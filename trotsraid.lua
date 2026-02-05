@@ -3,10 +3,10 @@ local trotsraid = {}
 --Kunark Events
 
 function TrakBreathOut()
-    local casterclass = {dru = true, enc = true, mag = true, nec = true, shm = true, wiz = true }
-    local meleeclass = {brd = true, ber = true, bst = true, mnk = true, pal = true, rng = true, rog = true, shd = true, war = true}
+    local casterclass = { dru = true, enc = true, mag = true, nec = true, shm = true, wiz = true }
+    local meleeclass = { brd = true, ber = true, bst = true, mnk = true, pal = true, rng = true, rog = true, shd = true, war = true }
     local myclass = string.lower(mq.TLO.Me.Class.ShortName())
-    if myconfig.settings['doraid'] and mq.TLO.Zone.ID() == 89 then 
+    if myconfig.settings['doraid'] and mq.TLO.Zone.ID() == 89 then
         if casterclass[myclass] then mq.cmd('/interrupt') end
         if meleeclass[myclass] or casterclass[myclass] then
             raidsactive = true
@@ -20,11 +20,11 @@ function TrakBreathOut()
 end
 
 function TrakBreathIn()
-    local casterclass = {dru = true, enc = true, mag = true, nec = true, shm = true, wiz = true }
-    local meleeclass = {brd = true, ber = true, bst = true, mnk = true, pal = true, rng = true, rog = true, shd = true, war = true}
+    local casterclass = { dru = true, enc = true, mag = true, nec = true, shm = true, wiz = true }
+    local meleeclass = { brd = true, ber = true, bst = true, mnk = true, pal = true, rng = true, rog = true, shd = true, war = true }
     local myclass = string.lower(mq.TLO.Me.Class.ShortName())
-    print('trakin ',myclass)
-    if myconfig.settings['doraid']  and mq.TLO.Zone.ID() == 89 then 
+    print('trakin ', myclass)
+    if myconfig.settings['doraid'] and mq.TLO.Zone.ID() == 89 then
         raidtimer = 30000 + mq.gettime()
         raidsactive = false
         if casterclass[myclass] then mq.cmd('/interrupt') end
@@ -33,14 +33,12 @@ function TrakBreathIn()
             if meleeclass[myclass] then myconfig.settings['domelee'] = true end
             runconfig['acmatarget'] = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
-            mq.cmd('/multiline ; /nav id ${Spawn[Trakanon].ID} distance=35 ; /echo TrotsRaid: Resuming Combat with Trak...')
+            mq.cmd(
+            '/multiline ; /nav id ${Spawn[Trakanon].ID} distance=35 ; /echo TrotsRaid: Resuming Combat with Trak...')
             mq.delay(200)
         end
     end
 end
-
-
-
 
 mq.event('TrakBreathIn', "#*#Trakanon begins casting Poison Breath#*#", TrakBreathIn)
 mq.event('TrakBreathIn2', "#*#Joust Engage#*#", TrakBreathIn)
@@ -54,7 +52,6 @@ end
 
 function DozeIn()
 end
-
 
 mq.event('LadyNevIn', "#*#Lady Nevederia begins casting Bellowing Winds#*#", LadyNevIn)
 mq.event('LadyNevIn2', "#*#Joust Engage#*#", LadyNevIn)
@@ -79,16 +76,25 @@ mq.event('GriegIn2', "#*#Grieg Veneficus begins casting Upheaval#*#", GriegIn)
 -- PoP Events
 function RatheKill()
 end
+
 mq.event('RatheKill', "#*#rkill engage#*#", RatheKill)
 
 -- GoD/OoW Events (Half-Enabled)
 function ForesightDuck() end
+
 function ForesightStill() end
+
 function OMMGaze() end
+
 function TureBackOut() end
+
 function TureBackIn() end
-mq.event('ForesightDuck', "#*#From the corner of your eye, you notice a Kyv taking aim at your head. You should duck.#*#", ForesightDuck)
-mq.event('ForesightStill', "#*#From the corner of your eye, you notice a Kyv taking aim near your position. He appears to be leading the target, anticipating your next movement. You should stand still.#*#", ForesightStill)
+
+mq.event('ForesightDuck', "#*#From the corner of your eye, you notice a Kyv taking aim at your head. You should duck.#*#",
+    ForesightDuck)
+mq.event('ForesightStill',
+    "#*#From the corner of your eye, you notice a Kyv taking aim near your position. He appears to be leading the target, anticipating your next movement. You should stand still.#*#",
+    ForesightStill)
 mq.event('OMMGaze', "#*#You feel a gaze of deadly power focusing on you.#*#", OMMGaze)
 mq.event('TureBackOut', "#*#Ture roars with fury as it surveys its attackers.#*#", TureBackOut)
 mq.event('TureBackIn', "#*#Ture calms and regains its focus.#*#", TureBackIn)
@@ -97,80 +103,118 @@ mq.event('TureBackIn', "#*#Ture calms and regains its focus.#*#", TureBackIn)
 -- DoDH Events (DISABLED)
 function HatchetDuck()
 end
+
 function HatchetClose()
 end
+
 function HatchetAway()
 end
+
 function HatchetReturn()
 end
+
 function DevlinReturn()
 end
+
 function HatchetKite()
 end
+
 function HatchetSafe()
 end
+
 function HatchetResume()
 end
+
 function TrisIgnore()
 end
+
 function TrisFaceAway()
 end
+
 function TrisFaceAwayDone()
 end
+
 function TrisHeal()
 end
+
 function TrisCure()
 end
+
 function RoleyIgnore()
 end
+
 function EmpIgnore()
 end
+
 function PerfIgnore()
 end
+
 function PerfBritOne()
 end
+
 function PerfBritTwo()
 end
+
 function PerfBritThree()
 end
+
 function PerfBritFour()
 end
+
 function PerfBritFive()
 end
+
 function PerfBritSix()
 end
+
 function PerfAelfOne()
 end
+
 function PerfAelfTwo()
 end
+
 function PerfAelfThree()
 end
+
 function PerfAelfFour()
 end
+
 function PerfAelfFive()
 end
+
 function PerfSethOne()
 end
+
 function PerfSethTwo()
 end
+
 function PerfSethThree()
 end
+
 function PerfSethFour()
 end
+
 function PerfSethFive()
 end
+
 function PerfRandOne()
 end
+
 function PerfSethSix()
 end
+
 function PerfRandTwo()
 end
+
 function PerfRandThree()
 end
+
 function PerfRandFour()
 end
+
 function PerfRandFive()
 end
+
 mq.event('HatchetDuck', "#*#prepares#*#You should duck#*#", HatchetDuck)
 mq.event('HatchetClose', "#*#You should hide#*#", HatchetClose)
 mq.event('HatchetAway', "#*#weighted throwing axe#*#", HatchetAway)
@@ -216,10 +260,15 @@ mq.event('PerfRandFive', "#*#screamin', 'Where is that brownie? I'll kick it!'#*
 
 -- PoR Events (ENABLED)
 function DKOneMovement() end
+
 function DKVertigoSetup() end
+
 function DKVertigoSwapped() end
+
 function DKBane() end
+
 function AttackValikNow() end
+
 mq.event('DKOneMovement', "#*#DKMove#*#", DKOneMovement)
 mq.event('DKVertigoSetup', "#*#VertigoGroup#*#|${Me.CleanName}|#*#", DKVertigoSetup)
 mq.event('DKVertigoSwapped', "#*#You find yourself somewhere new#*#", DKVertigoSwapped)
@@ -228,15 +277,24 @@ mq.event('AttackValikNow', "#*#AttackValikNow#*#", AttackValikNow)
 
 -- TSS Events (ENABLED)
 function HearolWalls() end
+
 function OdeenBackOut() end
+
 function GremlinsSpread() end
+
 function LTwoMovement() end
+
 function HarfangeClicks() end
+
 function BeltronTimer() end
+
 function BeltronCorner() end
+
 function BeltronDone() end
+
 mq.event('HearolWalls', "#*#HearolWallsGo#*#", HearolWalls)
-mq.event('OdeenBackOut', "#*#You notice a glint from the steel arrowhead as an Archer of Zek levels his bow and takes#*#", OdeenBackOut)
+mq.event('OdeenBackOut', "#*#You notice a glint from the steel arrowhead as an Archer of Zek levels his bow and takes#*#",
+    OdeenBackOut)
 mq.event('GremlinsSpread', "#*#GremlinsSpread#*#", GremlinsSpread)
 mq.event('LTwoMovement', "#*#AGMove#*#", LTwoMovement)
 mq.event('HarfangeClicks', "#*#HarfangeGoClick#*#", HarfangeClicks)
@@ -248,13 +306,21 @@ mq.event('BeltronDone', "#*#Beltron Back#*#", BeltronDone)
 
 -- Solteris Events + Mayong Mistmoore (ENABLED)
 function MayongBaneSolt() end
+
 function MayongBackOut() end
+
 function MayongBackIn() end
+
 function MayongBaneNow() end
+
 function MayongBOTimer() end
+
 function CommodusFour() end
+
 function CommodusEight() end
+
 function NearbyAdds() end
+
 mq.event('MayongBaneSolt', "#*#MayongSolt#*#|${Me.CleanName}|#*#", MayongBaneSolt)
 mq.event('MayongBackOut', "#*#MayongOut#*#", MayongBackOut)
 mq.event('MayongBackIn', "#*#MayongIn#*#", MayongBackIn)
@@ -268,10 +334,15 @@ mq.event('NearbyAdds', "#*#NearbyAdds#*#", NearbyAdds)
 
 -- Secrets of Faydwer Events (ENABLED)
 function BreaknekDuck() end
+
 function BreaknekDuckDone() end
+
 function BreaknekCharge() end
+
 function BreaknekOther() end
+
 function BreaknekMove() end
+
 function ClickFireStick() end
 
 mq.event('BreaknekDuck', "#*#preparing to lob a weighted mallet in#*#", BreaknekDuck)
@@ -282,6 +353,7 @@ mq.event('BreaknekMove', "#*#BNMove#*#", BreaknekMove)
 mq.event('ClickFireStick', "#*#FireStick#*#", ClickFireStick)
 
 function EarthTwoOut() end
+
 function EarthTwoIn() end
 
 mq.event('EarthTwoOut', "#*#A swirling vortex forms around Kildrukaun!#*#", EarthTwoOut)
@@ -289,10 +361,15 @@ mq.event('EarthTwoIn', "#*#Earth Back In#*#", EarthTwoIn)
 mq.event('EarthTwoOut2', "#*#Earth Get Out#*#", EarthTwoOut)
 
 function AirTwoMove() end
+
 function KerafyrmMove() end
+
 function KerafyrmTailRake() end
+
 function KerafyrmCharge() end
+
 function KerafyrmRoar() end
+
 function KerafyrmBreath() end
 
 mq.event('AirTwoMove', "#*#CATMove#*#", AirTwoMove)
@@ -301,12 +378,14 @@ mq.event('KerafyrmMove', "#*#KerafyrmMove#*#", KerafyrmMove)
 mq.event('KerafyrmTailRake', "#*#The mighty prismatic dragon prepares a terrible tail strike!#*#", KerafyrmTailRake)
 mq.event('KerafyrmCharge', "#*#Kerafyrm tenses for a charge that will overwhelm his foes!#*#", KerafyrmCharge)
 mq.event('KerafyrmRoar', "#*#Kerafyrm the Awakened prepares to roar!#*#", KerafyrmRoar)
-mq.event('KerafyrmBreath', "#*#All in the room stagger forward as Kerafyrm draws in a long breath and prepares to exhale.#*#", KerafyrmBreath)
+mq.event('KerafyrmBreath',
+    "#*#All in the room stagger forward as Kerafyrm draws in a long breath and prepares to exhale.#*#", KerafyrmBreath)
 
 
 ----- Seeds of Destruction - ENABLED
 
 function Mindshear() end
+
 function MindshearRespawn() end
 
 mq.event("Mindshear", "You get the feeling that someone is watching you.", Mindshear)
@@ -339,38 +418,38 @@ function trotsraid.RaidCheck()
     if zone == 89 and (raidtimer < mq.gettime() and not raidsactive) and mq.TLO.Spawn("Trakanon").ID() and mq.TLO.Me.XTarget("Trakanon").ID() and mq.TLO.Spawn("Trakanon").Distance() < 400 then
         TrakBreathOut()
     end
-    
+
     if zone == 128 and mq.TLO.Spawn("Milas An`Rev").ID() and mq.TLO.Me.XTarget("Milas An`Rev").ID() and (raidtimer < mq.gettime()) and mq.TLO.Spawn("Milas An`Rev").Distance() < 400 then
         MilasOut()
     end
-    
+
     if zone == 124 and mq.TLO.Spawn("Lady Nevederia").ID() and mq.TLO.Me.XTarget("Lady Nevederia").ID() and (raidtimer < mq.gettime()) and mq.TLO.Spawn("Lady Nevederia").Distance() < 250 then
         LadyNevBreathOut()
     end
-    
+
     if zone == 124 and mq.TLO.Spawn("Dozekar the Cursed").ID() and mq.TLO.Me.XTarget("Dozekar the Cursed").ID() and (raidtimer < mq.gettime()) and mq.TLO.Spawn("Dozekar the Cursed").Distance() < 250 then
         DozeOut()
     end
-    
+
     if zone == 162 and mq.TLO.Spawn("Vyzh`dra the Cursed").ID() and mq.TLO.Me.XTarget("Vyzh`dra the Cursed").ID() and not (raidtimer < mq.gettime()) and mq.TLO.Spawn("Vyzh`dra the Cursed").Distance() < 250 then
         CursedOut()
     end
-    
+
     if zone == 163 and mq.TLO.Spawn("npc Grieg Veneficus").ID() and mq.TLO.Me.XTarget("Grieg Veneficus").ID() and not (raidtimer < mq.gettime()) and mq.TLO.Spawn("npc Grieg Veneficus").Distance() < 250 then
         GriegOut()
     end
-    
+
     if zone == 222 and mq.TLO.Spawn("A Rathe Councilman").ID() and mq.TLO.Spawn("npc A Rathe Councilman").Distance() < 250 then
         RatheCouncil()
     end
     if mq.TLO.Me.Buff("Touch of Shadows").ID() or mq.TLO.Me.Song("Touch of Shadows").ID() then
-        local classskip = {war = 'war', shd = 'shd', pal = 'pal'}
+        local classskip = { war = 'war', shd = 'shd', pal = 'pal' }
         if not classskip[mq.TLO.Me.Clas.ShortName()] then
             BeltronDebuff()
             if mq.TLO.Me.Buff("Touch of Shadows").ID() or mq.TLO.ME.Song("Touch of Shadows").ID() then return true end
         end
     end
-    if hatchemote  and mq.TLO.SpawnCount("Hatchet npc radius 5000 zradius 5000") then
+    if hatchemote and mq.TLO.SpawnCount("Hatchet npc radius 5000 zradius 5000") then
         if hatchetkite then HatchetKite() end
         if hatchetsafe then HatchetSafe() end
         if hatchetduck then HatchetDuck() end
@@ -379,8 +458,6 @@ function trotsraid.RaidCheck()
         return true
     end
     if raidsactive then return true end
-    
 end
-
 
 return trotsraid
