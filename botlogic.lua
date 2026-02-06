@@ -201,9 +201,6 @@ function botlogic.StartUp(...)
         return
     end
     -- verify mq2 and plugin requirements are met
-    if (mq.TLO.Plugin('MQ2DanNet').IsLoaded() == nil) then
-        mq.cmd('/squelch /plugin MQ2DanNet load')
-    end
     if (mq.TLO.Plugin('MQ2Cast').IsLoaded() == nil) then
         mq.cmd('/squelch /plugin MQ2Cast load')
     end

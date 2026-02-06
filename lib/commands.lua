@@ -13,7 +13,6 @@ local botraid = require('botraid')
 local botevents = require('botevents')
 local mobfilter = require('lib.mobfilter')
 local state = require('lib.state')
-local dannet = require('lib.dannet')
 local groupmanager = require('lib.groupmanager')
 local actornet = require('actornet')
 local rexec = actornet.rexec
@@ -107,10 +106,6 @@ local function cmd_import(args)
     else
         printf('Usage: /tb import lua <filename> [save]')
     end
-end
-
-local function cmd_dropobs(args)
-    dannet.DropObs()
 end
 
 local function cmd_export(args)
@@ -707,7 +702,6 @@ end
 local handlers = {
     doyell = cmd_doyell,
     import = cmd_import,
-    dropobs = cmd_dropobs,
     export = cmd_export,
     debug = cmd_debug,
     equipgear = cmd_equipgear,

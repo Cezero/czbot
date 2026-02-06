@@ -6,7 +6,6 @@ local immune = require('lib.immune')
 local state = require('lib.state')
 local spellstates = require('lib.spellstates')
 local mobfilter = require('lib.mobfilter')
-local dannet = require('lib.dannet')
 local chchain = require('lib.chchain')
 local charinfo = require('actornet.charinfo')
 
@@ -27,7 +26,6 @@ local function DelayOnZone()
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     spellstates.CleanMobList()
-    dannet.DropObs()
     MountCastFailed = false
 end
 
