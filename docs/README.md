@@ -1,6 +1,6 @@
 # CZBot Documentation Index
 
-Short index of all documentation pages. Use this to find the right doc for configuring healing, tanking, pulling, buffing, debuffing, curing, pets, nuking, and mezzing.
+Short index of all documentation pages. Use this to find the right doc for configuring healing, tanking, pulling, buffing, debuffing, curing, pets, nuking, mezzing, and melee combat abilities.
 
 ---
 
@@ -51,6 +51,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [Nuking configuration](nuking-configuration.md)   | How to set up nuking: configure nukes as debuffs (tanktar, notanktar).                 |
 | [Mezzing configuration](mezzing-configuration.md) | How to set up mezzing: configure mez as debuffs (notanktar, charmnames), level limits. |
+| [Melee combat abilities](melee-combat-abilities.md) | How to set up melee combat abilities: configure disciplines and /doability as debuffs (gem disc/ability); domelee + dodebuff. |
 
 
 ## Pets

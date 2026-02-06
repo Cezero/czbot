@@ -169,6 +169,8 @@ See [Pull Configuration and Logic](pull-configuration.md) for the full pull tabl
 | **otoffset** | 0 | Which add to pick when MT and MA on same mob. |
 | **minmana** | 0 | Min mana % to engage. |
 
+Combat abilities (disciplines, /doability) are configured as **debuff** entries with **gem** `'disc'` or `'ability'`; **dodebuff** must be on for them to run. See [Melee combat abilities](melee-combat-abilities.md).
+
 ### Heal / Buff / Debuff / Cure sections
 
 - **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **enabled**, **tarcnt** (optional; group heals only), **bands**, **priority**, **precondition** (optional; default true; boolean or Lua script when set). See [Healing configuration](healing-configuration.md).

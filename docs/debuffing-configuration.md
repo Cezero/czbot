@@ -1,12 +1,13 @@
 # Debuffing Configuration
 
-This document explains how to configure the bot’s **debuffing** behavior: which detrimental spells are cast on which mobs (tank target, adds, named) and options such as charm, recast, and delay. **Nuking** and **mezzing** use this same debuff system; see [Nuking configuration](nuking-configuration.md) and [Mezzing configuration](mezzing-configuration.md) for those use cases.
+This document explains how to configure the bot’s **debuffing** behavior: which detrimental spells are cast on which mobs (tank target, adds, named) and options such as charm, recast, and delay. **Nuking**, **mezzing**, and **melee combat abilities** use this same debuff system; see [Nuking configuration](nuking-configuration.md), [Mezzing configuration](mezzing-configuration.md), and [Melee combat abilities](melee-combat-abilities.md) for those use cases.
 
 ## Overview
 
 - **Master switch:** Debuffing runs only when **`settings.dodebuff`** is `true`. Default is `false`.
 - **Mob list:** The bot builds a list of valid mobs (within **acleash** and **zradius** of camp, filtered by **TargetFilter**). Debuffs are only cast on mobs in this list.
 - **Evaluation order:** Charm targets (if **charmnames** is set) → **tanktar** (MA/tank’s current target) → **notanktar** (other mobs / adds) → **named** (named mobs that are the tank target). For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
+- **Melee combat abilities** (disciplines, kick/bash-style abilities) use this same debuff system with **gem** `'disc'` or `'ability'`; see [Melee combat abilities](melee-combat-abilities.md).
 
 ---
 
@@ -113,3 +114,4 @@ When **charmnames** is set to a comma-separated list of mob names, the debuff lo
 
 - [Nuking configuration](nuking-configuration.md) — Configure nukes as debuffs (typically **tanktar**, optionally **notanktar**).
 - [Mezzing configuration](mezzing-configuration.md) — Configure mez as debuffs (typically **notanktar**; **charmnames** for charm mez).
+- [Melee combat abilities](melee-combat-abilities.md) — Configure disciplines and /doability-style abilities as debuffs (typically **tanktar**).
