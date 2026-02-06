@@ -1,6 +1,6 @@
-# bumsbot
+# CZBot
 
-Fork of LUA trotsbot
+Fork of LUA TrotsBot
 
 Base documentation: [https://sites.google.com/view/trotsbotdocumentation/trotsbot-lua-version-6/lua-commands?authuser=0](https://sites.google.com/view/trotsbotdocumentation/trotsbot-lua-version-6/lua-commands?authuser=0)
 

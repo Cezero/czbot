@@ -1,0 +1,266 @@
+local mq = require('mq')
+local botconfig = require('lib.config')
+local charm = require('lib.charm')
+local commands = require('lib.commands')
+local immune = require('lib.immune')
+local state = require('lib.state')
+local spellstates = require('lib.spellstates')
+local mobfilter = require('lib.mobfilter')
+local dannet = require('lib.dannet')
+local chchain = require('lib.chchain')
+local charinfo = require('actornet.charinfo')
+
+local botevents = {}
+
+-- Reset zone-specific variables (called on zone change from MQ events and botlogic zoneCheck hook).
+local function DelayOnZone()
+    state.getRunconfig().zonename = mq.TLO.Zone.ShortName()
+    if state.getRunconfig().campstatus == true then
+        state.getRunconfig().makecampx = nil
+        state.getRunconfig().makecampy = nil
+        state.getRunconfig().makecampz = nil
+    end
+    state.getRunconfig().campstatus = false
+    if botconfig.config.settings.dopull == true then botconfig.config.settings.dopull = false end
+    if state.getRunconfig().acmatarget then state.getRunconfig().acmatarget = nil end
+    if APTarget then APTarget = nil end
+    mobfilter.process('exclude', 'zone')
+    mobfilter.process('priority', 'zone')
+    spellstates.CleanMobList()
+    dannet.DropObs()
+    MountCastFailed = false
+end
+
+-- Expose for botlogic zoneCheck hook (same handler as MQ zone events).
+botevents.DelayOnZone = DelayOnZone
+
+function botevents.Event_Invite()
+end
+
+function botevents.Event_Slain()
+    local respawntimeleft = (state.getRunconfig().HoverEchoTimer - mq.gettime()) / 1000
+    printf('\ayCZBot:\axI died and am hovering, %s seconds until I release', respawntimeleft)
+    mq.cmd('/multiline ; /consent group ; /consent raid ; /consent guild')
+    if false and charinfo.GetPeerCnt() > 0 then
+        --disabling this as it doesnt seem needed and spams badly
+        local peers = charinfo.GetPeers()
+        for i = 1, charinfo.GetPeerCnt() do
+            mq.cmdf('/consent %s', peers[i])
+        end
+    end
+    state.getRunconfig().HoverTimer = mq.gettime() + 30000
+end
+
+function botevents.Event_CastRst()
+    SpellResisted = true
+end
+
+function botevents.Event_CastImm(line)
+    local curtarget = mq.TLO.Target.ID()
+    local sub = state.getRunconfig().CurSpell.sub
+    local spell = state.getRunconfig().CurSpell.spell
+    local spellid = mq.TLO.Spell(botconfig.config[sub .. spell].spell).ID()
+    if string.find(line, "(with this spell)") then return false end
+    if mq.TLO.Cast.Stored.ID() == spellid then
+        if mq.TLO.Spell(spellid).TargetType() ~= "Targeted AE" and mq.TLO.Spell(spellid).TargetType() ~= "PB AE" then
+            if state.getRunconfig().CurSpell.target or state.getRunconfig().CurSpell.target == 1 then
+                if state.getRunconfig().CurSpell.target == curtarget then
+                    local immuneID = state.getRunconfig().CurSpell.target
+                    immune.processList(immuneID)
+                end
+            end
+        end
+    end
+end
+
+function botevents.Event_MissedNote()
+    --print('MissedNote')
+    state.getRunconfig().MissedNote = true
+end
+
+function botevents.Event_CastStn()
+end
+
+function botevents.Event_CharmBroke(line, charmspell)
+    charm.OnCharmBroke(line, charmspell)
+end
+
+function botevents.Event_ResetMelee()
+end
+
+function botevents.Event_WornOff()
+end
+
+function botevents.Event_Camping()
+end
+
+function botevents.Event_GoM()
+end
+
+function botevents.Event_LockedDoor()
+end
+
+function botevents.Event_EQBC()
+end
+
+function botevents.Event_DanChat()
+end
+
+function botevents.Event_CHChain(line, arg1)
+    return chchain.OnGo(line, arg1)
+end
+
+function botevents.Event_CHChainSetup(line, arg1, arg2, arg3, arg4)
+    if arg1 == 'setup' then commands.Parse('chchain', 'setup', arg2, arg3, arg4) end
+end
+
+function botevents.Event_CHChainStop(line)
+    if string.find(line, 'stop') then commands.Parse('chchain', 'stop') end
+end
+
+function botevents.Event_CHChainStart(line, arg1, argN)
+    local cleanname = arg1:match("%S+")
+    if arg1 then commands.Parse('chchain', 'start', cleanname) end
+end
+
+function botevents.Event_CHChainTank(line, arg1, argN)
+    local cleanname = arg1:match("%S+")
+    if arg1 and dochchain then commands.Parse('chchain', 'tank', cleanname) end
+end
+
+function botevents.Event_CHChainPause(line, arg1, argN)
+    if arg1 and dochchain then commands.Parse('chchain', 'pause', arg1) end
+end
+
+function botevents.Event_LinkItem(line, Slot, HPFilter)
+    if debug then mq.cmdf('/echo %s | %s', Slot, HPFilter) end
+    HPValue = HPFilter
+    if string.find(line, 'TB-') then return false end
+    if string.find(Slot, "'") then Slot = string.sub(Slot, 2) end
+    if HPValue and string.find(HPValue, "'") then HPValue = string.sub(HPValue, 2) end
+    if HPValue then
+        if HPFilter < mq.TLO.InvSlot(Slot).Item.HP() then return false end
+    end
+    if not mq.TLO.Me.Inventory(Slot).ID() then
+        printf('\ayCZBot:\ax\arMy \at%s slot \aris empty!', Slot)
+        mq.cmdf('/rs My %s slot is empty!', Slot)
+        return
+    end
+    local itemlink = mq.TLO.Me.Inventory(Slot).ItemLink('CLICKABLE')()
+    local itemac = mq.TLO.InvSlot(Slot).Item.AC()
+    local itemhp = mq.TLO.InvSlot(Slot).Item.HP()
+    local itemmana = mq.TLO.InvSlot(Slot).Item.Mana()
+    printf('\ayCZBot:\ax%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
+    mq.cmdf('/rs \ayCZBot:\ax%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
+end
+
+function botevents.Event_TooSteep()
+end
+
+function botevents.Event_FTELocked()
+    local spawn = mq.TLO.Target
+    if spawn.ID() and spawn.ID() > 0 then
+        printf(
+            '\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', spawn.Name())
+    end
+    --if DoYell and DoYellTimer < mq.gettime() then
+    --mq.cmd('/yell')
+    state.getRunconfig().DoYellTimer = mq.gettime() + 5000
+    --end
+    if state.getRunconfig().FTECount == 0 then state.getRunconfig().FTECount = state.getRunconfig().FTECount + 1 end
+    if spawn.ID() and spawn.ID() > 0 and not state.getRunconfig().FTEList[spawn.ID()] then
+        state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 1, timer = mq.gettime() + 10000 }
+    elseif state.getRunconfig().FTEList[spawn.ID()] and state.getRunconfig().FTEList[spawn.ID()].hitcount == 1 then
+        state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 2, timer = mq.gettime() + 30000 }
+    elseif state.getRunconfig().FTEList[spawn.ID()] and state.getRunconfig().FTEList[spawn.ID()].hitcount >= 2 then
+        state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 3, timer = mq.gettime() + 90500 }
+    end
+    mq.cmd('/multiline ; /squelch /target myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
+    if botconfig.config.settings.dopull then
+        print('clearing pull target ')
+        APTarget = false
+    end
+    local botcast = require('botcast')
+    botcast.ADSpawnCheck()
+end
+
+function botevents.Event_GMDetected()
+    if state.getRunconfig().gmtimer < mq.gettime() then
+        printf('\ayCZBot:\axGM Detected! Disabling DoMelee, MakeCamp, and Stick!')
+        botconfig.config.settings.domelee = false
+        mq.cmd('/stick off')
+        MakeCampX = nil
+        MakeCampY = nil
+        MakeCampZ = nil
+        CampStatus = nil
+        state.getRunconfig().gmtimer = mq.gettime() + 60000
+    end
+end
+
+function botevents.Event_MountFailed()
+    if botconfig.config.domount then MountCastFailed = true end
+end
+
+function botevents.Event_MobProb(line, arg1, arg2)
+    if mobprobtimer <= mq.gettime() then return true end
+    if state.getRunconfig().acmatarget then
+        if mq.TLO.Navigation.PathLength('id ' .. state.getRunconfig().acmatarget)() <= myconfig.settings.acleash then
+            mq.cmdf(
+                '/nav id %s dist=0 log=off', state.getRunconfig().acmatarget)
+        end
+    end
+    mobprobtimer = mq.gettime() + 3000
+end
+
+function botevents.BindEvents()
+    mq.event('Invite', "#*#invites you to join a #1#.#*#", botevents.Event_Invite)
+    mq.event('Slain1', "#*#You have been slain by#*#", botevents.Event_Slain)
+    mq.event('Slain2', "#*#Returning to Bind Location#*#", botevents.Event_Slain)
+    mq.event('Slain3', "You died.", botevents.Event_Slain)
+    mq.event('DelayOnZone1', "#*#You have entered#*#", DelayOnZone)
+    mq.event('DelayOnZone2', "#*#LOADING, PLEASE WAIT.#*#", DelayOnZone)
+    mq.event('CastRst1', "Your target resisted the#*#", botevents.Event_CastRst)
+    mq.event('CastRst2', "#*#resisted your#*#!#*#", botevents.Event_CastRst)
+    mq.event('CastRst3', "#*#avoided your#*#!#*#", botevents.Event_CastRst)
+    mq.event('CastImm', "Your target cannot be#*#", botevents.Event_CastImm)
+    mq.event('SlowImm', "Your target is immune to changes in its attack speed", botevents.Event_CastImm)
+    mq.event('MissedNote', "You miss a note, bringing your#*#", botevents.Event_MissedNote)
+    mq.event('CastStn1', "You are stunned#*#", botevents.Event_CastStn)
+    mq.event('CastStn2', "You can't cast spells while stunned!#*#", botevents.Event_CastStn)
+    mq.event('CastStn3', "You miss a note#*#", botevents.Event_CastStn)
+    mq.event('CharmBroke', "Your #1# spell has worn off#*#", botevents.Event_CharmBroke)
+    mq.event('ResetMelee', "You cannot see your target.", botevents.Event_ResetMelee)
+    mq.event('WornOff', "#*#Your #1# spell has worn off of #2#.", botevents.Event_WornOff)
+    mq.event('Camping', "#*#more seconds to prepare your camp#*#", botevents.Event_Camping)
+    mq.event('GoM1', "#*#granted gift of #1# to #2#!", botevents.Event_GoM)
+    mq.event('GoM2', "#*#granted a gracious gift of #1# to #2#!", botevents.Event_GoM)
+    mq.event('LockedDoor', "It's locked and you're not holding the key.", botevents.Event_LockedDoor)
+    mq.event('EQBC1', "<#1#> #2#", botevents.Event_EQBC)
+    mq.event('EQBC2', "[#1#(msg)] #2#", botevents.Event_EQBC)
+    mq.event('EQBC3', "[MQ2] mb- #2#", botevents.Event_EQBC)
+    mq.event('EQBC4', "[MQ2] tb- #2#", botevents.Event_EQBC)
+    mq.event('DanChat1', "[ #*#_#1# #*# ] #2#", botevents.Event_DanChat)
+    mq.event('DanChat2', "[#1#(msg)] #2#", botevents.Event_DanChat)
+    mq.event('DanChat3', "[MQ2] tb- #2#", botevents.Event_DanChat)
+    mq.event('DanChat4', "[MQ2] mb- #2#", botevents.Event_DanChat)
+    mq.event('DanChat5', "<#1#> #2#", botevents.Event_DanChat)
+    mq.event('DanChat6', "MB- #2#", botevents.Event_DanChat)
+    mq.event('DanChat7', "TB- #2#", botevents.Event_DanChat)
+    mq.event('EQBC5', "MB- #2#", botevents.Event_EQBC)
+    mq.event('EQBC6', "TB- #2#", botevents.Event_EQBC)
+    mq.event('CHChain', "#*#Go #1#>>#*#", botevents.Event_CHChain)
+    mq.event('CHChainStop', "#*#chchain stop#*#", botevents.Event_CHChainStop)
+    mq.event('CHChainStart', "#*#chchain start #1#'", botevents.Event_CHChainStart)
+    mq.event('CHChainTank', "#*#chchain tank #1#'", botevents.Event_CHChainTank)
+    mq.event('CHChainPause', "#*#chchain pause #1#'", botevents.Event_CHChainPause)
+    mq.event('CHChainSetup', "#*#chchain #1# #2# #3# #4#", botevents.Event_CHChainSetup)
+    mq.event('LinkItem', "#*#LinkItem #1# #2#", botevents.Event_LinkItem)
+    mq.event('TooSteep', "The ground here is too steep to camp", botevents.Event_TooSteep)
+    mq.event('FTELock', "#*#your target is Encounter Locked to someone else#*#", botevents.Event_FTELocked)
+    mq.event('MountFailed', '#*#You cannot summon a mount here.#*#', botevents.Event_MountFailed)
+    mq.event('MobProb1', "#*#Your target is too far away,#*#", botevents.Event_MobProb)
+    mq.event('MobProb2', "#*#You cannot see your target#*#", botevents.Event_MobProb)
+    mq.event('MobProb3', "#*#You can\'t hit them from here#*#", botevents.Event_MobProb)
+end
+
+return botevents

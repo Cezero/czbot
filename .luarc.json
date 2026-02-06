@@ -1,0 +1,8 @@
+{
+  "diagnostics.globals": [
+    "printf",
+    "debug",
+    "actors",
+    "mq"
+  ]
+}

@@ -1,6 +1,8 @@
 local mq = require('mq')
+local botconfig = require('lib.config')
+local myconfig = botconfig.config
 
-local trotsdb = {}
+local spellsdb = {}
 
 local DB_PATH = nil
 
@@ -35,22 +37,33 @@ end
 local has_sqlite, sqlite3 = pcall(require, 'lsqlite3')
 local db = nil
 
--- determine local directory for dll lookup
-local function get_local_dir()
+-- directory of this script (e.g. .../bumsbot/lib/)
+local function get_script_dir()
     local src = debug and debug.getinfo and debug.getinfo(1, 'S') and debug.getinfo(1, 'S').source or ''
     if src then
-        local m = src:match('@(.+)[/\\]')
+        local m = src:match('@(.+)[/\\][^/\\]+$')
         if m then return m .. '\\' end
     end
     return ''
 end
 
+-- project root: parent of lib/ when script is in lib/, else script dir
+local function get_project_root()
+    local script_dir = get_script_dir()
+    if script_dir == '' then return '' end
+    local norm = script_dir:gsub('/', '\\')
+    if norm:match('\\lib\\?$') then
+        local parent = norm:match('^(.+)\\[^\\]+\\?$')
+        return parent and (parent .. '\\') or script_dir
+    end
+    return script_dir
+end
+
 local function ensure_sqlite()
     if has_sqlite and sqlite3 then return true end
-    -- attempt to append local trotsbot dll path then require again
-    local tdir = get_local_dir()
-    if tdir ~= '' then
-        package.cpath = package.cpath .. ';' .. tdir .. '?.dll'
+    local root = get_project_root()
+    if root ~= '' then
+        package.cpath = package.cpath .. ';' .. root .. '?.dll'
     end
     local ok, lib = pcall(require, 'lsqlite3')
     if ok then
@@ -75,12 +88,12 @@ local function set_default_db_path()
     if myconfig and myconfig.settings and myconfig.settings.spelldb then
         DB_PATH = myconfig.settings.spelldb
     else
-        local tdir = get_local_dir()
-        DB_PATH = (tdir ~= '' and (tdir .. 'spells.db')) or 'spells.db'
+        local root = get_project_root()
+        DB_PATH = (root ~= '' and (root .. 'spells.db')) or 'spells.db'
     end
 end
 
-function trotsdb.set_db(path)
+function spellsdb.set_db(path)
     if db then
         pcall(function() db:close() end)
         db = nil
@@ -132,15 +145,15 @@ local function sqlite_query_all(sql)
     return results
 end
 
-local function section_category(sub)
-    if sub == 'ah' then return 'HEAL' end
-    if sub == 'ab' then return 'BUFF' end
-    if sub == 'ac' then return 'CURE' end
-    -- ad can be DEBUFF/DPS/OFFENSIVE; ae varies by user
+local function section_category(section)
+    if section == 'heal' then return 'HEAL' end
+    if section == 'buff' then return 'BUFF' end
+    if section == 'cure' then return 'CURE' end
+    -- debuff/event categories vary; no filter
     return nil
 end
 
-function trotsdb.resolve_line(line, sub, gem)
+function spellsdb.resolve_line(line, sub, gem)
     if not line or line == '' then return nil end
     set_default_db_path()
     local class = mq.TLO.Me.Class.ShortName()
@@ -187,18 +200,17 @@ local function resolve_from_alias(alias_str, sub, gem)
     for value in tostring(alias_str):gmatch("[^|]+") do
         local token = trim(value)
         if token and token ~= '' then
-            local name = trotsdb.resolve_line(token, sub, gem)
+            local name = spellsdb.resolve_line(token, sub, gem)
             if name then return name end
         end
     end
     return nil
 end
 
-function trotsdb.resolve_entry(sub, index, force)
+function spellsdb.resolve_entry(section, index, force)
     if true then return false end
-    if not myconfig or not sub or not index then return nil end
-    local key = tostring(sub) .. tostring(index)
-    local entry = myconfig[key]
+    if not botconfig or not section or not index then return nil end
+    local entry = botconfig.getSpellEntry(section, index)
     if not entry then return nil end
     -- simple cache: don't re-resolve if same alias at same level unless forced
     local curlevel = tonumber(mq.TLO.Me.Level()) or 1
@@ -211,18 +223,18 @@ function trotsdb.resolve_entry(sub, index, force)
     end
     local resolved = nil
     if type(entry.alias) == 'string' and entry.alias ~= '' then
-        resolved = resolve_from_alias(entry.alias, sub, entry.gem)
+        resolved = resolve_from_alias(entry.alias, section, entry.gem)
     end
     if resolved and resolved ~= entry.spell then
-        myconfig[key].spell = resolved
-        myconfig[key]._resolved_level = curlevel
-        myconfig[key]._resolved_alias = entry.alias
+        entry.spell = resolved
+        entry._resolved_level = curlevel
+        entry._resolved_alias = entry.alias
         return resolved
     else
-        myconfig[key]._resolved_level = curlevel
-        myconfig[key]._resolved_alias = entry.alias
+        entry._resolved_level = curlevel
+        entry._resolved_alias = entry.alias
     end
     return nil
 end
 
-return trotsdb
+return spellsdb

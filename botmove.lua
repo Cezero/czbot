@@ -1,0 +1,414 @@
+local mq = require('mq')
+local botconfig = require('lib.config')
+local combat = require('lib.combat')
+local state = require('lib.state')
+local targeting = require('lib.targeting')
+local charinfo = require('actornet.charinfo')
+local myconfig = botconfig.config
+
+local botmove = {}
+local CorpseID = nil
+
+-- ---------------------------------------------------------------------------
+-- Follow / stuck helpers
+-- ---------------------------------------------------------------------------
+
+local function refreshFollowId()
+    local rc = state.getRunconfig()
+    if not mq.TLO.Spawn('id ' .. rc.followid).ID() or mq.TLO.Spawn('id ' .. rc.followid).Type() == 'Corpse' then
+        if mq.TLO.Spawn('=' .. rc.followname).ID() then
+            rc.followid = mq.TLO.Spawn('=' .. rc.followname).ID()
+        end
+    end
+end
+
+local function doFollowNav()
+    local rc = state.getRunconfig()
+    if mq.TLO.Me.Sneaking() then mq.cmd('/doability sneak') end
+    mq.cmdf('/nav id %s log=off', rc.followid)
+end
+
+local function shouldCallFollow(rc)
+    local followid = mq.TLO.Spawn(rc.followid).ID() or 0
+    local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
+    local acmatar = rc.acmatarget or 0
+    local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
+    return followid > 0 and followdistance > 0 and acmatar == 0 and followtype ~= 'CORPSE' and followdistance >= 35
+end
+
+local function updateStuckTimerWithinLeash(rc)
+    local d3 = mq.TLO.Spawn(rc.followid).Distance3D()
+    if d3 and d3 <= myconfig.settings.acleash and (not stucktimer or stucktimer < mq.gettime() + 60000) then
+        stucktimer = mq.gettime() + 60000
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- UnStuck phase handlers
+-- ---------------------------------------------------------------------------
+
+local function tickUnstuckPhase(p, followid, stuckdistance)
+    if not p or p.followid ~= followid then state.clearRunState() return true end
+    if mq.gettime() < (p.deadline or 0) then return true end
+    local nowdist = mq.TLO.Spawn(followid).Distance3D()
+    if p.phase == 'nav_wait5' then
+        if nowdist and stuckdistance >= nowdist + 10 then
+            stucktimer = mq.gettime() + 60000
+            state.clearRunState()
+            return true
+        end
+        state.clearRunState()
+    elseif p.phase == 'wiggle_wait' then
+        mq.cmd('/squelch /keypress forward')
+        mq.cmdf('/squelch /nav id %s log=off', followid)
+        if nowdist and stuckdistance >= nowdist + 10 then
+            stucktimer = mq.gettime() + 60000
+            state.clearRunState()
+            return true
+        end
+        mq.cmd('/squelch /keypress back hold')
+        state.setRunState('unstuck', { phase = 'back_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance })
+    elseif p.phase == 'back_wait' then
+        mq.cmd('/squelch /keypress back')
+        mq.cmdf('/squelch /nav id %s log=off', followid)
+        if p.stuckdistance and nowdist and p.stuckdistance >= nowdist + 10 then
+            stucktimer = mq.gettime() + 60000
+        end
+        state.clearRunState()
+    end
+    return true
+end
+
+local function tryPathExistsUnstuck(followid)
+    if not mq.TLO.Navigation.PathExists('id ' .. followid)() then return false end
+    mq.cmdf('/nav id %s los=on dist=15 log=off', followid)
+    state.setRunState('unstuck', { phase = 'nav_wait5', deadline = mq.gettime() + 5000, followid = followid })
+    return true
+end
+
+local function tryAutoSizeUnstuck(followid, stuckdistance)
+    if not mq.TLO.Navigation.Active() then return false end
+    if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 1') end
+    local d = mq.TLO.Spawn(followid).Distance3D()
+    if d and stuckdistance >= d + 10 then stucktimer = mq.gettime() + 60000 return true end
+    if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 12') end
+    d = mq.TLO.Spawn(followid).Distance3D()
+    if d and stuckdistance >= d + 10 then stucktimer = mq.gettime() + 60000 return true end
+    if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 8') end
+    d = mq.TLO.Spawn(followid).Distance3D()
+    if d and stuckdistance >= d + 10 then stucktimer = mq.gettime() + 60000 return true end
+    return false
+end
+
+local function doWiggleUnstuck(followid, stuckdistance)
+    local rc = state.getRunconfig()
+    local stuckdir = math.random(0, 360)
+    local ransize = math.random(1, 12)
+    local wiggleHeadings = { 0, 90, 180, 270, 0, 90, 180, 270, stuckdir }
+    local wiggleSizes = { 1, 1, 1, 1, 12, 12, 12, 12, ransize }
+    mq.cmd('/nav stop')
+    local idx = (rc.unstuckWiggleIndex or 0) + 1
+    rc.unstuckWiggleIndex = idx
+    local heading = wiggleHeadings[idx] or stuckdir
+    local size = wiggleSizes[idx] or ransize
+    print('facing heading:', heading, ' sizing to:', size)
+    if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then
+        mq.cmdf('/squelch /multiline ; /face fast heading %s ; /stand ; /autosize sizeself %s ; /keypress forward hold', heading, size)
+    end
+    state.setRunState('unstuck', { phase = 'wiggle_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance })
+    if idx >= 9 then rc.unstuckWiggleIndex = nil end
+end
+
+-- ---------------------------------------------------------------------------
+-- ACMA return-to-follow phase handlers
+-- ---------------------------------------------------------------------------
+
+local function tickAcmaReturnDelay400(p)
+    local now = mq.gettime()
+    if now < (p.deadline or 0) then return end
+    state.setRunState('acma_return_follow', { phase = 'nav_wait', deadline = now + 10000 })
+end
+
+local function tickAcmaReturnNavWait(p)
+    local now = mq.gettime()
+    if not mq.TLO.Navigation.Active() or now >= (p.deadline or 0) then
+        state.clearRunState()
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- MakeCamp leash helpers
+-- ---------------------------------------------------------------------------
+
+local function campDistanceOk(rc)
+    return mq.TLO.Math.Distance(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ':' .. rc.makecampx .. ',' .. rc.makecampy)() <= (myconfig.settings.acleash * 0.20)
+end
+
+local function campLOSOk(rc)
+    return mq.TLO.LineOfSight(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ',' .. mq.TLO.Me.Z() .. ':' .. rc.makecampx .. ',' .. rc.makecampy .. ',' .. rc.makecampz)()
+end
+
+local function doLeashResetCombat()
+    combat.ResetCombatState()
+end
+
+-- Navigate to camp location (makecampx/y/z). opts: dist (number|nil), echoMsg (string|nil).
+local function doNavToCamp(opts)
+    opts = opts or {}
+    local rc = state.getRunconfig()
+    if not rc.makecampx or not rc.makecampy or not rc.makecampz then return end
+    if opts.echoMsg then mq.cmd('/echo ' .. opts.echoMsg) end
+    if opts.dist ~= nil then
+        mq.cmdf('/nav locxyz %s %s %s log=off dist=%s', rc.makecampx, rc.makecampy, rc.makecampz, opts.dist)
+    else
+        mq.cmdf('/nav locxyz %s %s %s log=off', rc.makecampx, rc.makecampy, rc.makecampz)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- MakeCamp (on / off / return) helpers
+-- ---------------------------------------------------------------------------
+
+local function setCampHere()
+    local rc = state.getRunconfig()
+    rc.makecampx = mq.TLO.Me.X()
+    rc.makecampy = mq.TLO.Me.Y()
+    rc.makecampz = mq.TLO.Me.Z()
+end
+
+local function makeCampOn()
+    if mq.TLO.Stick.Active() then mq.cmd('/stick off') end
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    if not mq.TLO.Navigation.MeshLoaded() then
+        printf('\ayCZBot:\axCannot use makecamp (no mesh loaded)')
+        return false
+    end
+    setCampHere()
+    state.getRunconfig().campstatus = true
+    printf('\ayCZBot:\axhanging out using mq2nav')
+    return true
+end
+
+local function makeCampOff()
+    if not myconfig.pull.hunter then state.getRunconfig().makecampx = nil end
+    if not myconfig.pull.hunter then state.getRunconfig().makecampy = nil end
+    if not myconfig.pull.hunter then state.getRunconfig().makecampz = nil end
+    state.getRunconfig().campstatus = false
+    printf('\ayCZBot:\axmakecamp \aroff\ax')
+end
+
+local function makeCampReturn()
+    doLeashResetCombat()
+    doNavToCamp()
+    state.setRunState('camp_return', { deadline = mq.gettime() + 5000 })
+end
+
+-- ---------------------------------------------------------------------------
+-- DragCheck helpers
+-- ---------------------------------------------------------------------------
+
+local DragDist = 1500
+
+local function tickSumcorpsePending()
+    if state.getRunState() ~= 'sumcorpse_pending' then return false end
+    if targeting.IsActive() then return true end
+    local p = state.getRunStatePayload()
+    if p and p.corpseID then mq.cmd('/sumcorpse') end
+    state.clearRunState()
+    return true
+end
+
+local function tickDragging(payload)
+    if not payload or not payload.corpseID then state.clearRunState() return true end
+    local cid = payload.corpseID
+    if payload.phase == 'init' then
+        if mq.gettime() < (payload.deadline or 0) then return true end
+        mq.cmd('/hidec none')
+        mq.cmd('/hidec alwaysnpc')
+        mq.cmd('/multiline ; /attack off ; /stick off')
+        targeting.SetTarget(cid, 500)
+        state.setRunState('dragging', { phase = 'wait_target', corpseID = cid })
+        return true
+    end
+    if payload.phase == 'wait_target' then
+        if targeting.IsActive() then return true end
+        state.setRunState('dragging', { phase = 'sneak', corpseID = cid })
+        return true
+    end
+    if payload.phase == 'sneak' then
+        if mq.TLO.Me.Class.ShortName() == 'ROG' and (not mq.TLO.Me.Invis() or not mq.TLO.Me.Sneaking()) then
+            if not mq.TLO.Me.Sneaking() then mq.cmd('/squelch /doability sneak') end
+            if mq.TLO.Me.AbilityReady("Hide")() then mq.cmd('/squelch /doability hide') end
+            return true
+        end
+        mq.cmdf('/nav id %s', cid)
+        state.setRunState('dragging', { phase = 'navigating', corpseID = cid })
+        return true
+    end
+    if payload.phase == 'navigating' then
+        mq.doevents()
+        if not mq.TLO.Navigation.Active() then
+            state.clearRunState()
+            return true
+        end
+        local corpsedist = mq.TLO.Spawn(cid).Distance3D()
+        if mq.TLO.Spawn(cid).ID() and corpsedist and corpsedist < 90 then
+            mq.cmd('/multiline ; /corpsedrag ; /nav stop')
+            state.clearRunState()
+            CorpseID = nil
+        end
+    end
+    return true
+end
+
+local function findCorpseToDrag()
+    local bots = charinfo.GetPeers()
+    for cor = 1, charinfo.GetPeerCnt() do
+        local bot = bots[cor]
+        local corpse = nil
+        local corpsedist = nil
+        if bot then
+            corpse = mq.TLO.Spawn(bot .. "'s corpse").Type()
+            corpsedist = mq.TLO.Spawn(bot .. "'s corpse").Distance()
+        end
+        if debug then print(bot, corpse) end
+        if corpse == 'Corpse' and corpsedist and corpsedist > 10 and corpsedist < DragDist then
+            return mq.TLO.Spawn(bot .. "'s corpse").ID()
+        end
+    end
+    return nil
+end
+
+local function startDrag(corpseId, justDidSumcorpse)
+    local rc = state.getRunconfig()
+    if rc.DragHack and corpseId and not justDidSumcorpse then
+        targeting.SetTarget(corpseId, 500)
+        state.setRunState('sumcorpse_pending', { corpseID = corpseId })
+        return
+    end
+    if corpseId and mq.TLO.Navigation.PathExists('id ' .. corpseId)() then
+        mq.cmd('/multiline ; /target clear ; /hidec all')
+        state.setRunState('dragging', { phase = 'init', corpseID = corpseId, deadline = mq.gettime() + 2000 })
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Public API
+-- ---------------------------------------------------------------------------
+
+function botmove.FollowCall()
+    if MasterPause then return false end
+    if not stucktimer then stucktimer = 0 end
+    if stucktimer <= mq.gettime() then botmove.UnStuck() end
+    refreshFollowId()
+    doFollowNav()
+end
+
+function botmove.UnStuck()
+    local rc = state.getRunconfig()
+    local followid = rc.followid
+    if not followid or followid == 0 then return false end
+    local stuckdistance = mq.TLO.Spawn(followid).Distance3D() or 100
+    local acleash = myconfig.settings.acleash
+    if stuckdistance < acleash then return false end
+
+    if state.getRunState() == 'unstuck' then
+        local p = state.getRunStatePayload()
+        if tickUnstuckPhase(p, followid, stuckdistance) then return false end
+    end
+
+    if tryPathExistsUnstuck(followid) then return false end
+
+    mq.cmd('/echo I appear to be stuck, attempting to get unstuck')
+    if tryAutoSizeUnstuck(followid, stuckdistance) then return false end
+
+    doWiggleUnstuck(followid, stuckdistance)
+    return false
+end
+
+function botmove.StartReturnToFollowAfterACMA()
+    local rc = state.getRunconfig()
+    local followid = mq.TLO.Spawn(rc.followid).ID() or 0
+    local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
+    local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
+    if followdistance < 35 or not followid or followtype == 'CORPSE' then return end
+    mq.cmd('/multiline ; /stick off ; /squelch /attack off ; /target self')
+    botmove.FollowCall()
+    state.setRunState('acma_return_follow', { phase = 'delay_400', deadline = mq.gettime() + 400 })
+end
+
+function botmove.TickReturnToFollowAfterACMA()
+    if state.getRunState() ~= 'acma_return_follow' then return end
+    local p = state.getRunStatePayload()
+    if not p then state.clearRunState() return end
+    if p.phase == 'delay_400' then
+        tickAcmaReturnDelay400(p)
+        return
+    end
+    if p.phase == 'nav_wait' then
+        tickAcmaReturnNavWait(p)
+    end
+end
+
+function botmove.FollowAndStuckCheck()
+    botmove.TickReturnToFollowAfterACMA()
+    if not (state.getRunconfig().followid and state.getRunconfig().followid > 0) then return end
+    local rc = state.getRunconfig()
+    local followid = mq.TLO.Spawn(rc.followid).ID() or 0
+    if followid > 0 and followid ~= rc.followid then
+        rc.followid = followid
+    end
+    if shouldCallFollow(rc) then
+        botmove.FollowCall()
+    end
+    updateStuckTimerWithinLeash(rc)
+end
+
+function botmove.MakeCampLeashCheck()
+    if not state.getRunconfig().campstatus then return end
+    if state.getRunconfig().acmatarget then return end
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
+    local rc = state.getRunconfig()
+    if campDistanceOk(rc) and campLOSOk(rc) then return end
+    print("\ar Exceeded ACLeash\ax, resetting combat")
+    doLeashResetCombat()
+    botmove.MakeCamp('return')
+end
+
+function botmove.NavToCamp(opts)
+    doNavToCamp(opts)
+end
+
+function botmove.SetCampHere()
+    setCampHere()
+end
+
+function botmove.MakeCamp(...)
+    local args = { ... }
+    if args[1] == 'on' then
+        return makeCampOn()
+    elseif args[1] == 'off' then
+        makeCampOff()
+    elseif args[1] == 'return' then
+        print('return called')
+        makeCampReturn()
+    end
+end
+
+function botmove.DragCheck()
+    if debug then print('drag call') end
+    local just_did_sumcorpse = tickSumcorpsePending()
+
+    if state.getRunState() == 'dragging' then
+        local payload = state.getRunStatePayload()
+        if tickDragging(payload) then return end
+    end
+
+    CorpseID = nil
+    CorpseID = findCorpseToDrag()
+    if not CorpseID then return false end
+    if debug then print('CorpseID is ' .. CorpseID) end
+    startDrag(CorpseID, just_did_sumcorpse)
+end
+
+return botmove
