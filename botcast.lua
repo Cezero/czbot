@@ -1018,7 +1018,7 @@ end
 
 local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
-    if entry ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
+    if entry ~= nil and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false
     end
     charm.BeforeCast(EvalID, targethit)
