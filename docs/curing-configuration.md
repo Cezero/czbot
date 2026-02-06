@@ -47,10 +47,10 @@ Bands use **class** only (no min/max). Each band is a table with **class** = lis
 
 - **self** — Cure yourself.
 - **tank** — Main Tank (from TankName).
-- **group** — Any group member (in addition to class filters).
+- **group** — When in the bands, the bot first considers only **peers who are in the bot’s group** (and match class). A second pass then considers **all peers** by class (no group check), so out-of-group peers can be cured in that pass.
 - **Class shorts** — e.g. `war`, `clr`, `shd`, `pal`, `shm`, `dru`, `rng`, `mnk`, `rog`, `brd`, `bst`, `ber`, `wiz`, `mag`, `enc`, `nec`. Restricts cures to those classes.
 
-Evaluation order: **self** → **tank** → **group** (by class) → other bots by **class**.
+Evaluation order: **self** → **tank** → **group** (by class, only in-group peers) → **all peers** by class. See [Out-of-group peers](out-of-group-peers.md) for peer vs group behavior.
 
 **Example: poison/disease and all**
 

@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **buffing** behavior: which 
 ## Overview
 
 - **Master switch:** Buffing runs only when **`settings.dobuff`** is `true`. Default is `false`.
-- **Evaluation order:** The buff loop checks, in order: self (including **petspell** when you have no pet), buffs by **name**, tank, other bots by **class**, your pet (**mypet**), then other bots’ pets (**pet**). The first valid target in range gets the buff.
+- **Evaluation order:** The buff loop checks, in order: self (including **petspell** when you have no pet), buffs by **name**, tank, other bots by **class**, your pet (**mypet**), then other bots’ pets (**pet**). “Other bots” and “other bots’ pets” mean **all peers** (any character known via charinfo), not limited to group members. The bot will buff any peer in range that matches the band and needs the buff. The first valid target in range gets the buff.
 - **When buffs run:** Each spell entry can be marked for **idle** only, **combat** only, or both (by band tokens **idle** and **cbt**). With no mobs in camp, idle-only and combat buffs can run; with mobs, only combat buffs run.
 
 ---
@@ -42,11 +42,13 @@ Bands use **class** only (no min/max). Each band is a table with **class** = lis
 - **petspell** — Summon pet: cast on self when you have **no pet**. Use with **self** in the same band. Documented in [Pets configuration](pets-configuration.md).
 - **tank** — Main Tank (from TankName).
 - **mypet** — Your pet.
-- **pet** — Other group members’ pets.
+- **pet** — Other peers’ pets (any peer, not only group members).
 - **Class shorts** — e.g. `war`, `clr`, `shd`, `pal`, `rng`, `mnk`, `rog`, `brd`, `bst`, `ber`, `shm`, `dru`, `wiz`, `mag`, `enc`, `nec`. Restricts the buff to those classes.
 - **name** — Buff specific characters by name (list their names in the band’s class list).
 - **cbt** — This buff is allowed during combat (mobs in camp).
 - **idle** — This buff is allowed when idle (no mobs in camp). If neither **cbt** nor **idle** is set, the spell may run in both.
+
+Buffing is not restricted by group: any peer in range who matches the band and needs the buff can be buffed. See [Out-of-group peers](out-of-group-peers.md).
 
 **Example: self buff, tank buff, and group class buff**
 

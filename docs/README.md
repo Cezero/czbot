@@ -20,6 +20,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | Document                                              | Description                                                                                                                             |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | [Pull Configuration and Logic](pull-configuration.md) | How pulling works: config options, when the bot starts a pull, pre-conditions, hunter mode, runtime commands (xarc, exclude, priority). |
+| [Corpse dragging](corpse-dragging.md)                 | Automatic drag of peer corpses (dodrag); draghack uses sumcorpse.                                                                      |
 
 
 ## Raid
@@ -39,6 +40,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | [Buffing configuration](buffing-configuration.md)     | Buff spells, bands (self, tank, class, mypet, pet, petspell), spellicon, combat vs idle.                  |
 | [Debuffing configuration](debuffing-configuration.md) | Debuff spells, bands (tanktar, notanktar, named), charmnames, recast, delay; links to nuking and mezzing. |
 | [Curing configuration](curing-configuration.md)       | Cure spells, curetype (all / poison / disease / curse / corruption), prioritycure, bands.                 |
+| [Out-of-group peers](out-of-group-peers.md)            | Who counts as a peer, how healing, buffing, curing, and corpse drag treat peers outside your group.      |
 
 
 ## Nuking and mezzing (first-order)

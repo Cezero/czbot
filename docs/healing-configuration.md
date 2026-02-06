@@ -49,12 +49,16 @@ Each entry in **`heal.spells`** can have:
 
 Bands define **who** can receive the spell and **at what HP %**. Each band has:
 
-- **class:** List of target types. One or more of: `pc`, `pet`, `grp`, `group`, `self`, `tank`, `mypet`, class shorts (`war`, `shd`, `pal`, `clr`, `dru`, etc.), `tnt`, `corpse`, `bots`, `raid`, `cbt`, `all`, `xtgt`.
+- **class:** List of target types. One or more of: `pc`, `pet`, `grp`, `group`, `self`, `tank`, `mypet`, class shorts (`war`, `shd`, `pal`, `clr`, `dru`, etc.), `tnt`, `corpse`, `bots`, `raid`, `cbt`, `all`, `xtgt`. **`group`** restricts single-target PC (and tank) heal targets to **peers who are in the bot’s group**. If **`group`** is **omitted**, the bot may heal **any peer** (including out-of-group) whose HP is in the band and who is in range; HP is taken from charinfo.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For **corpse**, **bots**, **raid**, **cbt**, **all** the effective max is treated as 200 (special).
 
 **Special tokens:** **cbt** (combat) — When included in a **corpse** (rez) spell’s bands, the bot may rez even when there are mobs in the camp list. Without **cbt**, corpse rez is only considered when there are no mobs in camp (safe rez only). **all** — When used with corpse, rez any corpse in range (subject to rezoffset and filter).
 
-Heal evaluation order: **corpse** (rez) → **self** → **grp** (group AE) → **tank** → **pc** by class → **mypet** → **pet** (other group pets) → **xtgt** (extended targets). The first matching target in range gets the heal. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
+Heal evaluation order: **corpse** (rez) → **self** → **grp** (group AE) → **tank** → **pc** by class → **mypet** → **pet** (other pets) → **xtgt** (extended targets). The first matching target in range gets the heal. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
+
+### Peers and group
+
+PC heal candidates come from **peers** (characters known via the actor net). Adding **`group`** to a band limits those targets to peers who are in the bot’s group. Omitting **`group`** allows healing any peer in range (including out-of-group) when their HP is in the band. Peer **pets** are always considered from the full peer list (no group restriction). See [Out-of-group peers](out-of-group-peers.md) for how the bot interacts with peers who are not in your group.
 
 **Example: single-target tank heal and group heal**
 

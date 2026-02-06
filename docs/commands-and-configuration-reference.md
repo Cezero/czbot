@@ -23,7 +23,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **docure** | Cure loop. |
 | **dosit** | Sit when not in combat (for mana/endurance). |
 | **domount** | Mount when not in combat. |
-| **dodrag** | Corpse drag. |
+| **dodrag** | Corpse drag: automatically find and drag peer corpses within range. See [Corpse dragging](corpse-dragging.md). |
 
 ### Movement and camp
 
@@ -76,7 +76,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **ui** / **show** | — | Open the CZBot UI. |
 | **quit** | — | Terminate the bot. |
 | **chchain** | `stop` / `setup` / `start` / `tank` / `pause` | Complete Heal chain control. |
-| **draghack** | `on` / `off` or toggle | Toggle corpse-drag behavior. |
+| **draghack** | `on` / `off` or toggle | Toggle use of sumcorpse instead of walk-to-corpse for dragging. See [Corpse dragging](corpse-dragging.md). |
 | **linkitem** | — | Link item (event). |
 | **linkaugs** | `<slot>` | Print augments in the given slot. |
 | **spread** | — | Spread bots (nav to positions). |
@@ -141,7 +141,7 @@ return StoredConfig
 | **docure** | `false` | Enable cure loop. |
 | **dopull** | `false` | Enable pull loop. |
 | **doraid** | `false` | Raid mode (zone-specific raid mechanics; when active, pulling is suppressed). See [Raid mode](raid-mode.md). |
-| **dodrag** | `false` | Corpse drag. |
+| **dodrag** | `false` | Corpse drag (automatically find and drag peer corpses). See [Corpse dragging](corpse-dragging.md). |
 | **domount** | `false` | Auto mount. |
 | **mountcast** | `false` | Mount cast (e.g. spell\|item). |
 | **dosit** | `true` | Sit when not in combat. |
