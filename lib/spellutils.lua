@@ -290,8 +290,10 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
                 and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
                 and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
                 and spellutils.PreCondCheck(sub, i, EvalID) then
-                spellutils.CastSpell(i, EvalID, targethit, sub)
-                return false
+                -- Only exit when we actually started a cast (or precast); otherwise try next index
+                if spellutils.CastSpell(i, EvalID, targethit, sub) then
+                    return false
+                end
             end
         end
     end
