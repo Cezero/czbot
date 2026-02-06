@@ -921,18 +921,16 @@ local function DebuffEvalTankTar(index, ctx)
             if debug then printf('debuff tanktar %d %s mob=%s myrange=%s', index, entry.spell, v.ID(), myrange) end
             if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
             if not (myrange and v.Distance() and v.Distance() > myrange) then
-                if debug then printf('debuff tanktar %d %s mob=%s in range (%d)', index, entry.spell, v.ID(), v.Distance()) end
                 if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
-                    if debug then printf('debuff tanktar %d %s mob=%s doesnt have debuff longer than 6 seconds', index, entry.spell, v.ID()) end
                     local tanktarstack = mq.TLO.Spell(entry.spell).StacksSpawn(ctx.tanktar)() or
                         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(ctx.tanktar))
                     if ctx.tanktarlvl and mq.TLO.Spell(ctx.spellid).Subcategory() == 'Enthrall' and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
                         return nil, nil
                     end
                     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
-                        if debug then printf('debuff tanktar %d %s tanktarstack=%s', index, entry.spell, tanktarstack) end
                         return nil, nil
                     end
+                    if debug then printf('debuff tanktar %d %s mob=%s tanktarstack=%s', index, entry.spell, v.ID(), tanktarstack) end
                     return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
                 end
             end

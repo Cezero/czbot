@@ -286,10 +286,12 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         if MasterPause then return false end
         if (not options.entryValid or options.entryValid(i)) then
             local EvalID, targethit = evalFn(i)
+            if debug then printf('spellutils.RunSpellCheckLoop %d %s EvalID=%s targethit=%s', i, sub, EvalID, targethit) end
             if EvalID and targethit
                 and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
                 and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
                 and spellutils.PreCondCheck(sub, i, EvalID) then
+                if debug then printf('spellutils.RunSpellCheckLoop %d %s EvalID=%s targethit=%s casting...', i, sub, EvalID, targethit) end
                 spellutils.CastSpell(i, EvalID, targethit, sub)
                 return false
             end
