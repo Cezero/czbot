@@ -116,6 +116,10 @@ local function cmd_ui(args)
     botgui.UIEnable()
 end
 
+local function cmd_quit(args, str)
+    state.getRunconfig().terminate = true
+end
+
 local function cmd_makecamp(args)
     if args[2] then
         botmove.MakeCamp(args[2])
@@ -693,6 +697,7 @@ local handlers = {
     linkaugs = cmd_linkaugs,
     spread = cmd_spread,
     raid = cmd_raid,
+    quit = cmd_quit,
 }
 
 -- Register toggle commands (same handler for all togglelist keys)
@@ -752,5 +757,6 @@ end
 mq.bind('/cz', M.Parse)
 mq.bind('/czshow', botgui.UIEnable)
 mq.bind('/czp', M.czpause)
+mq.bind('/czquit', function() state.getRunconfig().terminate = true end)
 
 return M

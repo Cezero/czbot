@@ -6,6 +6,7 @@ local botmelee = require('botmelee')
 local botpull = require('botpull')
 local botcast = require('botcast')
 local state = require('lib.state')
+local charinfo = require('actornet.charinfo')
 
 local M = {}
 
@@ -51,6 +52,24 @@ local function drawNestedTableTree(tbl)
                 end
                 ImGui.TableNextColumn()
             end
+        end
+    end
+end
+
+local function drawNestedTableTreeReadOnly(tbl)
+    for k, v in pairs(tbl) do
+        ImGui.TableNextRow()
+        ImGui.TableNextColumn()
+        if type(v) == 'table' then
+            local open = ImGui.TreeNodeEx(tostring(k), ImGuiTreeNodeFlags.SpanFullWidth)
+            if open then
+                drawNestedTableTreeReadOnly(v)
+                ImGui.TreePop()
+            end
+        else
+            ImGui.TextColored(YELLOW, '%s', k)
+            ImGui.TableNextColumn()
+            ImGui.TextColored(RED, '%s', tostring(v))
         end
     end
 end
@@ -194,6 +213,31 @@ local function updateImGui()
             if ImGui.BeginTabItem('Debug') then
                 ImGui.Text('Debug area, these are running variables in trotbot, editting these may cause crashes!')
                 drawTableTree(state.getRunconfig(), 'running')
+                ImGui.EndTabItem()
+            end
+            if ImGui.BeginTabItem('Peers') then
+                local peers = charinfo.GetPeers()
+                if #peers == 0 then
+                    ImGui.Text('No peers (no character data received yet).')
+                else
+                    for _, name in ipairs(peers) do
+                        local data = charinfo.GetInfo(name)
+                        if data then
+                            ImGui.SetNextItemOpen(true, ImGuiCond.FirstUseEver)
+                            if ImGui.TreeNode(name) then
+                                if ImGui.BeginTable('peers table ' .. name, 2, TABLE_FLAGS, -1, -1) then
+                                    ImGui.TableSetupScrollFreeze(0, 1)
+                                    ImGui.TableSetupColumn('Key', ImGuiTableColumnFlags.DefaultSort, 2, 1)
+                                    ImGui.TableSetupColumn('Value', ImGuiTableColumnFlags.DefaultSort, 2, 2)
+                                    ImGui.TableHeadersRow()
+                                    drawNestedTableTreeReadOnly(data)
+                                    ImGui.EndTable()
+                                end
+                                ImGui.TreePop()
+                            end
+                        end
+                    end
+                end
                 ImGui.EndTabItem()
             end
             ImGui.EndTabBar()
