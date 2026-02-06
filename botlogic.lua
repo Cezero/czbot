@@ -76,17 +76,17 @@ local function CharState(...)
     if (mq.TLO.Plugin('MQ2Twist').IsLoaded()) then
         if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then mq.cmd('/squelch /twist stop') end
     end
-    if not state.getRunconfig().acmatarget or mq.TLO.Target.ID() ~= state.getRunconfig().acmatarget then
+    if not state.getRunconfig().engageTargetId or mq.TLO.Target.ID() ~= state.getRunconfig().engageTargetId then
         if mq.TLO.Me.Combat() then
             mq.cmd('/attack off')
         end
-        if ((not state.getRunconfig().acmatarget or (state.getRunconfig().acmatarget and mq.TLO.Me.Pet.Target.ID() ~= state.getRunconfig().acmatarget)) and mq.TLO.Me.Pet.Aggressive()) then
+        if ((not state.getRunconfig().engageTargetId or (state.getRunconfig().engageTargetId and mq.TLO.Me.Pet.Target.ID() ~= state.getRunconfig().engageTargetId)) and mq.TLO.Me.Pet.Aggressive()) then
             mq.cmd('/squelch /pet back off')
             mq.cmd('/squelch /pet follow')
         end
     end
-    if not (state.getRunconfig().MobList[1] and state.getRunconfig().acmatarget) then
-        state.getRunconfig().acmatarget = nil
+    if not (state.getRunconfig().MobList[1] and state.getRunconfig().engageTargetId) then
+        state.getRunconfig().engageTargetId = nil
     end
     if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() then
         if mq.TLO.GMCheck() == 'TRUE' then
@@ -108,7 +108,7 @@ local _miscInactivetimer = 0
 
 -- doMiscTimer sub-routines (run every 1s from _runDoMiscTimer).
 local function _miscInactiveClick()
-    if state.getRunconfig().acmatarget then return end
+    if state.getRunconfig().engageTargetId then return end
     if _miscInactivetimer >= mq.gettime() then return end
     _miscInactivetimer = mq.gettime() + math.random(60000, 90000)
     mq.cmd('/click right center')
@@ -186,10 +186,11 @@ function botlogic.StartUp(...)
     botconfig.LoadConfig()
     runconfig.zonename = mq.TLO.Zone.ShortName()
     if args[1] then
-        runconfig.TankName = args[1]:sub(1, 1):upper() .. args[1]:sub(2)
+        runconfig.TankName = (args[1] == 'automatic') and 'automatic' or (args[1]:sub(1, 1):upper() .. args[1]:sub(2))
     else
         runconfig.TankName = botconfig.config.settings.TankName
     end
+    runconfig.AssistName = botconfig.config.settings.AssistName or runconfig.TankName
     if args[2] == 'makecamp' then commands.MakeCamp('on') end
     if args[2] == 'follow' and args[1] then commands.Follow(args[1]) end
     mobfilter.process('exclude', 'zone')

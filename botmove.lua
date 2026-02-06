@@ -31,9 +31,9 @@ end
 local function shouldCallFollow(rc)
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
-    local acmatar = rc.acmatarget or 0
+    local engageId = rc.engageTargetId or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
-    return followid > 0 and followdistance > 0 and acmatar == 0 and followtype ~= 'CORPSE' and followdistance >= 35
+    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'CORPSE' and followdistance >= 35
 end
 
 local function updateStuckTimerWithinLeash(rc)
@@ -120,16 +120,16 @@ local function doWiggleUnstuck(followid, stuckdistance)
 end
 
 -- ---------------------------------------------------------------------------
--- ACMA return-to-follow phase handlers
+-- Engage return-to-follow phase handlers
 -- ---------------------------------------------------------------------------
 
-local function tickAcmaReturnDelay400(p)
+local function tickEngageReturnDelay400(p)
     local now = mq.gettime()
     if now < (p.deadline or 0) then return end
-    state.setRunState('acma_return_follow', { phase = 'nav_wait', deadline = now + 10000 })
+    state.setRunState('engage_return_follow', { phase = 'nav_wait', deadline = now + 10000 })
 end
 
-local function tickAcmaReturnNavWait(p)
+local function tickEngageReturnNavWait(p)
     local now = mq.gettime()
     if not mq.TLO.Navigation.Active() or now >= (p.deadline or 0) then
         state.clearRunState()
@@ -324,7 +324,7 @@ function botmove.UnStuck()
     return false
 end
 
-function botmove.StartReturnToFollowAfterACMA()
+function botmove.StartReturnToFollowAfterEngage()
     local rc = state.getRunconfig()
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
@@ -332,24 +332,24 @@ function botmove.StartReturnToFollowAfterACMA()
     if followdistance < 35 or not followid or followtype == 'CORPSE' then return end
     mq.cmd('/multiline ; /stick off ; /squelch /attack off ; /target self')
     botmove.FollowCall()
-    state.setRunState('acma_return_follow', { phase = 'delay_400', deadline = mq.gettime() + 400 })
+    state.setRunState('engage_return_follow', { phase = 'delay_400', deadline = mq.gettime() + 400 })
 end
 
-function botmove.TickReturnToFollowAfterACMA()
-    if state.getRunState() ~= 'acma_return_follow' then return end
+function botmove.TickReturnToFollowAfterEngage()
+    if state.getRunState() ~= 'engage_return_follow' then return end
     local p = state.getRunStatePayload()
     if not p then state.clearRunState() return end
     if p.phase == 'delay_400' then
-        tickAcmaReturnDelay400(p)
+        tickEngageReturnDelay400(p)
         return
     end
     if p.phase == 'nav_wait' then
-        tickAcmaReturnNavWait(p)
+        tickEngageReturnNavWait(p)
     end
 end
 
 function botmove.FollowAndStuckCheck()
-    botmove.TickReturnToFollowAfterACMA()
+    botmove.TickReturnToFollowAfterEngage()
     if not (state.getRunconfig().followid and state.getRunconfig().followid > 0) then return end
     local rc = state.getRunconfig()
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
@@ -364,7 +364,7 @@ end
 
 function botmove.MakeCampLeashCheck()
     if not state.getRunconfig().campstatus then return end
-    if state.getRunconfig().acmatarget then return end
+    if state.getRunconfig().engageTargetId then return end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     local rc = state.getRunconfig()
     if campDistanceOk(rc) and campLOSOk(rc) then return end

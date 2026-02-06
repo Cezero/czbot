@@ -220,7 +220,7 @@ local function updateImGui()
                 ImGui.EndTabItem()
             end
             if ImGui.BeginTabItem('Debug') then
-                ImGui.Text('Debug area, these are running variables in trotbot, editting these may cause crashes!')
+                ImGui.Text('Debug area, these are running variables in czbot, editting these may cause crashes!')
                 drawTableTree(state.getRunconfig(), 'running')
                 ImGui.EndTabItem()
             end

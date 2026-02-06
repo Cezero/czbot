@@ -18,7 +18,7 @@ local function DelayOnZone()
     end
     state.getRunconfig().campstatus = false
     if botconfig.config.settings.dopull == true then botconfig.config.settings.dopull = false end
-    if state.getRunconfig().acmatarget then state.getRunconfig().acmatarget = nil end
+    if state.getRunconfig().engageTargetId then state.getRunconfig().engageTargetId = nil end
     if APTarget then APTarget = nil end
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
@@ -160,10 +160,10 @@ end
 
 function botevents.Event_MobProb(line, arg1, arg2)
     if mobprobtimer <= mq.gettime() then return true end
-    if state.getRunconfig().acmatarget then
-        if mq.TLO.Navigation.PathLength('id ' .. state.getRunconfig().acmatarget)() <= myconfig.settings.acleash then
+    if state.getRunconfig().engageTargetId then
+        if mq.TLO.Navigation.PathLength('id ' .. state.getRunconfig().engageTargetId)() <= myconfig.settings.acleash then
             mq.cmdf(
-                '/nav id %s dist=0 log=off', state.getRunconfig().acmatarget)
+                '/nav id %s dist=0 log=off', state.getRunconfig().engageTargetId)
         end
     end
     mobprobtimer = mq.gettime() + 3000

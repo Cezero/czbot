@@ -2,11 +2,12 @@
 ---@field ScriptList table
 ---@field SubOrder table
 ---@field zonename string
----@field acmatarget number|nil
+---@field engageTargetId number|nil
 ---@field AlertList number
 ---@field followid number
 ---@field followname string
 ---@field TankName string
+---@field AssistName string
 ---@field ExcludeList string
 ---@field PriorityList string
 ---@field MobList table
@@ -15,7 +16,6 @@
 ---@field campstatus boolean
 ---@field makecamp {x:number|nil, y:number|nil, z:number|nil}
 ---@field charmid number|nil
----@field BotList table
 ---@field domelee boolean|nil
 ---@field pulledmob number|nil
 ---@field pullreturntimer number|nil
@@ -56,7 +56,7 @@ local BUSY_STATES = {
     casting = true,
     dragging = true,
     camp_return = true,
-    acma_return_follow = true,
+    engage_return_follow = true,
     targeting = true,
     unstuck = true,
     chchain = true,
@@ -72,11 +72,12 @@ function M.resetRunconfig()
         ScriptList = {},
         SubOrder = {},
         zonename = '',
-        acmatarget = nil,
+        engageTargetId = nil,
         AlertList = 20,
         followid = 0,
         followname = '',
         TankName = '',
+        AssistName = '',
         ExcludeList = '',
         PriorityList = '',
         MobList = {},
@@ -85,7 +86,6 @@ function M.resetRunconfig()
         campstatus = false,
         makecamp = { x = nil, y = nil, z = nil },
         charmid = nil,
-        BotList = {},
         domelee = nil,
         pulledmob = nil,
         pullreturntimer = nil,
@@ -121,7 +121,7 @@ function M.resetRunconfig()
 end
 
 ---Set current run state and optional payload (deadline, phase, or custom table).
----@param name string One of: idle, pulling, raid_mechanic, casting, dragging, camp_return, acma_return_follow, targeting, melee, unstuck, chchain, zone_changing, loading_gem, load_raid
+---@param name string One of: idle, pulling, raid_mechanic, casting, dragging, camp_return, engage_return_follow, targeting, melee, unstuck, chchain, zone_changing, loading_gem, load_raid
 ---@param payload table|nil Optional: { deadline = number?, phase = string?, ... }
 function M.setRunState(name, payload)
     local rc = M.getRunconfig()

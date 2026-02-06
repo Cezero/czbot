@@ -13,8 +13,8 @@
 ---@field sitmana number|nil
 ---@field sitendur number|nil
 ---@field TankName string|nil
+---@field AssistName string|nil
 ---@field TargetFilter string|nil
----@field masterlist string|nil
 ---@field petassist boolean|nil
 ---@field acleash number|nil
 ---@field zradius number|nil
@@ -80,7 +80,7 @@ M._common = nil
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'TargetFilter', 'masterlist', 'petassist', 'acleash', 'zradius' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'zradius' },
     pull = { 'pullability', 'abilityrange', 'radius', 'zrange', 'maxlevel', 'minlevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -367,7 +367,6 @@ function M.Load(path)
     if (M.config.settings.dosit == nil) then M.config.settings.dosit = true end
     if (M.config.settings.sitmana == nil) then M.config.settings.sitmana = 90 end
     if (M.config.settings.sitendur == nil) then M.config.settings.sitendur = 90 end
-    if (M.config.settings.masterlist == nil) then M.config.settings.masterlist = 'actornet' end
     if (M.config.settings.acleash == nil) then M.config.settings.acleash = 75 end
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "manual" end

@@ -15,7 +15,7 @@ function TrakBreathOut()
         if meleeclass[myclass] or casterclass[myclass] then
             raidsactive = true
             myconfig.settings.domelee = false
-            state.getRunconfig().acmatarget = nil
+            state.getRunconfig().engageTargetId = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
             mq.cmd('/multiline ; /nav loc -1180 -75 -178 ; /echo TrotsRaid: Moving away from Trak')
             mq.delay(200)
@@ -34,7 +34,7 @@ function TrakBreathIn()
         if meleeclass[myclass] or casterclass[myclass] then
             raidsactive = true
             if meleeclass[myclass] then myconfig.settings.domelee = true end
-            state.getRunconfig().acmatarget = nil
+            state.getRunconfig().engageTargetId = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
             mq.cmd('/multiline ; /nav id ${Spawn[Trakanon].ID} distance=35 ; /echo TrotsRaid: Resuming Combat with Trak...')
             mq.delay(200)

@@ -12,7 +12,7 @@ local myconfig = botconfig.config
 local botcast = {}
 
 -- Module-level state for buff/cure/heal/debuff (used by evals and spellutils globals)
--- Runconfig fields used by botcast: acmatarget (set in ADSpawnCheck when clearing invalid spawn, and in DebuffOnBeforeCast for tanktar);
+-- Runconfig fields used by botcast: engageTargetId (set in ADSpawnCheck when clearing invalid spawn, and in DebuffOnBeforeCast for tanktar);
 -- charmid (set in charm.EvalTarget and spellutils on cast); MobList, MobCount (set in ADSpawnCheck); CurSpell (read-only here, set in spellutils).
 local BuffClass = {}
 local CureClass = {}
@@ -782,10 +782,10 @@ end)
 local noncombatzones = { 'GuildHall', 'GuildLobby', 'PoKnowledge', 'Nexus', 'Bazaar', 'AbysmalSea', 'potranquility' }
 
 local function ADSpawnCheck_ValidateAcmTarget(rc)
-    if rc.acmatarget then
-        if not mq.TLO.Spawn(rc.acmatarget).ID() or mq.TLO.Spawn(rc.acmatarget).Type() == 'Corpse' then
-            rc.acmatarget = nil
-            if debug then print('clearing acmatarget') end
+    if rc.engageTargetId then
+        if not mq.TLO.Spawn(rc.engageTargetId).ID() or mq.TLO.Spawn(rc.engageTargetId).Type() == 'Corpse' then
+            rc.engageTargetId = nil
+            if debug then print('clearing engageTargetId') end
         end
     end
     if utils.isInList(mq.TLO.Zone.ShortName(), noncombatzones) then return false end
@@ -924,7 +924,7 @@ local function DebuffEvalTankTar(index, ctx)
                     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
                         return nil, nil
                     end
-                    return state.getRunconfig().acmatarget or ctx.tanktar, 'tanktar'
+                    return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
                 end
             end
         end
@@ -982,7 +982,7 @@ local function DebuffEvalNamedTankTar(index, ctx)
                 if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
                     return nil, nil
                 end
-                return state.getRunconfig().acmatarget or ctx.tanktar, 'tanktar'
+                return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
             end
         end
     end
@@ -1019,7 +1019,7 @@ local function DebuffOnBeforeCast(i, EvalID, classhit)
     end
     charm.BeforeCast(EvalID, classhit)
     if classhit == 'tanktar' and EvalID and EvalID > 0 then
-        if not myconfig.melee.offtank then state.getRunconfig().acmatarget = EvalID end
+        if not myconfig.melee.offtank then state.getRunconfig().engageTargetId = EvalID end
         if mq.TLO.Pet.Target.ID() ~= EvalID and not mq.TLO.Me.Pet.Combat() then
             mq.cmdf('/pet attack %s', EvalID)
         end

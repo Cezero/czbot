@@ -202,7 +202,7 @@ local function cmd_abort(args)
         end
         if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
         if mq.TLO.Target.ID() then mq.cmd('/squelch /target clear') end
-        if state.getRunconfig().acmatarget then state.getRunconfig().acmatarget = nil end
+        if state.getRunconfig().engageTargetId then state.getRunconfig().engageTargetId = nil end
         if botconfig.config.settings.domelee then
             botconfig.config.settings.domelee = false
             meleeabort = true
@@ -228,22 +228,39 @@ local function cmd_leash(args)
     end
 end
 
+-- Engage MA's target.
 local function cmd_attack(args)
-    local tankInfo = charinfo(state.getRunconfig().TankName)
-    local KillTarget = tankInfo and tankInfo.Target and tankInfo.Target.ID or nil
-    state.getRunconfig().acmatarget = KillTarget
+    local tankrole = require('lib.tankrole')
+    local assistName = tankrole.GetAssistTargetName()
+    if not assistName then
+        printf('\ayCZBot:\ax\ar No Main Assist set, cannot engage')
+        return
+    end
+    local maInfo = charinfo(assistName)
+    local KillTarget = maInfo and maInfo.Target and maInfo.Target.ID or nil
+    state.getRunconfig().engageTargetId = KillTarget
     if KillTarget then
         printf('\ayCZBot:\ax\arEngaging\ax \ay%s\ax now', mq.TLO.Spawn(KillTarget).CleanName())
     else
-        printf('\ayCZBot:\ax\ar Tank has no target, cannot engage')
+        printf('\ayCZBot:\ax\ar Main Assist has no target, cannot engage')
     end
 end
 
+-- Set MT (Main Tank).
 local function cmd_tank(args)
-    local name = args[2]:sub(1, 1):upper() .. args[2]:sub(2)
+    if not args[2] then return end
+    local name = (args[2] == 'automatic') and 'automatic' or (args[2]:sub(1, 1):upper() .. args[2]:sub(2))
     state.getRunconfig().TankName = name
     printf('\ayCZBot:\axSetting tank to %s', name)
     mq.TLO.Target.TargetOfTarget()
+end
+
+-- Set MA (Main Assist).
+local function cmd_assist(args)
+    if not args[2] then return end
+    local name = (args[2] == 'automatic') and 'automatic' or (args[2]:sub(1, 1):upper() .. args[2]:sub(2))
+    state.getRunconfig().AssistName = name
+    printf('\ayCZBot:\axSetting assist to %s', name)
 end
 
 local function cmd_stickcmd(args, str)
@@ -681,6 +698,7 @@ local handlers = {
     leash = cmd_leash,
     attack = cmd_attack,
     tank = cmd_tank,
+    assist = cmd_assist,
     stickcmd = cmd_stickcmd,
     acleash = cmd_acleash,
     targetfilter = cmd_targetfilter,

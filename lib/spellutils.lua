@@ -4,6 +4,7 @@ local spellsdb = require('lib.spellsdb')
 local immune = require('lib.immune')
 local state = require('lib.state')
 local spellstates = require('lib.spellstates')
+local tankrole = require('lib.tankrole')
 local charinfo = require('actornet.charinfo')
 local spellutils = {}
 local _deps = {}
@@ -144,25 +145,25 @@ function spellutils.GetSpellInfo(entry)
     return spell, range, tartype, spellid
 end
 
--- Return tank name, tankid, and optionally tanktar, tanktarhp. Uses botmelee when needed (lazy require to avoid circular deps).
+-- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.
 function spellutils.GetTankInfo(includeTarget)
-    local state = require('lib.state')
-    local tank = state.getRunconfig().TankName
-    if not tank then return nil, nil, nil, nil end
-    local tankid = mq.TLO.Spawn('pc =' .. tank).ID()
-    if not includeTarget then return tank, tankid, nil, nil end
+    local mainTankName = state.getRunconfig().TankName
+    if mainTankName == 'automatic' then mainTankName = tankrole.GetMainTankName() end
+    if not mainTankName or mainTankName == '' then return nil, nil, nil, nil end
+    local tankid = mq.TLO.Spawn('pc =' .. mainTankName).ID()
+    if not includeTarget then return mainTankName, tankid, nil, nil end
     local tanktar, tanktarhp
-    local info = charinfo.GetInfo(tank)
+    local info = charinfo.GetInfo(mainTankName)
     if info and info.ID then
         tanktar = info.Target and info.Target.ID or nil
         tanktarhp = info.TargetHP
     elseif tankid then
         local botmelee = require('botmelee')
-        tanktar = botmelee.GetTankTar(tank)
+        tanktar = botmelee.GetPCTarget(mainTankName)
         tanktarhp = tanktar and mq.TLO.Spawn(tanktar).PctHPs() or nil
     end
     if tanktar == 0 then tanktar = nil end
-    return tank, tankid, tanktar, tanktarhp
+    return mainTankName, tankid, tanktar, tanktarhp
 end
 
 -- Post-cast logic when CastTimeLeft() has reached 0 (called from RunSpellCheckLoop).

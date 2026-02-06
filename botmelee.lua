@@ -5,6 +5,7 @@ local state = require('lib.state')
 local targeting = require('lib.targeting')
 local botmove = require('botmove')
 local charinfo = require('actornet.charinfo')
+local tankrole = require('lib.tankrole')
 local myconfig = botconfig.config
 local botmelee = {}
 
@@ -20,92 +21,134 @@ botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee t
 
 mobprobtimer = 0
 
--- When I am tank and my target is a PC: clear combat state.
+-- When I am MT and my target is a PC: clear combat state.
 local function clearTankCombatState()
-    state.getRunconfig().acmatarget = nil
+    state.getRunconfig().engageTargetId = nil
     combat.ResetCombatState()
 end
 
--- When I am tank (and raid/group/MT): pick target from MobList. Returns tanktar, newacmafound.
-local function selectTankTarget(tank)
-    local tanktar = nil
-    local newacmafound = false
-    if tank ~= mq.TLO.Me.Name() then return nil, false end
-    if not (mq.TLO.Raid.Members() or not mq.TLO.Group() or mq.TLO.Group.MainTank() == mq.TLO.Me.Name()) then return nil, false end
+-- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Returns mtPick spawn, engageTargetRefound.
+local function selectTankTarget(mainTankName)
+    local mtPick = nil
+    local engageTargetRefound = false
+    if mainTankName ~= mq.TLO.Me.Name() then return nil, false end
+    local gmt = mq.TLO.Group.MainTank
+    local groupMTName = (gmt and gmt.Name) and gmt.Name() or nil
+    if not (mq.TLO.Raid.Members() or not mq.TLO.Group() or groupMTName == mq.TLO.Me.Name()) then return nil, false end
     if mq.TLO.Me.Combat() then return nil, false end
     if debug then print('tanklogic') end
-    for _, v in ipairs(state.getRunconfig().MobList) do
+    local pullerTarID = tankrole.GetPullerTargetID()
+    local rc = state.getRunconfig()
+    for _, v in ipairs(rc.MobList) do
         if v.LineOfSight() then
-            if tanktar then
-                if v.ID() == state.getRunconfig().acmatarget then
-                    tanktar = v
-                    newacmafound = true
-                end
-                if v.Distance() < tanktar.Distance() then
-                    tanktar = v
+            if mtPick then
+                if pullerTarID and v.ID() == pullerTarID then
+                    mtPick = v
+                elseif v.ID() == rc.engageTargetId then
+                    mtPick = v
+                    engageTargetRefound = true
+                elseif not (pullerTarID and mtPick.ID() == pullerTarID) and v.Distance() < mtPick.Distance() then
+                    mtPick = v
                 end
             else
-                tanktar = v
+                mtPick = v
             end
         end
     end
-    return tanktar, newacmafound
+    return mtPick, engageTargetRefound
 end
 
--- Offtank: get tank's target; choose Nth non-tank target or assist tank. Sets acmatarget.
-local function resolveOfftankTarget(tank, assistpct)
+-- Offtank: if MT target == MA target pick add (Nth other mob); if MT target != MA target tank MA's target (agro/taunt).
+local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if debug then print('offtank logic') end
-    local actarid
-    local acname
-    local tanktarid = nil
-    local tankinfo = charinfo.GetInfo(tank)
-    if tankinfo and tankinfo.ID then
-        tanktarid = tankinfo.Target and tankinfo.Target.ID or nil
-    elseif mq.TLO.Spawn('pc =' .. tank).ID() then
-        tanktarid = botmelee.GetTankTar(tank)
+    local rc = state.getRunconfig()
+    local maInfo = charinfo.GetInfo(assistName)
+    local maTarId = (maInfo and maInfo.ID and maInfo.Target) and maInfo.Target.ID or nil
+    if not maTarId and mq.TLO.Spawn('pc =' .. assistName).ID() then
+        maTarId = botmelee.GetPCTarget(assistName)
     end
-    local otcounter = 0
-    for _, v in ipairs(state.getRunconfig().MobList) do
-        if v.ID() ~= tanktarid and not actarid then
-            if otcounter == myconfig.melee.otoffset then
-                actarid = v.ID()
-                acname = v.CleanName()
+    local mtInfo = charinfo.GetInfo(mainTankName)
+    local mtTarId = (mtInfo and mtInfo.ID and mtInfo.Target) and mtInfo.Target.ID or nil
+    if not mtTarId and mq.TLO.Spawn('pc =' .. mainTankName).ID() then
+        mtTarId = botmelee.GetPCTarget(mainTankName)
+    end
+    if mtTarId == maTarId then
+        -- Same target: pick an add (Nth mob in MobList that is not that target).
+        local actarid, acname
+        local otcounter = 0
+        for _, v in ipairs(rc.MobList) do
+            if v.ID() ~= maTarId and not actarid then
+                if otcounter == myconfig.melee.otoffset then
+                    actarid = v.ID()
+                    acname = v.CleanName()
+                end
+                otcounter = otcounter + 1
             end
-            otcounter = otcounter + 1
         end
-    end
-    if debug then print('offtank target: ', actarid) end
-    if actarid then
-        if actarid ~= mq.TLO.Target.ID() then
-            printf('\ayCZBot:\ax\arOff-tanking\ax a \ag%s id %s', acname, actarid)
+        if debug then print('offtank target: ', actarid) end
+        if actarid then
+            if actarid ~= mq.TLO.Target.ID() then
+                printf('\ayCZBot:\ax\arOff-tanking\ax a \ag%s id %s', acname, actarid)
+            end
+            rc.engageTargetId = actarid
+        elseif maInfo and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) and maTarId and maTarId > 0 then
+            rc.engageTargetId = maTarId
         end
-        state.getRunconfig().acmatarget = actarid
-    elseif tankinfo and tankinfo.TargetHP and (tankinfo.TargetHP <= assistpct) then
-        if tanktarid > 0 then state.getRunconfig().acmatarget = tanktarid else state.getRunconfig().acmatarget = nil end
-        if debug then print('nothing to offtank, acmatarget: ', state.getRunconfig().acmatarget) end
+    else
+        -- Different targets: offtank tanks the MA's target (agro/taunt).
+        if maTarId and maTarId > 0 then
+            rc.engageTargetId = maTarId
+        end
     end
 end
 
--- Melee assist: sync acmatarget to tank's target when tank is engaging.
-local function resolveMeleeAssistTarget(tank, assistpct)
+-- DPS: sync engageTargetId to MA's target when MA is engaging.
+local function resolveMeleeAssistTarget(assistName, assistpct)
     if debug then print('meleelogic') end
-    local info = charinfo.GetInfo(tank)
-    local tanktarid = info and info.Target and info.Target.ID or nil
-    if info and info.ID and (state.getRunconfig().acmatarget ~= tanktarid) then state.getRunconfig().acmatarget = nil end
-    for _, v in ipairs(state.getRunconfig().MobList) do
-        if v.ID() == tanktarid and info and info.TargetHP and (info.TargetHP <= assistpct) then
-            state.getRunconfig().acmatarget = tanktarid
+    local rc = state.getRunconfig()
+    local maInfo = charinfo.GetInfo(assistName)
+    local maTarId = maInfo and maInfo.Target and maInfo.Target.ID or nil
+    if maInfo and maInfo.ID and (rc.engageTargetId ~= maTarId) then rc.engageTargetId = nil end
+    for _, v in ipairs(rc.MobList) do
+        if v.ID() == maTarId and maInfo and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) then
+            rc.engageTargetId = maTarId
         end
     end
-    if not (info and info.ID) then
-        state.getRunconfig().acmatarget = botmelee.GetTankTar(tank)
+    if not (maInfo and maInfo.ID) then
+        rc.engageTargetId = botmelee.GetPCTarget(assistName)
     end
 end
 
--- When acmatarget is set: pet attack, target (via targeting lib), stand, attack on, stick. Uses targeting state + melee phase moving_closer; no mq.delay.
+-- MA bot only: choose target from MobList with priority (1) named, (2) MT's target. Sets engageTargetId.
+local function selectMATarget(mainTankName)
+    local rc = state.getRunconfig()
+    local mtTarId = nil
+    local mtInfo = charinfo.GetInfo(mainTankName)
+    if mtInfo and mtInfo.Target then mtTarId = mtInfo.Target.ID end
+    if not mtTarId and mq.TLO.Spawn('pc =' .. mainTankName).ID() then
+        mtTarId = botmelee.GetPCTarget(mainTankName)
+    end
+    local namedSpawn = nil
+    local mtTarSpawn = nil
+    for _, v in ipairs(rc.MobList) do
+        if v.LineOfSight() then
+            if v.Named() then
+                if not namedSpawn or v.Distance() < namedSpawn.Distance() then namedSpawn = v end
+            end
+            if mtTarId and v.ID() == mtTarId then mtTarSpawn = v end
+        end
+    end
+    if namedSpawn then
+        rc.engageTargetId = namedSpawn.ID()
+    elseif mtTarSpawn then
+        rc.engageTargetId = mtTarSpawn.ID()
+    end
+end
+
+-- When engageTargetId is set: pet attack, target (via targeting lib), stand, attack on, stick. Uses targeting state + melee phase moving_closer; no mq.delay.
 local function engageTarget()
-    local acmatarget = state.getRunconfig().acmatarget
-    if not acmatarget then return end
+    local engageTargetId = state.getRunconfig().engageTargetId
+    if not engageTargetId then return end
 
     if targeting.IsActive() then
         return
@@ -127,20 +170,20 @@ local function engageTarget()
     end
 
     if mq.TLO.Me.Pet.ID() and myconfig.settings.petassist and not mq.TLO.Pet.Aggressive() then
-        mq.cmdf('/pet attack %s', acmatarget)
+        mq.cmdf('/pet attack %s', engageTargetId)
     end
 
     if not myconfig.settings.domelee then return end
 
-    if mq.TLO.Target.ID() ~= acmatarget then
-        targeting.SetTarget(acmatarget, 500)
+    if mq.TLO.Target.ID() ~= engageTargetId then
+        targeting.SetTarget(engageTargetId, 500)
         return
     end
 
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop') end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
     if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
-    if not mq.TLO.Stick.Active() or (mq.TLO.Stick.StickTarget() ~= acmatarget) then
+    if not mq.TLO.Stick.Active() or (mq.TLO.Stick.StickTarget() ~= engageTargetId) then
         mq.cmdf('/squelch /multiline ; /attack on ; /stick %s', myconfig.melee.stickcmd)
     end
 
@@ -149,56 +192,58 @@ local function engageTarget()
     end
 end
 
--- When no acmatarget: stick off, attack off, pet back, clear NPC target.
+-- When no engageTargetId: stick off, attack off, pet back, clear NPC target.
 local function disengageCombat()
     combat.ResetCombatState()
 end
 
+-- Resolve assistName (MA) and mainTankName (MT). MT picks from MobList (puller priority); MA bot picks named then MT target; offtank/DPS follow MA.
 function botmelee.AdvCombat()
     if debug then print('melee called') end
-    local tank = state.getRunconfig().TankName
+    local assistName = tankrole.GetAssistTargetName()
+    local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
+    local rc = state.getRunconfig()
 
-    if tank == mq.TLO.Me.Name() and mq.TLO.Target.Master.Type() == 'PC' then
+    if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Master.Type() == 'PC' then
         clearTankCombatState()
     end
 
-    local tanktar, newacmafound = selectTankTarget(tank)
-    if tanktar then
-        if tanktar.ID() then
-            state.getRunconfig().acmatarget = tanktar.ID()
+    if tankrole.AmIMainTank() then
+        local mtPick, engageTargetRefound = selectTankTarget(mainTankName)
+        if mtPick and mtPick.ID() then
+            rc.engageTargetId = mtPick.ID()
+        end
+        if engageTargetRefound then
+            botmove.StartReturnToFollowAfterEngage()
+        end
+    elseif tankrole.AmIMainAssist() then
+        selectMATarget(mainTankName)
+    else
+        if myconfig.melee.offtank and assistName and mainTankName then
+            resolveOfftankTarget(assistName, mainTankName, assistpct)
+        end
+        if not myconfig.melee.offtank and assistName then
+            resolveMeleeAssistTarget(assistName, assistpct)
         end
     end
 
-    if newacmafound then
-        botmove.StartReturnToFollowAfterACMA()
-    end
-
-    if (myconfig.melee.offtank and tank ~= mq.TLO.Me.Name()) then
-        resolveOfftankTarget(tank, assistpct)
-    end
-
-    if not myconfig.melee.offtank and not (tank == mq.TLO.Me.Name()) then
-        resolveMeleeAssistTarget(tank, assistpct)
-    end
-
-    if state.getRunconfig().acmatarget then
+    if rc.engageTargetId then
         engageTarget()
     else
         disengageCombat()
     end
 end
 
--- Get tank's target when tank is not on actornet: use /assist, wait (melee phase targeting), then return
--- target ID only if it's in MobList (camp/acleash valid mobs). Uses melee state + phase; no mq.delay.
-function botmelee.GetTankTar(tank)
-    if debug then print('gettanktar sub called') end
-    if not tank or not mq.TLO.Spawn('pc =' .. tank).ID() then return nil end
+-- Return target ID of PC pcName (used for MA's or MT's target depending on caller). Uses charinfo when peer, else /assist + melee phase targeting.
+function botmelee.GetPCTarget(pcName)
+    if debug then print('GetPCTarget sub called') end
+    if not pcName or not mq.TLO.Spawn('pc =' .. pcName).ID() then return nil end
 
     if state.getRunState() == 'melee' then
         local p = state.getRunStatePayload()
-        if p and p.phase == 'targeting' and p.tank then
-            if p.tank ~= tank then
+        if p and p.phase == 'targeting' and p.pcName then
+            if p.pcName ~= pcName then
                 state.setRunState('melee', { phase = 'idle' })
                 return nil
             end
@@ -214,16 +259,16 @@ function botmelee.GetTankTar(tank)
     end
 
     if mq.TLO.Me.Assist() then mq.cmd('/squelch /assist off') end
-    mq.cmdf('/assist %s', tank)
-    state.setRunState('melee', { phase = 'targeting', tank = tank, deadline = mq.gettime() + 500 })
+    mq.cmdf('/assist %s', pcName)
+    state.setRunState('melee', { phase = 'targeting', pcName = pcName, deadline = mq.gettime() + 500 })
     return nil
 end
 
 do
     local hookregistry = require('lib.hookregistry')
     hookregistry.registerMainloopHook('doMelee', function()
-        if state.getRunState() == 'acma_return_follow' then
-            botmove.TickReturnToFollowAfterACMA()
+        if state.getRunState() == 'engage_return_follow' then
+            botmove.TickReturnToFollowAfterEngage()
             return
         end
         if not myconfig.settings.domelee or not state.getRunconfig().MobList[1] then
@@ -232,7 +277,7 @@ do
         end
         local payload = (state.getRunState() == 'melee') and state.getRunStatePayload() or nil
         state.setRunState('melee', payload and payload or { phase = 'idle' })
-        if state.getRunconfig().TankName == mq.TLO.Me.Name() then
+        if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then
             botmelee.AdvCombat()
             return
         end
