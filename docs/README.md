@@ -22,6 +22,14 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | [Pull Configuration and Logic](pull-configuration.md) | How pulling works: config options, when the bot starts a pull, pre-conditions, hunter mode, runtime commands (xarc, exclude, priority). |
 
 
+## Raid
+
+
+| Document                          | Description                                                                                                      |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| [Raid mode](raid-mode.md)         | What the doraid toggle does (raid mechanic mode), raid save/load commands, and how they affect bot behavior.   |
+
+
 ## Spells and effects
 
 

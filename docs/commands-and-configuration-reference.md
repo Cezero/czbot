@@ -19,7 +19,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **dodebuff** | Debuff loop (nukes, slows, mez, etc.). |
 | **dobuff** | Buff loop (buffs, pet summon). |
 | **doheal** | Heal loop. |
-| **doraid** | Raid mode (load/save raid config). |
+| **doraid** | Raid mode: enable zone-specific raid mechanic handling; when raid mechanics are active, pulling is suppressed and zone scripts may run. See [Raid mode](raid-mode.md). |
 | **docure** | Cure loop. |
 | **dosit** | Sit when not in combat (for mana/endurance). |
 | **domount** | Mount when not in combat. |
@@ -80,7 +80,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **linkitem** | — | Link item (event). |
 | **linkaugs** | `<slot>` | Print augments in the given slot. |
 | **spread** | — | Spread bots (nav to positions). |
-| **raid** | `save` / `load` `<name>` | Save or load a raid configuration by name. |
+| **raid** | `save` / `load` `<name>` | Save or load a raid configuration by name. See [Raid mode](raid-mode.md) for save/load behavior and raid formation. |
 
 ### Master pause
 
@@ -140,7 +140,7 @@ return StoredConfig
 | **dodebuff** | `false` | Enable debuff loop. |
 | **docure** | `false` | Enable cure loop. |
 | **dopull** | `false` | Enable pull loop. |
-| **doraid** | `false` | Raid mode. |
+| **doraid** | `false` | Raid mode (zone-specific raid mechanics; when active, pulling is suppressed). See [Raid mode](raid-mode.md). |
 | **dodrag** | `false` | Corpse drag. |
 | **domount** | `false` | Auto mount. |
 | **mountcast** | `false` | Mount cast (e.g. spell\|item). |
