@@ -287,6 +287,9 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         if (not options.entryValid or options.entryValid(i)) then
             local EvalID, targethit = evalFn(i)
             if debug then printf('spellutils.RunSpellCheckLoop %d %s EvalID=%s targethit=%s', i, sub, EvalID, targethit) end
+            if debug and options.beforeCast then printf('spellutils.RunSpellCheckLoop %d %s EvalID=%s targethit=%s beforeCast=%s', i, sub, EvalID, targethit, options.beforeCast(i, EvalID, targethit)) end
+            if debug and options.immuneCheck then printf('spellutils.RunSpellCheckLoop %d %s EvalID=%s targethit=%s immuneCheck=%s', i, sub, EvalID, targethit, spellutils.ImmuneCheck(sub, i, EvalID)) end
+            if debug then printf('spellutils.RunSpellCheckLoop %d %s EvalID=%s targethit=%s precondition=%s', i, sub, EvalID, targethit, spellutils.PreCondCheck(sub, i, EvalID)) end
             if EvalID and targethit
                 and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
                 and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))

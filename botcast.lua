@@ -918,7 +918,6 @@ local function DebuffEvalTankTar(index, ctx)
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar then
             local myrange = ctx.myrange
-            if debug then printf('debuff tanktar %d %s mob=%s myrange=%s', index, entry.spell, v.ID(), myrange) end
             if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
             if not (myrange and v.Distance() and v.Distance() > myrange) then
                 if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
@@ -930,7 +929,6 @@ local function DebuffEvalTankTar(index, ctx)
                     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
                         return nil, nil
                     end
-                    if debug then printf('debuff tanktar %d %s mob=%s tanktarstack=%s', index, entry.spell, v.ID(), tanktarstack) end
                     return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
                 end
             end
