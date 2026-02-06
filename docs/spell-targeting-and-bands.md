@@ -7,9 +7,9 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 | Section  | What "target" means | Count gate | Bands (main idea) |
 | -------- | ------------------- | ---------- | ----------------- |
 | **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (priority stages) + **validtargets** (within-phase types) + min/max HP % |
-| **buff** | Self, tank, peers by class, mypet, other pets | None | **targetphase** + **validtargets** (classes or all); **cbt** / **idle** control when spell can run |
+| **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **cbt** / **idle** control when spell can run |
 | **debuff** | Mobs in camp (MA target + adds) | **tarcnt** = min mobs in camp to consider spell | **targetphase** only (tanktar, notanktar, named) + min/max HP % |
-| **cure**  | Self, tank, peers by class | None | **targetphase** + **validtargets**; **groupmember** = two-pass (in-group then all peers) |
+| **cure**  | Self, tank, group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **groupmember** (in-group, incl. non-bots), **groupcure**, **pc** |
 
 ---
 
@@ -100,37 +100,40 @@ From `BuffEval` in the code, the order is:
 
 1. **self** — Yourself (including **petspell** when you have no pet, for summon).
 2. **byname** — Specific characters whose names appear in **validtargets** when **byname** is in targetphase.
-3. **tank** — Main Tank.
-4. **bots** — Other peers by class (from validtargets). “Bots” = all peers (charinfo), not limited to group.
-5. **mypet** — Your pet.
-6. **pet** — Other peers’ pets.
+3. **tank** — Main Tank (can be non-bot when explicitly named; only out-of-group non-bot we buff). Non-peer buff state from Spawn after targeting (BuffsPopulated).
+4. **groupbuff** — Group AE buff; spell targets group; cast when enough group members need the buff (**tarcnt**). Need is from charinfo for peers, Spawn (when BuffsPopulated) for non-peers.
+5. **groupmember** — In-group only (single-target); includes non-bot group members. Non-peer need from Spawn (BuffsPopulated).
+6. **pc** — All peers by class (from validtargets). Not limited to group. Config token **bots** is accepted and treated as **pc**.
+7. **mypet** — Your pet.
+8. **pet** — Other peers’ pets.
 
-For **BRD**, only **self** is tried after the initial self check (no tank/bots/mypet/pet pass).
+For **BRD**, only **self** is tried after the initial self check (no tank/groupbuff/groupmember/pc/mypet/pet pass).
 
 ### Bands
 
-Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **bots**, **mypet**, **pet**, **byname**, **cbt**, **idle**. validtargets: class shorts or **all** (for **bots** phase); or character names (for **byname**). **cbt** / **idle** = when the spell can run. There is no **tarcnt** for buffs. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
+Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**, **byname**, **cbt**, **idle**. validtargets: class shorts or **all** (for **groupmember** and **pc**); or character names (for **byname**). **cbt** / **idle** = when the spell can run. **tarcnt** optional for **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
 
 ---
 
 ## Cure targeting
 
-Cure spells choose a target in a fixed order. Bands use **targetphase** and **validtargets**. **groupmember** in targetphase enables a **two-pass** behavior: first in-group peers, then all peers (**pc**).
+Cure spells choose a target in a fixed order. Bands use **targetphase** and **validtargets**. **groupmember** = in-group only (peers then non-peer group members via Group TLO). **groupcure** = group AE cure. **pc** = all peers.
 
 ### Evaluation order
 
 From `CureEval` in the code, the order is:
 
 1. **self** — Yourself (if bands allow).
-2. **tank** — Main Tank (if bands allow).
-3. **groupmember** pass — Only peers who are **in the bot’s group**, by class from validtargets. Each such peer is checked for needing the cure.
-4. **pc** pass — **All** peers by class from validtargets (no group check). This allows curing out-of-group peers in this second pass.
+2. **tank** — Main Tank (if bands allow; can be non-bot when explicitly named; only out-of-group non-bot we cure). Non-peer detrimentals from Spawn after targeting (BuffsPopulated).
+3. **groupcure** — Group AE cure; spell targets group; cast when at least **tarcnt** group members have a matching detrimental (peers from charinfo, non-peers from Spawn when BuffsPopulated).
+4. **groupmember** — In-group only: peers first, then non-peer group members. Non-peer need from Spawn (BuffsPopulated).
+5. **pc** — All peers by class from validtargets (no group check). Out-of-group peers can be cured in this pass.
 
-So **groupmember** in targetphase adds a first pass over in-group peers, then **pc** pass over all peers. See [Curing configuration](curing-configuration.md) and [Out-of-group peers](out-of-group-peers.md).
+See [Curing configuration](curing-configuration.md) and [Out-of-group peers](out-of-group-peers.md).
 
 ### Bands
 
-Bands use **targetphase** and **validtargets** (no min/max). targetphase: **self**, **tank**, **groupmember**, **pc**. validtargets: class shorts or **all**. There is no **tarcnt** for cures. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the order above.
+Bands use **targetphase** and **validtargets** (no min/max). targetphase: **self**, **tank**, **groupcure**, **groupmember**, **pc**. validtargets: class shorts or **all**. **tarcnt** optional for **groupcure**. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the order above.
 
 ---
 

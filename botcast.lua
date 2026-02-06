@@ -34,7 +34,7 @@ local function defaultBuffEntry()
         alias = false,
         announce = false,
         enabled = true,
-        bands = { { targetphase = { 'self', 'tank', 'bots', 'mypet', 'pet' }, validtargets = { 'all' } } },
+        bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } },
         spellicon = 0,
         precondition = true
     }
@@ -152,13 +152,83 @@ local function BuffEvalByName(index, entry, spellid, range)
     return nil, nil
 end
 
-local function BuffEvalTank(index, entry, spellid, range, tank, tankid)
-    if not tank or not entry or not BuffClass[index].tank or not IconCheck(index, tankid) then return nil, nil end
-    return BuffEvalBotNeedsBuff(tankid, tank, spellid, range, index, 'tank')
+local function BuffEvalTank(index, entry, spell, spellid, range, tank, tankid)
+    if not tank or not entry or not BuffClass[index].tank or not tankid or tankid <= 0 then return nil, nil end
+    if not IconCheck(index, tankid) then return nil, nil end
+    local peer = charinfo(tank)
+    if peer then
+        return BuffEvalBotNeedsBuff(tankid, tank, spellid, range, index, 'tank')
+    end
+    -- Non-bot tank (explicitly configured): buff state only from Spawn after targeting (BuffsPopulated)
+    local tankdist = mq.TLO.Spawn(tankid).Distance()
+    if not range or not tankdist or tankdist > range then return nil, nil end
+    if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff') then return nil, nil end
+    if spellutils.SpawnNeedsBuff(tankid, spell, entry.spellicon) then return tankid, 'tank' end
+    -- Out-of-group: best-effort cast in range when we don't have buff data (not targeted or BuffsPopulated false)
+    if not mq.TLO.Group.Member(tank).Index() then return tankid, 'tank' end
+    return nil, nil
 end
 
-local function BuffEvalBots(index, entry, spellid, range, bots, botcount)
-    if not BuffClass[index].bots then return nil, nil end
+local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
+    if not BuffClass[index].groupbuff then return nil, nil end
+    local tartype = mq.TLO.Spell(spell).TargetType()
+    if tartype ~= 'Group v1' and tartype ~= 'Group v2' then return nil, nil end
+    local aeRange = mq.TLO.Spell(spell).AERange()
+    if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then aeRange = mq.TLO.FindItem(entry.spell).Spell.AERange() end
+    if not aeRange or aeRange <= 0 then return nil, nil end
+    local needCount = 0
+    for i = 1, mq.TLO.Group.Members() do
+        local grpname = mq.TLO.Group(i).Name()
+        local grpid = mq.TLO.Group(i).ID()
+        local grpdist = mq.TLO.Group(i).Distance()
+        if grpid and grpid > 0 and mq.TLO.Spawn(grpid).Type() == 'PC' and grpdist and grpdist <= aeRange then
+            local peer = charinfo(grpname)
+            if peer then
+                local hasBuff = spellutils.PeerHasBuff(peer, spellid)
+                local stacks = peer.Stacks(spellid)
+                local free = peer.FreeBuffSlots
+                if not hasBuff and stacks and free and free > 0 then needCount = needCount + 1 end
+            else
+                if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then needCount = needCount + 1 end
+            end
+        end
+    end
+    if needCount >= (entry.tarcnt or 1) then
+        if tartype == 'Group v1' then return 1, 'groupbuff' end
+        return mq.TLO.Me.ID(), 'groupbuff'
+    end
+    return nil, nil
+end
+
+local function BuffEvalGroupMember(index, entry, spell, spellid, range)
+    if not BuffClass[index].groupmember then return nil, nil end
+    local members = mq.TLO.Group.Members()
+    if not members or members == 0 then return nil, nil end
+    for i = 1, members do
+        local grpname = mq.TLO.Group(i).Name()
+        local grpid = mq.TLO.Group(i).ID()
+        local grpclass = mq.TLO.Group(i).Class.ShortName()
+        local grpdist = mq.TLO.Group(i).Distance()
+        if grpid and grpid > 0 and grpclass and mq.TLO.Spawn(grpid).Type() == 'PC' then
+            if range and grpdist and grpdist <= range then
+                local lc = grpclass:lower()
+                if (BuffClass[index].classes == 'all' or (BuffClass[index].classes and BuffClass[index].classes[lc])) and IconCheck(index, grpid) then
+                    local peer = charinfo(grpname)
+                    if peer then
+                        local id, hit = BuffEvalBotNeedsBuff(grpid, grpname, spellid, range, index, lc)
+                        if id then return id, hit end
+                    else
+                        if spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff') and spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then return grpid, lc end
+                    end
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function BuffEvalPc(index, entry, spellid, range, bots, botcount)
+    if not BuffClass[index].pc then return nil, nil end
     for i = 1, botcount do
         if bots[i] then
             local botname = mq.TLO.Spawn('pc =' .. bots[i]).Name()
@@ -231,9 +301,13 @@ local function BuffEval(index)
         if id then return id, hit end
         id, hit = BuffEvalByName(index, entry, sid, range)
         if id then return id, hit end
-        id, hit = BuffEvalTank(index, entry, sid, range, tank, tankid)
+        id, hit = BuffEvalTank(index, entry, spell, sid, range, tank, tankid)
         if id then return id, hit end
-        id, hit = BuffEvalBots(index, entry, sid, range, bots, botcount)
+        id, hit = BuffEvalGroupBuff(index, entry, spell, sid, range)
+        if id then return id, hit end
+        id, hit = BuffEvalGroupMember(index, entry, spell, sid, range)
+        if id then return id, hit end
+        id, hit = BuffEvalPc(index, entry, sid, range, bots, botcount)
         if id then return id, hit end
         id, hit = BuffEvalMyPet(index, entry, spell, sid, range)
         if id then return id, hit end
@@ -314,6 +388,12 @@ botconfig.RegisterConfigLoader(function()
     if botconfig.config.settings.docure then botcast.LoadCureConfig() end
 end)
 
+local function CureTypeList(index)
+    local list = {}
+    for k in pairs(CureType[index] or {}) do list[#list + 1] = k end
+    return list
+end
+
 local function CureEvalForTarget(index, botname, botid, botclass, targethit, spelltartype)
     local cureindex = CureClass[index]
     if not cureindex then return nil, nil end
@@ -326,19 +406,62 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
             end
         else
             local peer = charinfo.GetInfo(botname)
-            local detrimentals = peer and peer.Detrimentals or nil
-            local curetype = peer and peer[v] or nil
-            if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
-                if targethit == 'tank' then return botid, 'tank' end
-                if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
-                if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
-            end
-            if string.lower(v) ~= 'all' and curetype and curetype > 0 then
-                if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'tank' end
-                if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
-                if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
+            if peer then
+                local detrimentals = peer.Detrimentals or nil
+                local curetype = peer[v] or nil
+                if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
+                    if targethit == 'tank' then return botid, 'tank' end
+                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
+                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
+                end
+                if string.lower(v) ~= 'all' and curetype and curetype > 0 then
+                    if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'tank' end
+                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
+                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
+                end
             end
         end
+    end
+    if botname and botid and not charinfo.GetInfo(botname) then
+        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure') then return nil, nil end
+        local typelist = CureTypeList(index)
+        local needCure = spellutils.SpawnDetrimentalsForCure(botid, typelist)
+        if needCure and spellutils.DistanceCheck('cure', index, botid) then
+            if targethit == 'tank' then return botid, 'tank' end
+            if targethit == 'groupmember' then return botid, 'groupmember' end
+        end
+    end
+    return nil, nil
+end
+
+local function CureEvalGroupCure(index, entry)
+    if not CureClass[index] or not CureClass[index].groupcure then return nil, nil end
+    local tartype = mq.TLO.Spell(entry.spell).TargetType()
+    if tartype ~= 'Group v1' and tartype ~= 'Group v2' then return nil, nil end
+    local typelist = CureTypeList(index)
+    local needCount = 0
+    for i = 1, mq.TLO.Group.Members() do
+        local grpname = mq.TLO.Group(i).Name()
+        local grpid = mq.TLO.Group(i).ID()
+        if grpid and grpid > 0 then
+            local peer = charinfo.GetInfo(grpname)
+            if peer then
+                for _, v in pairs(CureType[index] or {}) do
+                    local detrimentals = peer.Detrimentals or nil
+                    local curetype = peer[v] or nil
+                    if (string.lower(v) == 'all' and detrimentals and detrimentals > 0) or (string.lower(v) ~= 'all' and curetype and curetype > 0) then
+                        needCount = needCount + 1
+                        break
+                    end
+                end
+            else
+                if spellutils.SpawnDetrimentalsForCure(grpid, typelist) then needCount = needCount + 1 end
+            end
+        end
+    end
+    if needCount >= (entry.tarcnt or 1) then
+        if tartype == 'Group v1' then return 1, 'groupcure' end
+        return mq.TLO.Me.ID(), 'groupcure'
     end
     return nil, nil
 end
@@ -361,7 +484,11 @@ local function CureEval(index)
         local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype)
         if id then return id, hit end
     end
-    if cureindex.groupmember and botcount then
+    if cureindex.groupcure then
+        local id, hit = CureEvalGroupCure(index, entry)
+        if id then return id, hit end
+    end
+    if cureindex.groupmember then
         for i = 1, botcount do
             local botname = bots[i]
             local botid = mq.TLO.Spawn('pc =' .. botname).ID()
@@ -369,6 +496,16 @@ local function CureEval(index)
             if botclass then botclass = string.lower(botclass) end
             if cureindex[botclass] and botid and mq.TLO.Group.Member(botname).ID() then
                 local id, hit = CureEvalForTarget(index, botname, botid, botclass, 'groupmember', spelltartype)
+                if id then return id, hit end
+            end
+        end
+        for i = 1, mq.TLO.Group.Members() do
+            local grpname = mq.TLO.Group(i).Name()
+            local grpid = mq.TLO.Group(i).ID()
+            local grpclass = mq.TLO.Group(i).Class.ShortName()
+            if grpclass then grpclass = string.lower(grpclass) end
+            if grpid and grpid > 0 and cureindex[grpclass] and not charinfo.GetInfo(grpname) then
+                local id, hit = CureEvalForTarget(index, grpname, grpid, grpclass, 'groupmember', spelltartype)
                 if id then return id, hit end
             end
         end

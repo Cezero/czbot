@@ -45,10 +45,20 @@ Each entry in **`config.cure.spells`** can have:
 
 Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). Each band is a table with **targetphase** = list of stage tokens and **validtargets** = list of class tokens or `all`. No min/max for cures.
 
-- **targetphase** tokens: **self**, **tank**, **groupmember**, **pc**. **groupmember** = first pass only peers in the bot’s group (by class); **pc** = second pass all peers by class.
+- **targetphase** tokens: **self**, **tank**, **groupcure**, **groupmember**, **pc**. **groupmember** = in-group only (peers first, then non-peer group members via Group TLO); **pc** = all peers by class. **groupcure** = group AE cure (spell targets group; cast when at least **tarcnt** group members have a matching detrimental; optional **tarcnt** on spell entry, default 1).
 - **validtargets**: Class shorts (e.g. `war`, `clr`, `shd`, …) or `all`. Absent = all classes.
 
-Evaluation order: **self** → **tank** → **groupmember** (by class, only in-group peers) → **pc** (all peers by class). See [Out-of-group peers](out-of-group-peers.md) for peer vs group behavior.
+**Evaluation order (priority)**
+
+The bot evaluates cure targets in a **fixed, literal order**:
+
+1. **self**
+2. **tank**
+3. **groupcure** (group AE)
+4. **groupmember** (in-group only)
+5. **pc** (all peers)
+
+The first phase in this list that has a valid, in-range target needing the cure wins. For non-peers (e.g. non-bot group members or tank), detrimentals are only known from the **Spawn** TLO after you have targeted that spawn until **Spawn.BuffsPopulated** is true (same as buffs/mobs). **tank** can be a non-bot when explicitly named (TankName); we only cure the configured tank when not a peer. See [Out-of-group peers](out-of-group-peers.md).
 
 **Example: poison/disease and all**
 

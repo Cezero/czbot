@@ -418,7 +418,7 @@ end
 
 local defaultSpellEntry = {
     heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, priority = false, precondition = true },
-    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'bots', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = true },
+    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = true },
     debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true },
     cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, priority = false, precondition = true },
 }

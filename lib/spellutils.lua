@@ -138,6 +138,85 @@ function spellutils.PeerHasPetBuff(peerInfo, spellid)
     return false
 end
 
+-- Ensure we have buff data for this spawn (for non-peer buff/cure checks). Buffs only populate after
+-- targeting the spawn for a few ms. Returns true if we can read buffs (targeted and BuffsPopulated);
+-- if not, targets the spawn, sets state 'buffs_populate_wait', and returns false so caller should
+-- return without casting. Next tick RunSpellCheckLoop will re-enter and either wait or clear state.
+function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub)
+    if not spawnId or not sub then return false end
+    local runState = state.getRunState()
+    local payload = state.getRunStatePayload()
+    if runState == 'buffs_populate_wait' and payload and payload.spawnId == spawnId and payload.sub == sub then
+        if mq.TLO.Target.ID() ~= spawnId then
+            mq.cmdf('/tar id %s', spawnId)
+            return false
+        end
+        local sp = mq.TLO.Spawn(spawnId)
+        if sp and sp.BuffsPopulated and sp.BuffsPopulated() then
+            state.clearRunState()
+            return true
+        end
+        return false
+    end
+    if mq.TLO.Target.ID() == spawnId then
+        local sp = mq.TLO.Spawn(spawnId)
+        if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
+    end
+    state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub })
+    mq.cmdf('/tar id %s', spawnId)
+    return false
+end
+
+-- Spawn: does this spawn need the buff? Buffs are only available on Spawn (like mobs); you must have
+-- targeted the spawn for a few ms until BuffsPopulated is true, then Spawn.Buff() is valid.
+-- Call EnsureSpawnBuffsPopulated(spawnId, 'buff') first; if it returns false, do not cast.
+-- Returns true only when BuffsPopulated and they do not have the buff. Returns false when not
+-- populated or when they already have the buff.
+function spellutils.SpawnNeedsBuff(spawnId, spellName, spellicon)
+    if not spawnId or not spellName or spellName == '' then return false end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() == 0 then return false end
+    if not sp.BuffsPopulated or not sp.BuffsPopulated() then return false end
+    local hasBuff = sp.Buff(spellName)()
+    return not hasBuff
+end
+
+-- Spawn: does this spawn have a matching detrimental? Same as buffs: only valid after targeting
+-- the spawn until BuffsPopulated is true. Spawn has no Detrimentals/CountXXX; we walk sp.Buff(i)
+-- and use TotalCounters to find curable debuffs, then CountersPoison/CountersDisease/etc. on each buff.
+function spellutils.SpawnDetrimentalsForCure(spawnId, cureTypeList)
+    if not spawnId or not cureTypeList or type(cureTypeList) ~= 'table' then return false end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() == 0 then return false end
+    if not sp.BuffsPopulated or not sp.BuffsPopulated() then return false end
+    local maxSlots = (sp.MaxBuffSlots and sp.MaxBuffSlots()) or 40
+    local countPoison, countDisease, countCurse, countCorruption = 0, 0, 0, 0
+    local hasCurable = false
+    for i = 1, maxSlots do
+        local b = sp.Buff(i)
+        if b then
+            local total = b.TotalCounters and b.TotalCounters() or 0
+            if total > 0 then
+                hasCurable = true
+                countPoison = countPoison + (b.CountersPoison and b.CountersPoison() or 0)
+                countDisease = countDisease + (b.CountersDisease and b.CountersDisease() or 0)
+                countCurse = countCurse + (b.CountersCurse and b.CountersCurse() or 0)
+                countCorruption = countCorruption + (b.CountersCorruption and b.CountersCorruption() or 0)
+            end
+        end
+    end
+    if not hasCurable then return false end
+    for _, v in ipairs(cureTypeList) do
+        local vlower = string.lower(tostring(v))
+        if vlower == 'all' then return true end
+        if vlower == 'poison' and countPoison > 0 then return true end
+        if vlower == 'disease' and countDisease > 0 then return true end
+        if vlower == 'curse' and countCurse > 0 then return true end
+        if vlower == 'corruption' and countCorruption > 0 then return true end
+    end
+    return false
+end
+
 -- Returns table of bot names from charinfo.GetPeers(), Fisher-Yates shuffled.
 function spellutils.GetBotListShuffled()
     local bots = charinfo.GetPeers()
@@ -282,10 +361,29 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         if state.getRunState() == 'loading_gem' then return false end
     end
 
+    -- Re-entry: waiting for spawn buffs to populate (non-peer buff/cure). Target spawn, then wait until BuffsPopulated.
+    if state.getRunState() == 'buffs_populate_wait' then
+        local p = state.getRunStatePayload()
+        if p and p.spawnId then
+            if mq.TLO.Target.ID() ~= p.spawnId then
+                mq.cmdf('/tar id %s', p.spawnId)
+                return false
+            end
+            local sp = mq.TLO.Spawn(p.spawnId)
+            if not sp or not sp.BuffsPopulated or not sp.BuffsPopulated() then
+                return false
+            end
+            state.clearRunState()
+        end
+    end
+
     for i = 1, count do
         if MasterPause then return false end
         if (not options.entryValid or options.entryValid(i)) then
             local EvalID, targethit = evalFn(i)
+            if state.getRunState() == 'buffs_populate_wait' then
+                return false
+            end
             if EvalID and targethit
                 and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
                 and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
@@ -446,7 +544,7 @@ function spellutils.InterruptCheck()
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
         if mq.TLO.Target.ID() and string.lower(spelltartype) ~= "self" and (mq.TLO.Target.ID() == 0 or string.find(mq.TLO.Target.Name(), 'corpse') and criteria ~= 'corpse') then
             mq.cmd('/squelch /multiline; /stick off ; /target clear')
-            if mq.TLO.Me.CastTimeLeft() > 0 and target ~= 1 and criteria ~= 'groupheal' then
+            if mq.TLO.Me.CastTimeLeft() > 0 and target ~= 1 and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
                 mq.cmd('/echo I lost my target, interrupting')
                 mq.cmd('/stopcast')
                 if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
@@ -575,7 +673,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
         end
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
-    if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal') then
+    if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
         if mq.TLO.Target.ID() ~= EvalID then
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'
@@ -588,7 +686,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
         printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end
     if type(gem) == 'number' or gem == 'item' or gem == 'alt' or gem == 'script' then
-        if EvalID == 1 and (targethit == 'self' or targethit == 'groupheal') then
+        if EvalID == 1 and (targethit == 'self' or targethit == 'groupheal' or targethit == 'groupbuff' or targethit == 'groupcure') then
             if type(gem) == 'number' then
                 mq.cmdf('/cast "%s"', spell)
             elseif gem == 'item' then

@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **buffing** behavior: which 
 ## Overview
 
 - **Master switch:** Buffing runs only when **`settings.dobuff`** is `true`. Default is `false`.
-- **Evaluation order:** The buff loop checks, in order: self (including **petspell** when you have no pet), buffs by **name**, tank, other bots by **class**, your pet (**mypet**), then other bots’ pets (**pet**). “Other bots” and “other bots’ pets” mean **all peers** (any character known via charinfo), not limited to group members. The bot will buff any peer in range that matches the band and needs the buff. The first valid target in range gets the buff.
+- **Evaluation order:** The buff loop uses a **fixed evaluation order** (see [Buff bands](#buff-bands)): self → byname → tank → groupbuff → groupmember → pc → mypet → pet. The first valid target in range gets the buff. **pc** = all peers (any character known via charinfo), not limited to group members. **groupmember** = in-group only (including non-bot group members, via Group TLO). The only out-of-group non-bot PC we buff is the **explicitly configured tank** (TankName).
 - **When buffs run:** Each spell entry can be marked for **idle** only, **combat** only, or both (by band tokens **idle** and **cbt**). With no mobs in camp, idle-only and combat buffs can run; with mobs, only combat buffs run.
 
 ---
@@ -38,12 +38,28 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 
 Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). No min/max for buffs.
 
-- **targetphase** tokens: **self**, **tank**, **bots** (other PCs by class), **mypet**, **pet**, **byname**; **cbt** / **idle** control when the spell can run (combat vs no mobs in camp).
-- **validtargets**: Class shorts (e.g. `war`, `clr`, …) or `all`. Restricts which classes get the buff for the **bots** phase. Absent = all classes.
+- **targetphase** tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc** (other PCs by class), **mypet**, **pet**, **byname**; **cbt** / **idle** control when the spell can run (combat vs no mobs in camp). **bots** in config is accepted for backward compatibility and treated as **pc**.
+- **validtargets**: Class shorts (e.g. `war`, `clr`, …) or `all`. Restricts which classes get the buff for **groupmember** and **pc** phases. Absent = all classes.
 - **petspell** — Summon pet: cast on self when you have **no pet**. Use with **self** in the same band. Documented in [Pets configuration](pets-configuration.md).
 - **name** — Buff specific characters by name (list their names in **validtargets** when using **byname** in targetphase).
+- **groupbuff** — Group AE buff: when the spell targets the group (e.g. Group v1), the bot counts group members in range who need the buff (peers from charinfo, non-peers from Spawn when BuffsPopulated); if the count is at least **tarcnt** (optional, default 1), it casts on self. **tarcnt** can be set on the spell entry.
+- **groupmember** — Single-target buffs only for characters in the bot’s (EQ) group; includes non-bot group members. For non-peers, buff state comes only from **Spawn** after targeting (Spawn.BuffsPopulated must be true). Add **pc** in targetphase to also buff peers outside the group (evaluated after groupmember).
+- **tank** — Can be a non-bot when explicitly named in config (TankName). Buff need for non-peers is only known from the **Spawn** TLO after you have targeted that spawn long enough for **Spawn.BuffsPopulated** to be true (same as mobs). When we have buff data we only cast if they need it; when out-of-group and we don’t have data we cast in range (best-effort).
 
-Buffing is not restricted by group: any peer in range who matches the band and needs the buff can be buffed. See [Out-of-group peers](out-of-group-peers.md).
+**Evaluation order (priority)**
+
+The bot evaluates buff targets in a **fixed, literal order**. The list below is the actual priority:
+
+1. **self** (including **petspell** when no pet)
+2. **byname**
+3. **tank**
+4. **groupbuff** (group AE)
+5. **groupmember** (in-group only)
+6. **pc** (all peers)
+7. **mypet**
+8. **pet**
+
+The first phase in this list that has a valid, in-range target that needs the buff wins. See [Out-of-group peers](out-of-group-peers.md).
 
 **Example: self buff, tank buff, and group class buff**
 
@@ -65,7 +81,7 @@ Buffing is not restricted by group: any peer in range who matches the band and n
       ['spell'] = 'Talisman of the Tribunal',
       ['minmana'] = 0,
       ['bands'] = {
-        { ['targetphase'] = { 'tank', 'bots' }, ['validtargets'] = { 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
+        { ['targetphase'] = { 'tank', 'pc' }, ['validtargets'] = { 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
       },
       ['spellicon'] = 0
     }
