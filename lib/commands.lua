@@ -331,7 +331,7 @@ local function cmd_cast(args)
                     end
                 elseif args[3] and value == args[2] then
                     if args[3] == 'on' then
-                        entry.tarcnt = 1
+                        entry.enabled = true
                         printf('\ayCZBot:\axEnabling \ag%s\ax', entry.spell)
                         if not botconfig.config.settings[settingkey] then
                             loadfn()
@@ -339,7 +339,7 @@ local function cmd_cast(args)
                         end
                     end
                     if args[3] == 'off' then
-                        entry.tarcnt = 0
+                        entry.enabled = false
                         printf('\ayCZBot:\axDisabling \ag%s\ax', entry.spell)
                     end
                 end
@@ -428,10 +428,10 @@ local function cmd_setvar(args)
 end
 
 local defaultSpellEntry = {
-    heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, tarcnt = 0, bands = { { class = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } }, priority = false, precondition = true },
-    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, tarcnt = 0, bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } }, spellicon = 0, precondition = true },
-    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, tarcnt = 0, bands = { { class = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true },
-    cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", tarcnt = 0, bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } }, priority = false, precondition = true },
+    heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, bands = { { class = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } }, priority = false, precondition = true },
+    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } }, spellicon = 0, precondition = true },
+    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { class = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true },
+    cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } }, priority = false, precondition = true },
 }
 
 local function copyEntry(src)

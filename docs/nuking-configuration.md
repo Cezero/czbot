@@ -17,7 +17,8 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
 2. **Add a debuff (nuke) spell entry** under **`config.debuff.spells`**:
    - **gem** — Spell gem number (1–12) or `'item'`, `'alt'`, `'disc'`.
    - **spell** — Exact spell name (e.g. `"Chaos Flame"`).
-   - **tarcnt** — Set > 0 (e.g. 1 or higher; can limit by mob count if desired).
+   - **enabled** — Optional; default is `true`. When `false`, the spell is not used.
+   - **tarcnt** — Optional. When set, only consider the nuke when total mobs in camp is ≥ tarcnt (count includes the MA’s target plus adds). E.g. **tarcnt 2** = at least two mobs in camp (one add). See [Debuffing configuration](debuffing-configuration.md).
    - **bands** — For nuking the main target use **tanktar**. For multi-target or add nuking add **notanktar**. For named-only nukes add **named**. Use **min**/ **max** to restrict by mob HP % (e.g. nuke only when mob is 5–100% HP).
 
 3. **Optional:** **recast** (resist count before disabling for that spawn), **delay** (ms before same spell can be used again), **alias** (for `/cz cast <alias>`), **minmana**.
@@ -32,14 +33,12 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
       ['spell'] = 'Chaos Flame',
       ['alias'] = 'nuke',
       ['minmana'] = 0,
-      ['tarcnt'] = 1,
       ['bands'] = {
         { ['class'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 0,
-      ['delay'] = 0,
-      ['precondition'] = true
+      ['delay'] = 0
     }
   }
 }
@@ -60,7 +59,7 @@ Use **tanktar** and **notanktar** in the same band (or separate bands) so the nu
 ## Runtime control
 
 - **Toggle debuffing (nuking):** `/cz dodebuff on` or `/cz dodebuff off`.
-- **Cast by alias:** `/cz cast <alias> [target]` — cast the nuke by alias. `/cz cast <alias> on` or `off` to enable or disable the spell (tarcnt).
+- **Cast by alias:** `/cz cast <alias> [target]` — cast the nuke by alias. `/cz cast <alias> on` or `off` to enable or disable the spell (**enabled**).
 - **Add a spell slot:** `/cz addspell debuff <position>`.
 
 ---

@@ -36,10 +36,10 @@ Each entry in **`config.cure.spells`** can have:
 | **announce** | Optional. If true, announce when casting. |
 | **minmana** | Minimum mana (absolute) to cast. |
 | **curetype** | **all** or space-separated types: e.g. **poison**, **disease**, **curse**, **corruption**. The spell is only used when the target has at least one matching detrimental. |
-| **tarcnt** | Must be > 0 for the spell to be used. |
+| **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **bands** | Who can be cured. See [Cure bands](#cure-bands) below. |
 | **priority** | Optional. Affects post-cast behavior when **prioritycure** is true. |
-| **precondition** | Optional. When false, the spell is skipped. |
+| **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
 ### Cure bands
 
@@ -64,12 +64,10 @@ Evaluation order: **self** → **tank** → **group** (by class, only in-group p
       ['alias'] = 'curepoison',
       ['minmana'] = 0,
       ['curetype'] = 'poison',
-      ['tarcnt'] = 1,
       ['bands'] = {
         { ['class'] = { 'self', 'tank', 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
       },
-      ['priority'] = false,
-      ['precondition'] = true
+      ['priority'] = false
     },
     {
       ['gem'] = 6,
@@ -77,12 +75,10 @@ Evaluation order: **self** → **tank** → **group** (by class, only in-group p
       ['alias'] = 'curedisease',
       ['minmana'] = 0,
       ['curetype'] = 'disease',
-      ['tarcnt'] = 1,
       ['bands'] = {
         { ['class'] = { 'self', 'tank', 'group' } }
       },
-      ['priority'] = false,
-      ['precondition'] = true
+      ['priority'] = false
     }
   }
 }
@@ -93,7 +89,7 @@ Evaluation order: **self** → **tank** → **group** (by class, only in-group p
 ## Runtime control
 
 - **Toggle curing:** `/cz docure on` or `/cz docure off` (or `/cz docure` to toggle).
-- **Cast by alias:** `/cz cast <alias> [target]` — cast a cure by alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell (tarcnt).
+- **Cast by alias:** `/cz cast <alias> [target]` — cast a cure by alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell (**enabled**).
 - **Add a spell slot:** `/cz addspell cure <position>` — insert a new cure entry at the given position.
 
 ---

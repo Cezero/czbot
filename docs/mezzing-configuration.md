@@ -18,10 +18,11 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
 2. **Add a debuff (mez) spell entry** under **`config.debuff.spells`**:
    - **gem** — Spell gem number (1–12) or `'item'`, `'alt'`, `'disc'`.
    - **spell** — Exact spell name (e.g. an Enthrall or mez spell).
-   - **tarcnt** — Set > 0. You can limit how many mobs must be in the list before mezzing (e.g. only mez when there are 2+ adds).
+   - **enabled** — Optional; default is `true`. When `false`, the spell is not used.
+   - **tarcnt** — Optional. When set, only consider mez when total mobs in camp is ≥ tarcnt (count includes the MA’s target plus adds). E.g. **tarcnt 2** = mez when there are at least two mobs in camp (one add). See [Debuffing configuration](debuffing-configuration.md).
    - **bands** — For mezzing **adds**, use **notanktar**. Optionally add **named** to allow mezzing named mobs that are not the tank target. Use **min**/ **max** to restrict by mob HP % (e.g. mez only when mob is 20–100% HP so you don’t mez nearly-dead adds).
 
-3. **Optional:** **recast** (after this many resists on the same spawn, the spell is disabled for that spawn for a duration), **delay** (ms before the spell can be used again), **charmnames** (for charm mez: comma-separated mob names; bot will **pet leave** before casting and can recast when charm breaks), **alias**, **minmana**.
+3. **Optional:** **recast** (after this many resists on the same spawn, the spell is disabled for that spawn for a duration), **delay** (ms before the spell can be used again), **charmnames** (for charm mez: comma-separated mob names; bot will **pet leave** before casting and can recast when charm breaks), **alias**, **minmana**, **precondition** (default true when missing; when set, boolean or Lua script to allow/skip the cast).
 
 **Example: mez adds only**
 
@@ -33,14 +34,12 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
       ['spell'] = 'Bellow of the Mastruq',
       ['alias'] = 'mez',
       ['minmana'] = 0,
-      ['tarcnt'] = 1,
       ['bands'] = {
         { ['class'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 2,
-      ['delay'] = 0,
-      ['precondition'] = true
+      ['delay'] = 0
     }
   }
 }
@@ -68,7 +67,7 @@ For Enthrall-type (mez) spells, the bot uses the spell’s **MaxLevel** and the 
 ## Runtime control
 
 - **Toggle debuffing (mezzing):** `/cz dodebuff on` or `/cz dodebuff off`.
-- **Cast by alias:** `/cz cast <alias> [target]` — cast the mez by alias. `/cz cast <alias> on` or `off` to enable or disable the spell (tarcnt).
+- **Cast by alias:** `/cz cast <alias> [target]` — cast the mez by alias. `/cz cast <alias> on` or `off` to enable or disable the spell (**enabled**).
 - **Add a spell slot:** `/cz addspell debuff <position>`.
 
 ---

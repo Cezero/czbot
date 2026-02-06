@@ -40,10 +40,11 @@ Each entry in **`heal.spells`** can have:
 | **announce** | Optional. If true, announce when casting (e.g. to group). |
 | **minmana** | Minimum mana (absolute) to cast. |
 | **minmanapct** / **maxmanapct** | Your mana % must be within this range to use this spell (default 0–100). |
-| **tarcnt** | Must be > 0 for the spell to be used. For group/AE heals, minimum number of group members in HP band to trigger. |
+| **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
+| **tarcnt** | Optional. Only used for **group/AE heals**: minimum number of group members in the HP band (and in range) required to trigger the spell. When omitted, group heals fire when at least 1 member is in band. Not used for single-target heals. |
 | **bands** | Who and at what HP % this spell applies. See [Heal bands](#heal-bands) below. |
 | **priority** | If true, after casting the bot re-checks that the target still needs the heal (validate). |
-| **precondition** | Optional. When false, the spell is skipped. |
+| **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip this spell for this evaluation; **string** — Lua script run with `mq` and `EvalID` (current target spawn ID) in scope; return a truthy value to allow the cast, otherwise the spell is skipped (e.g. only cast when target HP > X%, or only when not in a certain zone). |
 
 ### Heal bands
 
@@ -78,12 +79,10 @@ PC heal candidates come from **peers** (characters known via the actor net). Add
       ['minmana'] = 0,
       ['minmanapct'] = 0,
       ['maxmanapct'] = 100,
-      ['tarcnt'] = 1,
       ['bands'] = {
         { ['class'] = { 'tank', 'pc' }, ['min'] = 0, ['max'] = 70 }
       },
-      ['priority'] = false,
-      ['precondition'] = true
+      ['priority'] = false
     },
     {
       ['gem'] = 2,
@@ -107,7 +106,7 @@ PC heal candidates come from **peers** (characters known via the actor net). Add
 ## Runtime control
 
 - **Toggle healing:** `/cz doheal on` or `/cz doheal off` (or `/cz doheal` to toggle).
-- **Cast by alias:** `/cz cast <alias> [target]` — cast a heal spell by its alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell’s use (tarcnt).
+- **Cast by alias:** `/cz cast <alias> [target]` — cast a heal spell by its alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell’s use (**enabled**).
 - **Add a spell slot:** `/cz addspell heal <position>` — insert a new heal entry at the given position (1 to count+1).
 
 ---

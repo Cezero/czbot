@@ -91,10 +91,10 @@ local subOrder = {
 }
 
 local spellSlotOrder = {
-    heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'tarcnt', 'bands', 'priority', 'precondition' },
-    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'tarcnt', 'bands', 'spellicon', 'precondition' },
-    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'tarcnt', 'bands', 'charmnames', 'recast', 'delay', 'precondition' },
-    cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'tarcnt', 'bands', 'priority', 'precondition' },
+    heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'tarcnt', 'bands', 'priority', 'precondition' },
+    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'spellicon', 'precondition' },
+    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'charmnames', 'recast', 'delay', 'precondition' },
+    cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'priority', 'precondition' },
 }
 
 function M.getPath()

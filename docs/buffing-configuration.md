@@ -29,10 +29,10 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 | **alias** | Optional. Short name for `/cz cast <alias>`. Pipe-separated for multiple. |
 | **announce** | Optional. If true, announce when casting. |
 | **minmana** | Minimum mana (absolute) to cast. |
-| **tarcnt** | Must be > 0 for the spell to be used. |
+| **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **bands** | Who receives the buff. See [Buff bands](#buff-bands) below. |
 | **spellicon** | Optional. Buff icon ID. If set (non-zero), the bot skips a target who already has that buff icon (avoids overwriting). |
-| **precondition** | Optional. When false, the spell is skipped. |
+| **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
 ### Buff bands
 
@@ -60,23 +60,19 @@ Buffing is not restricted by group: any peer in range who matches the band and n
       ['spell'] = 'Spirit of the Wolf',
       ['alias'] = 'sow',
       ['minmana'] = 0,
-      ['tarcnt'] = 1,
       ['bands'] = {
         { ['class'] = { 'self' } }
       },
-      ['spellicon'] = 0,
-      ['precondition'] = true
+      ['spellicon'] = 0
     },
     {
       ['gem'] = 4,
       ['spell'] = 'Talisman of the Tribunal',
       ['minmana'] = 0,
-      ['tarcnt'] = 1,
       ['bands'] = {
         { ['class'] = { 'tank', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
       },
-      ['spellicon'] = 0,
-      ['precondition'] = true
+      ['spellicon'] = 0
     }
   }
 }
@@ -87,7 +83,7 @@ Buffing is not restricted by group: any peer in range who matches the band and n
 ## Runtime control
 
 - **Toggle buffing:** `/cz dobuff on` or `/cz dobuff off` (or `/cz dobuff` to toggle).
-- **Cast by alias:** `/cz cast <alias> [target]` — cast a buff by alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell (tarcnt).
+- **Cast by alias:** `/cz cast <alias> [target]` — cast a buff by alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell (**enabled**).
 - **Add a spell slot:** `/cz addspell buff <position>` — insert a new buff entry at the given position.
 
 ---

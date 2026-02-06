@@ -60,7 +60,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 
 | Command | Arguments | Purpose |
 |---------|-----------|---------|
-| **cast** | `<alias> [target]` or `<alias> on` / `off` | Cast a spell by alias (heal/buff/debuff/cure). With `on`/`off`, enable or disable that spell (tarcnt). |
+| **cast** | `<alias> [target]` or `<alias> on` / `off` | Cast a spell by alias (heal/buff/debuff/cure). With `on`/`off`, enable or disable that spell (**enabled**). |
 | **setvar** | `<path> <value>` | Set a config value at runtime (e.g. `settings.petassist true`). Writes to config file. |
 | **addspell** | `heal` / `buff` / `debuff` / `cure` `<position>` | Add a new spell entry at the given position (1 to count+1). |
 | **refresh** / **refreshspells** | — | Refresh spell state. |
@@ -171,10 +171,10 @@ See [Pull Configuration and Logic](pull-configuration.md) for the full pull tabl
 
 ### Heal / Buff / Debuff / Cure sections
 
-- **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **tarcnt**, **bands**, **priority**, **precondition**. See [Healing configuration](healing-configuration.md).
-- **buff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **tarcnt**, **bands**, **spellicon**, **precondition**. See [Buffing configuration](buffing-configuration.md).
-- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **tarcnt**, **bands**, **charmnames**, **recast**, **delay**, **precondition**. See [Debuffing configuration](debuffing-configuration.md).
-- **cure:** Top-level: **prioritycure**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **curetype**, **tarcnt**, **bands**, **priority**, **precondition**. See [Curing configuration](curing-configuration.md).
+- **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **enabled**, **tarcnt** (optional; group heals only), **bands**, **priority**, **precondition** (optional; default true; boolean or Lua script when set). See [Healing configuration](healing-configuration.md).
+- **buff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands**, **spellicon**, **precondition** (optional; default true; boolean or Lua script when set). See [Buffing configuration](buffing-configuration.md).
+- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **tarcnt** (optional; minimum total mobs in camp — MA target + adds; e.g. 2 = at least one add), **bands**, **charmnames**, **recast**, **delay**, **precondition** (optional; default true; boolean or Lua script when set). See [Debuffing configuration](debuffing-configuration.md).
+- **cure:** Top-level: **prioritycure**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **curetype**, **enabled**, **bands**, **priority**, **precondition** (optional; default true; boolean or Lua script when set). See [Curing configuration](curing-configuration.md).
 
 **Example: one heal spell entry**
 
@@ -186,12 +186,10 @@ See [Pull Configuration and Logic](pull-configuration.md) for the full pull tabl
   ['minmana'] = 0,
   ['minmanapct'] = 0,
   ['maxmanapct'] = 100,
-  ['tarcnt'] = 1,
   ['bands'] = {
     { ['class'] = { 'tank', 'pc' }, ['min'] = 0, ['max'] = 70 }
   },
-  ['priority'] = false,
-  ['precondition'] = true
+  ['priority'] = false
 }
 ```
 

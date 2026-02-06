@@ -44,7 +44,7 @@ function spellutils.SpellCheck(Sub, ID)
     --spell
     if mq.TLO.Window('SpellBookWnd').Open() then mq.cmd('/book') end
     if spellreg and spellreg > 0 and not mq.TLO.FindItem(spellreg)() then
-        if entry then entry.tarcnt = 0 end
+        if entry then entry.enabled = false end
         printf('\ayCZBot:\axMissing reagent for %s, disabling spell', spell)
         return false
     end
@@ -283,6 +283,7 @@ end
 function spellutils.PreCondCheck(Sub, ID, spawnID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return false end
+    if entry.precondition == nil then return true end
     local precond = entry.precondition
     EvalID = spawnID
     if type(entry.precondition) == 'string' then
@@ -291,14 +292,16 @@ function spellutils.PreCondCheck(Sub, ID, spawnID)
             local env = { EvalID = EvalID }
             setmetatable(env, { __index = _G })
             local output = loadprecond()
+            EvalID = nil
             return output
         else
             print('problem loading precond')
         end
     elseif type(entry.precondition) == 'boolean' then
-        if entry.precondition then return true end
+        if entry.precondition then EvalID = nil; return true end
     end
     EvalID = nil
+    return true
 end
 
 --checks if a precondition is valid
@@ -310,7 +313,7 @@ function spellutils.ProcessScript(script, Sub, ID)
         else
             print('problem loading precond')
             local entry = botconfig.getSpellEntry(Sub, ID)
-            if entry then entry.tarcnt = 0 end
+            if entry then entry.enabled = false end
             return false
         end
     elseif type(botconfig.config[script]) == 'boolean' then
@@ -328,7 +331,7 @@ function spellutils.RunScript(script, Sub, ID)
         else
             print('problem loading precond')
             local entry = botconfig.getSpellEntry(Sub, ID)
-            if entry then entry.tarcnt = 0 end
+            if entry then entry.enabled = false end
             return false
         end
     elseif type(botconfig.config[script]) == 'boolean' then
@@ -387,7 +390,7 @@ function spellutils.LoadSpell(Sub, ID)
                 return false
             else
                 printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', Sub, ID, spell)
-                entry.tarcnt = 0
+                entry.enabled = false
                 return false
             end
         end
@@ -610,15 +613,15 @@ function spellutils.RefreshSpells()
                     known = entry.spell and mq.TLO.Me.Book(entry.spell)()
                 end
                 if known then
-                    if entry.tarcnt == 0 then
-                        entry.tarcnt = entry._saved_tarcnt or 1
-                        entry._saved_tarcnt = nil
+                    if entry.enabled == false then
+                        entry.enabled = (entry._saved_enabled ~= false) and (entry._saved_enabled or true)
+                        entry._saved_enabled = nil
                         enabled = enabled + 1
                     end
                 else
-                    if entry._saved_tarcnt == nil then entry._saved_tarcnt = entry.tarcnt or 0 end
-                    if entry.tarcnt ~= 0 then disabled = disabled + 1 end
-                    entry.tarcnt = 0
+                    if entry._saved_enabled == nil then entry._saved_enabled = entry.enabled end
+                    if entry.enabled then disabled = disabled + 1 end
+                    entry.enabled = false
                 end
             end
         end

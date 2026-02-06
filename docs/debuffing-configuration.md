@@ -29,12 +29,13 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 | **alias** | Optional. Short name for `/cz cast <alias>`. Pipe-separated for multiple. |
 | **announce** | Optional. If true, announce when casting. |
 | **minmana** | Minimum mana (absolute) to cast. |
-| **tarcnt** | Must be > 0 for the spell to be used. Can limit how many mobs (e.g. only debuff when mob count ≤ tarcnt). |
+| **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
+| **tarcnt** | Optional. When set, the spell is only considered when total mobs in camp is **≥ tarcnt**. The count includes the MA’s target plus all adds (the full camp list). So e.g. **tarcnt 2** = at least 2 mobs in camp = one add. When omitted, no mob-count minimum is applied. |
 | **bands** | Which mobs and at what HP %. See [Debuff bands](#debuff-bands) below. |
 | **charmnames** | Optional. Comma-separated mob **names**. When set, the bot can target those mobs for charm (recast when charm breaks). Before casting charm, the bot sends **pet leave** if your pet is charmed. |
 | **recast** | Optional. After this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. |
 | **delay** | Optional. Delay (ms) before the spell can be used again after cast (per-index/spell). |
-| **precondition** | Optional. When false, the spell is skipped. |
+| **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
 ### Debuff bands
 
@@ -94,7 +95,7 @@ When **charmnames** is set to a comma-separated list of mob names, the debuff lo
 ## Runtime control
 
 - **Toggle debuffing:** `/cz dodebuff on` or `/cz dodebuff off` (or `/cz dodebuff` to toggle).
-- **Cast by alias:** `/cz cast <alias> [target]` — cast a debuff by alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell (tarcnt).
+- **Cast by alias:** `/cz cast <alias> [target]` — cast a debuff by alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell (**enabled**).
 - **Add a spell slot:** `/cz addspell debuff <position>` — insert a new debuff entry at the given position.
 
 ---

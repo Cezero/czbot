@@ -17,7 +17,7 @@ Pet summoning is a **self buff** that the bot casts when it has **no pet**.
 1. In your config, ensure **`settings.dobuff`** is `true` (or turn buffing on with `/cz dobuff on`).
 2. Add a spell entry under **`config.buff.spells`** with your **summon pet** spell:
    - Set **gem** and **spell** (e.g. gem 3, spell `"Summon Warder"`).
-   - Set **tarcnt** to **1** (or higher) so the spell is active.
+   - The spell is active by default (**enabled** is `true` when omitted). Set **enabled** to `false` to disable it.
    - In **bands**, include the class token **petspell** (and typically **self**). The bot will only cast this spell when it has no pet (`mypetid == 0`).
 
 **Example: summon pet buff entry**
@@ -28,12 +28,10 @@ Pet summoning is a **self buff** that the bot casts when it has **no pet**.
   ['spell'] = 'Summon Warder',
   ['alias'] = 'pet',
   ['minmana'] = 0,
-  ['tarcnt'] = 1,
   ['bands'] = {
     { ['class'] = { 'self', 'petspell' } }
   },
-  ['spellicon'] = 0,
-  ['precondition'] = true
+  ['spellicon'] = 0
 }
 ```
 
@@ -81,6 +79,6 @@ See [Debuffing configuration](debuffing-configuration.md) for **charmnames**, **
 
 ## Runtime control
 
-- **Toggle buffing (for summon):** `/cz dobuff on` or `/cz dobuff off`. Pet summon runs only when buffing is on and the petspell entry has `tarcnt > 0`.
+- **Toggle buffing (for summon):** `/cz dobuff on` or `/cz dobuff off`. Pet summon runs only when buffing is on and the petspell entry is **enabled** (default is true when omitted).
 - **Enable/disable a buff by alias:** `/cz cast <alias> on` or `/cz cast <alias> off` — use the alias you gave the summon spell (or any buff).
 - **Engage (pet follows):** `/cz attack` — engages the MA’s target; if **petassist** is true, the pet attacks that target.

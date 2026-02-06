@@ -33,7 +33,7 @@ local function defaultBuffEntry()
         minmana = 0,
         alias = false,
         announce = false,
-        tarcnt = 0,
+        enabled = true,
         bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } },
         spellicon = 0,
         precondition = true
@@ -57,6 +57,7 @@ function botcast.LoadBuffConfig()
             end
             table.insert(state.getRunconfig().ScriptList, entry.spell)
         end
+        if entry.enabled == nil then entry.enabled = true end
         BuffClass[i] = spellbands.applyBands('buff', entry, i)
     end
 end
@@ -254,7 +255,8 @@ function botcast.BuffCheck()
             local entry = botconfig.getSpellEntry('buff', i)
             if not entry then return false end
             local gem = entry.gem
-            if not (((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') and entry.tarcnt > 0) then return false end
+            if not entry.enabled then return false end
+            if not ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') then return false end
             local cbtspell = BuffClass[i] and BuffClass[i].cbt
             local idlespell = BuffClass[i] and BuffClass[i].idle
             return (not hasMob and (not cbtspell or idlespell)) or (hasMob and cbtspell)
@@ -274,7 +276,7 @@ local function defaultCureEntry()
         alias = false,
         announce = false,
         curetype = "all",
-        tarcnt = 0,
+        enabled = true,
         bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } },
         priority = false,
         precondition = true
@@ -298,6 +300,7 @@ function botcast.LoadCureConfig()
             end
             table.insert(state.getRunconfig().ScriptList, entry.spell)
         end
+        if entry.enabled == nil then entry.enabled = true end
         CureClass[i] = spellbands.applyBands('cure', entry, i)
         CureType[i] = {}
         for word in (entry.curetype or 'all'):gmatch("%S+") do
@@ -401,7 +404,7 @@ function botcast.CureCheck()
             local entry = botconfig.getSpellEntry('cure', i)
             if not entry then return false end
             local gem = entry.gem
-            return ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') and entry.tarcnt > 0
+            return entry.enabled and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
         end,
     })
 end
@@ -419,7 +422,7 @@ local function defaultHealEntry()
         maxmanapct = 100,
         alias = false,
         announce = false,
-        tarcnt = 0,
+        enabled = true,
         bands = { { class = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } },
         priority = false,
         precondition = true
@@ -446,6 +449,7 @@ function botcast.LoadHealConfig()
             end
             table.insert(state.getRunconfig().ScriptList, entry.spell)
         end
+        if entry.enabled == nil then entry.enabled = true end
         AHThreshold[i] = spellbands.applyBands('heal', entry, i)
     end
     if myconfig.heal.xttargets then
@@ -566,7 +570,7 @@ local function HPEvalGrp(index, ctx)
             if mq.TLO.Group.Member(k).Type() ~= 'Corpse' then grpmatch = grpmatch + 1 end
         end
     end
-    if grpmatch >= ctx.entry.tarcnt then
+    if grpmatch >= (ctx.entry.tarcnt or 1) then
         if mq.TLO.Spell(ctx.entry.spell).TargetType() == 'Group v1' then return 1, 'grp' end
         return mq.TLO.Me.ID(), 'grp'
     end
@@ -720,7 +724,7 @@ function botcast.HealCheck()
         entryValid = function(i)
             local entry = botconfig.getSpellEntry('heal', i)
             if not entry then return false end
-            if entry.gem == 0 or entry.tarcnt == 0 then return false end
+            if not entry.enabled or entry.gem == 0 then return false end
             local minmanapct = entry.minmanapct
             local maxmanapct = entry.maxmanapct
             if minmanapct == nil then minmanapct = 0 end
@@ -743,7 +747,7 @@ local function defaultDebuffEntry()
         minmana = 0,
         alias = false,
         announce = false,
-        tarcnt = 0,
+        enabled = true,
         bands = { { class = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } },
         charmnames = '',
         recast = 0,
@@ -771,6 +775,7 @@ function botcast.LoadDebuffConfig()
             end
             table.insert(state.getRunconfig().ScriptList, entry.spell)
         end
+        if entry.enabled == nil then entry.enabled = true end
         DebuffBands[i] = spellbands.applyBands('debuff', entry, i)
     end
 end
@@ -993,7 +998,7 @@ local function DebuffEval(index)
     if debug then print('debuff eval ', index) end
     local entry = botconfig.getSpellEntry('debuff', index)
     if not entry then return nil, nil end
-    if entry.tarcnt > state.getRunconfig().MobCount then return nil, nil end
+    if entry.tarcnt and entry.tarcnt > state.getRunconfig().MobCount then return nil, nil end
     local id, hit = charm.GetRecastRequestForIndex(index)
     if id then
         charm.ClearRecastRequest()
@@ -1044,7 +1049,7 @@ function botcast.DebuffCheck()
             local entry = botconfig.getSpellEntry('debuff', i)
             if not entry then return false end
             local gem = entry.gem
-            return ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') and entry.tarcnt > 0
+            return entry.enabled and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
         end,
         afterCast = function(i, EvalID, classhit)
             if spellstates.GetDebuffDelay(i) and spellstates.GetDebuffDelay(i) > mq.gettime() then return false end
