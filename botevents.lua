@@ -15,9 +15,7 @@ local botevents = {}
 local function DelayOnZone()
     state.getRunconfig().zonename = mq.TLO.Zone.ShortName()
     if state.getRunconfig().campstatus == true then
-        state.getRunconfig().makecampx = nil
-        state.getRunconfig().makecampy = nil
-        state.getRunconfig().makecampz = nil
+        state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
     end
     state.getRunconfig().campstatus = false
     if botconfig.config.settings.dopull == true then botconfig.config.settings.dopull = false end
@@ -177,9 +175,7 @@ function botevents.Event_GMDetected()
         printf('\ayCZBot:\axGM Detected! Disabling DoMelee, MakeCamp, and Stick!')
         botconfig.config.settings.domelee = false
         mq.cmd('/stick off')
-        MakeCampX = nil
-        MakeCampY = nil
-        MakeCampZ = nil
+        state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
         CampStatus = nil
         state.getRunconfig().gmtimer = mq.gettime() + 60000
     end

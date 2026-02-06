@@ -806,8 +806,8 @@ local function ADSpawnCheck_FilterSpawn(spawn, rc)
     local spawnname = spawn.CleanName() or 'none'
     if rc.campstatus then
         local spawnx, spawny, spawnz = spawn.X(), spawn.Y(), spawn.Z()
-        distance2D = utils.calcDist2D(spawnx, spawny, rc.makecampx, rc.makecampy)
-        if spawnz then distanceZ = math.abs(spawnz - rc.makecampz) end
+        distance2D = utils.calcDist2D(spawnx, spawny, rc.makecamp.x, rc.makecamp.y)
+        if spawnz then distanceZ = math.abs(spawnz - rc.makecamp.z) end
     end
     if rc.FTECount and spawn.ID() and rc.FTEList and rc.FTEList[spawn.ID()] and rc.FTEList[spawn.ID()].timer > mq.gettime() then
         return false

@@ -158,18 +158,9 @@ function M.AdvanceLoadRaid()
             })
             return
         end
-        -- All invites done; move to after_inv
-        rexec.sendSelfAndZoneCommand('/squelch /multiline ; /target clear ; /timed 5 /inv')
-        state.setRunState('load_raid', {
-            phase = 'after_inv',
-            deadline = mq.gettime() + 1500,
-        })
-        return
-    end
-
-    if p.phase == 'after_inv' then
-        rexec.sendSelfAndZoneCommand('/yes')
+        -- All invites done; plugin handles accepting group/raid invites
         state.clearRunState()
+        return
     end
 end
 

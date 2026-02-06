@@ -6,7 +6,6 @@ local mobfilter = require('lib.mobfilter')
 local state = require('lib.state')
 local botmove = require('botmove')
 local hookregistry = require('lib.hookregistry')
-local equip = require('lib.equip')
 local spellutils = require('lib.spellutils')
 local botevents = require('botevents')
 local utils = require('lib.utils')
@@ -15,7 +14,7 @@ local actornet = require('actornet')
 local botlogic = {}
 local myconfig = botconfig.config
 
--- TODO: CharState is a large per-tick handler; consider breaking into smaller functions (e.g. trading, equipping, sit, mount, dead/hover, pet, etc.).
+-- TODO: CharState is a large per-tick handler; consider breaking into smaller functions (e.g. sit, mount, dead/hover, pet, etc.).
 local function CharState(...)
     local args = { ... }
     local tarname = mq.TLO.Target.Name()
@@ -30,38 +29,6 @@ local function CharState(...)
         end
         if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
     end
-    ---@diagnostic disable-next-line: missing-parameter
-    if state.getRunState() == 'trading' then
-        if not mq.TLO.Window('TradeWnd').Open() then
-            local payload = state.getRunStatePayload()
-            state.clearRunState()
-            if payload and payload.equipItem and state.getRunconfig().EquipGear then
-                state.setRunState('equipping', { item = payload.equipItem })
-            end
-        else
-            mq.cmd('/notify TradeWnd TRDW_Trade_Button leftmouseup')
-        end
-    elseif (mq.TLO.Window('TradeWnd').Open() and not mq.TLO.Window('TradeWnd').MyTradeReady() and not mq.TLO.Cursor.ID()) then
-        local tradepartner = 'none'
-        local itemintrade = 'none'
-        if mq.TLO.Window('TradeWnd').Child('TRDW_OtherName')() and mq.TLO.Window('TradeWnd').Child('TRDW_OtherName')() ~= 0 then
-            tradepartner = mq.TLO.Window('TradeWnd').Child('TRDW_OtherName').Text()
-        elseif mq.TLO.Window('TradeWnd').Child('TRDW_HisName')() then
-            tradepartner = mq.TLO.Window('TradeWnd').Child('TRDW_HisName').Text()
-        end
-        if (string.find(botconfig.config.settings.masterlist, tradepartner) or string.find(table.concat(actornet.charinfo.GetPeers(), " "), tradepartner)) then
-            itemintrade = mq.TLO.Window('TradeWnd').Child('TRDW_TradeSlot8').Tooltip()
-            state.setRunState('trading', { equipItem = (state.getRunconfig().EquipGear and itemintrade) or nil })
-            mq.cmd('/notify TradeWnd TRDW_Trade_Button leftmouseup')
-        end
-    end
-    if state.getRunState() == 'equipping' then
-        local payload = state.getRunStatePayload()
-        if payload and payload.item and mq.TLO.FindItem(payload.item)() then
-            equip.EquipGear(payload.item)
-            state.clearRunState()
-        end
-    end
     if mq.TLO.Window('LootWnd').Open() then
         mq.cmd('/clean')
     end
@@ -72,7 +39,7 @@ local function CharState(...)
         if not mq.TLO.Me.Moving() or (state.getRunStatePayload() and state.getRunStatePayload().deadline and mq.gettime() >= state.getRunStatePayload().deadline) then
             state.clearRunState()
         end
-    elseif state.getRunconfig().campstatus and utils.calcDist2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecampx, state.getRunconfig().makecampy) and utils.calcDist2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecampx, state.getRunconfig().makecampy) > botconfig.config.settings.acleash then
+    elseif state.getRunconfig().campstatus and utils.calcDist2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x, state.getRunconfig().makecamp.y) and utils.calcDist2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x, state.getRunconfig().makecamp.y) > botconfig.config.settings.acleash then
         botmove.MakeCamp('return')
     end
     if botconfig.config.settings.dosit and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then

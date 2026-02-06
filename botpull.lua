@@ -86,7 +86,7 @@ end
 local function figureMobAngle(spawn)
     if not spawn then return false end
     local rc = state.getRunconfig()
-    local DirToMob = spawn.HeadingTo(rc.makecampy, rc.makecampx).Degrees()
+    local DirToMob = spawn.HeadingTo(rc.makecamp.y, rc.makecamp.x).Degrees()
     if arcLside >= arcRside then
         if DirToMob < arcLside and DirToMob > arcRside then return false end
     else
@@ -117,7 +117,7 @@ function botpull.EngageCheck()
     local rc = state.getRunconfig()
     if bot then
         local targetdist = utils.calcDist3D(mq.TLO.Spawn(targetid).X(), mq.TLO.Spawn(targetid).Y(),
-            mq.TLO.Spawn(targetid).Z(), rc.makecampx, rc.makecampy, rc.makecampz)
+            mq.TLO.Spawn(targetid).Z(), rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
         if targetdist and targetdist > 200 and not myconfig.pull.hunter then return false end
     end
     if tartarid and tartarid > 0 and tartarid ~= mq.TLO.Me.ID() and (mq.TLO.Spawn(tartarid).Type() ~= 'NPC') and tartartype ~= 'Corpse' then
@@ -159,7 +159,7 @@ local function ensureCampAndAnchor(rc)
     mq.cmdf('/squelch /mapfilter SpellRadius %s', myconfig.pull.radius)
     mq.cmdf('/squelch /mapfilter CastRadius %s', mq.TLO.Spell(myconfig.pull.pullability).MyRange())
     if not myconfig.pull.hunter and not rc.campstatus then botmove.MakeCamp('on') end
-    if myconfig.pull.hunter and (not rc.makecampx or not rc.makecampy) then
+    if myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
         mq.cmd('/echo setting HunterMode anchor')
         botmove.SetCampHere()
         if rc.campstatus then botmove.MakeCamp('off') end
@@ -172,7 +172,7 @@ end
 
 -- Build filtered spawn list for pulling.
 local function buildPullMobList(rc)
-    local x, y, z = rc.makecampx, rc.makecampy, rc.makecampz
+    local x, y, z = rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
     local radius = myconfig.pull.radius
     local zrange = myconfig.pull.zrange
     local minlevel = myconfig.pull.minlevel
@@ -248,7 +248,7 @@ function botpull.StartPull()
 
     rc.pullAPTargetID = spawn.ID()
     rc.pullTagTimer = botpull.TagTimeCalc('pull', spawn.ID())
-    rc.pullReturnTimer = botpull.TagTimeCalc('return', nil, rc.makecampx, rc.makecampy, rc.makecampz)
+    rc.pullReturnTimer = botpull.TagTimeCalc('return', nil, rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
     rc.pullState = 'navigating'
     rc.pullPhase = nil
     rc.pullDeadline = nil
@@ -260,13 +260,13 @@ local function tickNavigating(rc, spawn)
     if rc.pullTagTimer and mq.gettime() >= rc.pullTagTimer then
         printf('\ayCZBot:\ax\arI have timed out trying to pull \ay%s', spawn.Name())
         if string.lower(myconfig.pull.pullability) == 'warp' then
-            mq.cmdf('/warp loc %s %s %s', rc.makecampy, rc.makecampx, rc.makecampz)
+            mq.cmdf('/warp loc %s %s %s', rc.makecamp.y, rc.makecamp.x, rc.makecamp.z)
         end
         clearPullState()
         return
     end
     if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then clearPullState() return end
-    if rc.campstatus and utils.calcDist3D(rc.makecampx, rc.makecampy, rc.makecampz, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()) > (myconfig.pull.radius + 40) then
+    if rc.campstatus and utils.calcDist3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()) > (myconfig.pull.radius + 40) then
         clearPullState()
         return
     end
@@ -382,7 +382,7 @@ local function tickReturning(rc, spawn)
         return
     end
     if myconfig.pull.pullability == 'warp' then
-        mq.cmdf('/warp loc %s %s %s', rc.makecampy, rc.makecampx, rc.makecampz)
+        mq.cmdf('/warp loc %s %s %s', rc.makecamp.y, rc.makecamp.x, rc.makecamp.z)
         clearPullState()
         return
     end

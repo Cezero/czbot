@@ -141,27 +141,27 @@ end
 -- ---------------------------------------------------------------------------
 
 local function campDistanceOk(rc)
-    return mq.TLO.Math.Distance(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ':' .. rc.makecampx .. ',' .. rc.makecampy)() <= (myconfig.settings.acleash * 0.20)
+    return mq.TLO.Math.Distance(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ':' .. rc.makecamp.x .. ',' .. rc.makecamp.y)() <= (myconfig.settings.acleash * 0.20)
 end
 
 local function campLOSOk(rc)
-    return mq.TLO.LineOfSight(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ',' .. mq.TLO.Me.Z() .. ':' .. rc.makecampx .. ',' .. rc.makecampy .. ',' .. rc.makecampz)()
+    return mq.TLO.LineOfSight(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ',' .. mq.TLO.Me.Z() .. ':' .. rc.makecamp.x .. ',' .. rc.makecamp.y .. ',' .. rc.makecamp.z)()
 end
 
 local function doLeashResetCombat()
     combat.ResetCombatState()
 end
 
--- Navigate to camp location (makecampx/y/z). opts: dist (number|nil), echoMsg (string|nil).
+-- Navigate to camp location (makecamp.x/y/z). opts: dist (number|nil), echoMsg (string|nil).
 local function doNavToCamp(opts)
     opts = opts or {}
     local rc = state.getRunconfig()
-    if not rc.makecampx or not rc.makecampy or not rc.makecampz then return end
+    if not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then return end
     if opts.echoMsg then mq.cmd('/echo ' .. opts.echoMsg) end
     if opts.dist ~= nil then
-        mq.cmdf('/nav locxyz %s %s %s log=off dist=%s', rc.makecampx, rc.makecampy, rc.makecampz, opts.dist)
+        mq.cmdf('/nav locxyz %s %s %s log=off dist=%s', rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, opts.dist)
     else
-        mq.cmdf('/nav locxyz %s %s %s log=off', rc.makecampx, rc.makecampy, rc.makecampz)
+        mq.cmdf('/nav locxyz %s %s %s log=off', rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
     end
 end
 
@@ -171,9 +171,9 @@ end
 
 local function setCampHere()
     local rc = state.getRunconfig()
-    rc.makecampx = mq.TLO.Me.X()
-    rc.makecampy = mq.TLO.Me.Y()
-    rc.makecampz = mq.TLO.Me.Z()
+    rc.makecamp.x = mq.TLO.Me.X()
+    rc.makecamp.y = mq.TLO.Me.Y()
+    rc.makecamp.z = mq.TLO.Me.Z()
 end
 
 local function makeCampOn()
@@ -190,9 +190,7 @@ local function makeCampOn()
 end
 
 local function makeCampOff()
-    if not myconfig.pull.hunter then state.getRunconfig().makecampx = nil end
-    if not myconfig.pull.hunter then state.getRunconfig().makecampy = nil end
-    if not myconfig.pull.hunter then state.getRunconfig().makecampz = nil end
+    if not myconfig.pull.hunter then state.getRunconfig().makecamp = { x = nil, y = nil, z = nil } end
     state.getRunconfig().campstatus = false
     printf('\ayCZBot:\axmakecamp \aroff\ax')
 end

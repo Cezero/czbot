@@ -41,9 +41,7 @@ local function cmd_toggle(args)
         if args[1] == 'dopull' then
             if APTarget and APTarget.ID() then APTarget = nil end
             if botconfig.config.pull.hunter then
-                state.getRunconfig().makecampx = false
-                state.getRunconfig().makecampy = false
-                state.getRunconfig().makecampz = false
+                state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
             end
             mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
         end
@@ -55,9 +53,7 @@ local function cmd_toggle(args)
                 mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
             end
             if args[1] == 'dopull' and botconfig.config.pull.hunter then
-                state.getRunconfig().makecampx = false
-                state.getRunconfig().makecampy = false
-                state.getRunconfig().makecampz = false
+                state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
             end
         else
             botconfig.config.settings[args[1]] = false
@@ -110,24 +106,6 @@ local function cmd_debug(args)
         elseif debug == false then
             print('Enabling debug messages')
             debug = true
-        end
-    end
-end
-
-local function cmd_equipgear(args)
-    if args[2] == 'on' then
-        printf('\ayCZBot:\axEnabling CZBot auto equip, equiping any gear traded to me')
-        state.getRunconfig().EquipGear = true
-    elseif args[2] == 'off' then
-        printf('\ayCZBot:\axDisabling CZBot auto equip')
-        state.getRunconfig().EquipGear = false
-    else
-        if state.getRunconfig().EquipGear == true then
-            printf('\ayCZBot:\axDisabling CZBot auto equip')
-            state.getRunconfig().EquipGear = false
-        elseif state.getRunconfig().EquipGear == false then
-            printf('\ayCZBot:\axEnabling CZBot auto equip, equiping any gear traded to me')
-            state.getRunconfig().EquipGear = true
         end
     end
 end
@@ -685,7 +663,6 @@ local handlers = {
     import = cmd_import,
     export = cmd_export,
     debug = cmd_debug,
-    equipgear = cmd_equipgear,
     ui = cmd_ui,
     show = cmd_ui,
     makecamp = cmd_makecamp,
