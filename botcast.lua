@@ -995,7 +995,6 @@ local function DebuffEvalNamedTankTar(index, ctx)
 end
 
 local function DebuffEval(index)
-    if debug then print('debuff eval ', index) end
     local entry = botconfig.getSpellEntry('debuff', index)
     if not entry then return nil, nil end
     if entry.tarcnt and entry.tarcnt > state.getRunconfig().MobCount then return nil, nil end
@@ -1019,8 +1018,7 @@ end
 
 local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
-    if entry and spellstates.GetRecastCounter(EvalID, i) >= (entry.recast or 0) then
-        if debug then printf('debuff %d %s recast counter %d >= %d, skipping', i, entry.spell, spellstates.GetRecastCounter(EvalID, i), entry.recast or 0) end
+    if entry ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false
     end
     charm.BeforeCast(EvalID, targethit)
