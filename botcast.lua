@@ -911,6 +911,10 @@ local function DebuffEvalTankTar(index, ctx)
     local entry = ctx.entry
     local gem = entry.gem
     local db = DebuffBands[index]
+    local inMobList = false
+    if debug then print('debuff tanktar', index, 'tanktar=', ctx.tanktar) end
+    if ctx.tanktar then for _, v in ipairs(ctx.mobList or {}) do if v.ID() == ctx.tanktar then inMobList = true break end end end
+    if debug then print('debuff tanktar', index, 'inMobList=', inMobList) end
     if not db or not db.tanktar or not ctx.tanktar then return nil, nil end
     local tanktarhp = ctx.tanktarhp
     if tanktarhp == nil then tanktarhp = mq.TLO.Spawn(ctx.tanktar).PctHPs() end
@@ -927,6 +931,7 @@ local function DebuffEvalTankTar(index, ctx)
                         return nil, nil
                     end
                     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
+                        if debug then print('debuff tanktar skip: stacks', index, entry.spell) end
                         return nil, nil
                     end
                     return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
