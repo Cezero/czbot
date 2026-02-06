@@ -255,7 +255,7 @@ function botcast.BuffCheck()
             local entry = botconfig.getSpellEntry('buff', i)
             if not entry then return false end
             local gem = entry.gem
-            if not entry.enabled then return false end
+            if entry.enabled == false then return false end
             if not ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') then return false end
             local cbtspell = BuffClass[i] and BuffClass[i].cbt
             local idlespell = BuffClass[i] and BuffClass[i].idle
@@ -404,7 +404,7 @@ function botcast.CureCheck()
             local entry = botconfig.getSpellEntry('cure', i)
             if not entry then return false end
             local gem = entry.gem
-            return entry.enabled and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
+            return (entry.enabled ~= false) and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
         end,
     })
 end
@@ -724,7 +724,7 @@ function botcast.HealCheck()
         entryValid = function(i)
             local entry = botconfig.getSpellEntry('heal', i)
             if not entry then return false end
-            if not entry.enabled or entry.gem == 0 then return false end
+            if entry.enabled == false or entry.gem == 0 then return false end
             local minmanapct = entry.minmanapct
             local maxmanapct = entry.maxmanapct
             if minmanapct == nil then minmanapct = 0 end
@@ -1049,7 +1049,7 @@ function botcast.DebuffCheck()
             local entry = botconfig.getSpellEntry('debuff', i)
             if not entry then return false end
             local gem = entry.gem
-            return entry.enabled and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
+            return (entry.enabled ~= false) and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
         end,
         afterCast = function(i, EvalID, classhit)
             if spellstates.GetDebuffDelay(i) and spellstates.GetDebuffDelay(i) > mq.gettime() then return false end
