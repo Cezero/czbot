@@ -1,0 +1,204 @@
+# Commands and Configuration Reference
+
+This document is a single reference for all **/cz** commands and the **configuration file** structure. For detailed behavior and examples, see the topic-specific docs (healing, tanking, buffing, etc.).
+
+---
+
+## Commands
+
+All commands are used as **`/cz <command> [arguments]`**. Arguments are optional unless noted.
+
+### Toggles
+
+These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or **`/cz <cmd>`** to toggle.
+
+| Command | Purpose |
+|---------|---------|
+| **domelee** | Melee / engage (stick, attack, follow MA or tank logic). |
+| **dopull** | Pulling loop (find mob, aggro, return to camp). |
+| **dodebuff** | Debuff loop (nukes, slows, mez, etc.). |
+| **dobuff** | Buff loop (buffs, pet summon). |
+| **doheal** | Heal loop. |
+| **doraid** | Raid mode (load/save raid config). |
+| **docure** | Cure loop. |
+| **dosit** | Sit when not in combat (for mana/endurance). |
+| **domount** | Mount when not in combat. |
+| **dodrag** | Corpse drag. |
+
+### Movement and camp
+
+| Command | Arguments | Purpose |
+|---------|-----------|---------|
+| **makecamp** | `on`, `off`, or `return` | Set or clear make camp; `return` sends bot back to camp. |
+| **follow** | `<name>` | Follow the named character (disables make camp). |
+| **stop** | — | Disable make camp and follow. |
+| **leash** | — | Return to camp (if camp is set). |
+
+### Pull
+
+| Command | Arguments | Purpose |
+|---------|-----------|---------|
+| **dopull** | `on` / `off` or toggle | Enable/disable pulling. |
+| **xarc** | `<degrees>` or none | Directional pulling: restrict pulls to an arc in front of the bot (e.g. `90`). No argument turns it off. (This is the runtime “pullarc” setting.) |
+| **exclude** | `<name>` or target, optional `save` | Add a mob to the exclude list (pull and target selection skip it). `save` persists the list. |
+| **priority** | `<name>` or target, optional `save` | Add a mob to the priority list; when pull.usepriority is true, prefer these mobs. `save` persists. |
+
+### Combat and roles
+
+| Command | Arguments | Purpose |
+|---------|-----------|---------|
+| **attack** | — | Engage the Main Assist’s target. |
+| **abort** | optional `off` | Abort: stop cast, clear target, turn off melee/debuff; return to camp. Use `abort off` to re-enable melee/debuff. |
+| **tank** | `<name>` or `automatic` | Set Main Tank. |
+| **assist** | `<name>` or `automatic` | Set Main Assist. |
+| **offtank** | `on` / `off` or toggle | Enable/disable offtank behavior. |
+| **stickcmd** | `<string>` | Set stick command (e.g. `hold uw 7`). |
+| **acleash** | `<number>` | Set camp leash distance (max distance from camp for mob list / targeting). |
+| **targetfilter** | `0` / `1` / `2` | Filter for mob list: 0 = NPC + aggressive + LOS, 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
+
+### Spells and config
+
+| Command | Arguments | Purpose |
+|---------|-----------|---------|
+| **cast** | `<alias> [target]` or `<alias> on` / `off` | Cast a spell by alias (heal/buff/debuff/cure). With `on`/`off`, enable or disable that spell (tarcnt). |
+| **setvar** | `<path> <value>` | Set a config value at runtime (e.g. `settings.petassist true`). Writes to config file. |
+| **addspell** | `heal` / `buff` / `debuff` / `cure` `<position>` | Add a new spell entry at the given position (1 to count+1). |
+| **refresh** / **refreshspells** | — | Refresh spell state. |
+| **echo** | `<config.path>` | Print current value of a config path (e.g. `heal.interruptlevel`). |
+
+### Other
+
+| Command | Arguments | Purpose |
+|---------|-----------|---------|
+| **import** | `lua <filename> [save]` | Load config from a Lua file; optional `save` writes it to current config. |
+| **export** | `<filename>` | Export current config to a file in config directory. |
+| **debug** | `on` / `off` or toggle | Enable/disable debug messages. |
+| **ui** / **show** | — | Open the CZBot UI. |
+| **quit** | — | Terminate the bot. |
+| **chchain** | `stop` / `setup` / `start` / `tank` / `pause` | Complete Heal chain control. |
+| **draghack** | `on` / `off` or toggle | Toggle corpse-drag behavior. |
+| **linkitem** | — | Link item (event). |
+| **linkaugs** | `<slot>` | Print augments in the given slot. |
+| **spread** | — | Spread bots (nav to positions). |
+| **raid** | `save` / `load` `<name>` | Save or load a raid configuration by name. |
+
+### Master pause
+
+- **`/czp`** or **`/czpause [on|off]`** — Pause or unpause the entire bot. No arguments toggles pause.
+
+---
+
+## Configuration file structure
+
+The config file is a Lua script that returns a table. Path: **`cz_<CharName>.lua`** in your MacroQuest config directory (e.g. `config/cz_Yourname.lua`).
+
+**Top-level keys:** `settings`, `pull`, `melee`, `heal`, `buff`, `debuff`, `cure`, `script`. Each section is a table; `heal`, `buff`, `debuff`, and `cure` contain a **spells** array of spell entries.
+
+**Example: overall shape and settings**
+
+```lua
+StoredConfig = {
+  ['settings'] = {
+    ['domelee'] = false,
+    ['doheal'] = false,
+    ['dobuff'] = false,
+    ['dodebuff'] = false,
+    ['docure'] = false,
+    ['dopull'] = false,
+    ['doraid'] = false,
+    ['dodrag'] = false,
+    ['domount'] = false,
+    ['mountcast'] = false,
+    ['dosit'] = true,
+    ['sitmana'] = 90,
+    ['sitendur'] = 90,
+    ['TankName'] = "manual",
+    ['AssistName'] = nil,
+    ['TargetFilter'] = '0',
+    ['petassist'] = false,
+    ['acleash'] = 75,
+    ['zradius'] = 75
+  },
+  ['pull'] = { ... },
+  ['melee'] = { ... },
+  ['heal'] = { ['rezoffset'] = 0, ['interruptlevel'] = 0.80, ['xttargets'] = 0, ['spells'] = { ... } },
+  ['buff'] = { ['spells'] = { ... } },
+  ['debuff'] = { ['spells'] = { ... } },
+  ['cure'] = { ['prioritycure'] = false, ['spells'] = { ... } },
+  ['script'] = {}
+}
+return StoredConfig
+```
+
+### Settings (defaults)
+
+| Option | Default | Purpose |
+|--------|--------|---------|
+| **domelee** | `false` | Enable melee/engage. |
+| **doheal** | `false` | Enable heal loop. |
+| **dobuff** | `false` | Enable buff loop. |
+| **dodebuff** | `false` | Enable debuff loop. |
+| **docure** | `false` | Enable cure loop. |
+| **dopull** | `false` | Enable pull loop. |
+| **doraid** | `false` | Raid mode. |
+| **dodrag** | `false` | Corpse drag. |
+| **domount** | `false` | Auto mount. |
+| **mountcast** | `false` | Mount cast (e.g. spell\|item). |
+| **dosit** | `true` | Sit when not in combat. |
+| **sitmana** | 90 | Sit when mana % at or below this. |
+| **sitendur** | 90 | Sit when endurance % at or below this. |
+| **TankName** | `"manual"` | Main Tank name or `"automatic"` / `"manual"`. |
+| **AssistName** | (unset) | Main Assist name or `"automatic"` / `"manual"`. |
+| **TargetFilter** | `'0'` | Mob list filter (0/1/2). |
+| **petassist** | `false` | Send pet on engage target. |
+| **acleash** | 75 | Camp leash distance. |
+| **zradius** | 75 | Vertical range from camp for mob list. |
+| **spelldb** | `'spells.db'` | Spell database file. |
+
+### Pull section
+
+See [Pull Configuration and Logic](pull-configuration.md) for the full pull table. Options include: **pullability**, **abilityrange**, **radius**, **zrange**, **minlevel**, **maxlevel**, **chainpullcnt**, **chainpullhp**, **mana**, **manaclass**, **leash**, **usepriority**, **hunter**.
+
+### Melee section
+
+| Option | Default | Purpose |
+|--------|--------|---------|
+| **assistpct** | 99 | MA target HP % at or below which to sync. |
+| **stickcmd** | `'hold uw 7'` | Stick command when engaging. |
+| **offtank** | `false` | This bot is an offtank. |
+| **otoffset** | 0 | Which add to pick when MT and MA on same mob. |
+| **minmana** | 0 | Min mana % to engage. |
+
+### Heal / Buff / Debuff / Cure sections
+
+- **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **tarcnt**, **bands**, **priority**, **precondition**. See [Healing configuration](healing-configuration.md).
+- **buff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **tarcnt**, **bands**, **spellicon**, **precondition**. See [Buffing configuration](buffing-configuration.md).
+- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **tarcnt**, **bands**, **charmnames**, **recast**, **delay**, **precondition**. See [Debuffing configuration](debuffing-configuration.md).
+- **cure:** Top-level: **prioritycure**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **curetype**, **tarcnt**, **bands**, **priority**, **precondition**. See [Curing configuration](curing-configuration.md).
+
+**Example: one heal spell entry**
+
+```lua
+{
+  ['gem'] = 1,
+  ['spell'] = 'Superior Healing',
+  ['alias'] = 'cht',
+  ['minmana'] = 0,
+  ['minmanapct'] = 0,
+  ['maxmanapct'] = 100,
+  ['tarcnt'] = 1,
+  ['bands'] = {
+    { ['class'] = { 'tank', 'pc' }, ['min'] = 0, ['max'] = 70 }
+  },
+  ['priority'] = false,
+  ['precondition'] = true
+}
+```
+
+---
+
+## Where to configure
+
+- **Config file:** Edit **`cz_<CharName>.lua`** in your MQ config directory. Reload by re-running the bot or using **import** / **setvar**.
+- **Runtime only (not in config file):** **ExcludeList**, **PriorityList** (pull exclude/priority), and **pullarc** (directional pull) are set at runtime via **/cz exclude**, **/cz priority**, and **/cz xarc**. Use **exclude save** or **priority save** to persist exclude/priority lists if supported.
+- **Both:** Most options can be set in the config file or at runtime via **/cz setvar** (e.g. **setvar settings.petassist true**), which writes back to the config file.

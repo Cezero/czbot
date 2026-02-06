@@ -38,7 +38,7 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | **usepriority** | `false` | If `true`, prefer mobs that match the runtime **Priority** list over path distance when choosing a pull target. |
 | **hunter** | `false` | Hunter mode: no makecamp; anchor is set once. The puller can be far from camp. See [Hunter mode vs camp mode](#hunter-mode-vs-camp-mode). |
 
-**Note:** **pullarc** (directional pulling) is not in the config file; it is set at runtime. See [Runtime control](#runtime-control-commands).
+**Note:** **pullarc** (directional pulling) is not in the config file; it is set at runtime with **`/cz xarc <degrees>`**. See [Runtime control](#runtime-control-commands).
 
 ---
 
@@ -98,7 +98,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 ## Runtime control (commands)
 
 - **Toggle pulling:** `/cz dopull on` or `/cz dopull off`. You can also toggle without arguments (e.g. `/cz dopull`). Turning **off** clears target, stops nav/stick/attack; if **hunter** is true, it also clears the makecamp anchor.
-- **Directional pulling:** `/cz pullarc <degrees>` — Restrict pulls to an arc in front of the bot (e.g. `90` for a 90° cone). Use with no argument to turn directional pulling off.
+- **Directional pulling:** `/cz xarc <degrees>` — Restrict pulls to an arc in front of the bot (e.g. `90` for a 90° cone). Use with no argument to turn directional pulling off.
 - **Exclude / priority:** **ExcludeList** and **PriorityList** are **runtime** (runconfig), not in the pull config file. Use **`/cz exclude <name>`** to add a mob to the exclude list (pull target selection will skip it). Use **`/cz priority <name>`** to add a mob to the priority list; when **pull.usepriority** is `true`, the bot prefers priority mobs over path distance. You can target a mob and use `/cz exclude` or `/cz priority` without a name to use the target’s name.
 
 ---

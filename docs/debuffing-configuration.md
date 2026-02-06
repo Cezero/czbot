@@ -1,0 +1,114 @@
+# Debuffing Configuration
+
+This document explains how to configure the bot’s **debuffing** behavior: which detrimental spells are cast on which mobs (tank target, adds, named) and options such as charm, recast, and delay. **Nuking** and **mezzing** use this same debuff system; see [Nuking configuration](nuking-configuration.md) and [Mezzing configuration](mezzing-configuration.md) for those use cases.
+
+## Overview
+
+- **Master switch:** Debuffing runs only when **`settings.dodebuff`** is `true`. Default is `false`.
+- **Mob list:** The bot builds a list of valid mobs (within **acleash** and **zradius** of camp, filtered by **TargetFilter**). Debuffs are only cast on mobs in this list.
+- **Evaluation order:** Charm targets (if **charmnames** is set) → **tanktar** (MA/tank’s current target) → **notanktar** (other mobs / adds) → **named** (named mobs that are the tank target).
+
+---
+
+## Config file reference
+
+### Settings
+
+| Option | Default | Purpose |
+|--------|--------|---------|
+| **dodebuff** | `false` | Boolean. Enables or disables the debuff loop. |
+
+### Debuff section
+
+All debuff options are under **`config.debuff.spells`**. Each spell entry can have:
+
+| Field | Purpose |
+|-------|---------|
+| **gem** | Spell gem number (1–12), or `'item'`, `'alt'`, `'disc'`, `'ability'`, `'script'`. |
+| **spell** | Spell name (or item name if gem is `'item'`). |
+| **alias** | Optional. Short name for `/cz cast <alias>`. Pipe-separated for multiple. |
+| **announce** | Optional. If true, announce when casting. |
+| **minmana** | Minimum mana (absolute) to cast. |
+| **tarcnt** | Must be > 0 for the spell to be used. Can limit how many mobs (e.g. only debuff when mob count ≤ tarcnt). |
+| **bands** | Which mobs and at what HP %. See [Debuff bands](#debuff-bands) below. |
+| **charmnames** | Optional. Comma-separated mob **names**. When set, the bot can target those mobs for charm (recast when charm breaks). Before casting charm, the bot sends **pet leave** if your pet is charmed. |
+| **recast** | Optional. After this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. |
+| **delay** | Optional. Delay (ms) before the spell can be used again after cast (per-index/spell). |
+| **precondition** | Optional. When false, the spell is skipped. |
+
+### Debuff bands
+
+Bands define **which mobs** and **at what HP %** the debuff is allowed. Each band has:
+
+- **class:** One or more of: **tanktar**, **notanktar**, **named**.
+  - **tanktar** — The Main Tank’s (or MA’s) current target.
+  - **notanktar** — Any other mob in the list (adds).
+  - **named** — Only named mobs; when used with tanktar, only the tank target if it is named.
+- **min** / **max:** Mob HP % range (0–100). The mob’s HP must be in this range to be considered.
+
+**Example: nuke on tank target and slow on adds**
+
+```lua
+['debuff'] = {
+  ['spells'] = {
+    {
+      ['gem'] = 1,
+      ['spell'] = 'Chaos Flame',
+      ['alias'] = 'nuke',
+      ['minmana'] = 0,
+      ['tarcnt'] = 10,
+      ['bands'] = {
+        { ['class'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
+      },
+      ['charmnames'] = '',
+      ['recast'] = 0,
+      ['delay'] = 0,
+      ['precondition'] = true
+    },
+    {
+      ['gem'] = 2,
+      ['spell'] = 'Turgur\'s Insects',
+      ['alias'] = 'slow',
+      ['minmana'] = 0,
+      ['tarcnt'] = 5,
+      ['bands'] = {
+        { ['class'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
+      },
+      ['charmnames'] = '',
+      ['recast'] = 2,
+      ['delay'] = 0,
+      ['precondition'] = true
+    }
+  }
+}
+```
+
+---
+
+## Charm (special case)
+
+When **charmnames** is set to a comma-separated list of mob names, the debuff logic can target those mobs for charm. When charm breaks, the bot can request a recast on that spawn. Before casting charm, the bot issues **pet leave** so your current pet is released. Charm is a debuff entry like any other; the only difference is the use of **charmnames** and the pet-leave/recast behavior. See also [Pets configuration](pets-configuration.md) for charm in context.
+
+---
+
+## Runtime control
+
+- **Toggle debuffing:** `/cz dodebuff on` or `/cz dodebuff off` (or `/cz dodebuff` to toggle).
+- **Cast by alias:** `/cz cast <alias> [target]` — cast a debuff by alias. Use `/cz cast <alias> on` or `off` to enable or disable that spell (tarcnt).
+- **Add a spell slot:** `/cz addspell debuff <position>` — insert a new debuff entry at the given position.
+
+---
+
+## Behavior summary
+
+- **Immune check:** The bot can skip mobs marked immune to the spell (per zone/target in immune data).
+- **Before cast (tanktar):** When casting on the tank target, the bot may set **engageTargetId** to that mob (so melee/pet follow) and send pet attack if **petassist** is on.
+- **Recast:** After **recast** resists on the same spawn, the spell is disabled for that spawn for a duration.
+- **Level:** For some spell types (e.g. Enthrall/mez), the spell’s **MaxLevel** is checked against the mob’s level; over-level mobs are skipped.
+
+---
+
+## See also
+
+- [Nuking configuration](nuking-configuration.md) — Configure nukes as debuffs (typically **tanktar**, optionally **notanktar**).
+- [Mezzing configuration](mezzing-configuration.md) — Configure mez as debuffs (typically **notanktar**; **charmnames** for charm mez).
