@@ -52,7 +52,10 @@ Bands define **who** can receive the spell and **at what HP %**. Each band has:
 - **class:** List of target types. One or more of: `pc`, `pet`, `grp`, `group`, `self`, `tank`, `mypet`, class shorts (`war`, `shd`, `pal`, `clr`, `dru`, etc.), `tnt`, `corpse`, `bots`, `raid`, `cbt`, `all`, `xtgt`. **`group`** restricts single-target PC (and tank) heal targets to **peers who are in the bot’s group**. If **`group`** is **omitted**, the bot may heal **any peer** (including out-of-group) whose HP is in the band and who is in range; HP is taken from charinfo.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For **corpse**, **bots**, **raid**, **cbt**, **all** the effective max is treated as 200 (special).
 
-**Special tokens:** **cbt** (combat) — When included in a **corpse** (rez) spell’s bands, the bot may rez even when there are mobs in the camp list. Without **cbt**, corpse rez is only considered when there are no mobs in camp (safe rez only). **all** — When used with corpse, rez any corpse in range (subject to rezoffset and filter).
+**Special tokens:**
+- **cbt** (combat) — When included in a **corpse** (rez) spell’s bands, the bot may rez even when there are mobs in the camp list. Without **cbt**, corpse rez is only considered when there are no mobs in camp (safe rez only). 
+- **all** — When used with corpse, rez any corpse in range (subject to rezoffset and filter).
+- **xtgt** (extended target) — When in a spell's bands and **heal.xttargets** is set, the spell can target extended target (XTarget) slots; the band's min/max apply to the XTarget's HP.
 
 Heal evaluation order: **corpse** (rez) → **self** → **grp** (group AE) → **tank** → **pc** by class → **mypet** → **pet** (other pets) → **xtgt** (extended targets). The first matching target in range gets the heal. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
 
