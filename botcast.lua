@@ -911,15 +911,12 @@ local function DebuffEvalTankTar(index, ctx)
     local entry = ctx.entry
     local gem = entry.gem
     local db = DebuffBands[index]
-    local inMobList = false
-    if ctx.tanktar then for _, v in ipairs(ctx.mobList or {}) do if v.ID() == ctx.tanktar then inMobList = true break end end end
     if not db or not db.tanktar or not ctx.tanktar then return nil, nil end
+    if debug then printf('debuff tanktar %d %s tanktar=%s tanktarhp=%d band=%d-%d', index, entry.spell, ctx.tanktar, ctx.tanktarhp, db.mobMin, db.mobMax) end
     local tanktarhp = ctx.tanktarhp
     if tanktarhp == nil then tanktarhp = mq.TLO.Spawn(ctx.tanktar).PctHPs() end
-    if not spellbands.hpInBand(tanktarhp, { min = db.mobMin, max = db.mobMax }) then
-        if debug then printf('debuff tanktar skip: %d %s not in band hp=%d band=%d-%d', index, entry.spell, tanktarhp, db.mobMin, db.mobMax) end
-        return nil, nil
-        end
+    if debug then printf('debuff tanktar %d %s tanktarhp=%d band=%d-%d', index, entry.spell, tanktarhp, db.mobMin, db.mobMax) end
+    if not spellbands.hpInBand(tanktarhp, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar then
             local myrange = ctx.myrange
@@ -932,7 +929,7 @@ local function DebuffEvalTankTar(index, ctx)
                         return nil, nil
                     end
                     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
-                        if debug then print('debuff tanktar skip: stacks', index, entry.spell) end
+                        if debug then printf('debuff tanktar %d %s tanktarstack=%s', index, entry.spell, tanktarstack) end
                         return nil, nil
                     end
                     return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
