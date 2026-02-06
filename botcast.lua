@@ -838,7 +838,6 @@ local function ADSpawnCheck_ApplyFilter(spawnlist, rc)
 end
 
 function botcast.ADSpawnCheck()
-    if debug then print('spawncheck') end
     local rc = state.getRunconfig()
     if not ADSpawnCheck_ValidateAcmTarget(rc) then return end
     local spawnlist = ADSpawnCheck_BuildSpawnList()
