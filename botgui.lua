@@ -57,7 +57,13 @@ local function drawNestedTableTree(tbl)
 end
 
 local function drawNestedTableTreeReadOnly(tbl)
-    for k, v in pairs(tbl) do
+    local keys = {}
+    for k in pairs(tbl) do
+        keys[#keys + 1] = k
+    end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    for _, k in ipairs(keys) do
+        local v = tbl[k]
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
         if type(v) == 'table' then
