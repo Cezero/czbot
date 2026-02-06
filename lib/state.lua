@@ -22,8 +22,6 @@
 ---@field pulledmob number|nil
 ---@field pullreturntimer number|nil
 ---@field pullarc number|nil
----@field DoYell boolean
----@field DoYellTimer number
 ---@field FTEList table
 ---@field FTECount number
 ---@field CurSpell table
@@ -99,8 +97,6 @@ function M.resetRunconfig()
         pulledmob = nil,
         pullreturntimer = nil,
         pullarc = nil,
-        DoYell = false,
-        DoYellTimer = 0,
         FTEList = {},
         FTECount = 0,
         CurSpell = {},

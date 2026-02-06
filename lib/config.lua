@@ -98,7 +98,7 @@ local spellSlotOrder = {
 }
 
 function M.getPath()
-    return mq.configDir .. '\\tb_' .. mq.TLO.Me.CleanName() .. '.lua'
+    return mq.configDir .. '\\cz_' .. mq.TLO.Me.CleanName() .. '.lua'
 end
 
 function M.getCommon()

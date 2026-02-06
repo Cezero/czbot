@@ -63,7 +63,7 @@ function spellstates.ClearDebuffList()
     DebuffList = {}
 end
 
--- Cleans ADMobList (zone reset / debuff list clear); alias for ClearDebuffList for callers that used trotslib.CleanMobList.
+-- Cleans ADMobList (zone reset / debuff list clear); alias for ClearDebuffList.
 function spellstates.CleanMobList()
     spellstates.ClearDebuffList()
 end

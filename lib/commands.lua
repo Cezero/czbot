@@ -1,4 +1,4 @@
--- Command parser for /tb: dispatches to per-command handlers.
+-- Command parser for /cz: dispatches to per-command handlers.
 -- Uses globals and modules from the CZBot environment (state.getRunconfig(), botconfig, etc.).
 
 local M = {}
@@ -69,24 +69,6 @@ local function cmd_toggle(args)
     printf('\ayCZBot:\axTurning %s to %s', args[1], botconfig.config.settings[args[1]])
 end
 
-local function cmd_doyell(args)
-    if args[2] == 'on' then
-        print('Enabling yelling for FTE')
-        state.getRunconfig().DoYell = true
-    elseif args[2] == 'off' then
-        print('Disabling yelling for FTE')
-        state.getRunconfig().DoYell = false
-    else
-        if state.getRunconfig().DoYell == true then
-            print('Disabling yelling for FTE')
-            state.getRunconfig().DoYell = false
-        elseif state.getRunconfig().DoYell == false then
-            print('Enabling yelling for FTE')
-            state.getRunconfig().DoYell = true
-        end
-    end
-end
-
 local function cmd_import(args)
     if args[2] == 'lua' then
         local importpath = mq.configDir .. "\\" .. args[3]
@@ -104,7 +86,7 @@ local function cmd_import(args)
             if args[4] == 'save' then botconfig.Save(botconfig.getPath()) end
         end
     else
-        printf('Usage: /tb import lua <filename> [save]')
+        printf('Usage: /cz import lua <filename> [save]')
     end
 end
 
@@ -337,7 +319,7 @@ local function cmd_cast(args)
                     else
                         if not spellutils.LoadSpell(cfgkey, i) then
                             if not spellutils.LoadSpell(cfgkey, i) then
-                                -- Only when user runs /tb cast; not per-tick, so no spam.
+                                -- Only when user runs /cz cast; not per-tick, so no spam.
                                 printf('\ayCZBot:\ax\arCast command spell %s not ready!', entry.spell)
                             else
                                 spellutils.CastSpell(i, target, 'castcommand', cfgkey)
@@ -684,13 +666,13 @@ local function cmd_raid(args)
     local sub = args[2] and string.lower(args[2])
     if sub == 'save' then
         if not args[3] or args[3] == '' then
-            printf('\ayCZBot:\ax Noname given, cant save raid (/tb raid save raidname)')
+            printf('\ayCZBot:\ax Noname given, cant save raid (/cz raid save raidname)')
             return
         end
         groupmanager.SaveRaid(args[3])
     elseif sub == 'load' then
         if not args[3] or args[3] == '' then
-            print('no raid name giving /tb raid load raidname')
+            print('no raid name giving /cz raid load raidname')
             return
         end
         groupmanager.LoadRaid(args[3])
@@ -700,7 +682,6 @@ end
 -- Handler table: command name -> function(args, str).
 -- Handlers receive (args, str); str only used by stickcmd.
 local handlers = {
-    doyell = cmd_doyell,
     import = cmd_import,
     export = cmd_export,
     debug = cmd_debug,
@@ -771,7 +752,7 @@ function M.Parse(...)
     end
 end
 
-function M.tbpause(...)
+function M.czpause(...)
     local args = { ... }
     if args[1] and args[1] == 'off' then
         MasterPause = false
@@ -790,6 +771,8 @@ function M.tbpause(...)
     end
 end
 
-mq.bind('/tbp', M.tbpause)
+mq.bind('/cz', M.Parse)
+mq.bind('/czshow', botgui.UIEnable)
+mq.bind('/czp', M.czpause)
 
 return M

@@ -40,7 +40,7 @@ function M.SaveRaid(raidname)
         return
     end
     if not raidname or raidname == '' then
-        printf('\ayCZBot:\ax Noname given, cant save raid (/tb raid save raidname)')
+        printf('\ayCZBot:\ax Noname given, cant save raid (/cz raid save raidname)')
         return
     end
     local comkeytable = botconfig.getCommon()

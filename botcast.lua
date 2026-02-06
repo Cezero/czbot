@@ -5,7 +5,6 @@ local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
 local spellstates = require('lib.spellstates')
 local state = require('lib.state')
-local trotslib = require('trotslib')
 local utils = require('lib.utils')
 local charinfo = require('actornet.charinfo')
 local myconfig = botconfig.config
@@ -829,29 +828,21 @@ local function ADSpawnCheck_FilterSpawn(spawn, rc)
     return false
 end
 
-local function ADSpawnCheck_ApplyFilter(spawnlist, rc, prevMobList)
-    local needtoyell = false
+local function ADSpawnCheck_ApplyFilter(spawnlist, rc)
     rc.MobList = {}
     for _, spawn in ipairs(spawnlist) do
         if ADSpawnCheck_FilterSpawn(spawn, rc) then
-            if rc.DoYell and not prevMobList[spawn.ID()] then needtoyell = true end
             table.insert(rc.MobList, spawn)
         end
     end
-    return needtoyell
 end
 
 function botcast.ADSpawnCheck()
     if debug then print('spawncheck') end
     local rc = state.getRunconfig()
     if not ADSpawnCheck_ValidateAcmTarget(rc) then return end
-    local prevMobList = {}
-    if rc.DoYell then
-        for _, v in ipairs(rc.MobList) do prevMobList[v.ID()] = v.ID() end
-    end
     local spawnlist = ADSpawnCheck_BuildSpawnList()
-    local needtoyell = ADSpawnCheck_ApplyFilter(spawnlist, rc, prevMobList)
-    if needtoyell then trotslib.DoYell() end
+    ADSpawnCheck_ApplyFilter(spawnlist, rc)
     table.sort(rc.MobList, function(a, b) return a.ID() < b.ID() end)
     local mobcount = 0
     local killtarpresent = false

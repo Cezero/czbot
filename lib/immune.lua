@@ -10,10 +10,10 @@ function M.get()
 end
 
 function M.load()
-    local immuneData, errr = loadfile(mq.configDir .. '/' .. 'tbimmune.lua')
+    local immuneData, errr = loadfile(mq.configDir .. '/' .. 'czimmune.lua')
     if errr then
         M._immune = {}
-        mq.pickle('tbimmune.lua', M._immune)
+        mq.pickle('czimmune.lua', M._immune)
     elseif immuneData then
         M._immune = immuneData()
         if not M._immune then M._immune = {} end
@@ -24,7 +24,7 @@ function M.load()
 end
 
 function M.save()
-    if M._immune then mq.pickle('tbimmune.lua', M._immune) end
+    if M._immune then mq.pickle('czimmune.lua', M._immune) end
 end
 
 function M.add(spell, zone, mobName)

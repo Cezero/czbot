@@ -193,7 +193,7 @@ local function _registerBuiltinHooks()
 end
 
 function botlogic.StartUp(...)
-    print('CZBot LUA is starting! (v6.28)')
+    print('CZBot is starting! (v1.00)')
     math.randomseed(os.time() * 1000 + os.clock() * 1000)
     if mq.TLO.Me.Hovering() or string.find(mq.TLO.Me.Name(), 'corpse') then
         printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')

@@ -98,12 +98,6 @@ end
 function botevents.Event_LockedDoor()
 end
 
-function botevents.Event_EQBC()
-end
-
-function botevents.Event_DanChat()
-end
-
 function botevents.Event_CHChain(line, arg1)
     return chchain.OnGo(line, arg1)
 end
@@ -161,10 +155,6 @@ function botevents.Event_FTELocked()
         printf(
             '\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', spawn.Name())
     end
-    --if DoYell and DoYellTimer < mq.gettime() then
-    --mq.cmd('/yell')
-    state.getRunconfig().DoYellTimer = mq.gettime() + 5000
-    --end
     if state.getRunconfig().FTECount == 0 then state.getRunconfig().FTECount = state.getRunconfig().FTECount + 1 end
     if spawn.ID() and spawn.ID() > 0 and not state.getRunconfig().FTEList[spawn.ID()] then
         state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 1, timer = mq.gettime() + 10000 }
@@ -233,19 +223,6 @@ function botevents.BindEvents()
     mq.event('GoM1', "#*#granted gift of #1# to #2#!", botevents.Event_GoM)
     mq.event('GoM2', "#*#granted a gracious gift of #1# to #2#!", botevents.Event_GoM)
     mq.event('LockedDoor', "It's locked and you're not holding the key.", botevents.Event_LockedDoor)
-    mq.event('EQBC1', "<#1#> #2#", botevents.Event_EQBC)
-    mq.event('EQBC2', "[#1#(msg)] #2#", botevents.Event_EQBC)
-    mq.event('EQBC3', "[MQ2] mb- #2#", botevents.Event_EQBC)
-    mq.event('EQBC4', "[MQ2] tb- #2#", botevents.Event_EQBC)
-    mq.event('DanChat1', "[ #*#_#1# #*# ] #2#", botevents.Event_DanChat)
-    mq.event('DanChat2', "[#1#(msg)] #2#", botevents.Event_DanChat)
-    mq.event('DanChat3', "[MQ2] tb- #2#", botevents.Event_DanChat)
-    mq.event('DanChat4', "[MQ2] mb- #2#", botevents.Event_DanChat)
-    mq.event('DanChat5', "<#1#> #2#", botevents.Event_DanChat)
-    mq.event('DanChat6', "MB- #2#", botevents.Event_DanChat)
-    mq.event('DanChat7', "TB- #2#", botevents.Event_DanChat)
-    mq.event('EQBC5', "MB- #2#", botevents.Event_EQBC)
-    mq.event('EQBC6', "TB- #2#", botevents.Event_EQBC)
     mq.event('CHChain', "#*#Go #1#>>#*#", botevents.Event_CHChain)
     mq.event('CHChainStop', "#*#chchain stop#*#", botevents.Event_CHChainStop)
     mq.event('CHChainStart', "#*#chchain start #1#'", botevents.Event_CHChainStart)

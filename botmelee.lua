@@ -3,7 +3,6 @@ local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
 local targeting = require('lib.targeting')
-local trotslib = require('trotslib')
 local botmove = require('botmove')
 local charinfo = require('actornet.charinfo')
 local myconfig = botconfig.config
@@ -36,7 +35,7 @@ local function selectTankTarget(tank)
     if mq.TLO.Me.Combat() then return nil, false end
     if debug then print('tanklogic') end
     for _, v in ipairs(state.getRunconfig().MobList) do
-        if v.LineOfSight() and trotslib.IgnoreCheck() then
+        if v.LineOfSight() then
             if tanktar then
                 if v.ID() == state.getRunconfig().acmatarget then
                     tanktar = v
