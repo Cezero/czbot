@@ -40,9 +40,9 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 
 ### Debuff bands
 
-Bands define **which mobs** and **at what HP %** the debuff is allowed. Each band has:
+Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff uses **targetphase** only (no validtargets; target is always mobs). Each band has:
 
-- **validtargets:** One or more of: **tanktar**, **notanktar**, **named**.
+- **targetphase:** One or more of: **tanktar**, **notanktar**, **named**.
   - **tanktar** — The Main Tank’s (or MA’s) current target.
   - **notanktar** — Any other mob in the list (adds).
   - **named** — Only named mobs; when used with tanktar, only the tank target if it is named.
@@ -60,7 +60,7 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Each ban
       ['minmana'] = 0,
       ['tarcnt'] = 10,
       ['bands'] = {
-        { ['validtargets'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
+        { ['targetphase'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 0,
@@ -74,7 +74,7 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Each ban
       ['minmana'] = 0,
       ['tarcnt'] = 5,
       ['bands'] = {
-        { ['validtargets'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
+        { ['targetphase'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 2,

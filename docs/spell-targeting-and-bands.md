@@ -6,10 +6,10 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 
 | Section  | What "target" means | Count gate | Bands (main idea) |
 | -------- | ------------------- | ---------- | ----------------- |
-| **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | validtargets + min/max HP % |
-| **buff** | Self, tank, peers by class, mypet, other pets | None | validtargets only; **cbt** / **idle** control when spell can run |
-| **debuff** | Mobs in camp (MA target + adds) | **tarcnt** = min mobs in camp to consider spell | tanktar / notanktar / named + min/max HP % |
-| **cure**  | Self, tank, peers by class | None | validtargets only; **group** = two-pass (in-group then all peers) |
+| **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (priority stages) + **validtargets** (within-phase types) + min/max HP % |
+| **buff** | Self, tank, peers by class, mypet, other pets | None | **targetphase** + **validtargets** (classes or all); **cbt** / **idle** control when spell can run |
+| **debuff** | Mobs in camp (MA target + adds) | **tarcnt** = min mobs in camp to consider spell | **targetphase** only (tanktar, notanktar, named) + min/max HP % |
+| **cure**  | Self, tank, peers by class | None | **targetphase** + **validtargets**; **groupmember** = two-pass (in-group then all peers) |
 
 ---
 
@@ -21,24 +21,25 @@ Heal spells choose a target by walking a fixed **evaluation order**; the first v
 
 From `HPEval` in the code, the order is:
 
-1. **corpse** (rez) — Corpses in range; subject to rezoffset and band (e.g. **bots**, **raid**, **cbt**, **all**).
+1. **corpse** (rez) — Corpses in range; subject to rezoffset and **validtargets** for corpse (`all`, `bots`, `raid`); **cbt** in targetphase allows rez in combat.
 2. **self** — Yourself.
-3. **grp** (group/AE) — Group heal; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
+3. **groupheal** (group/AE) — Group heal; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
 4. **tank** — The resolved Main Tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
-5. **pc** (by class) — Other PCs (peers). If **group** is in the spell’s bands, only peers who are in the bot’s group are considered; otherwise any peer in range whose HP is in the band.
-6. **mypet** — Your pet.
-7. **pet** — Other peers’ pets.
-8. **xtgt** — Extended target (XTarget) slots when **heal.xttargets** is set.
+5. **groupmember** — Only characters in the bot’s (EQ) group (evaluated before pc).
+6. **pc** — All peers (in or out of group). **validtargets** (classes or `all`) filter which classes.
+7. **mypet** — Your pet.
+8. **pet** — Other peers’ pets.
+9. **xtgt** — Extended target (XTarget) slots when **heal.xttargets** is set.
 
 The first matching target in range wins.
 
 ### tarcnt (heal)
 
-**tarcnt** is only used for **group/AE heals**. It is the minimum number of **group members** that must be in the spell’s HP band (and in AE range) for the spell to fire. The code checks `grpmatch >= (entry.tarcnt or 1)`. When omitted, the group heal fires when at least one member is in band. **tarcnt** is not used for single-target heals.
+**tarcnt** is only used for **groupheal** (group/AE heals). It is the minimum number of **group members** that must be in the spell’s HP band (and in AE range) for the spell to fire. When omitted, the group heal fires when at least one member is in band. **tarcnt** is not used for single-target heals.
 
 ### Bands
 
-Each band has **validtargets** (who) and **min** / **max** (HP %). Heal band tokens include: **pc**, **tank**, **grp**, **self**, **corpse**, **bots**, **raid**, **mypet**, **pet**, **xtgt**, **group**, **cbt**, **all**, and class shorts. **group** restricts single-target PC and tank heals to peers in the bot’s group; omitting it allows any peer in range. Special tokens (e.g. **cbt** for rez during combat, **xtgt** for extended targets) are described in [Healing configuration](healing-configuration.md).
+Each band has **targetphase** (priority stages only: corpse, self, groupheal, tank, pc, groupmember, mypet, pet, xtgt; optionally cbt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; `all`, `bots`, or `raid` for corpse). **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. Special tokens are described in [Healing configuration](healing-configuration.md).
 
 ---
 
@@ -91,14 +92,14 @@ Each band’s **min** / **max** define mob HP %. For debuff, all bands for that 
 
 ## Buff targeting
 
-Buff spells choose a target in a fixed order. Bands use **validtargets** only (no min/max). **cbt** and **idle** in bands control **when** the spell is allowed to run (combat vs no mobs in camp), not who is targeted.
+Buff spells choose a target in a fixed order. Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). **cbt** and **idle** in targetphase control **when** the spell can run (combat vs no mobs in camp), not who is targeted.
 
 ### Evaluation order
 
 From `BuffEval` in the code, the order is:
 
 1. **self** — Yourself (including **petspell** when you have no pet, for summon).
-2. **byname** — Specific characters whose names appear in the band’s validtargets list.
+2. **byname** — Specific characters whose names appear in **validtargets** when **byname** is in targetphase.
 3. **tank** — Main Tank.
 4. **bots** — Other peers by class (from validtargets). “Bots” = all peers (charinfo), not limited to group.
 5. **mypet** — Your pet.
@@ -108,13 +109,13 @@ For **BRD**, only **self** is tried after the initial self check (no tank/bots/m
 
 ### Bands
 
-Bands use **validtargets** only (no min/max). Tokens include: **self**, **petspell**, **tank**, **mypet**, **pet**, class shorts, **name**, **cbt**, **idle**. **cbt** = this buff can run when there are mobs in camp; **idle** = can run when there are no mobs. If neither is set, the spell can run in either case. There is no **tarcnt** for buffs. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
+Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **bots**, **mypet**, **pet**, **byname**, **cbt**, **idle**. validtargets: class shorts or **all** (for **bots** phase); or character names (for **byname**). **cbt** / **idle** = when the spell can run. There is no **tarcnt** for buffs. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
 
 ---
 
 ## Cure targeting
 
-Cure spells choose a target in a fixed order. Bands use **validtargets** only. **group** in bands enables a **two-pass** behavior: first in-group peers, then all peers.
+Cure spells choose a target in a fixed order. Bands use **targetphase** and **validtargets**. **groupmember** in targetphase enables a **two-pass** behavior: first in-group peers, then all peers (**pc**).
 
 ### Evaluation order
 
@@ -122,14 +123,14 @@ From `CureEval` in the code, the order is:
 
 1. **self** — Yourself (if bands allow).
 2. **tank** — Main Tank (if bands allow).
-3. **group** pass — Only peers who are **in the bot’s group**, by class from validtargets. Each such peer is checked for needing the cure.
-4. **all peers** pass — **All** peers by class from validtargets (no group check). This allows curing out-of-group peers in this second pass.
+3. **groupmember** pass — Only peers who are **in the bot’s group**, by class from validtargets. Each such peer is checked for needing the cure.
+4. **pc** pass — **All** peers by class from validtargets (no group check). This allows curing out-of-group peers in this second pass.
 
-So **group** in bands does not restrict cures to group only; it adds a first pass over in-group peers, then a second pass over all peers. See [Curing configuration](curing-configuration.md) and [Out-of-group peers](out-of-group-peers.md).
+So **groupmember** in targetphase adds a first pass over in-group peers, then **pc** pass over all peers. See [Curing configuration](curing-configuration.md) and [Out-of-group peers](out-of-group-peers.md).
 
 ### Bands
 
-Bands use **validtargets** only (no min/max). Tokens: **self**, **tank**, **group**, and class shorts. There is no **tarcnt** for cures. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the order above.
+Bands use **targetphase** and **validtargets** (no min/max). targetphase: **self**, **tank**, **groupmember**, **pc**. validtargets: class shorts or **all**. There is no **tarcnt** for cures. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the order above.
 
 ---
 

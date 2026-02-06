@@ -446,7 +446,7 @@ function spellutils.InterruptCheck()
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
         if mq.TLO.Target.ID() and string.lower(spelltartype) ~= "self" and (mq.TLO.Target.ID() == 0 or string.find(mq.TLO.Target.Name(), 'corpse') and criteria ~= 'corpse') then
             mq.cmd('/squelch /multiline; /stick off ; /target clear')
-            if mq.TLO.Me.CastTimeLeft() > 0 and target ~= 1 and criteria ~= 'grp' then
+            if mq.TLO.Me.CastTimeLeft() > 0 and target ~= 1 and criteria ~= 'groupheal' then
                 mq.cmd('/echo I lost my target, interrupting')
                 mq.cmd('/stopcast')
                 if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
@@ -575,7 +575,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
         end
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
-    if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'grp') then
+    if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal') then
         if mq.TLO.Target.ID() ~= EvalID then
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'
@@ -588,7 +588,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
         printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end
     if type(gem) == 'number' or gem == 'item' or gem == 'alt' or gem == 'script' then
-        if EvalID == 1 and (targethit == 'self' or targethit == 'grp') then
+        if EvalID == 1 and (targethit == 'self' or targethit == 'groupheal') then
             if type(gem) == 'number' then
                 mq.cmdf('/cast "%s"', spell)
             elseif gem == 'item' then

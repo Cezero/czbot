@@ -43,14 +43,12 @@ Each entry in **`config.cure.spells`** can have:
 
 ### Cure bands
 
-Bands use **validtargets** only (no min/max). Each band is a table with **validtargets** = list of tokens. Tokens include:
+Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). Each band is a table with **targetphase** = list of stage tokens and **validtargets** = list of class tokens or `all`. No min/max for cures.
 
-- **self** — Cure yourself.
-- **tank** — Main Tank (from TankName).
-- **group** — When in the bands, the bot first considers only **peers who are in the bot’s group** (and match class). A second pass then considers **all peers** by class (no group check), so out-of-group peers can be cured in that pass.
-- **Class shorts** — e.g. `war`, `clr`, `shd`, `pal`, `shm`, `dru`, `rng`, `mnk`, `rog`, `brd`, `bst`, `ber`, `wiz`, `mag`, `enc`, `nec`. Restricts cures to those classes.
+- **targetphase** tokens: **self**, **tank**, **groupmember**, **pc**. **groupmember** = first pass only peers in the bot’s group (by class); **pc** = second pass all peers by class.
+- **validtargets**: Class shorts (e.g. `war`, `clr`, `shd`, …) or `all`. Absent = all classes.
 
-Evaluation order: **self** → **tank** → **group** (by class, only in-group peers) → **all peers** by class. See [Out-of-group peers](out-of-group-peers.md) for peer vs group behavior.
+Evaluation order: **self** → **tank** → **groupmember** (by class, only in-group peers) → **pc** (all peers by class). See [Out-of-group peers](out-of-group-peers.md) for peer vs group behavior.
 
 **Example: poison/disease and all**
 
@@ -65,7 +63,7 @@ Evaluation order: **self** → **tank** → **group** (by class, only in-group p
       ['minmana'] = 0,
       ['curetype'] = 'poison',
       ['bands'] = {
-        { ['validtargets'] = { 'self', 'tank', 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
+        { ['targetphase'] = { 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
       },
       ['priority'] = false
     },
@@ -76,7 +74,7 @@ Evaluation order: **self** → **tank** → **group** (by class, only in-group p
       ['minmana'] = 0,
       ['curetype'] = 'disease',
       ['bands'] = {
-        { ['validtargets'] = { 'self', 'tank', 'group' } }
+        { ['targetphase'] = { 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'all' } }
       },
       ['priority'] = false
     }

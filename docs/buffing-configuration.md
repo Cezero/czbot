@@ -36,17 +36,12 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 
 ### Buff bands
 
-Bands use **validtargets** only (no min/max). Each band is a table with **validtargets** = list of tokens. Tokens include:
+Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). No min/max for buffs.
 
-- **self** — Buff yourself (and for pet classes, **petspell** can be used to summon when you have no pet; see [Pets configuration](pets-configuration.md)).
+- **targetphase** tokens: **self**, **tank**, **bots** (other PCs by class), **mypet**, **pet**, **byname**; **cbt** / **idle** control when the spell can run (combat vs no mobs in camp).
+- **validtargets**: Class shorts (e.g. `war`, `clr`, …) or `all`. Restricts which classes get the buff for the **bots** phase. Absent = all classes.
 - **petspell** — Summon pet: cast on self when you have **no pet**. Use with **self** in the same band. Documented in [Pets configuration](pets-configuration.md).
-- **tank** — Main Tank (from TankName).
-- **mypet** — Your pet.
-- **pet** — Other peers’ pets (any peer, not only group members).
-- **Class shorts** — e.g. `war`, `clr`, `shd`, `pal`, `rng`, `mnk`, `rog`, `brd`, `bst`, `ber`, `shm`, `dru`, `wiz`, `mag`, `enc`, `nec`. Restricts the buff to those classes.
-- **name** — Buff specific characters by name (list their names in the band’s validtargets list).
-- **cbt** — This buff is allowed during combat (mobs in camp).
-- **idle** — This buff is allowed when idle (no mobs in camp). If neither **cbt** nor **idle** is set, the spell may run in both.
+- **name** — Buff specific characters by name (list their names in **validtargets** when using **byname** in targetphase).
 
 Buffing is not restricted by group: any peer in range who matches the band and needs the buff can be buffed. See [Out-of-group peers](out-of-group-peers.md).
 
@@ -61,7 +56,7 @@ Buffing is not restricted by group: any peer in range who matches the band and n
       ['alias'] = 'sow',
       ['minmana'] = 0,
       ['bands'] = {
-        { ['validtargets'] = { 'self' } }
+        { ['targetphase'] = { 'self' }, ['validtargets'] = { 'all' } }
       },
       ['spellicon'] = 0
     },
@@ -70,7 +65,7 @@ Buffing is not restricted by group: any peer in range who matches the band and n
       ['spell'] = 'Talisman of the Tribunal',
       ['minmana'] = 0,
       ['bands'] = {
-        { ['validtargets'] = { 'tank', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
+        { ['targetphase'] = { 'tank', 'bots' }, ['validtargets'] = { 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
       },
       ['spellicon'] = 0
     }

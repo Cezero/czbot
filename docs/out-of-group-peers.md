@@ -21,16 +21,16 @@ All of this works for peers who are outside the bot’s group, as long as the re
 
 | System | Group restriction? | Out-of-group peers |
 |--------|--------------------|--------------------|
-| **Healing (PC)** | Only when **`group`** is in the heal band’s **validtargets** list. | If the band does **not** include **`group`**, the bot may heal any peer in range whose HP is in the band (HP from charinfo). See [Healing configuration](healing-configuration.md). |
+| **Healing (PC)** | Only when **`groupmember`** is in the heal band’s **targetphase** (in-group only). | Put **`pc`** in **targetphase** to also heal any peer in range whose HP is in the band (HP from charinfo). See [Healing configuration](healing-configuration.md). |
 | **Healing (pets)** | None. | Any peer’s pet in range with HP in band can be healed. |
 | **Buffing** | None. | Any peer (and their pet) in range that matches the band and needs the buff can be buffed. See [Buffing configuration](buffing-configuration.md). |
-| **Curing** | **`group`** in bands only affects the **first** pass: the bot considers only peers who are in the bot’s group. A **second** pass considers **all** peers by class (no group check). | Out-of-group peers can be cured in that second pass. See [Curing configuration](curing-configuration.md). |
-| **Corpse rez** | No “in group” requirement for the **bots** filter. | With **bots** in the rez spell’s bands, any peer’s corpse in range can be rezzed. |
+| **Curing** | **`groupmember`** in **targetphase** affects the **first** pass: the bot considers only peers who are in the bot’s group. A **second** pass considers **all** peers by class (no group check). | Out-of-group peers can be cured in that second pass. See [Curing configuration](curing-configuration.md). |
+| **Corpse rez** | No “in group” requirement for the **bots** validtarget. | With **corpse** in targetphase and **bots** in **validtargets**, any peer’s corpse in range can be rezzed. |
 | **Corpse drag** | None. | Any peer’s corpse in range can be dragged. See [Corpse dragging](corpse-dragging.md). |
 
 ## Configuration knobs
 
-- **Heal bands:** Include **`group`** in the band’s **validtargets** list to restrict single-target PC (and tank) heals to **peers who are in the bot’s group**. Omit **`group`** to allow healing any peer in range (including out-of-group) when their HP is in the band.
-- **Cure bands:** Include **`group`** to add a first pass that only considers in-group peers (by class). The bot still runs a second pass over all peers by class, so out-of-group peers can be cured in that pass. Omit **`group`** to have only the all-peers pass.
+- **Heal bands:** Put **`groupmember`** in **targetphase** to restrict single-target heals to **characters in the bot’s (EQ) group**. Put **`pc`** in **targetphase** to also heal any peer in range (including out-of-group) when their HP is in the band.
+- **Cure bands:** Put **`groupmember`** in **targetphase** to add a first pass that only considers in-group peers (by class). The bot still runs a second pass over all peers by class, so out-of-group peers can be cured in that pass.
 
 For full details on bands and options, use the linked configuration documents above.

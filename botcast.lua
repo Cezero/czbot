@@ -34,7 +34,7 @@ local function defaultBuffEntry()
         alias = false,
         announce = false,
         enabled = true,
-        bands = { { validtargets = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } },
+        bands = { { targetphase = { 'self', 'tank', 'bots', 'mypet', 'pet' }, validtargets = { 'all' } } },
         spellicon = 0,
         precondition = true
     }
@@ -74,7 +74,7 @@ local function IconCheck(index, EvalID)
     local botname = mq.TLO.Spawn(EvalID).Name()
     local info = charinfo.GetInfo(botname)
     local hasIcon = info and spellutils.PeerHasBuff(info, spellicon)
-    if debug then print('iconcheck', botname, hasIcon, index, EvalID) end
+    if debug then printf('iconcheck: %s %s %s %d %d', botname, entry.spell, hasIcon, index, EvalID) end
     return not hasIcon
 end
 
@@ -158,6 +158,7 @@ local function BuffEvalTank(index, entry, spellid, range, tank, tankid)
 end
 
 local function BuffEvalBots(index, entry, spellid, range, bots, botcount)
+    if not BuffClass[index].bots then return nil, nil end
     for i = 1, botcount do
         if bots[i] then
             local botname = mq.TLO.Spawn('pc =' .. bots[i]).Name()
@@ -277,7 +278,7 @@ local function defaultCureEntry()
         announce = false,
         curetype = "all",
         enabled = true,
-        bands = { { validtargets = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } },
+        bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } },
         priority = false,
         precondition = true
     }
@@ -329,12 +330,12 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
             local curetype = peer and peer[v] or nil
             if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
                 if targethit == 'tank' then return botid, 'tank' end
-                if targethit == 'group' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'group' end
+                if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
                 if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
             end
             if string.lower(v) ~= 'all' and curetype and curetype > 0 then
                 if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'tank' end
-                if targethit == 'group' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'group' end
+                if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
                 if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
             end
         end
@@ -360,19 +361,19 @@ local function CureEval(index)
         local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype)
         if id then return id, hit end
     end
-    if cureindex.group and botcount then
+    if cureindex.groupmember and botcount then
         for i = 1, botcount do
             local botname = bots[i]
             local botid = mq.TLO.Spawn('pc =' .. botname).ID()
             local botclass = mq.TLO.Spawn('pc =' .. botname).Class.ShortName()
             if botclass then botclass = string.lower(botclass) end
             if cureindex[botclass] and botid and mq.TLO.Group.Member(botname).ID() then
-                local id, hit = CureEvalForTarget(index, botname, botid, botclass, 'group', spelltartype)
+                local id, hit = CureEvalForTarget(index, botname, botid, botclass, 'groupmember', spelltartype)
                 if id then return id, hit end
             end
         end
     end
-    if botcount then
+    if cureindex.pc and botcount then
         for i = 1, botcount do
             local botname = bots[i]
             if botname then
@@ -423,7 +424,7 @@ local function defaultHealEntry()
         alias = false,
         announce = false,
         enabled = true,
-        bands = { { validtargets = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } },
+        bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } },
         priority = false,
         precondition = true
     }
@@ -559,26 +560,26 @@ local function HPEvalSelf(index, ctx)
 end
 
 local function HPEvalGrp(index, ctx)
-    if not AHThreshold[index] or not AHThreshold[index].grp then return nil, nil end
+    if not AHThreshold[index] or not AHThreshold[index].groupheal then return nil, nil end
     local aeRange = mq.TLO.Spell(ctx.entry.spell).AERange()
     if ctx.gem == 'item' and mq.TLO.FindItem(ctx.entry.spell)() then aeRange = mq.TLO.FindItem(ctx.entry.spell).Spell.AERange() end
     local grpmatch = 0
     for k = 0, mq.TLO.Group.Members() do
         local grpmempcthp = mq.TLO.Group.Member(k).PctHPs()
         local grpmemdist = mq.TLO.Group.Member(k).Distance()
-        if mq.TLO.Group.Member(k).Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].grp) and grpmemdist and aeRange and grpmemdist <= aeRange then
+        if mq.TLO.Group.Member(k).Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal) and grpmemdist and aeRange and grpmemdist <= aeRange then
             if mq.TLO.Group.Member(k).Type() ~= 'Corpse' then grpmatch = grpmatch + 1 end
         end
     end
     if grpmatch >= (ctx.entry.tarcnt or 1) then
-        if mq.TLO.Spell(ctx.entry.spell).TargetType() == 'Group v1' then return 1, 'grp' end
-        return mq.TLO.Me.ID(), 'grp'
+        if mq.TLO.Spell(ctx.entry.spell).TargetType() == 'Group v1' then return 1, 'groupheal' end
+        return mq.TLO.Me.ID(), 'groupheal'
     end
     return nil, nil
 end
 
 local function HPEvalTank(index, ctx)
-    if not AHThreshold[index] or not AHThreshold[index].tank or not AHThreshold[index].pc or not ctx.tank then return nil, nil end
+    if not AHThreshold[index] or not AHThreshold[index].tank or not ctx.tank then return nil, nil end
     local tankhp = mq.TLO.Group.Member(ctx.tank).PctHPs()
     local tankdist = mq.TLO.Spawn(ctx.tankid).Distance()
     local tankinfo = charinfo.GetInfo(ctx.tank)
@@ -596,40 +597,35 @@ local function HPEvalTank(index, ctx)
 end
 
 local function HPEvalPc(index, ctx)
-    if not AHThreshold[index] or not AHThreshold[index].pc then return nil, nil end
-    if AHThreshold[index].group and ctx.botcount then
-        for i = 1, ctx.botcount do
-            local botid = mq.TLO.Spawn('pc =' .. ctx.bots[i]).ID()
-            local botclass = mq.TLO.Spawn('pc =' .. ctx.bots[i]).Class.ShortName()
-            local peer = charinfo.GetInfo(ctx.bots[i])
-            local bothp = peer and peer.PctHPs or nil
-            local botdist = mq.TLO.Spawn('pc =' .. ctx.bots[i]).Distance()
-            if botclass and AHThreshold[index][botclass:lower()] and bothp and mq.TLO.Spawn(botid).Type() == 'PC' and hpInBand(bothp, AHThreshold[index][botclass:lower()]) then
-                if mq.TLO.Group.Member(ctx.bots[i]).Present() and ctx.spellrange and botdist and botdist <= ctx.spellrange then
-                    return botid, botclass:lower()
-                end
-            end
-        end
+    if not AHThreshold[index] then return nil, nil end
+    local th = AHThreshold[index]
+    local classOk = function(cls)
+        if not cls then return false end
+        local c = cls:lower()
+        if th.classes == 'all' then return true end
+        return th.classes and th.classes[c] == true
     end
-    if mq.TLO.Group.Members() > 0 then
+    -- groupmember only: group members (Group slots)
+    if th.groupmember and mq.TLO.Group.Members() > 0 then
         for i = 1, mq.TLO.Group.Members() do
             local grpclass = mq.TLO.Group(i).Class.ShortName()
             local grpid = mq.TLO.Group(i).ID()
             local grphp = mq.TLO.Group(i).PctHPs()
             local grpdist = mq.TLO.Group(i).Distance()
-            if AHThreshold[index][grpclass:lower()] and mq.TLO.Spawn(grpid).Type() == 'PC' and grphp and hpInBand(grphp, AHThreshold[index][grpclass:lower()]) then
+            if classOk(grpclass) and mq.TLO.Spawn(grpid).Type() == 'PC' and grphp and th.groupmember and hpInBand(grphp, th.groupmember) then
                 if ctx.spellrange and grpdist and grpdist <= ctx.spellrange then return grpid, grpclass:lower() end
             end
         end
     end
-    if not AHThreshold[index].group and ctx.botcount then
+    -- pc: all peers (ctx.bots)
+    if th.pc and ctx.botcount then
         for i = 1, ctx.botcount do
             local botid = mq.TLO.Spawn('pc =' .. ctx.bots[i]).ID()
             local botclass = mq.TLO.Spawn('pc =' .. ctx.bots[i]).Class.ShortName()
             local peer = charinfo.GetInfo(ctx.bots[i])
             local bothp = peer and peer.PctHPs or nil
             local botdist = mq.TLO.Spawn(ctx.bots[i]).Distance()
-            if botid and botclass and AHThreshold[index][botclass:lower()] and mq.TLO.Spawn(botid).Type() == 'PC' and hpInBand(bothp, AHThreshold[index][botclass:lower()]) then
+            if botid and botclass and classOk(botclass) and mq.TLO.Spawn(botid).Type() == 'PC' and bothp and th.pc and hpInBand(bothp, th.pc) then
                 if botdist and ctx.spellrange and botdist <= ctx.spellrange then return botid, botclass:lower() end
             end
         end
@@ -748,7 +744,7 @@ local function defaultDebuffEntry()
         alias = false,
         announce = false,
         enabled = true,
-        bands = { { validtargets = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } },
+        bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } },
         charmnames = '',
         recast = 0,
         delay = 0,

@@ -190,6 +190,15 @@ local function writeConfigToFile(config, filename)
         for _, band in ipairs(bands) do
             if type(band) == "table" then
                 file:write(indent .. "  {\n")
+                if type(band.targetphase) == "table" then
+                    file:write(indent .. "    ['targetphase'] = { ")
+                    local parts = {}
+                    for _, c in ipairs(band.targetphase) do
+                        parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
+                    end
+                    file:write(table.concat(parts, ", "))
+                    file:write(" },\n")
+                end
                 if type(band.validtargets) == "table" then
                     file:write(indent .. "    ['validtargets'] = { ")
                     local parts = {}
@@ -198,6 +207,14 @@ local function writeConfigToFile(config, filename)
                     end
                     file:write(table.concat(parts, ", "))
                     file:write(" },\n")
+                elseif type(band.targetphase) == "table" and #band.targetphase > 0 then
+                    local isDebuffOnly = true
+                    for _, p in ipairs(band.targetphase) do
+                        if p ~= 'tanktar' and p ~= 'notanktar' and p ~= 'named' then isDebuffOnly = false break end
+                    end
+                    if not isDebuffOnly then
+                        file:write(indent .. "    ['validtargets'] = { 'all' },\n")
+                    end
                 end
                 if band.min ~= nil then
                     file:write(indent .. "    ['min'] = " .. tonumber(band.min) .. ",\n")
