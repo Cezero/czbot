@@ -6,7 +6,7 @@ This document explains how to configure the bot’s **debuffing** behavior: whic
 
 - **Master switch:** Debuffing runs only when **`settings.dodebuff`** is `true`. Default is `false`.
 - **Mob list:** The bot builds a list of valid mobs (within **acleash** and **zradius** of camp, filtered by **TargetFilter**). Debuffs are only cast on mobs in this list.
-- **Evaluation order:** Charm targets (if **charmnames** is set) → **tanktar** (MA/tank’s current target) → **notanktar** (other mobs / adds) → **named** (named mobs that are the tank target).
+- **Evaluation order:** Charm targets (if **charmnames** is set) → **tanktar** (MA/tank’s current target) → **notanktar** (other mobs / adds) → **named** (named mobs that are the tank target). For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
 
 ---
 

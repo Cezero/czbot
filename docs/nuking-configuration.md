@@ -7,6 +7,7 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
 - **Nuking = debuffs.** There is no separate “nuke” section. You add your nuke spell(s) under **`config.debuff.spells`** and set **bands** to **tanktar** (MA/tank’s target), and optionally **notanktar** (adds) or **named** (named only).
 - **Master switch:** Turn on debuffing with **`settings.dodebuff`** (or `/cz dodebuff on`).
 - For all debuff options (recast, delay, charm, gem types, etc.), see [Debuffing configuration](debuffing-configuration.md).
+- See [Spell targeting and bands](spell-targeting-and-bands.md) for how tanktar and notanktar interact and evaluation order.
 
 ---
 

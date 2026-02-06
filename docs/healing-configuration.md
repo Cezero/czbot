@@ -58,7 +58,7 @@ Bands define **who** can receive the spell and **at what HP %**. Each band has:
 - **all** — When used with corpse, rez any corpse in range (subject to rezoffset and filter).
 - **xtgt** (extended target) — When in a spell's bands and **heal.xttargets** is set, the spell can target extended target (XTarget) slots; the band's min/max apply to the XTarget's HP.
 
-Heal evaluation order: **corpse** (rez) → **self** → **grp** (group AE) → **tank** → **pc** by class → **mypet** → **pet** (other pets) → **xtgt** (extended targets). The first matching target in range gets the heal. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
+Heal evaluation order: **corpse** (rez) → **self** → **grp** (group AE) → **tank** → **pc** by class → **mypet** → **pet** (other pets) → **xtgt** (extended targets). The first matching target in range gets the heal. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)). For a general overview of bands and targeting across spell sections, see [Spell targeting and bands](spell-targeting-and-bands.md).
 
 ### Peers and group
 

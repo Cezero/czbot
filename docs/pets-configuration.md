@@ -73,7 +73,7 @@ When you use a **charm** spell (e.g. Enchanter mez that makes the mob your pet),
 - Before casting charm, the bot issues **pet leave** so your current pet is released.
 - When charm breaks, the bot can request a recast on that spawn.
 
-See [Debuffing configuration](debuffing-configuration.md) for **charmnames**, **recast**, and **bands** (e.g. **notanktar** for adds). For mezzing in particular, see [Mezzing configuration](mezzing-configuration.md).
+See [Debuffing configuration](debuffing-configuration.md) for **charmnames**, **recast**, and **bands** (e.g. **notanktar** for adds), and [Spell targeting and bands](spell-targeting-and-bands.md) for band and targeting logic. For mezzing in particular, see [Mezzing configuration](mezzing-configuration.md).
 
 ---
 

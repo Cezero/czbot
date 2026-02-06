@@ -20,7 +20,7 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
    - **spell** — Exact spell name (e.g. an Enthrall or mez spell).
    - **enabled** — Optional; default is `true`. When `false`, the spell is not used.
    - **tarcnt** — Optional. When set, only consider mez when total mobs in camp is ≥ tarcnt (count includes the MA’s target plus adds). E.g. **tarcnt 2** = mez when there are at least two mobs in camp (one add). See [Debuffing configuration](debuffing-configuration.md).
-   - **bands** — For mezzing **adds**, use **notanktar**. Optionally add **named** to allow mezzing named mobs that are not the tank target. Use **min**/ **max** to restrict by mob HP % (e.g. mez only when mob is 20–100% HP so you don’t mez nearly-dead adds).
+   - **bands** — For mezzing **adds**, use **notanktar**. Optionally add **named** to allow mezzing named mobs that are not the tank target. Use **min**/ **max** to restrict by mob HP % (e.g. mez only when mob is 20–100% HP so you don’t mez nearly-dead adds). See [Spell targeting and bands](spell-targeting-and-bands.md) for targeting and band details.
 
 3. **Optional:** **recast** (after this many resists on the same spawn, the spell is disabled for that spawn for a duration), **delay** (ms before the spell can be used again), **charmnames** (for charm mez: comma-separated mob names; bot will **pet leave** before casting and can recast when charm breaks), **alias**, **minmana**, **precondition** (default true when missing; when set, boolean or Lua script to allow/skip the cast).
 

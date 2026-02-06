@@ -39,6 +39,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | [Healing configuration](healing-configuration.md)     | Heal spells, bands (who and at what HP), rez, interrupt, XT targets, commands.                            |
 | [Buffing configuration](buffing-configuration.md)     | Buff spells, bands (self, tank, class, mypet, pet, petspell), spellicon, combat vs idle.                  |
 | [Debuffing configuration](debuffing-configuration.md) | Debuff spells, bands (tanktar, notanktar, named), charmnames, recast, delay; links to nuking and mezzing. |
+| [Spell targeting and bands](spell-targeting-and-bands.md) | Targeting logic and band tags for all spell types (heal, buff, debuff, cure); evaluation order, tarcnt, tanktar/notanktar. |
 | [Curing configuration](curing-configuration.md)       | Cure spells, curetype (all / poison / disease / curse / corruption), prioritycure, bands.                 |
 | [Out-of-group peers](out-of-group-peers.md)            | Who counts as a peer, how healing, buffing, curing, and corpse drag treat peers outside your group.      |
 
