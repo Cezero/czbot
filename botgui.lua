@@ -17,6 +17,9 @@ local RED = ImVec4(1, 0, 0, 1)
 local TABLE_FLAGS = bit32.bor(ImGuiTableFlags.ScrollY, ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter,
     ImGuiTableFlags.BordersV, ImGuiTableFlags.SizingStretchSame, ImGuiTableFlags.Sortable,
     ImGuiTableFlags.Hideable, ImGuiTableFlags.Resizable, ImGuiTableFlags.Reorderable)
+-- Peers table: no ScrollY so the table sizes to content and other peers stay visible
+local PEER_TABLE_FLAGS = bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter,
+    ImGuiTableFlags.BordersV, ImGuiTableFlags.SizingStretchSame, ImGuiTableFlags.Resizable)
 
 local function drawNestedTableTree(tbl)
     for k, v in pairs(tbl) do
@@ -231,7 +234,7 @@ local function updateImGui()
                         if data then
                             ImGui.SetNextItemOpen(true, ImGuiCond.FirstUseEver)
                             if ImGui.TreeNode(name) then
-                                if ImGui.BeginTable('peers table ' .. name, 2, TABLE_FLAGS, -1, 0) then
+                                if ImGui.BeginTable('peers table ' .. name, 2, PEER_TABLE_FLAGS, -1, 0) then
                                     ImGui.TableSetupScrollFreeze(0, 1)
                                     ImGui.TableSetupColumn('Key', ImGuiTableColumnFlags.DefaultSort, 2, 1)
                                     ImGui.TableSetupColumn('Value', ImGuiTableColumnFlags.DefaultSort, 2, 2)
