@@ -6,8 +6,44 @@ local state = require('lib.state')
 local targeting = require('lib.targeting')
 local spellutils = require('lib.spellutils')
 local hookregistry = require('lib.hookregistry')
+local command_dispatcher = require('lib.command_dispatcher')
 
 local chchain = {}
+
+local function event_CHChain(line, arg1)
+    return chchain.OnGo(line, arg1)
+end
+
+local function event_CHChainSetup(line, arg1, arg2, arg3, arg4)
+    if arg1 == 'setup' then command_dispatcher.Dispatch('chchain', 'setup', arg2, arg3, arg4) end
+end
+
+local function event_CHChainStop(line)
+    if string.find(line, 'stop') then command_dispatcher.Dispatch('chchain', 'stop') end
+end
+
+local function event_CHChainStart(line, arg1, argN)
+    local cleanname = arg1 and arg1:match("%S+")
+    if arg1 then command_dispatcher.Dispatch('chchain', 'start', cleanname) end
+end
+
+local function event_CHChainTank(line, arg1, argN)
+    local cleanname = arg1 and arg1:match("%S+")
+    if arg1 and dochchain then command_dispatcher.Dispatch('chchain', 'tank', cleanname) end
+end
+
+local function event_CHChainPause(line, arg1, argN)
+    if arg1 and dochchain then command_dispatcher.Dispatch('chchain', 'pause', arg1) end
+end
+
+function chchain.registerEvents()
+    mq.event('CHChain', "#*#Go #1#>>#*#", event_CHChain)
+    mq.event('CHChainStop', "#*#chchain stop#*#", event_CHChainStop)
+    mq.event('CHChainStart', "#*#chchain start #1#'", event_CHChainStart)
+    mq.event('CHChainTank', "#*#chchain tank #1#'", event_CHChainTank)
+    mq.event('CHChainPause', "#*#chchain pause #1#'", event_CHChainPause)
+    mq.event('CHChainSetup', "#*#chchain #1# #2# #3# #4#", event_CHChainSetup)
+end
 
 function chchain.OnGo(line, arg1)
     if string.lower(arg1) ~= string.lower(mq.TLO.Me.Name()) then return false end

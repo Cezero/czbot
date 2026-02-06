@@ -11,6 +11,7 @@ local botpull = require('botpull')
 local botcast = require('botcast')
 local botraid = require('botraid')
 local botevents = require('botevents')
+local chchain = require('lib.chchain')
 local mobfilter = require('lib.mobfilter')
 local state = require('lib.state')
 local groupmanager = require('lib.groupmanager')
@@ -18,6 +19,7 @@ local actornet = require('actornet')
 local rexec = actornet.rexec
 local charinfo = actornet.charinfo
 local utils = require('lib.utils')
+local command_dispatcher = require('lib.command_dispatcher')
 
 local TOGGLELIST = {
     domelee = true,
@@ -568,7 +570,7 @@ local function cmd_chchain(args)
         end
     end
     if args[2] == 'start' then
-        if args[3] == mq.TLO.Me.Name() then botevents.Event_CHChain('start', mq.TLO.Me.Name()) end
+        if args[3] == mq.TLO.Me.Name() then chchain.OnGo('start', mq.TLO.Me.Name()) end
     end
     if args[2] == 'tank' then
         if mq.TLO.Spawn('=' .. args[3]) then
@@ -698,6 +700,10 @@ for k in pairs(TOGGLELIST) do
     handlers[k] = cmd_toggle
 end
 
+for cmd, fn in pairs(handlers) do
+    command_dispatcher.RegisterCommand(cmd, fn)
+end
+
 -- Entry points for makecamp/follow (callable without going through the parser)
 function M.MakeCamp(mode)
     cmd_makecamp({ 'makecamp', mode }, '')
@@ -721,12 +727,7 @@ function M.Parse(...)
         return
     end
 
-    local cmd = args[1] and string.lower(args[1])
-    local fn = cmd and handlers[cmd]
-    if fn then
-        local ok = fn(args, str)
-        if ok == false then return false end
-    end
+    command_dispatcher.Dispatch(args[1], table.unpack(args, 2))
 end
 
 function M.czpause(...)

@@ -1,7 +1,6 @@
 local mq = require('mq')
 local botconfig = require('lib.config')
 local charm = require('lib.charm')
-local commands = require('lib.commands')
 local immune = require('lib.immune')
 local state = require('lib.state')
 local spellstates = require('lib.spellstates')
@@ -96,32 +95,6 @@ end
 function botevents.Event_LockedDoor()
 end
 
-function botevents.Event_CHChain(line, arg1)
-    return chchain.OnGo(line, arg1)
-end
-
-function botevents.Event_CHChainSetup(line, arg1, arg2, arg3, arg4)
-    if arg1 == 'setup' then commands.Parse('chchain', 'setup', arg2, arg3, arg4) end
-end
-
-function botevents.Event_CHChainStop(line)
-    if string.find(line, 'stop') then commands.Parse('chchain', 'stop') end
-end
-
-function botevents.Event_CHChainStart(line, arg1, argN)
-    local cleanname = arg1:match("%S+")
-    if arg1 then commands.Parse('chchain', 'start', cleanname) end
-end
-
-function botevents.Event_CHChainTank(line, arg1, argN)
-    local cleanname = arg1:match("%S+")
-    if arg1 and dochchain then commands.Parse('chchain', 'tank', cleanname) end
-end
-
-function botevents.Event_CHChainPause(line, arg1, argN)
-    if arg1 and dochchain then commands.Parse('chchain', 'pause', arg1) end
-end
-
 function botevents.Event_LinkItem(line, Slot, HPFilter)
     if debug then mq.cmdf('/echo %s | %s', Slot, HPFilter) end
     HPValue = HPFilter
@@ -197,6 +170,7 @@ function botevents.Event_MobProb(line, arg1, arg2)
 end
 
 function botevents.BindEvents()
+    chchain.registerEvents()
     mq.event('Invite', "#*#invites you to join a #1#.#*#", botevents.Event_Invite)
     mq.event('Slain1', "#*#You have been slain by#*#", botevents.Event_Slain)
     mq.event('Slain2', "#*#Returning to Bind Location#*#", botevents.Event_Slain)
@@ -219,12 +193,6 @@ function botevents.BindEvents()
     mq.event('GoM1', "#*#granted gift of #1# to #2#!", botevents.Event_GoM)
     mq.event('GoM2', "#*#granted a gracious gift of #1# to #2#!", botevents.Event_GoM)
     mq.event('LockedDoor', "It's locked and you're not holding the key.", botevents.Event_LockedDoor)
-    mq.event('CHChain', "#*#Go #1#>>#*#", botevents.Event_CHChain)
-    mq.event('CHChainStop', "#*#chchain stop#*#", botevents.Event_CHChainStop)
-    mq.event('CHChainStart', "#*#chchain start #1#'", botevents.Event_CHChainStart)
-    mq.event('CHChainTank', "#*#chchain tank #1#'", botevents.Event_CHChainTank)
-    mq.event('CHChainPause', "#*#chchain pause #1#'", botevents.Event_CHChainPause)
-    mq.event('CHChainSetup', "#*#chchain #1# #2# #3# #4#", botevents.Event_CHChainSetup)
     mq.event('LinkItem', "#*#LinkItem #1# #2#", botevents.Event_LinkItem)
     mq.event('TooSteep', "The ground here is too steep to camp", botevents.Event_TooSteep)
     mq.event('FTELock', "#*#your target is Encounter Locked to someone else#*#", botevents.Event_FTELocked)
