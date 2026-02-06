@@ -1020,6 +1020,7 @@ end
 local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
     if entry and spellstates.GetRecastCounter(EvalID, i) >= (entry.recast or 0) then
+        if debug then printf('debuff %d %s recast counter %d >= %d, skipping', i, entry.spell, spellstates.GetRecastCounter(EvalID, i), entry.recast or 0) end
         return false
     end
     charm.BeforeCast(EvalID, targethit)
