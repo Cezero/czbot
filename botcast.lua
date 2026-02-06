@@ -420,7 +420,7 @@ local function defaultHealEntry()
         alias = false,
         announce = false,
         tarcnt = 0,
-        bands = { { class = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'tnt', 'mypet', 'self' }, min = 0, max = 60 } },
+        bands = { { class = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } },
         priority = false,
         precondition = true
     }

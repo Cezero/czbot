@@ -49,7 +49,7 @@ Each entry in **`heal.spells`** can have:
 
 Bands define **who** can receive the spell and **at what HP %**. Each band has:
 
-- **class:** List of target types. One or more of: `pc`, `pet`, `grp`, `group`, `self`, `tank`, `mypet`, class shorts (`war`, `shd`, `pal`, `clr`, `dru`, etc.), `tnt`, `corpse`, `bots`, `raid`, `cbt`, `all`, `xtgt`. **`group`** restricts single-target PC (and tank) heal targets to **peers who are in the bot’s group**. If **`group`** is **omitted**, the bot may heal **any peer** (including out-of-group) whose HP is in the band and who is in range; HP is taken from charinfo.
+- **class:** List of target types. One or more of: `pc`, `pet`, `grp`, `group`, `self`, `tank`, `mypet`, class shorts (`war`, `shd`, `pal`, `clr`, `dru`, etc.), `corpse`, `bots`, `raid`, `cbt`, `all`, `xtgt`. **`group`** restricts single-target PC (and tank) heal targets to **peers who are in the bot’s group**. If **`group`** is **omitted**, the bot may heal **any peer** (including out-of-group) whose HP is in the band and who is in range; HP is taken from charinfo.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For **corpse**, **bots**, **raid**, **cbt**, **all** the effective max is treated as 200 (special).
 
 **Special tokens:**
