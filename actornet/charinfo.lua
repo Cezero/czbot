@@ -35,7 +35,7 @@ end
 local function getShortBuffs()
     local buffs = {}
     for i = 1, 15 do
-        local buff = mq.TLO.Me.ShortBuff(i)
+        local buff = mq.TLO.Me.Song(i)
         if buff and buff.Spell then
             local entry = buffEntry(buff)
             if entry then buffs[#buffs + 1] = entry end
@@ -78,7 +78,7 @@ local function getDetrimentalsAndCounters()
         processBuff(mq.TLO.Me.Buff(i))
     end
     for i = 1, 15 do
-        processBuff(mq.TLO.Me.ShortBuff(i))
+        processBuff(mq.TLO.Me.Song(i))
     end
     return detrimentals, countPoison, countDisease, countCurse, countCorruption
 end
