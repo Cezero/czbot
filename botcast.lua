@@ -916,13 +916,14 @@ local function DebuffEvalTankTar(index, ctx)
     if tanktarhp == nil then tanktarhp = mq.TLO.Spawn(ctx.tanktar).PctHPs() end
     if not spellbands.hpInBand(tanktarhp, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
-        if debug then printf('debuff tanktar %d %s mob=%s', index, entry.spell, v.ID()) end
         if v.ID() == ctx.tanktar then
-            if debug then printf('debuff tanktar %d %s mob=%s is tanktar', index, entry.spell, v.ID()) end
             local myrange = ctx.myrange
+            if debug then printf('debuff tanktar %d %s mob=%s myrange=%s', index, entry.spell, v.ID(), myrange) end
             if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
             if not (myrange and v.Distance() and v.Distance() > myrange) then
+                if debug then printf('debuff tanktar %d %s mob=%s in range (%d)', index, entry.spell, v.ID(), v.Distance()) end
                 if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
+                    if debug then printf('debuff tanktar %d %s mob=%s doesnt have debuff longer than 6 seconds', index, entry.spell, v.ID()) end
                     local tanktarstack = mq.TLO.Spell(entry.spell).StacksSpawn(ctx.tanktar)() or
                         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(ctx.tanktar))
                     if ctx.tanktarlvl and mq.TLO.Spell(ctx.spellid).Subcategory() == 'Enthrall' and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
