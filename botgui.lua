@@ -231,7 +231,7 @@ local function updateImGui()
                         if data then
                             ImGui.SetNextItemOpen(true, ImGuiCond.FirstUseEver)
                             if ImGui.TreeNode(name) then
-                                if ImGui.BeginTable('peers table ' .. name, 2, TABLE_FLAGS, -1, -1) then
+                                if ImGui.BeginTable('peers table ' .. name, 2, TABLE_FLAGS, -1, 0) then
                                     ImGui.TableSetupScrollFreeze(0, 1)
                                     ImGui.TableSetupColumn('Key', ImGuiTableColumnFlags.DefaultSort, 2, 1)
                                     ImGui.TableSetupColumn('Value', ImGuiTableColumnFlags.DefaultSort, 2, 2)
