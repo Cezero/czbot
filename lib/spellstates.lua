@@ -5,11 +5,23 @@ local spellstates = {}
 local DebuffList = {}
 local recastcntr = {}
 local DebuffDlyLst = {}
+local ReagentDlyLst = {}
 
 function spellstates.EnsureDebuffState()
     DebuffList = DebuffList or {}
     recastcntr = recastcntr or {}
     DebuffDlyLst = DebuffDlyLst or {}
+    ReagentDlyLst = ReagentDlyLst or {}
+end
+
+function spellstates.SetReagentDelay(sub, index, expireTime)
+    if not ReagentDlyLst[sub] then ReagentDlyLst[sub] = {} end
+    ReagentDlyLst[sub][index] = expireTime
+end
+
+function spellstates.GetReagentDelay(sub, index)
+    if not ReagentDlyLst[sub] then return nil end
+    return ReagentDlyLst[sub][index]
 end
 
 function spellstates.DebuffListUpdate(spawnID, spell, duration)

@@ -187,7 +187,7 @@ See [Pull Configuration and Logic](pull-configuration.md) for the full pull tabl
   ['minmanapct'] = 0,
   ['maxmanapct'] = 100,
   ['bands'] = {
-    { ['class'] = { 'tank', 'pc' }, ['min'] = 0, ['max'] = 70 }
+    { ['validtargets'] = { 'tank', 'pc' }, ['min'] = 0, ['max'] = 70 }
   },
   ['priority'] = false
 }

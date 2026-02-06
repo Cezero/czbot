@@ -35,7 +35,7 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
       ['alias'] = 'nuke',
       ['minmana'] = 0,
       ['bands'] = {
-        { ['class'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
+        { ['validtargets'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 0,
@@ -51,7 +51,7 @@ Use **tanktar** and **notanktar** in the same band (or separate bands) so the nu
 
 ```lua
 ['bands'] = {
-  { ['class'] = { 'tanktar', 'notanktar' }, ['min'] = 10, ['max'] = 100 }
+  { ['validtargets'] = { 'tanktar', 'notanktar' }, ['min'] = 10, ['max'] = 100 }
 }
 ```
 

@@ -29,7 +29,7 @@ Pet summoning is a **self buff** that the bot casts when it has **no pet**.
   ['alias'] = 'pet',
   ['minmana'] = 0,
   ['bands'] = {
-    { ['class'] = { 'self', 'petspell' } }
+    { ['validtargets'] = { 'self', 'petspell' } }
   },
   ['spellicon'] = 0
 }

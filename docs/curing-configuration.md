@@ -43,7 +43,7 @@ Each entry in **`config.cure.spells`** can have:
 
 ### Cure bands
 
-Bands use **class** only (no min/max). Each band is a table with **class** = list of tokens. Tokens include:
+Bands use **validtargets** only (no min/max). Each band is a table with **validtargets** = list of tokens. Tokens include:
 
 - **self** — Cure yourself.
 - **tank** — Main Tank (from TankName).
@@ -65,7 +65,7 @@ Evaluation order: **self** → **tank** → **group** (by class, only in-group p
       ['minmana'] = 0,
       ['curetype'] = 'poison',
       ['bands'] = {
-        { ['class'] = { 'self', 'tank', 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
+        { ['validtargets'] = { 'self', 'tank', 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
       },
       ['priority'] = false
     },
@@ -76,7 +76,7 @@ Evaluation order: **self** → **tank** → **group** (by class, only in-group p
       ['minmana'] = 0,
       ['curetype'] = 'disease',
       ['bands'] = {
-        { ['class'] = { 'self', 'tank', 'group' } }
+        { ['validtargets'] = { 'self', 'tank', 'group' } }
       },
       ['priority'] = false
     }

@@ -21,7 +21,7 @@ All of this works for peers who are outside the bot’s group, as long as the re
 
 | System | Group restriction? | Out-of-group peers |
 |--------|--------------------|--------------------|
-| **Healing (PC)** | Only when **`group`** is in the heal band’s **class** list. | If the band does **not** include **`group`**, the bot may heal any peer in range whose HP is in the band (HP from charinfo). See [Healing configuration](healing-configuration.md). |
+| **Healing (PC)** | Only when **`group`** is in the heal band’s **validtargets** list. | If the band does **not** include **`group`**, the bot may heal any peer in range whose HP is in the band (HP from charinfo). See [Healing configuration](healing-configuration.md). |
 | **Healing (pets)** | None. | Any peer’s pet in range with HP in band can be healed. |
 | **Buffing** | None. | Any peer (and their pet) in range that matches the band and needs the buff can be buffed. See [Buffing configuration](buffing-configuration.md). |
 | **Curing** | **`group`** in bands only affects the **first** pass: the bot considers only peers who are in the bot’s group. A **second** pass considers **all** peers by class (no group check). | Out-of-group peers can be cured in that second pass. See [Curing configuration](curing-configuration.md). |
@@ -30,7 +30,7 @@ All of this works for peers who are outside the bot’s group, as long as the re
 
 ## Configuration knobs
 
-- **Heal bands:** Include **`group`** in the band’s **class** list to restrict single-target PC (and tank) heals to **peers who are in the bot’s group**. Omit **`group`** to allow healing any peer in range (including out-of-group) when their HP is in the band.
+- **Heal bands:** Include **`group`** in the band’s **validtargets** list to restrict single-target PC (and tank) heals to **peers who are in the bot’s group**. Omit **`group`** to allow healing any peer in range (including out-of-group) when their HP is in the band.
 - **Cure bands:** Include **`group`** to add a first pass that only considers in-group peers (by class). The bot still runs a second pass over all peers by class, so out-of-group peers can be cured in that pass. Omit **`group`** to have only the all-peers pass.
 
 For full details on bands and options, use the linked configuration documents above.

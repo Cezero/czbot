@@ -36,7 +36,7 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 
 ### Buff bands
 
-Bands use **class** only (no min/max). Each band is a table with **class** = list of tokens. Tokens include:
+Bands use **validtargets** only (no min/max). Each band is a table with **validtargets** = list of tokens. Tokens include:
 
 - **self** — Buff yourself (and for pet classes, **petspell** can be used to summon when you have no pet; see [Pets configuration](pets-configuration.md)).
 - **petspell** — Summon pet: cast on self when you have **no pet**. Use with **self** in the same band. Documented in [Pets configuration](pets-configuration.md).
@@ -44,7 +44,7 @@ Bands use **class** only (no min/max). Each band is a table with **class** = lis
 - **mypet** — Your pet.
 - **pet** — Other peers’ pets (any peer, not only group members).
 - **Class shorts** — e.g. `war`, `clr`, `shd`, `pal`, `rng`, `mnk`, `rog`, `brd`, `bst`, `ber`, `shm`, `dru`, `wiz`, `mag`, `enc`, `nec`. Restricts the buff to those classes.
-- **name** — Buff specific characters by name (list their names in the band’s class list).
+- **name** — Buff specific characters by name (list their names in the band’s validtargets list).
 - **cbt** — This buff is allowed during combat (mobs in camp).
 - **idle** — This buff is allowed when idle (no mobs in camp). If neither **cbt** nor **idle** is set, the spell may run in both.
 
@@ -61,7 +61,7 @@ Buffing is not restricted by group: any peer in range who matches the band and n
       ['alias'] = 'sow',
       ['minmana'] = 0,
       ['bands'] = {
-        { ['class'] = { 'self' } }
+        { ['validtargets'] = { 'self' } }
       },
       ['spellicon'] = 0
     },
@@ -70,7 +70,7 @@ Buffing is not restricted by group: any peer in range who matches the band and n
       ['spell'] = 'Talisman of the Tribunal',
       ['minmana'] = 0,
       ['bands'] = {
-        { ['class'] = { 'tank', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
+        { ['validtargets'] = { 'tank', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
       },
       ['spellicon'] = 0
     }

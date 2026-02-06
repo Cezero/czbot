@@ -68,8 +68,8 @@ function charm.EvalTarget(index, ctx)
     return nil, nil
 end
 
-function charm.BeforeCast(EvalID, classhit)
-    if classhit == 'charmtar' and mq.TLO.Me.Pet.IsSummoned() then
+function charm.BeforeCast(EvalID, targethit)
+    if targethit == 'charmtar' and mq.TLO.Me.Pet.IsSummoned() then
         mq.cmd('/pet leave')
     end
     return true

@@ -41,7 +41,7 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 
 Bands define **which mobs** and **at what HP %** the debuff is allowed. Each band has:
 
-- **class:** One or more of: **tanktar**, **notanktar**, **named**.
+- **validtargets:** One or more of: **tanktar**, **notanktar**, **named**.
   - **tanktar** — The Main Tank’s (or MA’s) current target.
   - **notanktar** — Any other mob in the list (adds).
   - **named** — Only named mobs; when used with tanktar, only the tank target if it is named.
@@ -59,7 +59,7 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Each ban
       ['minmana'] = 0,
       ['tarcnt'] = 10,
       ['bands'] = {
-        { ['class'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
+        { ['validtargets'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 0,
@@ -73,7 +73,7 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Each ban
       ['minmana'] = 0,
       ['tarcnt'] = 5,
       ['bands'] = {
-        { ['class'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
+        { ['validtargets'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 2,

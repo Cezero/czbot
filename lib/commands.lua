@@ -315,19 +315,8 @@ local function cmd_cast(args)
                         spellutils.InterruptCheck()
                         return
                     end
-                    if cfgkey == 'debuff' then
-                        if spellutils.LoadSpell('debuff', i) then spellutils.CastSpell(i, target, 'castcommand', 'debuff') end
-                    else
-                        if not spellutils.LoadSpell(cfgkey, i) then
-                            if not spellutils.LoadSpell(cfgkey, i) then
-                                -- Only when user runs /cz cast; not per-tick, so no spam.
-                                printf('\ayCZBot:\ax\arCast command spell %s not ready!', entry.spell)
-                            else
-                                spellutils.CastSpell(i, target, 'castcommand', cfgkey)
-                            end
-                        else
-                            spellutils.CastSpell(i, target, 'castcommand', cfgkey)
-                        end
+                    if not spellutils.CastSpell(i, target, 'castcommand', cfgkey) then
+                        printf('\ayCZBot:\ax\arCast command spell %s not ready!', entry.spell)
                     end
                 elseif args[3] and value == args[2] then
                     if args[3] == 'on' then
@@ -428,10 +417,10 @@ local function cmd_setvar(args)
 end
 
 local defaultSpellEntry = {
-    heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, bands = { { class = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } }, priority = false, precondition = true },
-    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } }, spellicon = 0, precondition = true },
-    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { class = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true },
-    cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } }, priority = false, precondition = true },
+    heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, bands = { { validtargets = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } }, priority = false, precondition = true },
+    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { validtargets = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } }, spellicon = 0, precondition = true },
+    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { validtargets = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true },
+    cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { validtargets = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } }, priority = false, precondition = true },
 }
 
 local function copyEntry(src)

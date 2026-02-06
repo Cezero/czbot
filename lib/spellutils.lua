@@ -24,12 +24,33 @@ function spellutils.MountCheck()
     end
 end
 
+-- Returns true if the spell has no reagents or the character has >= required count of each reagent in inventory.
+function spellutils.HasReagents(Sub, ID)
+    local entry = botconfig.getSpellEntry(Sub, ID)
+    if not entry or not entry.spell then return true end
+    local spellForReagents = entry.spell
+    if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then
+        spellForReagents = mq.TLO.FindItem(entry.spell).Spell.Name()
+        if not spellForReagents or spellForReagents == '' then return true end
+    end
+    local sp = mq.TLO.Spell(spellForReagents)
+    if not sp() then return true end
+    for slot = 1, 4 do
+        local rid = sp.ReagentID(slot)()
+        if rid and rid > 0 then
+            local need = sp.ReagentCount(slot)() or 1
+            local have = mq.TLO.FindItemCount(tostring(rid))() or 0
+            if have < need then return false end
+        end
+    end
+    return true
+end
+
 -- checks spell is loaded, minmana is met, and gem is ready, precondition is good
 function spellutils.SpellCheck(Sub, ID)
     local spell = nil
     local minmana = nil
     local gem = nil
-    local spellreg = mq.TLO.Spell(spell).ReagentID(1)()
     local entry = botconfig.getSpellEntry(Sub, ID)
     if gem ~= "item" and entry and type(entry.alias) == 'string' and spellsdb and spellsdb.resolve_entry then
         local level = tonumber(mq.TLO.Me.Level()) or 1
@@ -43,9 +64,11 @@ function spellutils.SpellCheck(Sub, ID)
     --check gemInUse (prevents spells fighting over the same gem)
     --spell
     if mq.TLO.Window('SpellBookWnd').Open() then mq.cmd('/book') end
-    if spellreg and spellreg > 0 and not mq.TLO.FindItem(spellreg)() then
+    if spellstates.GetReagentDelay(Sub, ID) and spellstates.GetReagentDelay(Sub, ID) > mq.gettime() then return false end
+    if not spellutils.HasReagents(Sub, ID) then
         if entry then entry.enabled = false end
-        printf('\ayCZBot:\axMissing reagent for %s, disabling spell', spell)
+        spellstates.SetReagentDelay(Sub, ID, mq.gettime() + (5 * 60 * 1000)) -- 5 min before retrying this spell
+        printf('\ayCZBot:\axMissing reagent for %s, disabling spell for 5 minutes', spell)
         return false
     end
     local spellmana = mq.TLO.Spell(spell).Mana()
@@ -167,7 +190,7 @@ function spellutils.GetTankInfo(includeTarget)
 end
 
 -- Post-cast logic when CastTimeLeft() has reached 0 (called from RunSpellCheckLoop).
-function spellutils.OnCastComplete(index, EvalID, classhit, sub)
+function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return end
@@ -212,10 +235,10 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             spellutils.InterruptCheck()
         end
         if mq.TLO.Me.CastTimeLeft() > 0 then return false end
-        spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.logic, rc.CurSpell.sub)
+        spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
         local cont = true
         if options.afterCast then
-            cont = options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.logic)
+            cont = options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
         end
         rc.CurSpell = {}
         state.clearRunState()
@@ -224,7 +247,7 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         -- fall through to try next spell index
     end
 
-    -- Re-entry: waiting for move to stop
+    -- Re-entry: waiting for move to stop (do not clear phase so CastSpell sees resuming = true)
     if rc.CurSpell and rc.CurSpell.phase == 'precast_wait_move' then
         if mq.TLO.Me.Moving() then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return false end
@@ -232,12 +255,11 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             state.clearRunState()
             return false
         end
-        rc.CurSpell.phase = nil
-        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.logic, rc.CurSpell.sub)
+        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
         return false
     end
 
-    -- Re-entry: waiting for target
+    -- Re-entry: waiting for target (do not clear phase so CastSpell sees resuming = true)
     if rc.CurSpell and rc.CurSpell.phase == 'precast' then
         if mq.TLO.Target.ID() ~= rc.CurSpell.target then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return false end
@@ -245,8 +267,7 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             state.clearRunState()
             return false
         end
-        rc.CurSpell.phase = nil
-        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.logic, rc.CurSpell.sub)
+        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
         return false
     end
 
@@ -263,15 +284,13 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
 
     for i = 1, count do
         if MasterPause then return false end
-        if (not options.entryValid or options.entryValid(i))
-            and spellutils.SpellCheck(sub, i) then
-            local EvalID, classhit = evalFn(i)
-            if EvalID and classhit
-                and (not options.beforeCast or options.beforeCast(i, EvalID, classhit))
+        if (not options.entryValid or options.entryValid(i)) then
+            local EvalID, targethit = evalFn(i)
+            if EvalID and targethit
+                and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
                 and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
-                and spellutils.PreCondCheck(sub, i, EvalID)
-                and spellutils.LoadSpell(sub, i) then
-                spellutils.CastSpell(i, EvalID, classhit, sub)
+                and spellutils.PreCondCheck(sub, i, EvalID) then
+                spellutils.CastSpell(i, EvalID, targethit, sub)
                 return false
             end
         end
@@ -411,7 +430,7 @@ function spellutils.InterruptCheck()
     if not entry then return false end
     local spellname = entry.spell or (entry.gem == 'item' and mq.TLO.FindItem(entry.spell).Spell())
     if not spellname then return false end
-    local criteria = rc.CurSpell.logic
+    local criteria = rc.CurSpell.targethit
     local target = rc.CurSpell.target
     local spelltartype = mq.TLO.Spell(spellname).TargetType()
     local targetname = mq.TLO.Spawn(target).CleanName()
@@ -425,7 +444,7 @@ function spellutils.InterruptCheck()
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
         if mq.TLO.Target.ID() and string.lower(spelltartype) ~= "self" and (mq.TLO.Target.ID() == 0 or string.find(mq.TLO.Target.Name(), 'corpse') and criteria ~= 'corpse') then
             mq.cmd('/squelch /multiline; /stick off ; /target clear')
-            if mq.TLO.Me.CastTimeLeft() > 0 and EvalID ~= 1 and classhit ~= 'grp' then
+            if mq.TLO.Me.CastTimeLeft() > 0 and target ~= 1 and criteria ~= 'grp' then
                 mq.cmd('/echo I lost my target, interrupting')
                 mq.cmd('/stopcast')
                 if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
@@ -510,62 +529,64 @@ function spellutils.InterruptCheck()
     end
 end
 
-function spellutils.CastSpell(index, EvalID, classhit, sub)
+function spellutils.CastSpell(index, EvalID, targethit, sub)
     if debug then print('castspell') end
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry(sub, index)
-    if not entry then return end
-    local spell = string.lower(entry.spell or '')
-    local gem = entry.gem
-    local targetname = mq.TLO.Spawn(EvalID).CleanName()
+    if not entry then return false end
     local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
     if not resuming then
+        if not spellutils.SpellCheck(sub, index) then return false end
+        if not spellutils.LoadSpell(sub, index) then return false end
         rc.CurSpell = {
             sub = sub,
             spell = index,
             target = EvalID,
-            logic = classhit,
+            targethit = targethit,
             resisted = false,
         }
-        if classhit == 'charmtar' then rc.charmid = EvalID end
+        if targethit == 'charmtar' then rc.charmid = EvalID end
     end
+    local spell = string.lower(entry.spell or '')
+    local gem = entry.gem
+    local targetname = mq.TLO.Spawn(EvalID).CleanName()
 
     if not resuming and (mq.TLO.Spell(spell).MyCastTime() and mq.TLO.Spell(spell).MyCastTime() > 0 and (mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()) and mq.TLO.Me.Class.ShortName() ~= 'BRD') then
         mq.cmd('/multiline ; /nav stop log=off ; /stick off)')
         rc.CurSpell.phase = 'precast_wait_move'
         rc.CurSpell.deadline = mq.gettime() + 3000
         state.setRunState('casting')
-        return
+        return true
     end
     -- TODO: Revisit bard mez + melee cycle. Current behavior: attack off when mezzing notanktar, and bard never
     -- re-engages melee while mez is "active", so bard just stands there singing mez. Desired: attack off, target add,
     -- pulse mez, wait for land, re-assist MA, attack on (optionally twist DPS song), stay on MA target ~12-15s,
     -- then attack off, target add, re-pulse mez, repeat. Implement in a later plan (state/timers per mez target).
-    if (sub == 'debuff' and classhit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
+    if (sub == 'debuff' and targethit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
     if debug then print(entry.spell, entry.gem, EvalID) end
     if (mq.TLO.Plugin('MQ2Twist').IsLoaded()) then
         if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then mq.cmd('/squelch /twist stop') end
     end
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
-        if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and classhit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
+        if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
             if _deps.AdvCombat then _deps.AdvCombat() end
         end
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
-    if EvalID ~= 1 or (classhit ~= 'self' and classhit ~= 'grp') then
+    if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'grp') then
         if mq.TLO.Target.ID() ~= EvalID then
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'
             rc.CurSpell.deadline = mq.gettime() + 1000
             state.setRunState('casting')
-            return
+            return true
         end
     end
     if entry.announce and type(entry.announce) == 'string' then
         printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end
     if type(gem) == 'number' or gem == 'item' or gem == 'alt' or gem == 'script' then
-        if EvalID == 1 and (classhit == 'self' or classhit == 'grp') then
+        if EvalID == 1 and (targethit == 'self' or targethit == 'grp') then
             if type(gem) == 'number' then
                 mq.cmdf('/cast "%s"', spell)
             elseif gem == 'item' then
@@ -594,6 +615,7 @@ function spellutils.CastSpell(index, EvalID, classhit, sub)
     end
     rc.CurSpell.phase = 'casting'
     state.setRunState('casting')
+    return true
 end
 
 function spellutils.RefreshSpells()

@@ -34,7 +34,7 @@ local function defaultBuffEntry()
         alias = false,
         announce = false,
         enabled = true,
-        bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } },
+        bands = { { validtargets = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } },
         spellicon = 0,
         precondition = true
     }
@@ -78,7 +78,7 @@ local function IconCheck(index, EvalID)
     return not hasIcon
 end
 
-local function BuffEvalBotNeedsBuff(botid, botname, spellid, range, index, classhit)
+local function BuffEvalBotNeedsBuff(botid, botname, spellid, range, index, targethit)
     local spawnid = mq.TLO.Spawn(botid).ID()
     local peer = charinfo(botname)
     if not peer then return nil, nil end
@@ -88,7 +88,7 @@ local function BuffEvalBotNeedsBuff(botid, botname, spellid, range, index, class
     local botdist = spawnid and mq.TLO.Spawn(spawnid).Distance()
     if not (spawnid and botbuffstack and botfreebuffslots and botfreebuffslots > 0) then return nil, nil end
     if not IconCheck(index, spawnid) or botbuff then return nil, nil end
-    if range and botdist and botdist <= range then return botid, classhit end
+    if range and botdist and botdist <= range then return botid, targethit end
     return nil, nil
 end
 
@@ -277,7 +277,7 @@ local function defaultCureEntry()
         announce = false,
         curetype = "all",
         enabled = true,
-        bands = { { class = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } },
+        bands = { { validtargets = { 'war', 'brd', 'clr', 'pal', 'shd', 'shm', 'rng', 'rog', 'ber', 'mnk', 'dru', 'bst', 'mag', 'nec', 'enc', 'wiz' } } },
         priority = false,
         precondition = true
     }
@@ -313,7 +313,7 @@ botconfig.RegisterConfigLoader(function()
     if botconfig.config.settings.docure then botcast.LoadCureConfig() end
 end)
 
-local function CureEvalForTarget(index, botname, botid, botclass, classhit, spelltartype)
+local function CureEvalForTarget(index, botname, botid, botclass, targethit, spelltartype)
     local cureindex = CureClass[index]
     if not cureindex then return nil, nil end
     for _, v in pairs(CureType[index] or {}) do
@@ -328,14 +328,14 @@ local function CureEvalForTarget(index, botname, botid, botclass, classhit, spel
             local detrimentals = peer and peer.Detrimentals or nil
             local curetype = peer and peer[v] or nil
             if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
-                if classhit == 'tank' then return botid, 'tank' end
-                if classhit == 'group' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'group' end
-                if classhit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
+                if targethit == 'tank' then return botid, 'tank' end
+                if targethit == 'group' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'group' end
+                if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
             end
             if string.lower(v) ~= 'all' and curetype and curetype > 0 then
-                if classhit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'tank' end
-                if classhit == 'group' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'group' end
-                if classhit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
+                if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'tank' end
+                if targethit == 'group' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'group' end
+                if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
             end
         end
     end
@@ -423,7 +423,7 @@ local function defaultHealEntry()
         alias = false,
         announce = false,
         enabled = true,
-        bands = { { class = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } },
+        bands = { { validtargets = { 'pc', 'pet', 'grp', 'group', 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber', 'shm', 'clr', 'dru', 'wiz', 'mag', 'enc', 'nec', 'mypet', 'self' }, min = 0, max = 60 } },
         priority = false,
         precondition = true
     }
@@ -748,7 +748,7 @@ local function defaultDebuffEntry()
         alias = false,
         announce = false,
         enabled = true,
-        bands = { { class = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } },
+        bands = { { validtargets = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } },
         charmnames = '',
         recast = 0,
         delay = 0,
@@ -1017,13 +1017,13 @@ local function DebuffEval(index)
     return nil, nil
 end
 
-local function DebuffOnBeforeCast(i, EvalID, classhit)
+local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
     if entry and spellstates.GetRecastCounter(EvalID, i) >= (entry.recast or 0) then
         return false
     end
-    charm.BeforeCast(EvalID, classhit)
-    if classhit == 'tanktar' and EvalID and EvalID > 0 then
+    charm.BeforeCast(EvalID, targethit)
+    if targethit == 'tanktar' and EvalID and EvalID > 0 then
         if not myconfig.melee.offtank then state.getRunconfig().engageTargetId = EvalID end
         if mq.TLO.Pet.Target.ID() ~= EvalID and not mq.TLO.Me.Pet.Combat() then
             mq.cmdf('/pet attack %s', EvalID)
@@ -1051,11 +1051,11 @@ function botcast.DebuffCheck()
             local gem = entry.gem
             return (entry.enabled ~= false) and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
         end,
-        afterCast = function(i, EvalID, classhit)
+        afterCast = function(i, EvalID, targethit)
             if spellstates.GetDebuffDelay(i) and spellstates.GetDebuffDelay(i) > mq.gettime() then return false end
             if mobcountstart < state.getRunconfig().MobCount then return false end
             local prevID = EvalID
-            local newEvalID, newClasshit = DebuffEval(i)
+            local newEvalID, newTargethit = DebuffEval(i)
             local adEntry = botconfig.getSpellEntry('debuff', i)
             if newEvalID and prevID == newEvalID and adEntry and (adEntry.recast or 0) > 0 and state.getRunconfig().CurSpell and state.getRunconfig().CurSpell.spell == i and state.getRunconfig().CurSpell.resisted then
                 local newCount = spellstates.IncrementRecastCounter(EvalID, i)

@@ -1,5 +1,5 @@
 -- Single parse/apply for spell bands across heal, buff, cure, event, debuff.
--- entry.bands = { { class = { 'tank', 'war' }, min = 0, max = 80 }, ... }
+-- entry.bands = { { validtargets = { 'tank', 'war' }, min = 0, max = 80 }, ... }
 -- No legacy class string parsing; config is bands-only.
 
 local spellbands = {}
@@ -9,7 +9,7 @@ local HEAL_SPECIAL_KEYS = { corpse = true, bots = true, raid = true, cbt = true,
 
 --- Apply entry.bands to build the runtime structure for this spell index.
 --- @param section string 'heal'|'buff'|'cure'|'debuff'
---- @param entry table spell entry with .bands (array of { class = {...}, min?, max? })
+--- @param entry table spell entry with .bands (array of { validtargets = {...}, min?, max? })
 --- @param index number spell index (for debuff: used by caller to store result)
 --- @return table runtime structure for this section/index
 function spellbands.applyBands(section, entry, index)
@@ -24,13 +24,13 @@ function spellbands.applyBands(section, entry, index)
     if section == 'heal' then
         local rt = {}
         for _, band in ipairs(bands) do
-            local classList = band.class
-            if type(classList) == 'table' then
+            local targetList = band.validtargets
+            if type(targetList) == 'table' then
                 local minVal = band.min
                 local maxVal = band.max
                 if minVal == nil then minVal = 0 end
                 if maxVal == nil then maxVal = 100 end
-                for _, c in ipairs(classList) do
+                for _, c in ipairs(targetList) do
                     if type(c) == 'string' and c ~= '' then
                         rt[c] = { min = minVal, max = maxVal }
                         if HEAL_SPECIAL_KEYS[c] then
@@ -46,9 +46,9 @@ function spellbands.applyBands(section, entry, index)
     if section == 'buff' or section == 'cure' then
         local rt = {}
         for _, band in ipairs(bands) do
-            local classList = band.class
-            if type(classList) == 'table' then
-                for _, c in ipairs(classList) do
+            local targetList = band.validtargets
+            if type(targetList) == 'table' then
+                for _, c in ipairs(targetList) do
                     if type(c) == 'string' and c ~= '' then rt[c] = true end
                 end
             end
@@ -60,13 +60,13 @@ function spellbands.applyBands(section, entry, index)
         local mobMin, mobMax = 0, 100
         local tanktar, notanktar, named = false, false, false
         for _, band in ipairs(bands) do
-            local classList = band.class
-            if type(classList) == 'table' then
+            local targetList = band.validtargets
+            if type(targetList) == 'table' then
                 local mn = band.min
                 local mx = band.max
                 if mn ~= nil and (mobMin == nil or mn < mobMin) then mobMin = mn end
                 if mx ~= nil and (mobMax == nil or mx > mobMax) then mobMax = mx end
-                for _, c in ipairs(classList) do
+                for _, c in ipairs(targetList) do
                     if c == 'tanktar' then
                         tanktar = true
                     elseif c == 'notanktar' then

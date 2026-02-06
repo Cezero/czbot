@@ -35,7 +35,7 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
       ['alias'] = 'mez',
       ['minmana'] = 0,
       ['bands'] = {
-        { ['class'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
+        { ['validtargets'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 2,
@@ -52,7 +52,7 @@ Set **charmnames** to mob names the bot is allowed to charm. The bot will **pet 
 ```lua
 ['charmnames'] = 'a mob name,another mob',
 ['bands'] = {
-  { ['class'] = { 'notanktar' }, ['min'] = 30, ['max'] = 100 }
+  { ['validtargets'] = { 'notanktar' }, ['min'] = 30, ['max'] = 100 }
 }
 ```
 

@@ -6,10 +6,10 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 
 | Section  | What "target" means | Count gate | Bands (main idea) |
 | -------- | ------------------- | ---------- | ----------------- |
-| **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | class + min/max HP % |
-| **buff** | Self, tank, peers by class, mypet, other pets | None | class only; **cbt** / **idle** control when spell can run |
+| **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | validtargets + min/max HP % |
+| **buff** | Self, tank, peers by class, mypet, other pets | None | validtargets only; **cbt** / **idle** control when spell can run |
 | **debuff** | Mobs in camp (MA target + adds) | **tarcnt** = min mobs in camp to consider spell | tanktar / notanktar / named + min/max HP % |
-| **cure**  | Self, tank, peers by class | None | class only; **group** = two-pass (in-group then all peers) |
+| **cure**  | Self, tank, peers by class | None | validtargets only; **group** = two-pass (in-group then all peers) |
 
 ---
 
@@ -38,7 +38,7 @@ The first matching target in range wins.
 
 ### Bands
 
-Each band has **class** (who) and **min** / **max** (HP %). Heal band tokens include: **pc**, **tank**, **grp**, **self**, **corpse**, **bots**, **raid**, **mypet**, **pet**, **xtgt**, **group**, **cbt**, **all**, and class shorts. **group** restricts single-target PC and tank heals to peers in the bot’s group; omitting it allows any peer in range. Special tokens (e.g. **cbt** for rez during combat, **xtgt** for extended targets) are described in [Healing configuration](healing-configuration.md).
+Each band has **validtargets** (who) and **min** / **max** (HP %). Heal band tokens include: **pc**, **tank**, **grp**, **self**, **corpse**, **bots**, **raid**, **mypet**, **pet**, **xtgt**, **group**, **cbt**, **all**, and class shorts. **group** restricts single-target PC and tank heals to peers in the bot’s group; omitting it allows any peer in range. Special tokens (e.g. **cbt** for rez during combat, **xtgt** for extended targets) are described in [Healing configuration](healing-configuration.md).
 
 ---
 
@@ -81,7 +81,7 @@ flowchart LR
 - **notanktar** — Any other mob in the list (adds).
 - **named** — Named mob; with tanktar, only the tank target when it is named.
 
-A spell can have **multiple** band classes (e.g. both **tanktar** and **notanktar**). Because **tanktar** is tried before **notanktar**, the tank’s target is chosen when it qualifies; otherwise an add can be chosen. So the same spell can fire on the tank’s target in one tick and on an add in another. If only **notanktar** is in bands, only adds are ever chosen.
+A spell can have **multiple** valid target types (e.g. both **tanktar** and **notanktar**). Because **tanktar** is tried before **notanktar**, the tank’s target is chosen when it qualifies; otherwise an add can be chosen. So the same spell can fire on the tank’s target in one tick and on an add in another. If only **notanktar** is in bands, only adds are ever chosen.
 
 ### HP band
 
@@ -91,16 +91,16 @@ Each band’s **min** / **max** define mob HP %. For debuff, all bands for that 
 
 ## Buff targeting
 
-Buff spells choose a target in a fixed order. Bands use **class** only (no min/max). **cbt** and **idle** in bands control **when** the spell is allowed to run (combat vs no mobs in camp), not who is targeted.
+Buff spells choose a target in a fixed order. Bands use **validtargets** only (no min/max). **cbt** and **idle** in bands control **when** the spell is allowed to run (combat vs no mobs in camp), not who is targeted.
 
 ### Evaluation order
 
 From `BuffEval` in the code, the order is:
 
 1. **self** — Yourself (including **petspell** when you have no pet, for summon).
-2. **byname** — Specific characters whose names appear in the band’s class list.
+2. **byname** — Specific characters whose names appear in the band’s validtargets list.
 3. **tank** — Main Tank.
-4. **bots** — Other peers by class (from bands). “Bots” = all peers (charinfo), not limited to group.
+4. **bots** — Other peers by class (from validtargets). “Bots” = all peers (charinfo), not limited to group.
 5. **mypet** — Your pet.
 6. **pet** — Other peers’ pets.
 
@@ -108,13 +108,13 @@ For **BRD**, only **self** is tried after the initial self check (no tank/bots/m
 
 ### Bands
 
-Bands use **class** only (no min/max). Tokens include: **self**, **petspell**, **tank**, **mypet**, **pet**, class shorts, **name**, **cbt**, **idle**. **cbt** = this buff can run when there are mobs in camp; **idle** = can run when there are no mobs. If neither is set, the spell can run in either case. There is no **tarcnt** for buffs. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
+Bands use **validtargets** only (no min/max). Tokens include: **self**, **petspell**, **tank**, **mypet**, **pet**, class shorts, **name**, **cbt**, **idle**. **cbt** = this buff can run when there are mobs in camp; **idle** = can run when there are no mobs. If neither is set, the spell can run in either case. There is no **tarcnt** for buffs. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
 
 ---
 
 ## Cure targeting
 
-Cure spells choose a target in a fixed order. Bands use **class** only. **group** in bands enables a **two-pass** behavior: first in-group peers, then all peers.
+Cure spells choose a target in a fixed order. Bands use **validtargets** only. **group** in bands enables a **two-pass** behavior: first in-group peers, then all peers.
 
 ### Evaluation order
 
@@ -122,14 +122,14 @@ From `CureEval` in the code, the order is:
 
 1. **self** — Yourself (if bands allow).
 2. **tank** — Main Tank (if bands allow).
-3. **group** pass — Only peers who are **in the bot’s group**, by class from bands. Each such peer is checked for needing the cure.
-4. **all peers** pass — **All** peers by class from bands (no group check). This allows curing out-of-group peers in this second pass.
+3. **group** pass — Only peers who are **in the bot’s group**, by class from validtargets. Each such peer is checked for needing the cure.
+4. **all peers** pass — **All** peers by class from validtargets (no group check). This allows curing out-of-group peers in this second pass.
 
 So **group** in bands does not restrict cures to group only; it adds a first pass over in-group peers, then a second pass over all peers. See [Curing configuration](curing-configuration.md) and [Out-of-group peers](out-of-group-peers.md).
 
 ### Bands
 
-Bands use **class** only (no min/max). Tokens: **self**, **tank**, **group**, and class shorts. There is no **tarcnt** for cures. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the order above.
+Bands use **validtargets** only (no min/max). Tokens: **self**, **tank**, **group**, and class shorts. There is no **tarcnt** for cures. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the order above.
 
 ---
 

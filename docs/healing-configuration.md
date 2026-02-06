@@ -50,7 +50,7 @@ Each entry in **`heal.spells`** can have:
 
 Bands define **who** can receive the spell and **at what HP %**. Each band has:
 
-- **class:** List of target types. One or more of: `pc`, `pet`, `grp`, `group`, `self`, `tank`, `mypet`, class shorts (`war`, `shd`, `pal`, `clr`, `dru`, etc.), `corpse`, `bots`, `raid`, `cbt`, `all`, `xtgt`. **`group`** restricts single-target PC (and tank) heal targets to **peers who are in the bot’s group**. If **`group`** is **omitted**, the bot may heal **any peer** (including out-of-group) whose HP is in the band and who is in range; HP is taken from charinfo.
+- **validtargets:** List of target types. One or more of: `pc`, `pet`, `grp`, `group`, `self`, `tank`, `mypet`, class shorts (`war`, `shd`, `pal`, `clr`, `dru`, etc.), `corpse`, `bots`, `raid`, `cbt`, `all`, `xtgt`. **`group`** restricts single-target PC (and tank) heal targets to **peers who are in the bot’s group**. If **`group`** is **omitted**, the bot may heal **any peer** (including out-of-group) whose HP is in the band and who is in range; HP is taken from charinfo.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For **corpse**, **bots**, **raid**, **cbt**, **all** the effective max is treated as 200 (special).
 
 **Special tokens:**
@@ -80,7 +80,7 @@ PC heal candidates come from **peers** (characters known via the actor net). Add
       ['minmanapct'] = 0,
       ['maxmanapct'] = 100,
       ['bands'] = {
-        { ['class'] = { 'tank', 'pc' }, ['min'] = 0, ['max'] = 70 }
+        { ['validtargets'] = { 'tank', 'pc' }, ['min'] = 0, ['max'] = 70 }
       },
       ['priority'] = false
     },
@@ -92,7 +92,7 @@ PC heal candidates come from **peers** (characters known via the actor net). Add
       ['maxmanapct'] = 100,
       ['tarcnt'] = 2,
       ['bands'] = {
-        { ['class'] = { 'grp' }, ['min'] = 0, ['max'] = 80 }
+        { ['validtargets'] = { 'grp' }, ['min'] = 0, ['max'] = 80 }
       },
       ['priority'] = false,
       ['precondition'] = true

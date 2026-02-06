@@ -190,10 +190,10 @@ local function writeConfigToFile(config, filename)
         for _, band in ipairs(bands) do
             if type(band) == "table" then
                 file:write(indent .. "  {\n")
-                if type(band.class) == "table" then
-                    file:write(indent .. "    ['class'] = { ")
+                if type(band.validtargets) == "table" then
+                    file:write(indent .. "    ['validtargets'] = { ")
                     local parts = {}
-                    for _, c in ipairs(band.class) do
+                    for _, c in ipairs(band.validtargets) do
                         parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
                     end
                     file:write(table.concat(parts, ", "))
