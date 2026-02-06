@@ -219,7 +219,9 @@ local function writeConfigToFile(config, filename)
             local valueStr = nil
             for _, key in ipairs(order2) do
                 value = t[key]
-                if key == 'bands' and type(value) == "table" then
+                if value == nil then
+                    -- omit nil keys to keep config sparse
+                elseif key == 'bands' and type(value) == "table" then
                     writeBands(value, indent)
                 elseif type(value) == "table" then
                     print("detected a corrupted value for:", key, " = ", value)
@@ -262,7 +264,9 @@ local function writeConfigToFile(config, filename)
                         for _, subkey in ipairs(subOrder[key]) do
                             if subkey ~= 'spells' then
                                 local subval = value[subkey]
-                                if tonumber(subval) then
+                                if subval == nil then
+                                    -- omit nil keys to keep config sparse
+                                elseif tonumber(subval) then
                                     file:write(indent .. "  ['" .. subkey .. "'] = ", tonumber(subval), ",\n")
                                 elseif subval == true then
                                     file:write(indent .. "  ['" .. subkey .. "'] = true,\n")
@@ -296,6 +300,8 @@ local function writeConfigToFile(config, filename)
                     end
                     file:write(indent .. "},\n")
                     file:flush()
+                elseif value == nil then
+                    -- omit nil keys to keep config sparse
                 else
                     local valueStr = type(value) == "string" and '"' .. value .. '"' or tostring(value)
                     if tonumber(value) then

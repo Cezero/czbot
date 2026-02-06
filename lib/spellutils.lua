@@ -38,7 +38,7 @@ function spellutils.SpellCheck(Sub, ID)
         end
     end
     if entry and entry.spell then spell = entry.spell end
-    if entry and entry.minmana then minmana = entry.minmana end
+    minmana = (entry and entry.minmana ~= nil) and entry.minmana or 0
     if entry and entry.gem then gem = entry.gem end
     --check gemInUse (prevents spells fighting over the same gem)
     --spell
