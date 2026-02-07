@@ -685,6 +685,10 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
     if entry.announce and type(entry.announce) == 'string' then
         printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end
+    -- Stand before cast when sitting (not on mount); MQ2Cast does not do this.
+    if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() then
+        mq.cmd('/stand')
+    end
     if type(gem) == 'number' or gem == 'item' or gem == 'alt' or gem == 'script' then
         if EvalID == 1 and (targethit == 'self' or targethit == 'groupheal' or targethit == 'groupbuff' or targethit == 'groupcure') then
             if type(gem) == 'number' then
