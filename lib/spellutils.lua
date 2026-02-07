@@ -414,18 +414,25 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
 
     for i = 1, count do
         if MasterPause then return false end
-        if (not options.entryValid or options.entryValid(i)) then
-            local EvalID, targethit = evalFn(i)
-            if state.getRunState() == 'buffs_populate_wait' then
-                return false
-            end
-            if EvalID and targethit
-                and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
-                and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
-                and spellutils.PreCondCheck(sub, i, EvalID) then
-                -- Only exit when we actually started a cast (or precast); otherwise try next index
-                if spellutils.CastSpell(i, EvalID, targethit, sub) then
+        local runState = state.getRunState()
+        local p = state.getRunStatePayload()
+        if (runState == 'buffs_resume' and p and p.buffIndex and i ~= p.buffIndex)
+            or (runState == 'cures_resume' and p and p.cureIndex and i ~= p.cureIndex) then
+            -- skip this index; only run eval for the index we are resuming
+        else
+            if (not options.entryValid or options.entryValid(i)) then
+                local EvalID, targethit = evalFn(i)
+                if state.getRunState() == 'buffs_populate_wait' then
                     return false
+                end
+                if EvalID and targethit
+                    and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
+                    and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
+                    and spellutils.PreCondCheck(sub, i, EvalID) then
+                    -- Only exit when we actually started a cast (or precast); otherwise try next index
+                    if spellutils.CastSpell(i, EvalID, targethit, sub) then
+                        return false
+                    end
                 end
             end
         end
