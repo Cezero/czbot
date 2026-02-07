@@ -4,5 +4,6 @@
     "debug",
     "actors",
     "mq"
-  ]
+  ],
+  "Lua.runtime.version": "Lua 5.1"
 }

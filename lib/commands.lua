@@ -20,6 +20,7 @@ local rexec = actornet.rexec
 local charinfo = actornet.charinfo
 local utils = require('lib.utils')
 local command_dispatcher = require('lib.command_dispatcher')
+local unpack = table.unpack or unpack
 
 local TOGGLELIST = {
     domelee = true,
@@ -739,7 +740,7 @@ function M.Parse(...)
         return
     end
 
-    command_dispatcher.Dispatch(args[1], table.unpack(args, 2))
+    command_dispatcher.Dispatch(args[1], unpack(args, 2))
 end
 
 function M.czpause(...)
