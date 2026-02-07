@@ -30,7 +30,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | Command | Arguments | Purpose |
 |---------|-----------|---------|
 | **makecamp** | `on`, `off`, or `return` | Set or clear make camp; `return` sends bot back to camp. |
-| **follow** | `<name>` | Follow the named character (disables make camp). |
+| **follow** | `<name>`, `me`, or omit | Follow the named character (disables make camp). With `me` or no name: when command is sent via rexec (e.g. `/angexecute /cz follow`), follow the sender; otherwise follow TankName. |
 | **stop** | — | Disable make camp and follow. |
 | **leash** | — | Return to camp (if camp is set). |
 
@@ -117,6 +117,7 @@ StoredConfig = {
     ['TargetFilter'] = '0',
     ['petassist'] = false,
     ['acleash'] = 75,
+    ['followdistance'] = 35,
     ['zradius'] = 75
   },
   ['pull'] = { ... },
@@ -152,6 +153,7 @@ return StoredConfig
 | **TargetFilter** | `'0'` | Mob list filter (0/1/2). |
 | **petassist** | `false` | Send pet on engage target. |
 | **acleash** | 75 | Camp leash distance. |
+| **followdistance** | 35 | Follow distance: beyond this distance the bot stands and runs follow; within it, sit is allowed when mana &lt; sitmana. |
 | **zradius** | 75 | Vertical range from camp for mob list. |
 | **spelldb** | `'spells.db'` | Spell database file. |
 
