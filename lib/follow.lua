@@ -32,7 +32,7 @@ local function event_FollowChat(line, speaker)
 end
 
 function follow.registerEvents()
-    mq.event('FollowChat', "#*# #1# tells the #*#, follow#*#", event_FollowChat)
+    mq.event('FollowChat', "#1# tells the #*#, 'follow#*#", event_FollowChat)
 end
 
 return follow
