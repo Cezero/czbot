@@ -178,18 +178,22 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
     if not aeRange or aeRange <= 0 then return nil, nil end
     local needCount = 0
     for i = 1, mq.TLO.Group.Members() do
-        local grpname = mq.TLO.Group(i).Name()
-        local grpid = mq.TLO.Group(i).ID()
-        local grpdist = mq.TLO.Group(i).Distance()
-        if grpid and grpid > 0 and mq.TLO.Spawn(grpid).Type() == 'PC' and grpdist and grpdist <= aeRange then
-            local peer = charinfo(grpname)
-            if peer then
-                local hasBuff = spellutils.PeerHasBuff(peer, spellid)
-                local stacks = peer.Stacks(spellid)
-                local free = peer.FreeBuffSlots
-                if not hasBuff and stacks and free and free > 0 then needCount = needCount + 1 end
-            else
-                if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then needCount = needCount + 1 end
+        local grpmember = mq.TLO.Group.Member(i)
+        if grpmember then
+            local grpspawn = grpmember.Spawn
+            local grpname = grpmember.Name()
+            local grpid = grpmember.ID()
+            local grpdist = grpspawn and grpspawn.Distance() or nil
+            if grpid and grpid > 0 and mq.TLO.Spawn(grpid).Type() == 'PC' and grpdist and grpdist <= aeRange then
+                local peer = charinfo(grpname)
+                if peer then
+                    local hasBuff = spellutils.PeerHasBuff(peer, spellid)
+                    local stacks = peer.Stacks(spellid)
+                    local free = peer.FreeBuffSlots
+                    if not hasBuff and stacks and free and free > 0 then needCount = needCount + 1 end
+                else
+                    if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then needCount = needCount + 1 end
+                end
             end
         end
     end
@@ -205,20 +209,24 @@ local function BuffEvalGroupMember(index, entry, spell, spellid, range)
     local members = mq.TLO.Group.Members()
     if not members or members == 0 then return nil, nil end
     for i = 1, members do
-        local grpname = mq.TLO.Group(i).Name()
-        local grpid = mq.TLO.Group(i).ID()
-        local grpclass = mq.TLO.Group(i).Class.ShortName()
-        local grpdist = mq.TLO.Group(i).Distance()
-        if grpid and grpid > 0 and grpclass and mq.TLO.Spawn(grpid).Type() == 'PC' then
-            if range and grpdist and grpdist <= range then
-                local lc = grpclass:lower()
-                if (BuffClass[index].classes == 'all' or (BuffClass[index].classes and BuffClass[index].classes[lc])) and IconCheck(index, grpid) then
-                    local peer = charinfo(grpname)
-                    if peer then
-                        local id, hit = BuffEvalBotNeedsBuff(grpid, grpname, spellid, range, index, lc)
-                        if id then return id, hit end
-                    else
-                        if spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff') and spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then return grpid, lc end
+        local grpmember = mq.TLO.Group.Member(i)
+        if grpmember and grpmember.Class then
+            local grpspawn = grpmember.Spawn
+            local grpname = grpmember.Name()
+            local grpid = grpmember.ID()
+            local grpclass = grpmember.Class.ShortName()
+            local grpdist = grpspawn and grpspawn.Distance() or nil
+            if grpid and grpid > 0 and grpclass and mq.TLO.Spawn(grpid).Type() == 'PC' then
+                if range and grpdist and grpdist <= range then
+                    local lc = grpclass:lower()
+                    if (BuffClass[index].classes == 'all' or (BuffClass[index].classes and BuffClass[index].classes[lc])) and IconCheck(index, grpid) then
+                        local peer = charinfo(grpname)
+                        if peer then
+                            local id, hit = BuffEvalBotNeedsBuff(grpid, grpname, spellid, range, index, lc)
+                            if id then return id, hit end
+                        else
+                            if spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff') and spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then return grpid, lc end
+                        end
                     end
                 end
             end
@@ -441,21 +449,24 @@ local function CureEvalGroupCure(index, entry)
     local typelist = CureTypeList(index)
     local needCount = 0
     for i = 1, mq.TLO.Group.Members() do
-        local grpname = mq.TLO.Group(i).Name()
-        local grpid = mq.TLO.Group(i).ID()
-        if grpid and grpid > 0 then
-            local peer = charinfo.GetInfo(grpname)
-            if peer then
-                for _, v in pairs(CureType[index] or {}) do
-                    local detrimentals = peer.Detrimentals or nil
-                    local curetype = peer[v] or nil
-                    if (string.lower(v) == 'all' and detrimentals and detrimentals > 0) or (string.lower(v) ~= 'all' and curetype and curetype > 0) then
-                        needCount = needCount + 1
-                        break
+        local grpmember = mq.TLO.Group.Member(i)
+        if grpmember then
+            local grpname = grpmember.Name()
+            local grpid = grpmember.ID()
+            if grpid and grpid > 0 then
+                local peer = charinfo.GetInfo(grpname)
+                if peer then
+                    for _, v in pairs(CureType[index] or {}) do
+                        local detrimentals = peer.Detrimentals or nil
+                        local curetype = peer[v] or nil
+                        if (string.lower(v) == 'all' and detrimentals and detrimentals > 0) or (string.lower(v) ~= 'all' and curetype and curetype > 0) then
+                            needCount = needCount + 1
+                            break
+                        end
                     end
+                else
+                    if spellutils.SpawnDetrimentalsForCure(grpid, typelist) then needCount = needCount + 1 end
                 end
-            else
-                if spellutils.SpawnDetrimentalsForCure(grpid, typelist) then needCount = needCount + 1 end
             end
         end
     end
@@ -500,13 +511,16 @@ local function CureEval(index)
             end
         end
         for i = 1, mq.TLO.Group.Members() do
-            local grpname = mq.TLO.Group(i).Name()
-            local grpid = mq.TLO.Group(i).ID()
-            local grpclass = mq.TLO.Group(i).Class.ShortName()
-            if grpclass then grpclass = string.lower(grpclass) end
-            if grpid and grpid > 0 and cureindex[grpclass] and not charinfo.GetInfo(grpname) then
-                local id, hit = CureEvalForTarget(index, grpname, grpid, grpclass, 'groupmember', spelltartype)
-                if id then return id, hit end
+            local grpmember = mq.TLO.Group.Member(i)
+            if grpmember and grpmember.Class then
+                local grpname = grpmember.Name()
+                local grpid = grpmember.ID()
+                local grpclass = grpmember.Class.ShortName()
+                if grpclass then grpclass = string.lower(grpclass) end
+                if grpid and grpid > 0 and cureindex[grpclass] and not charinfo.GetInfo(grpname) then
+                    local id, hit = CureEvalForTarget(index, grpname, grpid, grpclass, 'groupmember', spelltartype)
+                    if id then return id, hit end
+                end
             end
         end
     end
@@ -702,10 +716,16 @@ local function HPEvalGrp(index, ctx)
     if ctx.gem == 'item' and mq.TLO.FindItem(ctx.entry.spell)() then aeRange = mq.TLO.FindItem(ctx.entry.spell).Spell.AERange() end
     local grpmatch = 0
     for k = 0, mq.TLO.Group.Members() do
-        local grpmempcthp = mq.TLO.Group.Member(k).PctHPs()
-        local grpmemdist = mq.TLO.Group.Member(k).Distance()
-        if mq.TLO.Group.Member(k).Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal) and grpmemdist and aeRange and grpmemdist <= aeRange then
-            if mq.TLO.Group.Member(k).Type() ~= 'Corpse' then grpmatch = grpmatch + 1 end
+        local grpmem = mq.TLO.Group.Member(k)
+        if grpmem then
+            local grpspawn = grpmem.Spawn
+            if grpspawn then
+                local grpmempcthp = grpspawn.PctHPs()
+                local grpmemdist = grpspawn.Distance()
+                if grpmem.Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal) and grpmemdist and aeRange and grpmemdist <= aeRange then
+                    if grpspawn.Type() ~= 'Corpse' then grpmatch = grpmatch + 1 end
+                end
+            end
         end
     end
     if grpmatch >= (ctx.entry.tarcnt or 1) then
@@ -717,7 +737,8 @@ end
 
 local function HPEvalTank(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].tank or not ctx.tank then return nil, nil end
-    local tankhp = mq.TLO.Group.Member(ctx.tank).PctHPs()
+    local tankmember = mq.TLO.Group.Member(ctx.tank)
+    local tankhp = tankmember and tankmember.Spawn and tankmember.Spawn.PctHPs() or nil
     local tankdist = mq.TLO.Spawn(ctx.tankid).Distance()
     local tankinfo = charinfo.GetInfo(ctx.tank)
     local tanknbhp = tankinfo and tankinfo.PctHPs or nil
@@ -745,12 +766,16 @@ local function HPEvalPc(index, ctx)
     -- groupmember only: group members (Group slots)
     if th.groupmember and mq.TLO.Group.Members() > 0 then
         for i = 1, mq.TLO.Group.Members() do
-            local grpclass = mq.TLO.Group(i).Class.ShortName()
-            local grpid = mq.TLO.Group(i).ID()
-            local grphp = mq.TLO.Group(i).PctHPs()
-            local grpdist = mq.TLO.Group(i).Distance()
-            if classOk(grpclass) and mq.TLO.Spawn(grpid).Type() == 'PC' and grphp and th.groupmember and hpInBand(grphp, th.groupmember) then
-                if ctx.spellrange and grpdist and grpdist <= ctx.spellrange then return grpid, grpclass:lower() end
+            local grpmember = mq.TLO.Group.Member(i)
+            if grpmember and grpmember.Class then
+                local grpspawn = grpmember.Spawn
+                local grpclass = grpmember.Class.ShortName()
+                local grpid = grpmember.ID()
+                local grphp = grpspawn and grpspawn.PctHPs() or nil
+                local grpdist = grpspawn and grpspawn.Distance() or nil
+                if classOk(grpclass) and mq.TLO.Spawn(grpid).Type() == 'PC' and grphp and th.groupmember and hpInBand(grphp, th.groupmember) then
+                    if ctx.spellrange and grpdist and grpdist <= ctx.spellrange then return grpid, grpclass:lower() end
+                end
             end
         end
     end
