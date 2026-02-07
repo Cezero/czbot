@@ -317,12 +317,18 @@ local function BuffEval(index)
         if id then return id, hit end
         id, hit = BuffEvalTank(index, entry, spell, sid, range, tank, tankid)
         if id then return id, hit end
-        if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
+        if state.getRunState() == 'buffs_populate_wait' then
+            if debug then printf('BuffEval: tank buffs_populate_wait: returning nil, nil') end
+            return nil, nil
+        end
         id, hit = BuffEvalGroupBuff(index, entry, spell, sid, range)
         if id then return id, hit end
         id, hit = BuffEvalGroupMember(index, entry, spell, sid, range)
         if id then return id, hit end
-        if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
+        if state.getRunState() == 'buffs_populate_wait' then
+            if debug then printf('BuffEval: groupmember buffs_populate_wait: returning nil, nil') end
+            return nil, nil
+        end
         id, hit = BuffEvalPc(index, entry, sid, range, bots, botcount)
         if id then return id, hit end
         id, hit = BuffEvalMyPet(index, entry, spell, sid, range)

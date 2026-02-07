@@ -304,6 +304,7 @@ end
 -- If CurSpell.phase is casting/precast, handle that first. If loading_gem, check deadline/gem.
 -- Otherwise iterate indices and optionally start a cast (CastSpell sets phase and returns).
 function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
+    if debug then printf('RunSpellCheckLoop: %s %s state: %s', sub, count, state.getRunState()) end
     options = options or {}
     local skipInterruptForBRD = options.skipInterruptForBRD ~= false
     local rc = state.getRunconfig()
