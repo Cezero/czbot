@@ -323,8 +323,8 @@ local function BuffEval(index)
         if id then return id, hit end
         id, hit = BuffEvalByName(index, entry, sid, range)
         if id then return id, hit end
-        if resumeFrom and resumeFrom.phase == 'after_tank' then
-            resumeFrom = nil
+        if resumeFrom and (resumeFrom.phase == 'after_tank' or resumeFrom.phase == 'groupmember') then
+            if resumeFrom.phase == 'after_tank' then resumeFrom = nil end
         else
             id, hit = BuffEvalTank(index, entry, spell, sid, range, tank, tankid)
             if id then return id, hit end
@@ -531,8 +531,8 @@ local function CureEval(index)
         if id then return id, hit end
     end
     if cureindex.tank and tankid then
-        if resumeFrom and resumeFrom.phase == 'after_tank' then
-            resumeFrom = nil
+        if resumeFrom and (resumeFrom.phase == 'after_tank' or resumeFrom.phase == 'groupmember') then
+            if resumeFrom.phase == 'after_tank' then resumeFrom = nil end
         else
             local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype, 'after_tank', nil)
             if id then return id, hit end
