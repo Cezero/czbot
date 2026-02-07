@@ -445,7 +445,7 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
         end
     end
     if botname and botid and not charinfo.GetInfo(botname) then
-        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit) then return nil, nil end
+        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index)) then return nil, nil end
         local typelist = CureTypeList(index)
         local needCure = spellutils.SpawnDetrimentalsForCure(botid, typelist)
         if needCure and spellutils.DistanceCheck('cure', index, botid) then

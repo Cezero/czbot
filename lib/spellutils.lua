@@ -143,7 +143,8 @@ end
 -- if not, targets the spawn, sets state 'buffs_populate_wait', and returns false so caller should
 -- return without casting. Next tick RunSpellCheckLoop will re-enter and either wait or clear state.
 -- Optional spellIndex and targethit are stored in payload so the wait block can cast on clear.
-function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit)
+-- Optional cureTypeList (for sub=='cure') is stored so the wait block can re-check need.
+function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit, cureTypeList)
     if not spawnId or not sub then return false end
     local runState = state.getRunState()
     local payload = state.getRunStatePayload()
@@ -165,7 +166,7 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
     end
     if debug then printf('EnsureSpawnBuffsPopulated: buffs_populate_wait: setting state for %s %s %s %s', spawnId, sub, spellIndex, targethit) end
-    state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit })
+    state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit, cureTypeList = cureTypeList })
     mq.cmdf('/tar id %s', spawnId)
     return false
 end
@@ -381,7 +382,21 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             end
             state.clearRunState()
             if p.spellIndex and p.targethit then
-                spellutils.CastSpell(p.spellIndex, p.spawnId, p.targethit, p.sub)
+                local shouldCast = false
+                if p.sub == 'buff' then
+                    local entry = botconfig.getSpellEntry(p.sub, p.spellIndex)
+                    if entry then
+                        local spell = spellutils.GetSpellInfo(entry)
+                        shouldCast = (spell and spellutils.SpawnNeedsBuff(p.spawnId, spell, entry.spellicon)) == true
+                    end
+                elseif p.sub == 'cure' then
+                    shouldCast = spellutils.SpawnDetrimentalsForCure(p.spawnId, p.cureTypeList or {}) == true
+                else
+                    shouldCast = true
+                end
+                if shouldCast then
+                    spellutils.CastSpell(p.spellIndex, p.spawnId, p.targethit, p.sub)
+                end
                 return false
             end
         end
