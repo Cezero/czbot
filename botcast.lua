@@ -162,7 +162,7 @@ local function BuffEvalTank(index, entry, spell, spellid, range, tank, tankid)
     -- Non-bot tank (explicitly configured): buff state only from Spawn after targeting (BuffsPopulated)
     local tankdist = mq.TLO.Spawn(tankid).Distance()
     if not range or not tankdist or tankdist > range then return nil, nil end
-    if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff', index, 'tank') then
+    if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff', index, 'tank', nil, 'after_tank', nil) then
         if debug then printf('BuffEvalTank: EnsureSpawnBuffsPopulated failed for %s %s %s', tankid, index, 'tank') end
         return nil, nil
     end
@@ -207,11 +207,11 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
     return nil, nil
 end
 
-local function BuffEvalGroupMember(index, entry, spell, spellid, range)
+local function BuffEvalGroupMember(index, entry, spell, spellid, range, startFromGroupIndex)
     if not BuffClass[index].groupmember then return nil, nil end
     local members = mq.TLO.Group.Members()
     if not members or members == 0 then return nil, nil end
-    for i = 1, members do
+    for i = (startFromGroupIndex or 1), members do
         local grpmember = mq.TLO.Group.Member(i)
         if grpmember and grpmember.Class then
             local grpspawn = grpmember.Spawn
@@ -228,7 +228,7 @@ local function BuffEvalGroupMember(index, entry, spell, spellid, range)
                             local id, hit = BuffEvalBotNeedsBuff(grpid, grpname, spellid, range, index, lc)
                             if id then return id, hit end
                         else
-                            if not spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff', index, lc) then
+                            if not spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff', index, lc, nil, 'groupmember', i) then
                                 if debug then printf('BuffEvalGroupMember: EnsureSpawnBuffsPopulated failed for %s %s %s', grpid, index, lc) end
                                 return nil, nil end
                             if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then return grpid, lc end
@@ -310,20 +310,37 @@ local function BuffEval(index)
         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.MyRange())
     local botcount = charinfo.GetPeerCnt() or 0
     if not BuffClass[index] then return nil, nil end
+    local resumeFrom = nil
+    if state.getRunState() == 'buffs_resume' then
+        local payload = state.getRunStatePayload()
+        if payload and payload.buffIndex == index then
+            resumeFrom = { phase = payload.phase, nextGroupMemberIndex = payload.nextGroupMemberIndex }
+            state.clearRunState()
+        end
+    end
     if myclass ~= 'BRD' then
         local id, hit = BuffEvalSelf(index, entry, spell, sid, range, myid, myclass, tanktar)
         if id then return id, hit end
         id, hit = BuffEvalByName(index, entry, sid, range)
         if id then return id, hit end
-        id, hit = BuffEvalTank(index, entry, spell, sid, range, tank, tankid)
-        if id then return id, hit end
+        if resumeFrom and resumeFrom.phase == 'after_tank' then
+            resumeFrom = nil
+        else
+            id, hit = BuffEvalTank(index, entry, spell, sid, range, tank, tankid)
+            if id then return id, hit end
+        end
         if state.getRunState() == 'buffs_populate_wait' then
             if debug then printf('BuffEval: tank buffs_populate_wait: returning nil, nil') end
             return nil, nil
         end
         id, hit = BuffEvalGroupBuff(index, entry, spell, sid, range)
         if id then return id, hit end
-        id, hit = BuffEvalGroupMember(index, entry, spell, sid, range)
+        local startFrom = 1
+        if resumeFrom and resumeFrom.phase == 'groupmember' then
+            startFrom = resumeFrom.nextGroupMemberIndex or 1
+            resumeFrom = nil
+        end
+        id, hit = BuffEvalGroupMember(index, entry, spell, sid, range, startFrom)
         if id then return id, hit end
         if state.getRunState() == 'buffs_populate_wait' then
             if debug then printf('BuffEval: groupmember buffs_populate_wait: returning nil, nil') end
@@ -416,7 +433,7 @@ local function CureTypeList(index)
     return list
 end
 
-local function CureEvalForTarget(index, botname, botid, botclass, targethit, spelltartype)
+local function CureEvalForTarget(index, botname, botid, botclass, targethit, spelltartype, resumePhase, resumeGroupIndex)
     local cureindex = CureClass[index]
     if not cureindex then return nil, nil end
     for _, v in pairs(CureType[index] or {}) do
@@ -445,7 +462,7 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
         end
     end
     if botname and botid and not charinfo.GetInfo(botname) then
-        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index)) then return nil, nil end
+        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then return nil, nil end
         local typelist = CureTypeList(index)
         local needCure = spellutils.SpawnDetrimentalsForCure(botid, typelist)
         if needCure and spellutils.DistanceCheck('cure', index, botid) then
@@ -501,13 +518,25 @@ local function CureEval(index)
     local tank, tankid = spellutils.GetTankInfo(false)
     local cureindex = CureClass[index]
     if not cureindex then return nil, nil end
+    local resumeFrom = nil
+    if state.getRunState() == 'cures_resume' then
+        local payload = state.getRunStatePayload()
+        if payload and payload.cureIndex == index then
+            resumeFrom = { phase = payload.phase, nextGroupMemberIndex = payload.nextGroupMemberIndex }
+            state.clearRunState()
+        end
+    end
     if cureindex.self then
         local id, hit = CureEvalForTarget(index, nil, nil, nil, 'self', spelltartype)
         if id then return id, hit end
     end
     if cureindex.tank and tankid then
-        local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype)
-        if id then return id, hit end
+        if resumeFrom and resumeFrom.phase == 'after_tank' then
+            resumeFrom = nil
+        else
+            local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype, 'after_tank', nil)
+            if id then return id, hit end
+        end
     end
     if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
     if cureindex.groupcure then
@@ -525,7 +554,12 @@ local function CureEval(index)
                 if id then return id, hit end
             end
         end
-        for i = 1, mq.TLO.Group.Members() do
+        local startFrom = 1
+        if resumeFrom and resumeFrom.phase == 'groupmember' then
+            startFrom = resumeFrom.nextGroupMemberIndex or 1
+            resumeFrom = nil
+        end
+        for i = startFrom, mq.TLO.Group.Members() do
             local grpmember = mq.TLO.Group.Member(i)
             if grpmember and grpmember.Class then
                 local grpname = grpmember.Name()
@@ -533,10 +567,11 @@ local function CureEval(index)
                 local grpclass = grpmember.Class.ShortName()
                 if grpclass then grpclass = string.lower(grpclass) end
                 if grpid and grpid > 0 and cureindex[grpclass] and not charinfo.GetInfo(grpname) then
-                    local id, hit = CureEvalForTarget(index, grpname, grpid, grpclass, 'groupmember', spelltartype)
+                    local id, hit = CureEvalForTarget(index, grpname, grpid, grpclass, 'groupmember', spelltartype, 'groupmember', i)
                     if id then return id, hit end
                 end
             end
+            if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
         end
     end
     if state.getRunState() == 'buffs_populate_wait' then return nil, nil end

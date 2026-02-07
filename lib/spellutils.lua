@@ -144,7 +144,8 @@ end
 -- return without casting. Next tick RunSpellCheckLoop will re-enter and either wait or clear state.
 -- Optional spellIndex and targethit are stored in payload so the wait block can cast on clear.
 -- Optional cureTypeList (for sub=='cure') is stored so the wait block can re-check need.
-function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit, cureTypeList)
+-- Optional resumePhase and resumeGroupIndex (for sub=='buff') let the wait block set buffs_resume on clear.
+function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit, cureTypeList, resumePhase, resumeGroupIndex)
     if not spawnId or not sub then return false end
     local runState = state.getRunState()
     local payload = state.getRunStatePayload()
@@ -166,7 +167,7 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
     end
     if debug then printf('EnsureSpawnBuffsPopulated: buffs_populate_wait: setting state for %s %s %s %s', spawnId, sub, spellIndex, targethit) end
-    state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit, cureTypeList = cureTypeList })
+    state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit, cureTypeList = cureTypeList, resumePhase = resumePhase, resumeGroupIndex = resumeGroupIndex })
     mq.cmdf('/tar id %s', spawnId)
     return false
 end
@@ -396,6 +397,15 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
                 end
                 if shouldCast then
                     spellutils.CastSpell(p.spellIndex, p.spawnId, p.targethit, p.sub)
+                end
+                if p.sub == 'buff' and (p.resumePhase or p.resumeGroupIndex) then
+                    local phase = p.resumePhase or 'after_tank'
+                    local nextGroupMemberIndex = (p.resumePhase == 'groupmember' and p.resumeGroupIndex) and (p.resumeGroupIndex + 1) or nil
+                    state.setRunState('buffs_resume', { buffIndex = p.spellIndex, phase = phase, nextGroupMemberIndex = nextGroupMemberIndex })
+                elseif p.sub == 'cure' and (p.resumePhase or p.resumeGroupIndex) then
+                    local phase = p.resumePhase or 'after_tank'
+                    local nextGroupMemberIndex = (p.resumePhase == 'groupmember' and p.resumeGroupIndex) and (p.resumeGroupIndex + 1) or nil
+                    state.setRunState('cures_resume', { cureIndex = p.spellIndex, phase = phase, nextGroupMemberIndex = nextGroupMemberIndex })
                 end
                 return false
             end
