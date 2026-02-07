@@ -416,8 +416,8 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         if MasterPause then return false end
         local runState = state.getRunState()
         local p = state.getRunStatePayload()
-        if (runState == 'buffs_resume' and p and p.buffIndex and i ~= p.buffIndex)
-            or (runState == 'cures_resume' and p and p.cureIndex and i ~= p.cureIndex) then
+        if (runState == 'buffs_resume' and sub == 'buff' and p and p.buffIndex and i ~= p.buffIndex)
+            or (runState == 'cures_resume' and sub == 'cure' and p and p.cureIndex and i ~= p.cureIndex) then
             -- skip this index; only run eval for the index we are resuming
         else
             if (not options.entryValid or options.entryValid(i)) then
