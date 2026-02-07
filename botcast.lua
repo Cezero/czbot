@@ -162,7 +162,7 @@ local function BuffEvalTank(index, entry, spell, spellid, range, tank, tankid)
     -- Non-bot tank (explicitly configured): buff state only from Spawn after targeting (BuffsPopulated)
     local tankdist = mq.TLO.Spawn(tankid).Distance()
     if not range or not tankdist or tankdist > range then return nil, nil end
-    if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff') then return nil, nil end
+    if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff', index, 'tank') then return nil, nil end
     if spellutils.SpawnNeedsBuff(tankid, spell, entry.spellicon) then return tankid, 'tank' end
     -- Out-of-group: best-effort cast in range when we don't have buff data (not targeted or BuffsPopulated false)
     if not mq.TLO.Group.Member(tank).Index() then return tankid, 'tank' end
@@ -225,7 +225,7 @@ local function BuffEvalGroupMember(index, entry, spell, spellid, range)
                             local id, hit = BuffEvalBotNeedsBuff(grpid, grpname, spellid, range, index, lc)
                             if id then return id, hit end
                         else
-                            if not spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff') then return nil, nil end
+                            if not spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff', index, lc) then return nil, nil end
                             if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then return grpid, lc end
                         end
                     end
@@ -434,7 +434,7 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
         end
     end
     if botname and botid and not charinfo.GetInfo(botname) then
-        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure') then return nil, nil end
+        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit) then return nil, nil end
         local typelist = CureTypeList(index)
         local needCure = spellutils.SpawnDetrimentalsForCure(botid, typelist)
         if needCure and spellutils.DistanceCheck('cure', index, botid) then
@@ -498,6 +498,7 @@ local function CureEval(index)
         local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype)
         if id then return id, hit end
     end
+    if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
     if cureindex.groupcure then
         local id, hit = CureEvalGroupCure(index, entry)
         if id then return id, hit end
@@ -527,6 +528,7 @@ local function CureEval(index)
             end
         end
     end
+    if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
     if cureindex.pc and botcount then
         for i = 1, botcount do
             local botname = bots[i]
@@ -541,6 +543,7 @@ local function CureEval(index)
             end
         end
     end
+    if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
     return nil, nil
 end
 

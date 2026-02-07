@@ -142,7 +142,8 @@ end
 -- targeting the spawn for a few ms. Returns true if we can read buffs (targeted and BuffsPopulated);
 -- if not, targets the spawn, sets state 'buffs_populate_wait', and returns false so caller should
 -- return without casting. Next tick RunSpellCheckLoop will re-enter and either wait or clear state.
-function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub)
+-- Optional spellIndex and targethit are stored in payload so the wait block can cast on clear.
+function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit)
     if not spawnId or not sub then return false end
     local runState = state.getRunState()
     local payload = state.getRunStatePayload()
@@ -162,7 +163,7 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub)
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
     end
-    state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub })
+    state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit })
     mq.cmdf('/tar id %s', spawnId)
     return false
 end
@@ -374,6 +375,10 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
                 return false
             end
             state.clearRunState()
+            if p.spellIndex and p.targethit then
+                spellutils.CastSpell(p.spellIndex, p.spawnId, p.targethit, p.sub)
+                return false
+            end
         end
     end
 
