@@ -1,6 +1,7 @@
 local util = require('actornet.util')
 local actors = require('actors')
 local mq = require('mq')
+local state = require('lib.state')
 
 -- Basic remote command execution
 local function execCommand(command)
@@ -9,15 +10,21 @@ end
 
 -- message handler for remote commands
 local cmdActor = actors.register('rexec', function (message)
-    if message.content.id == 'direct' or (message.content.id == 'global' and mq.TLO.Me.Name() ~= message.content.sender) then
-        execCommand(message.content.command)
-    elseif message.content.id == 'zone' and mq.TLO.Zone.ShortName() == message.content.zone then
-        execCommand(message.content.command)
-    elseif message.content.id == 'group' and mq.TLO.Group.Member(message.content.sender).Index() then
-        execCommand(message.content.command)
-    elseif message.content.id == 'raid' and mq.TLO.Raid.Member(message.content.sender).Name() ~= nil then
-        execCommand(message.content.command)
+    local rc = state.getRunconfig()
+    rc.rexecSender = message.content.sender
+    local function run()
+        if message.content.id == 'direct' or (message.content.id == 'global' and mq.TLO.Me.Name() ~= message.content.sender) then
+            execCommand(message.content.command)
+        elseif message.content.id == 'zone' and mq.TLO.Zone.ShortName() == message.content.zone then
+            execCommand(message.content.command)
+        elseif message.content.id == 'group' and mq.TLO.Group.Member(message.content.sender).Index() then
+            execCommand(message.content.command)
+        elseif message.content.id == 'raid' and mq.TLO.Raid.Member(message.content.sender).Name() ~= nil then
+            execCommand(message.content.command)
+        end
     end
+    pcall(run)
+    rc.rexecSender = nil
 end)
 
 local function sendCommand(includeSelf, target, ...)

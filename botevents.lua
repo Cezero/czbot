@@ -6,6 +6,7 @@ local state = require('lib.state')
 local spellstates = require('lib.spellstates')
 local mobfilter = require('lib.mobfilter')
 local chchain = require('lib.chchain')
+local follow = require('lib.follow')
 local charinfo = require('actornet.charinfo')
 
 local botevents = {}
@@ -28,9 +29,6 @@ end
 
 -- Expose for botlogic zoneCheck hook (same handler as MQ zone events).
 botevents.DelayOnZone = DelayOnZone
-
-function botevents.Event_Invite()
-end
 
 function botevents.Event_Slain()
     local respawntimeleft = (state.getRunconfig().HoverEchoTimer - mq.gettime()) / 1000
@@ -159,19 +157,19 @@ function botevents.Event_MountFailed()
 end
 
 function botevents.Event_MobProb(line, arg1, arg2)
-    if mobprobtimer <= mq.gettime() then return true end
+    if state.getRunconfig().mobprobtimer <= mq.gettime() then return true end
     if state.getRunconfig().engageTargetId then
         if mq.TLO.Navigation.PathLength('id ' .. state.getRunconfig().engageTargetId)() <= myconfig.settings.acleash then
             mq.cmdf(
                 '/nav id %s dist=0 log=off', state.getRunconfig().engageTargetId)
         end
     end
-    mobprobtimer = mq.gettime() + 3000
+    state.getRunconfig().mobprobtimer = mq.gettime() + 3000
 end
 
 function botevents.BindEvents()
     chchain.registerEvents()
-    mq.event('Invite', "#*#invites you to join a #1#.#*#", botevents.Event_Invite)
+    follow.registerEvents()
     mq.event('Slain1', "#*#You have been slain by#*#", botevents.Event_Slain)
     mq.event('Slain2', "#*#Returning to Bind Location#*#", botevents.Event_Slain)
     mq.event('Slain3', "You died.", botevents.Event_Slain)

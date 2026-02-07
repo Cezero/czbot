@@ -20,7 +20,8 @@ local rexec = actornet.rexec
 local charinfo = actornet.charinfo
 local utils = require('lib.utils')
 local command_dispatcher = require('lib.command_dispatcher')
-local unpack = table.unpack or unpack
+local follow = require('lib.follow')
+local unpack = unpack
 
 local TOGGLELIST = {
     domelee = true,
@@ -121,7 +122,7 @@ local function cmd_quit(args, str)
     state.getRunconfig().terminate = true
 end
 
-local function cmd_makecamp(args)
+local function cmd_makecamp(args, str)
     if args[2] then
         botmove.MakeCamp(args[2])
     elseif not args[2] then
@@ -137,18 +138,15 @@ local function cmd_makecamp(args)
     end
 end
 
-local function cmd_follow(args)
-    if not mq.TLO.Navigation.MeshLoaded then
-        mq.cmd('/echo No Mesh for this zone, cannot use TrotsFollow+!!')
-        return false
+local function cmd_follow(args, str)
+    local rc = state.getRunconfig()
+    local targetName
+    if args[2] == nil or (type(args[2]) == 'string' and string.lower(args[2]) == 'me') then
+        targetName = rc.rexecSender or rc.TankName
+    else
+        targetName = args[2]
     end
-    if mq.TLO.Spawn('=' .. args[2]).ID() then
-        if state.getRunconfig().campstatus then botmove.MakeCamp('off') end
-        state.getRunconfig().followid = mq.TLO.Spawn('=' .. args[2]).ID()
-        state.getRunconfig().followname = args[2]
-        stucktimer = mq.gettime() + 60000
-        printf('\ayCZBot:\ax\auFollowing\ax ON %s', mq.TLO.Spawn(state.getRunconfig().followid).CleanName())
-    end
+    if targetName then follow.StartFollow(targetName) end
 end
 
 local function cmd_stop(args)

@@ -19,7 +19,7 @@ end
 
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee then botmelee.LoadMeleeConfig() end end)
 
-mobprobtimer = 0
+state.getRunconfig().mobprobtimer = 0
 
 -- When I am MT and my target is a PC: clear combat state.
 local function clearTankCombatState()

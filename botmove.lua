@@ -33,13 +33,13 @@ local function shouldCallFollow(rc)
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
     local engageId = rc.engageTargetId or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
-    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'CORPSE' and followdistance >= 35
+    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'CORPSE' and followdistance >= (myconfig.settings.followdistance or 35)
 end
 
 local function updateStuckTimerWithinLeash(rc)
     local d3 = mq.TLO.Spawn(rc.followid).Distance3D()
-    if d3 and d3 <= myconfig.settings.acleash and (not stucktimer or stucktimer < mq.gettime() + 60000) then
-        stucktimer = mq.gettime() + 60000
+    if d3 and d3 <= myconfig.settings.acleash and (not rc.stucktimer or rc.stucktimer < mq.gettime() + 60000) then
+        rc.stucktimer = mq.gettime() + 60000
     end
 end
 
@@ -53,7 +53,7 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
     local nowdist = mq.TLO.Spawn(followid).Distance3D()
     if p.phase == 'nav_wait5' then
         if nowdist and stuckdistance >= nowdist + 10 then
-            stucktimer = mq.gettime() + 60000
+            state.getRunconfig().stucktimer = mq.gettime() + 60000
             state.clearRunState()
             return true
         end
@@ -62,7 +62,7 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
         mq.cmd('/squelch /keypress forward')
         mq.cmdf('/squelch /nav id %s log=off', followid)
         if nowdist and stuckdistance >= nowdist + 10 then
-            stucktimer = mq.gettime() + 60000
+            state.getRunconfig().stucktimer = mq.gettime() + 60000
             state.clearRunState()
             return true
         end
@@ -72,7 +72,7 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
         mq.cmd('/squelch /keypress back')
         mq.cmdf('/squelch /nav id %s log=off', followid)
         if p.stuckdistance and nowdist and p.stuckdistance >= nowdist + 10 then
-            stucktimer = mq.gettime() + 60000
+            state.getRunconfig().stucktimer = mq.gettime() + 60000
         end
         state.clearRunState()
     end
@@ -90,13 +90,14 @@ local function tryAutoSizeUnstuck(followid, stuckdistance)
     if not mq.TLO.Navigation.Active() then return false end
     if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 1') end
     local d = mq.TLO.Spawn(followid).Distance3D()
-    if d and stuckdistance >= d + 10 then stucktimer = mq.gettime() + 60000 return true end
+    local rc = state.getRunconfig()
+    if d and stuckdistance >= d + 10 then rc.stucktimer = mq.gettime() + 60000 return true end
     if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 12') end
     d = mq.TLO.Spawn(followid).Distance3D()
-    if d and stuckdistance >= d + 10 then stucktimer = mq.gettime() + 60000 return true end
+    if d and stuckdistance >= d + 10 then rc.stucktimer = mq.gettime() + 60000 return true end
     if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 8') end
     d = mq.TLO.Spawn(followid).Distance3D()
-    if d and stuckdistance >= d + 10 then stucktimer = mq.gettime() + 60000 return true end
+    if d and stuckdistance >= d + 10 then rc.stucktimer = mq.gettime() + 60000 return true end
     return false
 end
 
@@ -296,9 +297,11 @@ end
 
 function botmove.FollowCall()
     if MasterPause then return false end
-    if not stucktimer then stucktimer = 0 end
-    if stucktimer <= mq.gettime() then botmove.UnStuck() end
+    local rc = state.getRunconfig()
+    if not rc.stucktimer then rc.stucktimer = 0 end
+    if rc.stucktimer <= mq.gettime() then botmove.UnStuck() end
     refreshFollowId()
+    if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
     doFollowNav()
 end
 
@@ -329,7 +332,7 @@ function botmove.StartReturnToFollowAfterEngage()
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
-    if followdistance < 35 or not followid or followtype == 'CORPSE' then return end
+    if followdistance < (myconfig.settings.followdistance or 35) or not followid or followtype == 'CORPSE' then return end
     mq.cmd('/multiline ; /stick off ; /squelch /attack off ; /target self')
     botmove.FollowCall()
     state.setRunState('engage_return_follow', { phase = 'delay_400', deadline = mq.gettime() + 400 })

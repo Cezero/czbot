@@ -6,6 +6,7 @@
 ---@field AlertList number
 ---@field followid number
 ---@field followname string
+---@field rexecSender string|nil
 ---@field TankName string
 ---@field AssistName string
 ---@field ExcludeList string
@@ -46,6 +47,8 @@
 ---@field pullReturnTimer number|nil
 ---@field pullPhase string|nil
 ---@field pullDeadline number|nil
+---@field stucktimer number|nil
+---@field mobprobtimer number
 
 local M = {}
 
@@ -76,6 +79,7 @@ function M.resetRunconfig()
         AlertList = 20,
         followid = 0,
         followname = '',
+        rexecSender = nil,
         TankName = '',
         AssistName = '',
         ExcludeList = '',
@@ -116,6 +120,8 @@ function M.resetRunconfig()
         pullReturnTimer = nil,
         pullPhase = nil,
         pullDeadline = nil,
+        stucktimer = 0,
+        mobprobtimer = 0,
     }
     return M._runconfig
 end

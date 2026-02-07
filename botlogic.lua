@@ -42,11 +42,29 @@ local function CharState(...)
     elseif state.getRunconfig().campstatus and utils.calcDist2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x, state.getRunconfig().makecamp.y) and utils.calcDist2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x, state.getRunconfig().makecamp.y) > botconfig.config.settings.acleash then
         botmove.MakeCamp('return')
     end
+    -- Stand when follow is on and target is beyond follow distance (so follow logic can run)
+    do
+        local rc = state.getRunconfig()
+        if rc.followid and rc.followid > 0 and mq.TLO.Me.Sitting() then
+            local d = mq.TLO.Spawn(rc.followid).Distance()
+            local thresh = botconfig.config.settings.followdistance or 35
+            if d and d >= thresh then mq.cmd('/stand') end
+        end
+    end
     if botconfig.config.settings.dosit and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
-        local sitcheck = true
-        if (tonumber(botconfig.config.settings.sitmana) >= mq.TLO.Me.PctMana() and mq.TLO.Me.MaxMana() > 0) or tonumber(botconfig.config.settings.sitendur) >= mq.TLO.Me.PctEndurance() then
-            if mq.TLO.Me.PctHPs() < 40 and state.getRunconfig().MobCount > 0 then sitcheck = false end
-            if sitcheck then mq.cmd('/squelch /sit on') end
+        local rc = state.getRunconfig()
+        local skipSitForFollow = false
+        if rc.followid and rc.followid > 0 then
+            local d = mq.TLO.Spawn(rc.followid).Distance()
+            local thresh = botconfig.config.settings.followdistance or 35
+            if d and d >= thresh then skipSitForFollow = true end
+        end
+        if not skipSitForFollow then
+            local sitcheck = true
+            if (tonumber(botconfig.config.settings.sitmana) >= mq.TLO.Me.PctMana() and mq.TLO.Me.MaxMana() > 0) or tonumber(botconfig.config.settings.sitendur) >= mq.TLO.Me.PctEndurance() then
+                if mq.TLO.Me.PctHPs() < 40 and state.getRunconfig().MobCount > 0 then sitcheck = false end
+                if sitcheck then mq.cmd('/squelch /sit on') end
+            end
         end
     end
     if (mq.TLO.Cursor.ID() and not OutOfSpace) then
