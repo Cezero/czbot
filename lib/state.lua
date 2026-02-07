@@ -6,7 +6,6 @@
 ---@field AlertList number
 ---@field followid number
 ---@field followname string
----@field rexecSender string|nil
 ---@field TankName string
 ---@field AssistName string
 ---@field ExcludeList string
@@ -79,7 +78,6 @@ function M.resetRunconfig()
         AlertList = 20,
         followid = 0,
         followname = '',
-        rexecSender = nil,
         TankName = '',
         AssistName = '',
         ExcludeList = '',

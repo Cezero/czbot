@@ -30,7 +30,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | Command | Arguments | Purpose |
 |---------|-----------|---------|
 | **makecamp** | `on`, `off`, or `return` | Set or clear make camp; `return` sends bot back to camp. |
-| **follow** | `<name>`, `me`, or omit | Follow the named character (disables make camp). With `me` or no name: when command is sent via rexec (e.g. `/angexecute /cz follow`), follow the sender; otherwise follow TankName. |
+| **follow** | `<name>`, `me`, or omit | Follow the named character (disables make camp). With `me` or no name, follow TankName. When the command is sent via MQRemote (e.g. `/rc +self group /cz follow`), sender is not available—use MQRemote `/rc` directly (no CZBot `/an*execute` commands). |
 | **stop** | — | Disable make camp and follow. |
 | **leash** | — | Return to camp (if camp is set). |
 

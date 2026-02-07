@@ -16,7 +16,6 @@ local mobfilter = require('lib.mobfilter')
 local state = require('lib.state')
 local groupmanager = require('lib.groupmanager')
 local actornet = require('actornet')
-local rexec = actornet.rexec
 local charinfo = actornet.charinfo
 local utils = require('lib.utils')
 local command_dispatcher = require('lib.command_dispatcher')
@@ -141,8 +140,8 @@ end
 local function cmd_follow(args, str)
     local rc = state.getRunconfig()
     local targetName
-    if args[2] == nil or (type(args[2]) == 'string' and string.lower(args[2]) == 'me') then
-        targetName = rc.rexecSender or rc.TankName
+    if args[2] == nil then
+        targetName = rc.TankName
     else
         targetName = args[2]
     end
@@ -645,10 +644,11 @@ local function cmd_spread(args)
             slot = slot + 1
             local xiter = startX + ((slot - 1) % 6 + 1) * 5
             local yiter = startY + math.floor((slot - 1) / 6) * 5
-            rexec.sendDirectCommand(bot, '/nav locxy', xiter, yiter)
+            mq.cmdf('/rc %s /nav locxy %s %s', bot, xiter, yiter)
         end
     end
-    rexec.sendSelfAndZoneCommand('/face fast heading', heading)
+    mq.cmd('/face fast heading ' .. heading)
+    mq.cmdf('/rc zone /face fast heading %s', heading)
 end
 
 local function cmd_raid(args)

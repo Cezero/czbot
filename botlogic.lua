@@ -189,11 +189,17 @@ function botlogic.StartUp(...)
     if (mq.TLO.Plugin('MQ2Cast').IsLoaded() == nil) then
         mq.cmd('/squelch /plugin MQ2Cast load')
     end
+    if (mq.TLO.Plugin('MQRemote').IsLoaded() == nil) then
+        mq.cmd('/squelch /plugin MQRemote load')
+    end
     if (mq.TLO.Plugin('MQ2Exchange').IsLoaded() == nil) then
         mq.cmd('/squelch /plugin MQ2Exchange load')
     end
     if (mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() == nil) then
         mq.cmd('/squelch /plugin MQ2MoveUtils load')
+    end
+    if (mq.TLO.Plugin('MQ2Twist').IsLoaded() == nil) then
+        mq.cmd('/squelch /plugin MQ2Twist load')
     end
     -- Peer data is via actornet/charinfo (no MQ2NetBots).
     --load config file
@@ -219,7 +225,6 @@ function botlogic.StartUp(...)
     CharState('startup')
     mq.imgui.init('debuggui', botgui.getUpdateFn())
     _registerBuiltinHooks()
-    actornet.init()
     --check startup scripts NTA
     --check each section
     --build variables for enabled sections

@@ -4,8 +4,6 @@
 local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
-local actornet = require('actornet')
-local rexec = actornet.rexec
 
 local M = {}
 
@@ -16,7 +14,7 @@ local function doOneInvite(groupldr, raidmember, grptype)
     local spawnid = mq.TLO.Spawn('pc =' .. raidmember).ID() or 0
     if debug then printf('%s inviting: %s', groupldr, raidmember) end
     if (grptype == 'group' or spawnid > 0) and groupldrspawnid ~= myid then
-        rexec.sendDirectCommand(groupldr, '/inv', raidmember)
+        mq.cmdf('/rc %s /inv %s', groupldr, raidmember)
     elseif spawnid > 0 and groupldrspawnid == myid then
         mq.cmdf('/inv %s', raidmember)
     elseif grptype == 'raid' then
@@ -85,11 +83,11 @@ function M.LoadRaid(raidname)
     for disbanditer = 1, 12 do
         local groupldr = comkeytable.raidlist[raidname].leaders[disbanditer] or false
         if groupldr then
-            rexec.sendDirectCommand(groupldr, '/squelch /multiline ; /disband ; /raiddisband')
+            mq.cmdf('/rc %s /squelch /multiline ; /disband ; /raiddisband', groupldr)
         end
         if comkeytable.raidlist[raidname].groups[disbanditer] then
             for raidmember, _ in pairs(comkeytable.raidlist[raidname].groups[disbanditer]) do
-                rexec.sendDirectCommand(raidmember, '/squelch /multiline ; /disband ; /raiddisband')
+                mq.cmdf('/rc %s /squelch /multiline ; /disband ; /raiddisband', raidmember)
             end
         end
     end
