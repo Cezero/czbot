@@ -271,8 +271,9 @@ do
             botmove.TickReturnToFollowAfterEngage()
             return
         end
-        if not myconfig.settings.domelee or not state.getRunconfig().MobList[1] then
-            state.clearRunState()
+        if not myconfig.settings.domelee then return end
+        if not state.getRunconfig().MobList[1] then
+            if state.getRunState() == 'melee' then state.clearRunState() end
             return
         end
         local payload = (state.getRunState() == 'melee') and state.getRunStatePayload() or nil

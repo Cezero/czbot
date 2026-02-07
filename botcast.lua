@@ -643,7 +643,7 @@ local function HPEvalContext(index)
     local entry = botconfig.getSpellEntry('heal', index)
     if not entry then return nil end
     local gem = entry.gem
-    local tank, tankid = spellutils.GetTankInfo(true)
+    local tank, tankid = spellutils.GetTankInfo(false)
     local botcount = charinfo.GetPeerCnt()
     local bots = spellutils.GetBotListShuffled()
     local botstr = table.concat(charinfo.GetPeers(), " ")
