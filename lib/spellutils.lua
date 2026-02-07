@@ -149,6 +149,7 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
     local payload = state.getRunStatePayload()
     if runState == 'buffs_populate_wait' and payload and payload.spawnId == spawnId and payload.sub == sub then
         if mq.TLO.Target.ID() ~= spawnId then
+            if debug then printf('buffs_populate_wait: target not found, targeting %s', spawnId) end
             mq.cmdf('/tar id %s', spawnId)
             return false
         end
@@ -163,6 +164,7 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
     end
+    if debug then printf('buffs_populate_wait: setting state for %s %s %s %s', spawnId, sub, spellIndex, targethit) end
     state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit })
     mq.cmdf('/tar id %s', spawnId)
     return false
@@ -364,9 +366,11 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
 
     -- Re-entry: waiting for spawn buffs to populate (non-peer buff/cure). Target spawn, then wait until BuffsPopulated.
     if state.getRunState() == 'buffs_populate_wait' then
+        if debug then print('buffs_populate_wait') end
         local p = state.getRunStatePayload()
         if p and p.spawnId then
             if mq.TLO.Target.ID() ~= p.spawnId then
+                if debug then print('buffs_populate_wait: target not found, targeting') end
                 mq.cmdf('/tar id %s', p.spawnId)
                 return false
             end
