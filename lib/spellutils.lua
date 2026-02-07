@@ -687,6 +687,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
     end
     -- Stand before cast when sitting (not on mount); MQ2Cast does not do this.
     if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() then
+        if debug then print('standing before cast') end
         mq.cmd('/stand')
     end
     if type(gem) == 'number' or gem == 'item' or gem == 'alt' or gem == 'script' then
