@@ -26,6 +26,7 @@ function follow.StartFollow(name)
 end
 
 local function event_FollowChat(line, speaker)
+    if debug then printf('event_FollowChat: %s', line) end
     if not charinfo.GetPeer(speaker) then return end
     follow.StartFollow(speaker)
 end
