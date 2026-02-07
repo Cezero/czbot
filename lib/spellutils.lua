@@ -164,7 +164,7 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
     end
-    if debug then printf('buffs_populate_wait: setting state for %s %s %s %s', spawnId, sub, spellIndex, targethit) end
+    if debug then printf('EnsureSpawnBuffsPopulated: buffs_populate_wait: setting state for %s %s %s %s', spawnId, sub, spellIndex, targethit) end
     state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit })
     mq.cmdf('/tar id %s', spawnId)
     return false
@@ -370,7 +370,7 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         local p = state.getRunStatePayload()
         if p and p.spawnId then
             if mq.TLO.Target.ID() ~= p.spawnId then
-                if debug then print('buffs_populate_wait: target not found, targeting') end
+                if debug then printf('RunSpellCheckLoop: buffs_populate_wait: target not found, targeting %s', p.spawnId) end
                 mq.cmdf('/tar id %s', p.spawnId)
                 return false
             end
@@ -684,6 +684,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
     end
     if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
         if mq.TLO.Target.ID() ~= EvalID then
+            if debug then printf('CastSpell: target not found, targeting %s', EvalID) end
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'
             rc.CurSpell.deadline = mq.gettime() + 1000

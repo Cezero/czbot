@@ -162,7 +162,10 @@ local function BuffEvalTank(index, entry, spell, spellid, range, tank, tankid)
     -- Non-bot tank (explicitly configured): buff state only from Spawn after targeting (BuffsPopulated)
     local tankdist = mq.TLO.Spawn(tankid).Distance()
     if not range or not tankdist or tankdist > range then return nil, nil end
-    if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff', index, 'tank') then return nil, nil end
+    if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff', index, 'tank') then
+        if debug then printf('BuffEvalTank: EnsureSpawnBuffsPopulated failed for %s %s %s', tankid, index, 'tank') end
+        return nil, nil
+    end
     if spellutils.SpawnNeedsBuff(tankid, spell, entry.spellicon) then return tankid, 'tank' end
     -- Out-of-group: best-effort cast in range when we don't have buff data (not targeted or BuffsPopulated false)
     if not mq.TLO.Group.Member(tank).Index() then return tankid, 'tank' end
@@ -225,7 +228,9 @@ local function BuffEvalGroupMember(index, entry, spell, spellid, range)
                             local id, hit = BuffEvalBotNeedsBuff(grpid, grpname, spellid, range, index, lc)
                             if id then return id, hit end
                         else
-                            if not spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff', index, lc) then return nil, nil end
+                            if not spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff', index, lc) then
+                                if debug then printf('BuffEvalGroupMember: EnsureSpawnBuffsPopulated failed for %s %s %s', grpid, index, lc) end
+                                return nil, nil end
                             if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then return grpid, lc end
                         end
                     end
