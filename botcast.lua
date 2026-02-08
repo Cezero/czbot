@@ -83,7 +83,7 @@ local function BuffEvalBotNeedsBuff(botid, botname, spellid, range, index, targe
     local peer = charinfo.GetPeer(botname)
     if not peer then return nil, nil end
     local botbuff = spellutils.PeerHasBuff(peer, spellid)
-    local botbuffstack = peer.Stacks(spellid)
+    local botbuffstack = peer:Stacks(spellid)
     local botfreebuffslots = peer.FreeBuffSlots
     local botdist = spawnid and mq.TLO.Spawn(spawnid).Distance()
     if not (spawnid and botbuffstack and botfreebuffslots and botfreebuffslots > 0) then return nil, nil end
@@ -191,7 +191,7 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
                 local peer = charinfo.GetPeer(grpname)
                 if peer then
                     local hasBuff = spellutils.PeerHasBuff(peer, spellid)
-                    local stacks = peer.Stacks(spellid)
+                    local stacks = peer:Stacks(spellid)
                     local free = peer.FreeBuffSlots
                     if not hasBuff and stacks and free and free > 0 then needCount = needCount + 1 end
                 else
@@ -265,7 +265,7 @@ local function BuffEvalMyPet(index, entry, spell, spellid, range)
     local petbuff = mq.TLO.Me.Pet.Buff(spell)()
     local petrange = mq.TLO.Me.Pet.Distance()
     local myPeer = charinfo.GetPeer(mq.TLO.Me.Name())
-    local petstacks = myPeer and myPeer.StacksPet(spellid)
+    local petstacks = myPeer and myPeer:StacksPet(spellid)
     if mypetid > 0 and petstacks and not petbuff and petrange and range and range >= petrange then
         return mypetid, 'mypet'
     end
@@ -283,7 +283,7 @@ local function BuffEvalPets(index, entry, spellid, range, bots, botcount)
                 local petbuff = spellutils.PeerHasPetBuff(peer, spellid)
                 local botid = mq.TLO.Spawn('pc =' .. bots[i]).ID()
                 local spawnid = mq.TLO.Spawn(botid).ID()
-                local petstacks = peer.StacksPet(spellid)
+                local petstacks = peer:StacksPet(spellid)
                 if spawnid and spawnid > 0 and botpet and botpet > 0 and petstacks and IconCheck(index, spawnid) and not petbuff and range and range >= petrange then
                     return botpet, 'pet'
                 end
@@ -433,6 +433,14 @@ local function CureTypeList(index)
     return list
 end
 
+-- MQCharInfo peer fields for detrimentals (config curetype words are mapped here)
+local CureTypeToPeerKey = {
+    poison = "CountPoison",
+    disease = "CountDisease",
+    curse = "CountCurse",
+    corruption = "CountCorruption",
+}
+
 local function CureEvalForTarget(index, botname, botid, botclass, targethit, spelltartype, resumePhase, resumeGroupIndex)
     local cureindex = CureClass[index]
     if not cureindex then return nil, nil end
@@ -447,7 +455,8 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
             local peer = charinfo.GetInfo(botname)
             if peer then
                 local detrimentals = peer.Detrimentals or nil
-                local curetype = peer[v] or nil
+                local key = (string.lower(v) ~= 'all') and CureTypeToPeerKey[string.lower(v)]
+                local curetype = key and (peer[key] or nil) or nil
                 if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
                     if targethit == 'tank' then return botid, 'tank' end
                     if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
@@ -489,7 +498,8 @@ local function CureEvalGroupCure(index, entry)
                 if peer then
                     for _, v in pairs(CureType[index] or {}) do
                         local detrimentals = peer.Detrimentals or nil
-                        local curetype = peer[v] or nil
+                        local key = (string.lower(v) ~= 'all') and CureTypeToPeerKey[string.lower(v)]
+                        local curetype = key and (peer[key] or nil) or nil
                         if (string.lower(v) == 'all' and detrimentals and detrimentals > 0) or (string.lower(v) ~= 'all' and curetype and curetype > 0) then
                             needCount = needCount + 1
                             break
@@ -717,7 +727,7 @@ local function CorpseRezIdForFilter(index, ctx, filter)
         elseif filter == 'bots' and ctx.botcount then
             for k = 1, ctx.botcount do
                 local peer = charinfo.GetInfo(ctx.bots[k])
-                if peer and (peer.Name or peer.sender) == nearcorpse then match = true break end
+                if peer and peer.Name == nearcorpse then match = true break end
             end
         elseif filter == 'raid' and mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0 then
             for k = 1, mq.TLO.Raid.Members() do
