@@ -416,6 +416,16 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         if MasterPause then return false end
         local runState = state.getRunState()
         local p = state.getRunStatePayload()
+        -- If resume index is no longer valid (e.g. disabled after spell not in book), clear so full loop runs
+        if runState == 'buffs_resume' and sub == 'buff' and p and p.buffIndex and options.entryValid and not options.entryValid(p.buffIndex) then
+            state.clearRunState()
+            runState = state.getRunState()
+            p = state.getRunStatePayload()
+        elseif runState == 'cures_resume' and sub == 'cure' and p and p.cureIndex and options.entryValid and not options.entryValid(p.cureIndex) then
+            state.clearRunState()
+            runState = state.getRunState()
+            p = state.getRunStatePayload()
+        end
         if (runState == 'buffs_resume' and sub == 'buff' and p and p.buffIndex and i ~= p.buffIndex)
             or (runState == 'cures_resume' and sub == 'cure' and p and p.cureIndex and i ~= p.cureIndex) then
             -- skip this index; only run eval for the index we are resuming
