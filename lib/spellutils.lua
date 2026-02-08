@@ -145,13 +145,13 @@ end
 -- Optional spellIndex and targethit are stored in payload so the wait block can cast on clear.
 -- Optional cureTypeList (for sub=='cure') is stored so the wait block can re-check need.
 -- Optional resumePhase and resumeGroupIndex (for sub=='buff') let the wait block set buffs_resume on clear.
-function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit, cureTypeList, resumePhase, resumeGroupIndex)
+function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit, cureTypeList, resumePhase,
+                                              resumeGroupIndex)
     if not spawnId or not sub then return false end
     local runState = state.getRunState()
     local payload = state.getRunStatePayload()
     if runState == 'buffs_populate_wait' and payload and payload.spawnId == spawnId and payload.sub == sub then
         if mq.TLO.Target.ID() ~= spawnId then
-            if debug then printf('buffs_populate_wait: target not found, targeting %s', spawnId) end
             mq.cmdf('/tar id %s', spawnId)
             return false
         end
@@ -166,8 +166,9 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
     end
-    if debug then printf('EnsureSpawnBuffsPopulated: buffs_populate_wait: setting state for %s %s %s %s', spawnId, sub, spellIndex, targethit) end
-    state.setRunState('buffs_populate_wait', { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit, cureTypeList = cureTypeList, resumePhase = resumePhase, resumeGroupIndex = resumeGroupIndex })
+    state.setRunState('buffs_populate_wait',
+        { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit, cureTypeList = cureTypeList, resumePhase =
+        resumePhase, resumeGroupIndex = resumeGroupIndex })
     mq.cmdf('/tar id %s', spawnId)
     return false
 end
@@ -306,7 +307,6 @@ end
 -- If CurSpell.phase is casting/precast, handle that first. If loading_gem, check deadline/gem.
 -- Otherwise iterate indices and optionally start a cast (CastSpell sets phase and returns).
 function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
-    if debug then printf('RunSpellCheckLoop: %s %s state: %s', sub, count, state.getRunState()) end
     options = options or {}
     local skipInterruptForBRD = options.skipInterruptForBRD ~= false
     local rc = state.getRunconfig()
@@ -369,11 +369,9 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
 
     -- Re-entry: waiting for spawn buffs to populate (non-peer buff/cure). Target spawn, then wait until BuffsPopulated.
     if state.getRunState() == 'buffs_populate_wait' then
-        if debug then print('buffs_populate_wait') end
         local p = state.getRunStatePayload()
         if p and p.spawnId then
             if mq.TLO.Target.ID() ~= p.spawnId then
-                if debug then printf('RunSpellCheckLoop: buffs_populate_wait: target not found, targeting %s', p.spawnId) end
                 mq.cmdf('/tar id %s', p.spawnId)
                 return false
             end
@@ -400,12 +398,16 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
                 end
                 if p.sub == 'buff' and (p.resumePhase or p.resumeGroupIndex) then
                     local phase = p.resumePhase or 'after_tank'
-                    local nextGroupMemberIndex = (p.resumePhase == 'groupmember' and p.resumeGroupIndex) and (p.resumeGroupIndex + 1) or nil
-                    state.setRunState('buffs_resume', { buffIndex = p.spellIndex, phase = phase, nextGroupMemberIndex = nextGroupMemberIndex })
+                    local nextGroupMemberIndex = (p.resumePhase == 'groupmember' and p.resumeGroupIndex) and
+                    (p.resumeGroupIndex + 1) or nil
+                    state.setRunState('buffs_resume',
+                        { buffIndex = p.spellIndex, phase = phase, nextGroupMemberIndex = nextGroupMemberIndex })
                 elseif p.sub == 'cure' and (p.resumePhase or p.resumeGroupIndex) then
                     local phase = p.resumePhase or 'after_tank'
-                    local nextGroupMemberIndex = (p.resumePhase == 'groupmember' and p.resumeGroupIndex) and (p.resumeGroupIndex + 1) or nil
-                    state.setRunState('cures_resume', { cureIndex = p.spellIndex, phase = phase, nextGroupMemberIndex = nextGroupMemberIndex })
+                    local nextGroupMemberIndex = (p.resumePhase == 'groupmember' and p.resumeGroupIndex) and
+                    (p.resumeGroupIndex + 1) or nil
+                    state.setRunState('cures_resume',
+                        { cureIndex = p.spellIndex, phase = phase, nextGroupMemberIndex = nextGroupMemberIndex })
                 end
                 return false
             end
@@ -467,10 +469,12 @@ function spellutils.PreCondCheck(Sub, ID, spawnID)
             EvalID = nil
             return output
         else
-            print('problem loading precond')
+            print('problem loading precond') -- TODO add more context to make this a meaningful error message
         end
     elseif type(entry.precondition) == 'boolean' then
-        if entry.precondition then EvalID = nil; return true end
+        if entry.precondition then
+            EvalID = nil; return true
+        end
     end
     EvalID = nil
     return true
@@ -483,7 +487,7 @@ function spellutils.ProcessScript(script, Sub, ID)
         if loadprecond then
             return true
         else
-            print('problem loading precond')
+            print('problem loading precond') -- TODO add more context to make this a meaningful error message
             local entry = botconfig.getSpellEntry(Sub, ID)
             if entry then entry.enabled = false end
             return false
@@ -501,7 +505,7 @@ function spellutils.RunScript(script, Sub, ID)
             local output = loadprecond()
             return output
         else
-            print('problem loading precond')
+            print('problem loading precond') -- TODO add more context to make this a meaningful error message
             local entry = botconfig.getSpellEntry(Sub, ID)
             if entry then entry.enabled = false end
             return false
@@ -514,7 +518,6 @@ end
 function spellutils.LoadSpell(Sub, ID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return false end
-    if debug then print('loadspell') end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then
         return false
     end
@@ -533,7 +536,6 @@ function spellutils.LoadSpell(Sub, ID)
         if mq.TLO.Me.CombatAbilityReady(spell)() then return true else return false end
     end
     if gem == 'ability' then
-        if debug then print("ability ready?:", mq.TLO.Me.AbilityReady(spell)()) end
         if mq.TLO.Me.AbilityReady(spell)() then return true else return false end
     end
     if gem == 'alt' then
@@ -687,7 +689,6 @@ function spellutils.InterruptCheck()
 end
 
 function spellutils.CastSpell(index, EvalID, targethit, sub)
-    if debug then print('castspell') end
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return false end
@@ -720,7 +721,6 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
     -- pulse mez, wait for land, re-assist MA, attack on (optionally twist DPS song), stay on MA target ~12-15s,
     -- then attack off, target add, re-pulse mez, repeat. Implement in a later plan (state/timers per mez target).
     if (sub == 'debuff' and targethit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
-    if debug then print(entry.spell, entry.gem, EvalID) end
     if (mq.TLO.Plugin('MQ2Twist').IsLoaded()) then
         if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then mq.cmd('/squelch /twist stop') end
     end
@@ -732,7 +732,6 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
     end
     if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
         if mq.TLO.Target.ID() ~= EvalID then
-            if debug then printf('CastSpell: target not found, targeting %s', EvalID) end
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'
             rc.CurSpell.deadline = mq.gettime() + 1000

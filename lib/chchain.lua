@@ -50,9 +50,7 @@ function chchain.OnGo(line, arg1)
     if not dochchain then return false end
     chchaincurtank = 1
     local chtimer = (chchainpause * 100) + mq.gettime()
-    if debug then print(chtimer, ' ', mq.gettime()) end
     local tankid = mq.TLO.Spawn('=' .. chchaintank).ID()
-    if debug then print(tankid, chchaintank) end
     if not tankid or tankid == 0 or mq.TLO.Spawn(tankid).Type() == 'Corpse' then
         chchaincurtank = chchaincurtank + 1
         if chtanklist[chchaincurtank] and mq.TLO.Spawn('=' .. chtanklist[chchaincurtank]).Type() == 'PC' and mq.TLO.Spawn('=' .. chtanklist[chchaincurtank]).ID() then

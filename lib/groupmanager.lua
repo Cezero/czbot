@@ -12,7 +12,6 @@ local function doOneInvite(groupldr, raidmember, grptype)
     local myid = mq.TLO.Me.ID() or 0
     local groupldrspawnid = mq.TLO.Spawn('pc =' .. groupldr).ID() or 0
     local spawnid = mq.TLO.Spawn('pc =' .. raidmember).ID() or 0
-    if debug then printf('%s inviting: %s', groupldr, raidmember) end
     if (grptype == 'group' or spawnid > 0) and groupldrspawnid ~= myid then
         mq.cmdf('/rc %s /inv %s', groupldr, raidmember)
     elseif spawnid > 0 and groupldrspawnid == myid then
@@ -23,7 +22,6 @@ local function doOneInvite(groupldr, raidmember, grptype)
 end
 
 function M.GroupInvite(groupldr, groupmembers, grptype)
-    if debug then printf('groupldr: %s', groupldr) end
     local myid = mq.TLO.Me.ID() or 0
     local groupldrspawnid = mq.TLO.Spawn('pc =' .. groupldr).ID() or 0
     for raidmember, _ in pairs(groupmembers) do
@@ -53,8 +51,6 @@ function M.SaveRaid(raidname)
         local groupnum = mq.TLO.Raid.Member(i).Group() or false
         if groupldr and raidmember and groupnum then
             comkeytable.raidlist[raidname].leaders[groupnum] = raidmember
-            if debug then printf('saving leader of group %s as %s', groupnum,
-                    comkeytable.raidlist[raidname].leaders[groupnum]) end
         elseif raidmember and groupnum then
             if not comkeytable.raidlist[raidname].groups[groupnum] then
                 comkeytable.raidlist[raidname].groups[groupnum] = {}
@@ -63,8 +59,6 @@ function M.SaveRaid(raidname)
                 end
             end
             comkeytable.raidlist[raidname].groups[groupnum][raidmember] = raidmember
-            if debug then printf('saving member of group %s as %s', groupnum,
-                    comkeytable.raidlist[raidname].groups[groupnum][raidmember]) end
         end
     end
     botconfig.saveCommon()
@@ -115,7 +109,6 @@ function M.AdvanceLoadRaid()
             local groupldr = comkeytable.raidlist[raidname].leaders[i] or false
             local groups = comkeytable.raidlist[raidname].groups[i] or {}
             if groupldr then
-                if debug then printf('groupldr: %s', groupldr) end
                 for raidmember, _ in pairs(groups) do
                     actions[#actions + 1] = { type = 'invite', groupldr = groupldr, raidmember = raidmember, grptype = 'raid' }
                 end

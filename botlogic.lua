@@ -79,7 +79,7 @@ local function CharState(...)
     if mq.TLO.Me.State() == 'DEAD' or mq.TLO.Me.State() == 'HOVER' and mq.TLO.Me.Hovering() then
         if not state.getRunconfig().HoverEchoTimer or state.getRunconfig().HoverEchoTimer == 0 then
             state.getRunconfig().HoverEchoTimer =
-            mq.gettime() + 300000
+                mq.gettime() + 300000
         end
         if state.getRunconfig().HoverTimer < mq.gettime() then
             botevents.Event_Slain()
@@ -151,7 +151,7 @@ local function _registerBuiltinHooks()
     hookregistry.registerMainloopHook('zoneCheck', function()
         if state.getRunState() == 'zone_changing' then
             if state.runStateDeadlinePassed() then
-                print('Zone detected')
+                print('Zone detected') -- not debug, keep
                 botevents.DelayOnZone()
                 state.clearRunState()
             end
@@ -174,7 +174,7 @@ local function _registerBuiltinHooks()
 end
 
 function botlogic.StartUp(...)
-    print('CZBot is starting! (v1.00)')
+    print('CZBot is starting! (v1.00)') -- not debug, keep but change version to pull from a variable
     math.randomseed(os.time() * 1000 + os.clock() * 1000)
     if mq.TLO.Me.Hovering() or string.find(mq.TLO.Me.Name(), 'corpse') then
         printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')

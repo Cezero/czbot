@@ -560,7 +560,7 @@ local function cmd_chchain(args)
                     local vtrim = v:sub(-1) == "'" and v:sub(1, -2) or v
                     if mq.TLO.Spawn('=' .. vtrim).Type() == 'PC' then
                         table.insert(chtanklist, vtrim)
-                        print('adding ' .. vtrim .. ' to tank list')
+                        print('adding ' .. vtrim .. ' to tank list') -- doesn't look like debug but probably should be formatted better
                     end
                 end
             end
@@ -660,7 +660,7 @@ local function cmd_raid(args)
         groupmanager.SaveRaid(args[3])
     elseif sub == 'load' then
         if not args[3] or args[3] == '' then
-            print('no raid name giving /cz raid load raidname')
+            print('no raid name giving /cz raid load raidname') -- this is a real error message but needs to be reformatted
             return
         end
         groupmanager.LoadRaid(args[3])
@@ -730,8 +730,6 @@ function M.Parse(...)
         if i > 1 then str = str .. ' ' end
         str = str .. args[i]
     end
-    if debug then for i in pairs(args) do print(args[i]) end end
-
     if TOGGLELIST[args[1]] then
         cmd_toggle(args)
         return

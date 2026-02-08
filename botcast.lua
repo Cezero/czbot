@@ -52,7 +52,7 @@ function botcast.LoadBuffConfig()
         end
         if entry.gem == 'script' then
             if not myconfig.script[entry.spell] then
-                print('making script ', entry.spell)
+                print('making script ', entry.spell) -- this doesn't look like debug, but needs more context to be meaningful
                 myconfig.script[entry.spell] = "test"
             end
             table.insert(state.getRunconfig().ScriptList, entry.spell)
@@ -74,7 +74,6 @@ local function IconCheck(index, EvalID)
     local botname = mq.TLO.Spawn(EvalID).Name()
     local info = charinfo.GetInfo(botname)
     local hasIcon = info and spellutils.PeerHasBuff(info, spellicon)
-    if debug then printf('iconcheck: %s %s %s %d %d', botname, entry.spell, hasIcon, index, EvalID) end
     return not hasIcon
 end
 
@@ -163,7 +162,6 @@ local function BuffEvalTank(index, entry, spell, spellid, range, tank, tankid)
     local tankdist = mq.TLO.Spawn(tankid).Distance()
     if not range or not tankdist or tankdist > range then return nil, nil end
     if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff', index, 'tank', nil, 'after_tank', nil) then
-        if debug then printf('BuffEvalTank: EnsureSpawnBuffsPopulated failed for %s %s %s', tankid, index, 'tank') end
         return nil, nil
     end
     if spellutils.SpawnNeedsBuff(tankid, spell, entry.spellicon) then return tankid, 'tank' end
@@ -229,8 +227,8 @@ local function BuffEvalGroupMember(index, entry, spell, spellid, range, startFro
                             if id then return id, hit end
                         else
                             if not spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff', index, lc, nil, 'groupmember', i) then
-                                if debug then printf('BuffEvalGroupMember: EnsureSpawnBuffsPopulated failed for %s %s %s', grpid, index, lc) end
-                                return nil, nil end
+                                return nil, nil
+                            end
                             if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then return grpid, lc end
                         end
                     end
@@ -302,7 +300,8 @@ local function BuffEval(index)
     local sid = (spellid == 1536) and 1538 or spellid -- temp fix heroic bond
     local gem = entry.gem
     local tank, tankid, tanktar = spellutils.GetTankInfo(false)
-    tanktar = tanktar or (tank and charinfo.GetPeer(tank) and charinfo.GetPeer(tank).Target and charinfo.GetPeer(tank).Target.ID or nil)
+    tanktar = tanktar or
+    (tank and charinfo.GetPeer(tank) and charinfo.GetPeer(tank).Target and charinfo.GetPeer(tank).Target.ID or nil)
     local myid = mq.TLO.Me.ID()
     local myclass = mq.TLO.Me.Class.ShortName()
     local range = (mq.TLO.Spell(spell).MyRange() and mq.TLO.Spell(spell).MyRange() > 0) and mq.TLO.Spell(spell).MyRange()
@@ -330,7 +329,6 @@ local function BuffEval(index)
             if id then return id, hit end
         end
         if state.getRunState() == 'buffs_populate_wait' then
-            if debug then printf('BuffEval: tank buffs_populate_wait: returning nil, nil') end
             return nil, nil
         end
         id, hit = BuffEvalGroupBuff(index, entry, spell, sid, range)
@@ -343,7 +341,6 @@ local function BuffEval(index)
         id, hit = BuffEvalGroupMember(index, entry, spell, sid, range, startFrom)
         if id then return id, hit end
         if state.getRunState() == 'buffs_populate_wait' then
-            if debug then printf('BuffEval: groupmember buffs_populate_wait: returning nil, nil') end
             return nil, nil
         end
         id, hit = BuffEvalPc(index, entry, sid, range, bots, botcount)
@@ -360,7 +357,6 @@ local function BuffEval(index)
 end
 
 function botcast.BuffCheck()
-    if debug then print('buffcheck') end
     local mobList = state.getRunconfig().MobList
     local hasMob = mobList and mobList[1]
     return spellutils.RunSpellCheckLoop('buff', botconfig.getSpellCount('buff'), BuffEval, {
@@ -409,7 +405,7 @@ function botcast.LoadCureConfig()
         end
         if entry.gem == 'script' then
             if not myconfig.script[entry.spell] then
-                print('making script ', entry.spell)
+                print('making script ', entry.spell) -- doesn't look like debug, but needs more context to be meaningful
                 myconfig.script[entry.spell] = "test"
             end
             table.insert(state.getRunconfig().ScriptList, entry.spell)
@@ -459,19 +455,25 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
                 local curetype = key and (peer[key] or nil) or nil
                 if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
                     if targethit == 'tank' then return botid, 'tank' end
-                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
-                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
+                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid,
+                            'groupmember' end
+                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return
+                        botid, botclass end
                 end
                 if string.lower(v) ~= 'all' and curetype and curetype > 0 then
-                    if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'tank' end
-                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid, 'groupmember' end
-                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return botid, botclass end
+                    if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then return
+                        botid, 'tank' end
+                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid,
+                            'groupmember' end
+                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return
+                        botid, botclass end
                 end
             end
         end
     end
     if botname and botid and not charinfo.GetInfo(botname) then
-        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then return nil, nil end
+        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then return
+            nil, nil end
         local typelist = CureTypeList(index)
         local needCure = spellutils.SpawnDetrimentalsForCure(botid, typelist)
         if needCure and spellutils.DistanceCheck('cure', index, botid) then
@@ -519,7 +521,6 @@ local function CureEvalGroupCure(index, entry)
 end
 
 local function CureEval(index)
-    if debug then print('cureeval') end
     local entry = botconfig.getSpellEntry('cure', index)
     local spell, _, spelltartype = spellutils.GetSpellInfo(entry)
     if not spell then return nil, nil end
@@ -577,7 +578,8 @@ local function CureEval(index)
                 local grpclass = grpmember.Class.ShortName()
                 if grpclass then grpclass = string.lower(grpclass) end
                 if grpid and grpid > 0 and cureindex[grpclass] and not charinfo.GetInfo(grpname) then
-                    local id, hit = CureEvalForTarget(index, grpname, grpid, grpclass, 'groupmember', spelltartype, 'groupmember', i)
+                    local id, hit = CureEvalForTarget(index, grpname, grpid, grpclass, 'groupmember', spelltartype,
+                        'groupmember', i)
                     if id then return id, hit end
                 end
             end
@@ -604,7 +606,6 @@ local function CureEval(index)
 end
 
 function botcast.CureCheck()
-    if debug then print('curecheck') end
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     local priority = myconfig.cure.prioritycure
     return spellutils.RunSpellCheckLoop('cure', botconfig.getSpellCount('cure'), CureEval, {
@@ -658,7 +659,7 @@ function botcast.LoadHealConfig()
         end
         if entry.gem == 'script' then
             if not myconfig.script[entry.spell] then
-                print('making script ', entry.spell)
+                print('making script ', entry.spell) -- doesn't look like debug, but needs more context to be meaningful
                 myconfig.script[entry.spell] = "test"
             end
             table.insert(state.getRunconfig().ScriptList, entry.spell)
@@ -727,12 +728,18 @@ local function CorpseRezIdForFilter(index, ctx, filter)
         elseif filter == 'bots' and ctx.botcount then
             for k = 1, ctx.botcount do
                 local peer = charinfo.GetInfo(ctx.bots[k])
-                if peer and peer.Name == nearcorpse then match = true break end
+                if peer and peer.Name == nearcorpse then
+                    match = true
+                    break
+                end
             end
         elseif filter == 'raid' and mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0 then
             for k = 1, mq.TLO.Raid.Members() do
                 local raidname = mq.TLO.Raid.Member(k).Name()
-                if raidname == nearcorpse then match = true break end
+                if raidname == nearcorpse then
+                    match = true
+                    break
+                end
             end
         end
         if match then
@@ -748,7 +755,8 @@ end
 
 local function HPEvalCorpse(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].corpse then return nil, nil end
-    if not AHThreshold[index].cbt and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then return nil, nil end
+    if not AHThreshold[index].cbt and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then return nil,
+            nil end
     if AHThreshold[index].all then
         local rezid = CorpseRezIdForFilter(index, ctx, 'all')
         if rezid then return rezid, 'corpse' end
@@ -775,7 +783,8 @@ end
 local function HPEvalGrp(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].groupheal then return nil, nil end
     local aeRange = mq.TLO.Spell(ctx.entry.spell).AERange()
-    if ctx.gem == 'item' and mq.TLO.FindItem(ctx.entry.spell)() then aeRange = mq.TLO.FindItem(ctx.entry.spell).Spell.AERange() end
+    if ctx.gem == 'item' and mq.TLO.FindItem(ctx.entry.spell)() then aeRange = mq.TLO.FindItem(ctx.entry.spell).Spell
+        .AERange() end
     local grpmatch = 0
     for k = 0, mq.TLO.Group.Members() do
         local grpmem = mq.TLO.Group.Member(k)
@@ -903,7 +912,6 @@ end
 
 local function HPEval(index)
     if not index then return nil, nil end
-    if debug then print('hpeval ' .. index, botconfig.getSpellEntry('heal', index) and botconfig.getSpellEntry('heal', index).spell) end
     local ctx = HPEvalContext(index)
     if not ctx then return nil, nil end
     local id, hit = HPEvalCorpse(index, ctx)
@@ -929,7 +937,6 @@ function botcast.ValidateHeal()
     local target = state.getRunconfig().CurSpell.target
     local index = state.getRunconfig().CurSpell.spell
     local healtar, matchtype = HPEval(index)
-    if debug then print('validateheal') end
     return healtar and healtar > 0
 end
 
@@ -990,7 +997,7 @@ function botcast.LoadDebuffConfig()
         if not entry.delay then entry.delay = 0 end
         if entry.gem == 'script' then
             if not myconfig.script[entry.spell] then
-                print('making script ', entry.spell)
+                print('making script ', entry.spell) -- doesn't look like debug, but needs more context to be meaningful
                 myconfig.script[entry.spell] = "test"
             end
             table.insert(state.getRunconfig().ScriptList, entry.spell)
@@ -1010,7 +1017,6 @@ local function ADSpawnCheck_ValidateAcmTarget(rc)
     if rc.engageTargetId then
         if not mq.TLO.Spawn(rc.engageTargetId).ID() or mq.TLO.Spawn(rc.engageTargetId).Type() == 'Corpse' then
             rc.engageTargetId = nil
-            if debug then print('clearing engageTargetId') end
         end
     end
     if utils.isInList(mq.TLO.Zone.ShortName(), noncombatzones) then return false end
@@ -1048,7 +1054,8 @@ local function ADSpawnCheck_FilterSpawn(spawn, rc)
         return (spawn.Type() == 'NPC' or (spawn.Type() == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.LineOfSight()
     end
     if myconfig.settings.TargetFilter == 0 then
-        return (spawn.Type() == 'NPC' or (spawn.Type() == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.Aggressive() and spawn.LineOfSight()
+        return (spawn.Type() == 'NPC' or (spawn.Type() == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.Aggressive() and
+        spawn.LineOfSight()
     end
     return false
 end
@@ -1087,7 +1094,7 @@ local function DebuffEvalBuildContext(index)
     local gem = entry.gem
     if spellrange == 0 and spelltartype == 'PB AE' then
         spellrange = mq.TLO.Spell(spell).AERange() or
-        (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.AERange())
+            (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.AERange())
     end
     local spelldur = mq.TLO.Spell(entry.spell).MyDuration() or
         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.MyDuration())
@@ -1252,13 +1259,13 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
 end
 
 function botcast.DebuffCheck()
-    if debug then print('debuffcheck') end
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     local mobcountstart = state.getRunconfig().MobCount
     local botmelee = require('botmelee')
     if state.getRunconfig().MobList and state.getRunconfig().MobList[1] then
         local tank, _, tanktar = spellutils.GetTankInfo(true)
-        if tanktar and tanktar > 0 and mq.TLO.Pet.Target.ID() ~= tanktar and not mq.TLO.Me.Pet.Combat() then botmelee.AdvCombat() end
+        if tanktar and tanktar > 0 and mq.TLO.Pet.Target.ID() ~= tanktar and not mq.TLO.Me.Pet.Combat() then botmelee
+                .AdvCombat() end
     end
     return spellutils.RunSpellCheckLoop('debuff', botconfig.getSpellCount('debuff'), DebuffEval, {
         skipInterruptForBRD = true,
@@ -1281,11 +1288,11 @@ function botcast.DebuffCheck()
                 state.getRunconfig().CurSpell = {}
                 if newCount >= adEntry.recast then
                     printf(
-                    '\ayCZBot:\ax\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
+                        '\ayCZBot:\ax\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
                         mq.TLO.Spawn(EvalID).CleanName(), adEntry.spell, i, adEntry.recast)
                     local recastduration = 600000 + mq.gettime()
                     local spellid = mq.TLO.Spell(adEntry.spell).ID() or
-                    (adEntry.gem == 'item' and mq.TLO.FindItem(adEntry.spell)() and mq.TLO.FindItem(adEntry.spell).Spell.ID())
+                        (adEntry.gem == 'item' and mq.TLO.FindItem(adEntry.spell)() and mq.TLO.FindItem(adEntry.spell).Spell.ID())
                     local spelldur = tonumber(mq.TLO.Spell(spellid).MyDuration()) or 0
                     if spelldur > 0 then spellstates.DebuffListUpdate(EvalID, adEntry.spell, recastduration) end
                 end

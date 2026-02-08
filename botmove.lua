@@ -112,7 +112,7 @@ local function doWiggleUnstuck(followid, stuckdistance)
     rc.unstuckWiggleIndex = idx
     local heading = wiggleHeadings[idx] or stuckdir
     local size = wiggleSizes[idx] or ransize
-    print('facing heading:', heading, ' sizing to:', size)
+    print('facing heading:', heading, ' sizing to:', size) -- not debug, but needs reformatting / context to be meaningful
     if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then
         mq.cmdf('/squelch /multiline ; /face fast heading %s ; /stand ; /autosize sizeself %s ; /keypress forward hold', heading, size)
     end
@@ -270,7 +270,6 @@ local function findCorpseToDrag()
             corpse = mq.TLO.Spawn(bot .. "'s corpse").Type()
             corpsedist = mq.TLO.Spawn(bot .. "'s corpse").Distance()
         end
-        if debug then print(bot, corpse) end
         if corpse == 'Corpse' and corpsedist and corpsedist > 10 and corpsedist < DragDist then
             return mq.TLO.Spawn(bot .. "'s corpse").ID()
         end
@@ -371,7 +370,7 @@ function botmove.MakeCampLeashCheck()
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     local rc = state.getRunconfig()
     if campDistanceOk(rc) and campLOSOk(rc) then return end
-    print("\ar Exceeded ACLeash\ax, resetting combat")
+    print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
     doLeashResetCombat()
     botmove.MakeCamp('return')
 end
@@ -391,13 +390,12 @@ function botmove.MakeCamp(...)
     elseif args[1] == 'off' then
         makeCampOff()
     elseif args[1] == 'return' then
-        print('return called')
+        print('return called') -- not debug, but needs reformatting / context to be meaningful
         makeCampReturn()
     end
 end
 
 function botmove.DragCheck()
-    if debug then print('drag call') end
     local just_did_sumcorpse = tickSumcorpsePending()
 
     if state.getRunState() == 'dragging' then
@@ -408,7 +406,6 @@ function botmove.DragCheck()
     CorpseID = nil
     CorpseID = findCorpseToDrag()
     if not CorpseID then return false end
-    if debug then print('CorpseID is ' .. CorpseID) end
     startDrag(CorpseID, just_did_sumcorpse)
 end
 

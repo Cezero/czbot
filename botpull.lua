@@ -54,7 +54,8 @@ function botpull.TagTimeCalc(trip, spawnId, x, y, z)
         return (((mq.TLO.Navigation.PathLength('id ' .. spawnId)() + 100) / 100) * 9000) + mq.gettime()
     end
     if trip == 'return' and x and y and z then
-        return (((mq.TLO.Navigation.PathLength('locxyz ' .. x .. ',' .. y .. ',' .. z)() + 100) / 100) * 18000) + mq.gettime()
+        return (((mq.TLO.Navigation.PathLength('locxyz ' .. x .. ',' .. y .. ',' .. z)() + 100) / 100) * 18000) +
+        mq.gettime()
     end
     return mq.gettime() + 60000
 end
@@ -80,7 +81,7 @@ function botpull.SetPullArc(arc)
         arcRside = fdir + (rc.pullarc * .5)
     end
     arcMid = fdir
-    if arc then printf('Setting Pull Arc to %s at heading %s', arc, fdir) end
+    if arc then printf('Setting Pull Arc to %s at heading %s', arc, fdir) end -- not debug, keep
 end
 
 local function figureMobAngle(spawn)
@@ -138,7 +139,8 @@ local function canStartPull(rc)
     if MasterPause then return false end
     if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then return false end
     if not mq.TLO.Navigation.MeshLoaded() then
-        printf('\ayCZBot:\axI have DoPull set TRUE but have \arno MQ2Nav Mesh loaded\ax, please generate a NavMesh before using DoPull, \arsetting DoPull to FALSE\ax')
+        printf(
+        '\ayCZBot:\axI have DoPull set TRUE but have \arno MQ2Nav Mesh loaded\ax, please generate a NavMesh before using DoPull, \arsetting DoPull to FALSE\ax')
         myconfig.settings.dopull = false
         return false
     end
@@ -165,7 +167,7 @@ local function ensureCampAndAnchor(rc)
         if rc.campstatus then botmove.MakeCamp('off') end
     end
     if myconfig.pull.hunter and rc.campstatus then
-        print('Disabling makecamp because dopull is on with HunterMode enabled')
+        print('Disabling makecamp because dopull is on with HunterMode enabled') -- not debug, real error message
         botmove.MakeCamp('off')
     end
 end
@@ -220,7 +222,10 @@ local function selectPullTarget(apmoblist, rc)
     if not pulltar then return nil end
     local pullindex = nil
     for k, v in ipairs(apmoblist) do
-        if v.ID() == pulltar then pullindex = k break end
+        if v.ID() == pulltar then
+            pullindex = k
+            break
+        end
     end
     if not pullindex then return nil end
     local chosen = apmoblist[pullindex]
@@ -265,7 +270,10 @@ local function tickNavigating(rc, spawn)
         clearPullState()
         return
     end
-    if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then clearPullState() return end
+    if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then
+        clearPullState()
+        return
+    end
     if rc.campstatus and utils.calcDist3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()) > (myconfig.pull.radius + 40) then
         clearPullState()
         return
@@ -275,7 +283,10 @@ local function tickNavigating(rc, spawn)
             mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
         end
         if mq.TLO.Me.TargetOfTarget.ID() and mq.TLO.Target.ID() and mq.TLO.Target.Type() == 'NPC' and spawn.Distance() and spawn.Distance() <= 200 then
-            if botpull.EngageCheck() then clearPullState() return end
+            if botpull.EngageCheck() then
+                clearPullState()
+                return
+            end
         end
         if spawn.Distance() and spawn.Distance() < myconfig.pull.abilityrange and spawn.LineOfSight() then
             rc.pullState = 'aggroing'
@@ -294,7 +305,10 @@ end
 -- One tick of aggroing state (with sub-phases aggro_wait_target, aggro_wait_cast, aggro_wait_stop_moving).
 local function tickAggroing(rc, spawn)
     if rc.pullPhase == 'aggro_wait_target' then
-        if mq.gettime() >= (rc.pullDeadline or 0) then clearPullState() return end
+        if mq.gettime() >= (rc.pullDeadline or 0) then
+            clearPullState()
+            return
+        end
         if mq.TLO.Target.ID() ~= rc.pullAPTargetID then return end
         rc.pullPhase = nil
     end
@@ -420,7 +434,10 @@ function botpull.PullTick()
         return
     end
     mq.doevents()
-    if MasterPause then clearPullState() return end
+    if MasterPause then
+        clearPullState()
+        return
+    end
 
     if rc.pullState == 'navigating' then
         tickNavigating(rc, spawn)
@@ -450,7 +467,8 @@ do
         end
         if state.getRunconfig().MobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0 then
             if mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs() then
-                local tempcnt = myconfig.pull.chainpullcnt == 0 and (myconfig.pull.chainpullcnt + 1) or myconfig.pull.chainpullcnt
+                local tempcnt = myconfig.pull.chainpullcnt == 0 and (myconfig.pull.chainpullcnt + 1) or
+                myconfig.pull.chainpullcnt
                 if (tonumber(mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs()) <= myconfig.pull.chainpullhp) and state.getRunconfig().MobCount <= tempcnt then
                     botpull.StartPull()
                 end

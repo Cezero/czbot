@@ -36,7 +36,6 @@ local function selectTankTarget(mainTankName)
     local groupMTName = (gmt and gmt.Name) and gmt.Name() or nil
     if not (mq.TLO.Raid.Members() or not mq.TLO.Group() or groupMTName == mq.TLO.Me.Name()) then return nil, false end
     if mq.TLO.Me.Combat() then return nil, false end
-    if debug then print('tanklogic') end
     local pullerTarID = tankrole.GetPullerTargetID()
     local rc = state.getRunconfig()
     for _, v in ipairs(rc.MobList) do
@@ -60,7 +59,6 @@ end
 
 -- Offtank: if MT target == MA target pick add (Nth other mob); if MT target != MA target tank MA's target (agro/taunt).
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
-    if debug then print('offtank logic') end
     local rc = state.getRunconfig()
     local maInfo = charinfo.GetInfo(assistName)
     local maTarId = (maInfo and maInfo.ID and maInfo.Target) and maInfo.Target.ID or nil
@@ -85,7 +83,6 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
                 otcounter = otcounter + 1
             end
         end
-        if debug then print('offtank target: ', actarid) end
         if actarid then
             if actarid ~= mq.TLO.Target.ID() then
                 printf('\ayCZBot:\ax\arOff-tanking\ax a \ag%s id %s', acname, actarid)
@@ -104,7 +101,6 @@ end
 
 -- DPS: sync engageTargetId to MA's target when MA is engaging.
 local function resolveMeleeAssistTarget(assistName, assistpct)
-    if debug then print('meleelogic') end
     local rc = state.getRunconfig()
     local maInfo = charinfo.GetInfo(assistName)
     local maTarId = maInfo and maInfo.Target and maInfo.Target.ID or nil
@@ -199,7 +195,6 @@ end
 
 -- Resolve assistName (MA) and mainTankName (MT). MT picks from MobList (puller priority); MA bot picks named then MT target; offtank/DPS follow MA.
 function botmelee.AdvCombat()
-    if debug then print('melee called') end
     local assistName = tankrole.GetAssistTargetName()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
@@ -237,7 +232,6 @@ end
 
 -- Return target ID of PC pcName (used for MA's or MT's target depending on caller). Uses charinfo when peer, else /assist + melee phase targeting.
 function botmelee.GetPCTarget(pcName)
-    if debug then print('GetPCTarget sub called') end
     if not pcName or not mq.TLO.Spawn('pc =' .. pcName).ID() then return nil end
 
     if state.getRunState() == 'melee' then

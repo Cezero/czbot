@@ -94,7 +94,6 @@ function botevents.Event_LockedDoor()
 end
 
 function botevents.Event_LinkItem(line, Slot, HPFilter)
-    if debug then mq.cmdf('/echo %s | %s', Slot, HPFilter) end
     HPValue = HPFilter
     if string.find(line, 'TB-') then return false end
     if string.find(Slot, "'") then Slot = string.sub(Slot, 2) end
@@ -134,7 +133,7 @@ function botevents.Event_FTELocked()
     end
     mq.cmd('/multiline ; /squelch /target myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
     if botconfig.config.settings.dopull then
-        print('clearing pull target ')
+        print('clearing pull target because FTELock detected') -- not debug, real error message
         APTarget = false
     end
     local botcast = require('botcast')

@@ -27,7 +27,6 @@ end
 function spellstates.DebuffListUpdate(spawnID, spell, duration)
     local spellid = mq.TLO.Spell(spell).ID() or mq.TLO.FindItem(spell).Spell.ID()
     local spelldur = tonumber(mq.TLO.Spell(spellid).MyDuration()) or 0
-    if debug then print('debuff list update evalid:', spawnID, ' spellid:', spellid, ' duration:', duration) end
     if spelldur < 1 or not spellid or not duration then return false end
     if not DebuffList[spawnID] then DebuffList[spawnID] = {} end
     DebuffList[spawnID][spellid] = duration
