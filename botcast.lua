@@ -1293,27 +1293,27 @@ do
     end, 400)
     hookregistry.registerMainloopHook('priorityCure', function()
         if not myconfig.settings.docure or not (myconfig.cure.spells and #myconfig.cure.spells > 0) or not myconfig.cure.prioritycure then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' then return end
+        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         botcast.CureCheck()
     end, 700)
     hookregistry.registerMainloopHook('doHeal', function()
         if not myconfig.settings.doheal or not (myconfig.heal.spells and #myconfig.heal.spells > 0) then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' then return end
+        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         botcast.HealCheck()
     end, 900)
     hookregistry.registerMainloopHook('doDebuff', function()
         if not myconfig.settings.dodebuff or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) or not state.getRunconfig().MobList[1] then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' then return end
+        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         botcast.DebuffCheck()
     end, 1000)
     hookregistry.registerMainloopHook('doBuff', function()
         if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' then return end
+        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         botcast.BuffCheck()
     end, 1100)
     hookregistry.registerMainloopHook('doCure', function()
         if not myconfig.settings.docure or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' then return end
+        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         botcast.CureCheck()
     end, 1200)
 end
