@@ -70,7 +70,7 @@ local function IconCheck(index, EvalID)
     local entry = botconfig.getSpellEntry('buff', index)
     if not entry then return true end
     local spellicon = entry.spellicon
-    if spellicon == 0 then return true end
+    if not spellicon or spellicon == 0 then return true end
     local botname = mq.TLO.Spawn(EvalID).Name()
     local info = charinfo.GetInfo(botname)
     local hasIcon = info and spellutils.PeerHasBuff(info, spellicon)
