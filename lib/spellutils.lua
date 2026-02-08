@@ -304,16 +304,12 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             spellutils.InterruptCheck()
         end
         if mq.TLO.Me.CastTimeLeft() > 0 then
-            -- Different category asking to cast: interrupt and let this run proceed.
-            if sub ~= rc.CurSpell.sub then
-                mq.cmd('/stopcast')
-                rc.CurSpell = {}
-                rc.statusMessage = ''
-                state.clearRunState()
-                -- fall through to for-loop
-            else
+            -- Same category: stay in cast, don't re-enter loop.
+            if sub == rc.CurSpell.sub then
                 return false
             end
+            -- Different category just checking: do not interrupt here. Fall through to for-loop;
+            -- we only interrupt when the loop actually finds something to cast (see below).
         end
         -- Cast just finished (CurSpell still set; we did not interrupt).
         if rc.CurSpell and rc.CurSpell.sub then
@@ -382,6 +378,13 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
                     and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
                     and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
                     and spellutils.PreCondCheck(sub, i, EvalID) then
+                    -- Different category is currently casting: interrupt it only when we have something to cast.
+                    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 then
+                        mq.cmd('/stopcast')
+                        rc.CurSpell = {}
+                        rc.statusMessage = ''
+                        state.clearRunState()
+                    end
                     -- Only exit when we actually started a cast (or precast); otherwise try next index
                     if spellutils.CastSpell(i, EvalID, targethit, sub, options.runPriority) then
                         return false
