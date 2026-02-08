@@ -233,7 +233,7 @@ local function cmd_attack(args)
         printf('\ayCZBot:\ax\ar No Main Assist set, cannot engage')
         return
     end
-    local maInfo = charinfo(assistName)
+    local maInfo = charinfo.GetPeer(assistName)
     local KillTarget = maInfo and maInfo.Target and maInfo.Target.ID or nil
     state.getRunconfig().engageTargetId = KillTarget
     if KillTarget then
