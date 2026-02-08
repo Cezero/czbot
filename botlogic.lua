@@ -9,7 +9,7 @@ local hookregistry = require('lib.hookregistry')
 local spellutils = require('lib.spellutils')
 local botevents = require('botevents')
 local utils = require('lib.utils')
-local actornet = require('actornet')
+local charinfo = require('plugin.charinfo')
 
 local botlogic = {}
 local myconfig = botconfig.config
@@ -148,10 +148,6 @@ end
 
 -- Built-in hooks registration (called from StartUp). Other modules register via hookregistry when they load.
 local function _registerBuiltinHooks()
-    hookregistry.registerMainloopHook('networkSync', function()
-        actornet.publish()
-    end, 50, true)
-
     hookregistry.registerMainloopHook('zoneCheck', function()
         if state.getRunState() == 'zone_changing' then
             if state.runStateDeadlinePassed() then
@@ -201,7 +197,7 @@ function botlogic.StartUp(...)
     if (mq.TLO.Plugin('MQ2Twist').IsLoaded() == nil) then
         mq.cmd('/squelch /plugin MQ2Twist load')
     end
-    -- Peer data is via actornet/charinfo (no MQ2NetBots).
+    -- Peer data is via plugin.charinfo (no MQ2NetBots).
     --load config file
     state.resetRunconfig()
     ---@type RunConfig
@@ -239,7 +235,6 @@ function botlogic.mainloop()
         end
         mq.delay(100)
     end
-    actornet.cleanup()
 end
 
 -- Register all MQ events (zone reset lives in botevents.DelayOnZone).

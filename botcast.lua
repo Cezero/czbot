@@ -6,7 +6,7 @@ local spellutils = require('lib.spellutils')
 local spellstates = require('lib.spellstates')
 local state = require('lib.state')
 local utils = require('lib.utils')
-local charinfo = require('actornet.charinfo')
+local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
 
 local botcast = {}

@@ -6,7 +6,7 @@
 
 local mq = require('mq')
 local state = require('lib.state')
-local charinfo = require('actornet.charinfo')
+local charinfo = require('plugin.charinfo')
 
 local tankrole = {}
 

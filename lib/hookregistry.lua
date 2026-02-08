@@ -2,7 +2,7 @@
 -- Lower priority runs first. runWhenPaused = true runs every iteration even when MasterPause is set.
 --
 -- Always-run hooks (runWhenPaused = true): Must run every tick; never block. Use for:
---   - actornet/charinfo (network sync)
+--   - plugin.charinfo (network sync)
 --   - Any logic that must fire regardless of runState (pulling, casting, etc.)
 -- Normal hooks: Skipped when MasterPause; some skip when state.isBusy() (e.g. buff/heal/pull).
 local _hooks = {}

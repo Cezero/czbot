@@ -6,7 +6,7 @@ local botmelee = require('botmelee')
 local botpull = require('botpull')
 local botcast = require('botcast')
 local state = require('lib.state')
-local charinfo = require('actornet.charinfo')
+local charinfo = require('plugin.charinfo')
 
 local M = {}
 

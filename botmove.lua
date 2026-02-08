@@ -3,7 +3,7 @@ local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
 local targeting = require('lib.targeting')
-local charinfo = require('actornet.charinfo')
+local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
 
 local botmove = {}

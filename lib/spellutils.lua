@@ -5,7 +5,7 @@ local immune = require('lib.immune')
 local state = require('lib.state')
 local spellstates = require('lib.spellstates')
 local tankrole = require('lib.tankrole')
-local charinfo = require('actornet.charinfo')
+local charinfo = require('plugin.charinfo')
 local spellutils = {}
 local _deps = {}
 
