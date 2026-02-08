@@ -14,6 +14,7 @@ local botevents = require('botevents')
 local chchain = require('lib.chchain')
 local mobfilter = require('lib.mobfilter')
 local state = require('lib.state')
+local bothooks = require('lib.bothooks')
 local groupmanager = require('lib.groupmanager')
 local charinfo = require('plugin.charinfo')
 local utils = require('lib.utils')
@@ -531,7 +532,12 @@ local function cmd_chchain(args)
             if mq.TLO.Me.Book(spell)() then
                 mq.cmdf('/memspell %s "%s"', gem, spell)
                 state.getRunconfig().gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
-                state.setRunState('loading_gem', { deadline = mq.gettime() + 10000, gem = gem, spell = spell })
+                state.getRunconfig().statusMessage = 'CHChain: memorizing Complete Heal'
+                mq.delay(10000, function()
+                    local g = mq.TLO.Me.Gem(gem)()
+                    return g and string.lower(g) == string.lower(spell)
+                end)
+                state.getRunconfig().statusMessage = ''
             else
                 printf('\ayCZBot:\axCZBot CHChain: Spell %s not found in your book, failed to start CHChain', spell)
                 return false

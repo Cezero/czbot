@@ -11,6 +11,7 @@ local botevents = require('botevents')
 local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
 
+local bothooks = require('lib.bothooks')
 local botlogic = {}
 local myconfig = botconfig.config
 
@@ -146,31 +147,29 @@ local function _runDoMiscTimer()
     _miscLastRun = mq.gettime() + 1000
 end
 
--- Built-in hooks registration (called from StartUp). Other modules register via hookregistry when they load.
+-- Register built-in hook implementations. registerAllFromConfig() (called from StartUp) wires them from bothooks.
 local function _registerBuiltinHooks()
-    hookregistry.registerMainloopHook('zoneCheck', function()
-        if state.getRunState() == 'zone_changing' then
-            if state.runStateDeadlinePassed() then
-                print('Zone detected') -- not debug, keep
-                botevents.DelayOnZone()
-                state.clearRunState()
-            end
-            return
-        end
+    hookregistry.registerHookFn('zoneCheck', function(hookName)
         if state.getRunconfig().zonename ~= mq.TLO.Zone.ShortName() then
-            state.setRunState('zone_changing', { deadline = mq.gettime() + 1000 })
+            print('Zone detected') -- not debug, keep
+            state.getRunconfig().statusMessage = 'Zone change, waiting...'
+            mq.delay(1000)
+            botevents.DelayOnZone()
+            state.getRunconfig().statusMessage = ''
         end
-    end, 100)
+    end)
 
-    hookregistry.registerMainloopHook('doEvents', function()
+    hookregistry.registerHookFn('doEvents', function(hookName)
         mq.doevents()
-    end, 200)
+    end)
 
-    hookregistry.registerMainloopHook('charState', function()
+    hookregistry.registerHookFn('charState', function(hookName)
         CharState()
-    end, 300)
+    end)
 
-    hookregistry.registerMainloopHook('doMiscTimer', _runDoMiscTimer, 1400)
+    hookregistry.registerHookFn('doMiscTimer', function(hookName)
+        _runDoMiscTimer()
+    end)
 end
 
 function botlogic.StartUp(...)
@@ -221,6 +220,7 @@ function botlogic.StartUp(...)
     CharState('startup')
     mq.imgui.init('debuggui', botgui.getUpdateFn())
     _registerBuiltinHooks()
+    hookregistry.registerAllFromConfig()
     --check startup scripts NTA
     --check each section
     --build variables for enabled sections

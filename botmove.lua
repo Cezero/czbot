@@ -2,6 +2,7 @@ local mq = require('mq')
 local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
+local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
@@ -67,7 +68,7 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
             return true
         end
         mq.cmd('/squelch /keypress back hold')
-        state.setRunState('unstuck', { phase = 'back_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance })
+        state.setRunState('unstuck', { phase = 'back_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance, priority = bothooks.getPriority('doMiscTimer') })
     elseif p.phase == 'back_wait' then
         mq.cmd('/squelch /keypress back')
         mq.cmdf('/squelch /nav id %s log=off', followid)
@@ -82,7 +83,7 @@ end
 local function tryPathExistsUnstuck(followid)
     if not mq.TLO.Navigation.PathExists('id ' .. followid)() then return false end
     mq.cmdf('/nav id %s los=on dist=15 log=off', followid)
-    state.setRunState('unstuck', { phase = 'nav_wait5', deadline = mq.gettime() + 5000, followid = followid })
+    state.setRunState('unstuck', { phase = 'nav_wait5', deadline = mq.gettime() + 5000, followid = followid, priority = bothooks.getPriority('doMiscTimer') })
     return true
 end
 
@@ -116,7 +117,7 @@ local function doWiggleUnstuck(followid, stuckdistance)
     if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then
         mq.cmdf('/squelch /multiline ; /face fast heading %s ; /stand ; /autosize sizeself %s ; /keypress forward hold', heading, size)
     end
-    state.setRunState('unstuck', { phase = 'wiggle_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance })
+    state.setRunState('unstuck', { phase = 'wiggle_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance, priority = bothooks.getPriority('doMiscTimer') })
     if idx >= 9 then rc.unstuckWiggleIndex = nil end
 end
 
@@ -127,7 +128,7 @@ end
 local function tickEngageReturnDelay400(p)
     local now = mq.gettime()
     if now < (p.deadline or 0) then return end
-    state.setRunState('engage_return_follow', { phase = 'nav_wait', deadline = now + 10000 })
+    state.setRunState('engage_return_follow', { phase = 'nav_wait', deadline = now + 10000, priority = bothooks.getPriority('doMiscTimer') })
 end
 
 local function tickEngageReturnNavWait(p)
@@ -199,7 +200,7 @@ end
 local function makeCampReturn()
     doLeashResetCombat()
     doNavToCamp()
-    state.setRunState('camp_return', { deadline = mq.gettime() + 5000 })
+    state.setRunState('camp_return', { deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMiscTimer') })
 end
 
 -- ---------------------------------------------------------------------------
@@ -210,9 +211,11 @@ local DragDist = 1500
 
 local function tickSumcorpsePending()
     if state.getRunState() ~= 'sumcorpse_pending' then return false end
-    if targeting.IsActive() then return true end
     local p = state.getRunStatePayload()
-    if p and p.corpseID then mq.cmd('/sumcorpse') end
+    if p and p.corpseID then
+        targeting.TargetAndWait(p.corpseID, 500)
+        mq.cmd('/sumcorpse')
+    end
     state.clearRunState()
     return true
 end
@@ -225,13 +228,8 @@ local function tickDragging(payload)
         mq.cmd('/hidec none')
         mq.cmd('/hidec alwaysnpc')
         mq.cmd('/multiline ; /attack off ; /stick off')
-        targeting.SetTarget(cid, 500)
-        state.setRunState('dragging', { phase = 'wait_target', corpseID = cid })
-        return true
-    end
-    if payload.phase == 'wait_target' then
-        if targeting.IsActive() then return true end
-        state.setRunState('dragging', { phase = 'sneak', corpseID = cid })
+        targeting.TargetAndWait(cid, 500)
+        state.setRunState('dragging', { phase = 'sneak', corpseID = cid, priority = bothooks.getPriority('doMiscTimer') })
         return true
     end
     if payload.phase == 'sneak' then
@@ -241,7 +239,7 @@ local function tickDragging(payload)
             return true
         end
         mq.cmdf('/nav id %s', cid)
-        state.setRunState('dragging', { phase = 'navigating', corpseID = cid })
+        state.setRunState('dragging', { phase = 'navigating', corpseID = cid, priority = bothooks.getPriority('doMiscTimer') })
         return true
     end
     if payload.phase == 'navigating' then
@@ -280,13 +278,13 @@ end
 local function startDrag(corpseId, justDidSumcorpse)
     local rc = state.getRunconfig()
     if rc.DragHack and corpseId and not justDidSumcorpse then
-        targeting.SetTarget(corpseId, 500)
-        state.setRunState('sumcorpse_pending', { corpseID = corpseId })
+        targeting.TargetAndWait(corpseId, 500)
+        mq.cmd('/sumcorpse')
         return
     end
     if corpseId and mq.TLO.Navigation.PathExists('id ' .. corpseId)() then
         mq.cmd('/multiline ; /target clear ; /hidec all')
-        state.setRunState('dragging', { phase = 'init', corpseID = corpseId, deadline = mq.gettime() + 2000 })
+        state.setRunState('dragging', { phase = 'init', corpseID = corpseId, deadline = mq.gettime() + 2000, priority = bothooks.getPriority('doMiscTimer') })
     end
 end
 
@@ -334,7 +332,7 @@ function botmove.StartReturnToFollowAfterEngage()
     if followdistance < (myconfig.settings.followdistance or 35) or not followid or followtype == 'CORPSE' then return end
     mq.cmd('/multiline ; /stick off ; /squelch /attack off ; /target self')
     botmove.FollowCall()
-    state.setRunState('engage_return_follow', { phase = 'delay_400', deadline = mq.gettime() + 400 })
+    state.setRunState('engage_return_follow', { phase = 'delay_400', deadline = mq.gettime() + 400, priority = bothooks.getPriority('doMiscTimer') })
 end
 
 function botmove.TickReturnToFollowAfterEngage()

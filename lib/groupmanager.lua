@@ -1,5 +1,5 @@
 -- Raid/group formation: save/load raid config, group invites.
--- Uses globals debug and printf. LoadRaid uses state/timers (no mq.delay).
+-- LoadRaid runs the full sequence with mq.delay() between steps (blocking).
 
 local mq = require('mq')
 local botconfig = require('lib.config')
@@ -7,7 +7,7 @@ local state = require('lib.state')
 
 local M = {}
 
--- Do a single invite (one member). Used by AdvanceLoadRaid; delay between invites is enforced by state timer.
+-- Do a single invite (one member).
 local function doOneInvite(groupldr, raidmember, grptype)
     local myid = mq.TLO.Me.ID() or 0
     local groupldrspawnid = mq.TLO.Spawn('pc =' .. groupldr).ID() or 0
@@ -71,6 +71,7 @@ function M.LoadRaid(raidname)
         return
     end
     printf('\ayCZBot:\ax Loading raid setup \ag%s\ax', raidname)
+    state.getRunconfig().statusMessage = string.format('Loading raid: %s', raidname)
     local raidmembers = mq.TLO.Raid.Members() or 0
     local myid = mq.TLO.Me.ID() or 0
     if raidmembers and raidmembers > 0 then mq.cmd('/raiddisband') end
@@ -85,80 +86,35 @@ function M.LoadRaid(raidname)
             end
         end
     end
-    state.setRunState('load_raid', {
-        phase = 'after_disband',
-        deadline = mq.gettime() + 500,
-        raidname = raidname,
-    })
-end
-
--- Advance the load_raid state machine. Called from mainloop hook; no mq.delay.
-function M.AdvanceLoadRaid()
-    if state.getRunState() ~= 'load_raid' then return end
-    local p = state.getRunStatePayload()
-    if not p or not p.deadline or mq.gettime() < p.deadline then return end
-
-    local raidname = p.raidname
-    local comkeytable = botconfig.getCommon()
-    local myid = mq.TLO.Me.ID() or 0
-
-    if p.phase == 'after_disband' then
-        -- Build flat list of actions: one invite per member, then raidinv per group.
-        local actions = {}
-        for i = 1, 12 do
-            local groupldr = comkeytable.raidlist[raidname].leaders[i] or false
-            local groups = comkeytable.raidlist[raidname].groups[i] or {}
-            if groupldr then
-                for raidmember, _ in pairs(groups) do
-                    actions[#actions + 1] = { type = 'invite', groupldr = groupldr, raidmember = raidmember, grptype = 'raid' }
-                end
-                actions[#actions + 1] = { type = 'raidinv', groupldr = groupldr }
+    state.getRunconfig().statusMessage = string.format('Loading raid: %s (waiting after disband)', raidname)
+    mq.delay(500)
+    state.getRunconfig().statusMessage = string.format('Loading raid: %s (inviting)', raidname)
+    local actions = {}
+    for i = 1, 12 do
+        local groupldr = comkeytable.raidlist[raidname].leaders[i] or false
+        local groups = comkeytable.raidlist[raidname].groups[i] or {}
+        if groupldr then
+            for raidmember, _ in pairs(groups) do
+                actions[#actions + 1] = { type = 'invite', groupldr = groupldr, raidmember = raidmember, grptype = 'raid' }
+            end
+            actions[#actions + 1] = { type = 'raidinv', groupldr = groupldr }
+        end
+    end
+    for idx = 1, #actions do
+        local a = actions[idx]
+        if a.type == 'invite' then
+            doOneInvite(a.groupldr, a.raidmember, a.grptype)
+        elseif a.type == 'raidinv' then
+            local groupldrspawnid = mq.TLO.Spawn('pc =' .. a.groupldr).ID() or 0
+            if groupldrspawnid > 0 and groupldrspawnid ~= myid then
+                mq.cmdf('/raidinv %s', a.groupldr)
+            elseif groupldrspawnid ~= myid then
+                printf('\ayCZBot:\axGroup Leader \ar%s is not in zone, skipping group', a.groupldr)
             end
         end
-        state.setRunState('load_raid', {
-            phase = 'inviting',
-            raidname = raidname,
-            deadline = mq.gettime() + 50,
-            actions = actions,
-            index = 1,
-        })
-        return
+        mq.delay(50)
     end
-
-    if p.phase == 'inviting' then
-        local actions = p.actions
-        local idx = p.index or 1
-        if idx <= #actions then
-            local a = actions[idx]
-            if a.type == 'invite' then
-                doOneInvite(a.groupldr, a.raidmember, a.grptype)
-            elseif a.type == 'raidinv' then
-                local groupldrspawnid = mq.TLO.Spawn('pc =' .. a.groupldr).ID() or 0
-                if groupldrspawnid > 0 and groupldrspawnid ~= myid then
-                    mq.cmdf('/raidinv %s', a.groupldr)
-                elseif groupldrspawnid ~= myid then
-                    printf('\ayCZBot:\axGroup Leader \ar%s is not in zone, skipping group', a.groupldr)
-                end
-            end
-            state.setRunState('load_raid', {
-                phase = 'inviting',
-                raidname = raidname,
-                deadline = mq.gettime() + 50,
-                actions = actions,
-                index = idx + 1,
-            })
-            return
-        end
-        -- All invites done; plugin handles accepting group/raid invites
-        state.clearRunState()
-        return
-    end
+    state.getRunconfig().statusMessage = ''
 end
-
--- Register mainloop hook so AdvanceLoadRaid runs every tick when state is load_raid.
-local hookregistry = require('lib.hookregistry')
-hookregistry.registerMainloopHook('groupmanager_advance', function()
-    M.AdvanceLoadRaid()
-end, 100, true)
 
 return M

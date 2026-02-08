@@ -1,35 +1,22 @@
--- Shared "wait for /tar id to populate" state and timer. No mq.delay.
--- Call SetTarget(id, timeoutMs); on a later tick TickTargeting() clears state when Target.ID() == id or timeout.
+-- Blocking "wait for /tar id to populate" via mq.delay(duration, condition).
+-- Call TargetAndWait(id, timeoutMs): issues /tar, delays until Target.ID() == id or timeout, returns success.
 
 local mq = require('mq')
 local state = require('lib.state')
 
 local targeting = {}
 
-function targeting.SetTarget(id, timeoutMs)
-    if not id or id == 0 then return end
+--- Issue /tar id and block until target is set or timeout. Returns true if Target.ID() == id.
+---@param id number Spawn ID to target
+---@param timeoutMs number? Max ms to wait (default 500)
+---@return boolean ok True if mq.TLO.Target.ID() == id after wait
+function targeting.TargetAndWait(id, timeoutMs)
+    if not id or id == 0 then return false end
     mq.cmdf('/tar id %s', id)
-    state.setRunState('targeting', { targetID = id, deadline = mq.gettime() + (timeoutMs or 500) })
-end
-
-function targeting.TickTargeting()
-    if state.getRunState() ~= 'targeting' then return end
-    local p = state.getRunStatePayload()
-    if not p then state.clearRunState() return end
-    local now = mq.gettime()
-    if now >= (p.deadline or 0) or (p.targetID and mq.TLO.Target.ID() == p.targetID) then
-        state.getRunconfig().targetingResult = (mq.TLO.Target.ID() == p.targetID)
-        state.clearRunState()
-    end
-end
-
-function targeting.IsActive()
-    return state.getRunState() == 'targeting'
-end
-
-do
-    local hookregistry = require('lib.hookregistry')
-    hookregistry.registerMainloopHook('tickTargeting', targeting.TickTargeting, 100)
+    state.getRunconfig().statusMessage = string.format('Waiting for target (id %s)', id)
+    mq.delay(timeoutMs or 500, function() return mq.TLO.Target.ID() == id end)
+    state.getRunconfig().statusMessage = ''
+    return mq.TLO.Target.ID() == id
 end
 
 return targeting

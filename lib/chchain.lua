@@ -3,6 +3,7 @@
 
 local mq = require('mq')
 local state = require('lib.state')
+local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local spellutils = require('lib.spellutils')
 local hookregistry = require('lib.hookregistry')
@@ -60,18 +61,19 @@ function chchain.OnGo(line, arg1)
         else
             mq.cmdf('/rs Tank %s is not in zone or dead, skipping', chchaincurtank)
             -- Defer /rs <<Go>> until chchainpause expires; chchainTick will do it.
-            state.setRunState('chchain', { deadline = mq.gettime() + (chchainpause or 0) * 100, chnextclr = chnextclr })
+            state.setRunState('chchain', { deadline = mq.gettime() + (chchainpause or 0) * 100, chnextclr = chnextclr, priority = bothooks.getPriority('chchainTick') })
             return
         end
     end
     if chchaintank and mq.TLO.Target.ID() ~= tankid then
-        targeting.SetTarget(tankid, 500)
-        state.setRunState('chchain', { waitingForTarget = true, deadline = chtimer, chnextclr = chnextclr })
+        targeting.TargetAndWait(tankid, 500)
+    end
+    if chchaintank and mq.TLO.Target.ID() ~= tankid then
         return
     end
     if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < 400 then
         mq.cmdf('/rs SKIP ME (out of mana)')
-        state.setRunState('chchain', { deadline = mq.gettime() + (chchainpause or 0) * 100, chnextclr = chnextclr })
+        state.setRunState('chchain', { deadline = mq.gettime() + (chchainpause or 0) * 100, chnextclr = chnextclr, priority = bothooks.getPriority('chchainTick') })
         return
     end
     if not spellutils.DistanceCheck('complete heal', 0, tankid) then
@@ -80,20 +82,13 @@ function chchain.OnGo(line, arg1)
     end
     mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', chchaintank, chchainpause,
         mq.TLO.Me.PctMana())
-    state.setRunState('chchain', { deadline = chtimer, chnextclr = chnextclr })
+    state.setRunState('chchain', { deadline = chtimer, chnextclr = chnextclr, priority = bothooks.getPriority('chchainTick') })
 end
 
-hookregistry.registerMainloopHook('chchainTick', function()
+hookregistry.registerHookFn('chchainTick', function(hookName)
     if state.getRunState() ~= 'chchain' then return end
     local p = state.getRunStatePayload()
     if not p or not p.chnextclr then state.clearRunState() return end
-    if p.waitingForTarget then
-        if not targeting.IsActive() then
-            state.setRunState('chchain', { deadline = p.deadline, chnextclr = p.chnextclr })
-            mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', chchaintank, chchainpause, mq.TLO.Me.PctMana())
-        end
-        return
-    end
     if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then
         mq.cmdf('/cast "Complete Heal"')
         return
@@ -112,6 +107,6 @@ hookregistry.registerMainloopHook('chchainTick', function()
     if not mq.TLO.Me.Sitting() and not mq.TLO.Me.CastTimeLeft() then
         mq.cmd('/sit on')
     end
-end, 500)
+end)
 
 return chchain

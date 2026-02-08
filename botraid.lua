@@ -1,6 +1,7 @@
 local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local bothooks = require('lib.bothooks')
 local myconfig = botconfig.config
 
 local botraid = {}
@@ -64,14 +65,14 @@ end
 
 do
     local hookregistry = require('lib.hookregistry')
-    hookregistry.registerMainloopHook('doRaid', function()
+    hookregistry.registerHookFn('doRaid', function(hookName)
         if not myconfig.settings.doraid then return end
         if botraid.RaidCheck() then
-            state.setRunState('raid_mechanic')
+            state.setRunState('raid_mechanic', { priority = bothooks.getPriority('doRaid') })
         else
             state.setRunState('idle')
         end
-    end, 350)
+    end)
 end
 
 return botraid

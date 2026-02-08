@@ -139,38 +139,22 @@ function spellutils.PeerHasPetBuff(peerInfo, spellid)
 end
 
 -- Ensure we have buff data for this spawn (for non-peer buff/cure checks). Buffs only populate after
--- targeting the spawn for a few ms. Returns true if we can read buffs (targeted and BuffsPopulated);
--- if not, targets the spawn, sets state 'buffs_populate_wait', and returns false so caller should
--- return without casting. Next tick RunSpellCheckLoop will re-enter and either wait or clear state.
--- Optional spellIndex and targethit are stored in payload so the wait block can cast on clear.
--- Optional cureTypeList (for sub=='cure') is stored so the wait block can re-check need.
--- Optional resumePhase and resumeGroupIndex (for sub=='buff') let the wait block set buffs_resume on clear.
+-- targeting the spawn for a few ms. If not already targeted with BuffsPopulated, /tar and block up to 1s.
+-- Returns true when we can read buffs (targeted and BuffsPopulated). Optional args (spellIndex, etc.) kept for API compatibility.
 function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit, cureTypeList, resumePhase,
                                               resumeGroupIndex)
     if not spawnId or not sub then return false end
-    local runState = state.getRunState()
-    local payload = state.getRunStatePayload()
-    if runState == 'buffs_populate_wait' and payload and payload.spawnId == spawnId and payload.sub == sub then
-        if mq.TLO.Target.ID() ~= spawnId then
-            mq.cmdf('/tar id %s', spawnId)
-            return false
-        end
-        local sp = mq.TLO.Spawn(spawnId)
-        if sp and sp.BuffsPopulated and sp.BuffsPopulated() then
-            state.clearRunState()
-            return true
-        end
-        return false
-    end
     if mq.TLO.Target.ID() == spawnId then
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
     end
-    state.setRunState('buffs_populate_wait',
-        { spawnId = spawnId, sub = sub, spellIndex = spellIndex, targethit = targethit, cureTypeList = cureTypeList, resumePhase =
-        resumePhase, resumeGroupIndex = resumeGroupIndex })
     mq.cmdf('/tar id %s', spawnId)
-    return false
+    state.getRunconfig().statusMessage = string.format('Waiting for target buffs (id %s)', spawnId)
+    mq.delay(1000, function() return mq.TLO.Target.BuffsPopulated() end)
+    local sp = mq.TLO.Spawn(spawnId)
+    local ok = sp and sp.BuffsPopulated and sp.BuffsPopulated() and mq.TLO.Target.ID() == spawnId
+    if not ok then state.getRunconfig().statusMessage = '' end
+    return ok
 end
 
 -- Spawn: does this spawn need the buff? Buffs are only available on Spawn (like mobs); you must have
@@ -319,18 +303,32 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         if mq.TLO.Me.CastTimeLeft() > 0 and (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') then
             spellutils.InterruptCheck()
         end
-        if mq.TLO.Me.CastTimeLeft() > 0 then return false end
-        spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
-        local cont = true
-        if options.afterCast then
-            cont = options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
+        if mq.TLO.Me.CastTimeLeft() > 0 then
+            -- Different category asking to cast: interrupt and let this run proceed.
+            if sub ~= rc.CurSpell.sub then
+                mq.cmd('/stopcast')
+                rc.CurSpell = {}
+                rc.statusMessage = ''
+                state.clearRunState()
+                -- fall through to for-loop
+            else
+                return false
+            end
         end
-        rc.CurSpell = {}
-        rc.statusMessage = ''
-        state.clearRunState()
-        if not cont then return true end
-        if not options.priority then return true end
-        -- fall through to try next spell index
+        -- Cast just finished (CurSpell still set; we did not interrupt).
+        if rc.CurSpell and rc.CurSpell.sub then
+            spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
+            local cont = true
+            if options.afterCast then
+                cont = options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
+            end
+            rc.CurSpell = {}
+            rc.statusMessage = ''
+            state.clearRunState()
+            if not cont then return true end
+            if not options.priority then return true end
+            -- fall through to try next spell index
+        end
     end
 
     -- Re-entry: waiting for move to stop (do not clear phase so CastSpell sees resuming = true)
@@ -342,7 +340,7 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             state.clearRunState()
             return false
         end
-        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
+        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub, options.runPriority)
         return false
     end
 
@@ -355,66 +353,8 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             state.clearRunState()
             return false
         end
-        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
+        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub, options.runPriority)
         return false
-    end
-
-    -- loading_gem: check each tick
-    if state.getRunState() == 'loading_gem' then
-        local p = state.getRunStatePayload()
-        if p and p.deadline and mq.gettime() >= p.deadline then state.clearRunState() end
-        if state.getRunState() == 'loading_gem' and p and p.gem and p.spell then
-            local cur = mq.TLO.Me.Gem(p.gem)()
-            if cur and string.lower(cur) == string.lower(p.spell) then state.clearRunState() end
-        end
-        if state.getRunState() == 'loading_gem' then return false end
-    end
-
-    -- Re-entry: waiting for spawn buffs to populate (non-peer buff/cure). Target spawn, then wait until BuffsPopulated.
-    if state.getRunState() == 'buffs_populate_wait' then
-        local p = state.getRunStatePayload()
-        if p and p.spawnId then
-            if mq.TLO.Target.ID() ~= p.spawnId then
-                mq.cmdf('/tar id %s', p.spawnId)
-                return false
-            end
-            local sp = mq.TLO.Spawn(p.spawnId)
-            if not sp or not sp.BuffsPopulated or not sp.BuffsPopulated() then
-                return false
-            end
-            state.clearRunState()
-            if p.spellIndex and p.targethit then
-                local shouldCast = false
-                if p.sub == 'buff' then
-                    local entry = botconfig.getSpellEntry(p.sub, p.spellIndex)
-                    if entry then
-                        local spell = spellutils.GetSpellInfo(entry)
-                        shouldCast = (spell and spellutils.SpawnNeedsBuff(p.spawnId, spell, entry.spellicon)) == true
-                    end
-                elseif p.sub == 'cure' then
-                    shouldCast = spellutils.SpawnDetrimentalsForCure(p.spawnId, p.cureTypeList or {}) == true
-                else
-                    shouldCast = true
-                end
-                if shouldCast then
-                    spellutils.CastSpell(p.spellIndex, p.spawnId, p.targethit, p.sub)
-                end
-                if p.sub == 'buff' and (p.resumePhase or p.resumeGroupIndex) then
-                    local phase = p.resumePhase or 'after_tank'
-                    local nextGroupMemberIndex = (p.resumePhase == 'groupmember' and p.resumeGroupIndex) and
-                    (p.resumeGroupIndex + 1) or nil
-                    state.setRunState('buffs_resume',
-                        { buffIndex = p.spellIndex, phase = phase, nextGroupMemberIndex = nextGroupMemberIndex })
-                elseif p.sub == 'cure' and (p.resumePhase or p.resumeGroupIndex) then
-                    local phase = p.resumePhase or 'after_tank'
-                    local nextGroupMemberIndex = (p.resumePhase == 'groupmember' and p.resumeGroupIndex) and
-                    (p.resumeGroupIndex + 1) or nil
-                    state.setRunState('cures_resume',
-                        { cureIndex = p.spellIndex, phase = phase, nextGroupMemberIndex = nextGroupMemberIndex })
-                end
-                return false
-            end
-        end
     end
 
     for i = 1, count do
@@ -438,15 +378,12 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             local spellNotInBook = rc.spellNotInBook and rc.spellNotInBook[sub] and rc.spellNotInBook[sub][i]
             if (not options.entryValid or options.entryValid(i)) and not spellNotInBook then
                 local EvalID, targethit = evalFn(i)
-                if state.getRunState() == 'buffs_populate_wait' then
-                    return false
-                end
                 if EvalID and targethit
                     and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
                     and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
                     and spellutils.PreCondCheck(sub, i, EvalID) then
                     -- Only exit when we actually started a cast (or precast); otherwise try next index
-                    if spellutils.CastSpell(i, EvalID, targethit, sub) then
+                    if spellutils.CastSpell(i, EvalID, targethit, sub, options.runPriority) then
                         return false
                     end
                 end
@@ -518,7 +455,7 @@ function spellutils.RunScript(script, Sub, ID)
     end
 end
 
-function spellutils.LoadSpell(Sub, ID)
+function spellutils.LoadSpell(Sub, ID, runPriority)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return false end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then
@@ -563,8 +500,13 @@ function spellutils.LoadSpell(Sub, ID)
             if mq.TLO.Me.Book(spell)() then
                 mq.cmdf('/memspell %s "%s"', gem, spell)
                 rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
-                state.setRunState('loading_gem', { deadline = mq.gettime() + 10000, gem = gem, spell = spell })
-                return false
+                rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
+                mq.delay(10000, function()
+                    local g = mq.TLO.Me.Gem(gem)()
+                    return g and string.lower(g) == string.lower(spell)
+                end)
+                rc.statusMessage = ''
+                if mq.TLO.Me.Gem(spell)() ~= gem then return false end
             else
                 printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', Sub, ID, spell)
                 entry.enabled = false
@@ -697,14 +639,14 @@ function spellutils.InterruptCheck()
     end
 end
 
-function spellutils.CastSpell(index, EvalID, targethit, sub)
+function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority)
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return false end
     local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
     if not resuming then
         if not spellutils.SpellCheck(sub, index) then return false end
-        if not spellutils.LoadSpell(sub, index) then return false end
+        if not spellutils.LoadSpell(sub, index, runPriority) then return false end
         rc.CurSpell = {
             sub = sub,
             spell = index,
@@ -732,11 +674,11 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
         end
     end
 
-    if not resuming and (mq.TLO.Spell(spell).MyCastTime() and mq.TLO.Spell(spell).MyCastTime() > 0 and (mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()) and mq.TLO.Me.Class.ShortName() ~= 'BRD') then
+        if not resuming and (mq.TLO.Spell(spell).MyCastTime() and mq.TLO.Spell(spell).MyCastTime() > 0 and (mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()) and mq.TLO.Me.Class.ShortName() ~= 'BRD') then
         mq.cmd('/multiline ; /nav stop log=off ; /stick off)')
         rc.CurSpell.phase = 'precast_wait_move'
         rc.CurSpell.deadline = mq.gettime() + 3000
-        state.setRunState('casting')
+        state.setRunState('casting', { deadline = mq.gettime() + 3000, priority = runPriority })
         return true
     end
     -- TODO: Revisit bard mez + melee cycle. Current behavior: attack off when mezzing notanktar, and bard never
@@ -758,7 +700,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'
             rc.CurSpell.deadline = mq.gettime() + 1000
-            state.setRunState('casting')
+            state.setRunState('casting', { priority = runPriority })
             return true
         end
     end
@@ -798,7 +740,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
         mq.cmdf('/doability %s', spell)
     end
     rc.CurSpell.phase = 'casting'
-    state.setRunState('casting')
+    state.setRunState('casting', { priority = runPriority })
     return true
 end
 

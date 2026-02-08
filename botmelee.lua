@@ -2,6 +2,7 @@ local mq = require('mq')
 local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
+local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local botmove = require('botmove')
 local charinfo = require('plugin.charinfo')
@@ -141,24 +142,20 @@ local function selectMATarget(mainTankName)
     end
 end
 
--- When engageTargetId is set: pet attack, target (via targeting lib), stand, attack on, stick. Uses targeting state + melee phase moving_closer; no mq.delay.
+-- When engageTargetId is set: pet attack, target (blocking TargetAndWait), stand, attack on, stick. Uses melee phase moving_closer.
 local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
-
-    if targeting.IsActive() then
-        return
-    end
 
     if state.getRunState() == 'melee' then
         local p = state.getRunStatePayload()
         if p and p.phase == 'moving_closer' then
             if mq.TLO.Target.Distance() and mq.TLO.Target.Distance() < mq.TLO.Target.MaxMeleeTo() then
-                state.setRunState('melee', { phase = 'idle' })
+                state.setRunState('melee', { phase = 'idle', priority = bothooks.getPriority('doMelee') })
                 return
             end
             if p.deadline and mq.gettime() >= p.deadline then
-                state.setRunState('melee', { phase = 'idle' })
+                state.setRunState('melee', { phase = 'idle', priority = bothooks.getPriority('doMelee') })
                 return
             end
             return
@@ -172,8 +169,7 @@ local function engageTarget()
     if not myconfig.settings.domelee then return end
 
     if mq.TLO.Target.ID() ~= engageTargetId then
-        targeting.SetTarget(engageTargetId, 500)
-        return
+        targeting.TargetAndWait(engageTargetId, 500)
     end
 
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop') end
@@ -184,7 +180,7 @@ local function engageTarget()
     end
 
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
-        state.setRunState('melee', { phase = 'moving_closer', deadline = mq.gettime() + 5000 })
+        state.setRunState('melee', { phase = 'moving_closer', deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMelee') })
     end
 end
 
@@ -239,37 +235,24 @@ function botmelee.AdvCombat()
     end
 end
 
--- Return target ID of PC pcName (used for MA's or MT's target depending on caller). Uses charinfo when peer, else /assist + melee phase targeting.
+-- Return target ID of PC pcName (used for MA's or MT's target depending on caller). Uses charinfo when peer, else /assist + blocking delay until target set.
 function botmelee.GetPCTarget(pcName)
     if not pcName or not mq.TLO.Spawn('pc =' .. pcName).ID() then return nil end
 
-    if state.getRunState() == 'melee' then
-        local p = state.getRunStatePayload()
-        if p and p.phase == 'targeting' and p.pcName then
-            if p.pcName ~= pcName then
-                state.setRunState('melee', { phase = 'idle' })
-                return nil
-            end
-            if p.deadline and mq.gettime() < p.deadline then
-                return nil
-            end
-            state.setRunState('melee', { phase = 'idle' })
-            for _, v in ipairs(state.getRunconfig().MobList) do
-                if mq.TLO.Target.ID() == v.ID() then return mq.TLO.Target.ID() end
-            end
-            return nil
-        end
-    end
-
     if mq.TLO.Me.Assist() then mq.cmd('/squelch /assist off') end
     mq.cmdf('/assist %s', pcName)
-    state.setRunState('melee', { phase = 'targeting', pcName = pcName, deadline = mq.gettime() + 500 })
+    state.getRunconfig().statusMessage = string.format('Waiting for assist target (%s)', pcName)
+    mq.delay(500, function() return mq.TLO.Target.ID() end)
+    state.getRunconfig().statusMessage = ''
+    for _, v in ipairs(state.getRunconfig().MobList) do
+        if mq.TLO.Target.ID() == v.ID() then return mq.TLO.Target.ID() end
+    end
     return nil
 end
 
 do
     local hookregistry = require('lib.hookregistry')
-    hookregistry.registerMainloopHook('doMelee', function()
+    hookregistry.registerHookFn('doMelee', function(hookName)
         if state.getRunState() == 'engage_return_follow' then
             botmove.TickReturnToFollowAfterEngage()
             return
@@ -280,7 +263,7 @@ do
             return
         end
         local payload = (state.getRunState() == 'melee') and state.getRunStatePayload() or nil
-        state.setRunState('melee', payload and payload or { phase = 'idle' })
+        state.setRunState('melee', payload and payload or { phase = 'idle', priority = bothooks.getPriority('doMelee') })
         if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then
             botmelee.AdvCombat()
             return
@@ -292,7 +275,7 @@ do
         if (tonumber(myconfig.melee.minmana) < mq.TLO.Me.PctMana() or mq.TLO.Me.MaxMana() == 0) then
             botmelee.AdvCombat()
         end
-    end, 600)
+    end)
 end
 
 return botmelee

@@ -7,6 +7,7 @@ local spellstates = require('lib.spellstates')
 local state = require('lib.state')
 local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
+local bothooks = require('lib.bothooks')
 local myconfig = botconfig.config
 
 local botcast = {}
@@ -328,9 +329,6 @@ local function BuffEval(index)
             id, hit = BuffEvalTank(index, entry, spell, sid, range, tank, tankid)
             if id then return id, hit end
         end
-        if state.getRunState() == 'buffs_populate_wait' then
-            return nil, nil
-        end
         id, hit = BuffEvalGroupBuff(index, entry, spell, sid, range)
         if id then return id, hit end
         local startFrom = 1
@@ -340,9 +338,6 @@ local function BuffEval(index)
         end
         id, hit = BuffEvalGroupMember(index, entry, spell, sid, range, startFrom)
         if id then return id, hit end
-        if state.getRunState() == 'buffs_populate_wait' then
-            return nil, nil
-        end
         id, hit = BuffEvalPc(index, entry, sid, range, bots, botcount)
         if id then return id, hit end
         id, hit = BuffEvalMyPet(index, entry, spell, sid, range)
@@ -356,11 +351,12 @@ local function BuffEval(index)
     return nil, nil
 end
 
-function botcast.BuffCheck()
+function botcast.BuffCheck(runPriority)
     local mobList = state.getRunconfig().MobList
     local hasMob = mobList and mobList[1]
     return spellutils.RunSpellCheckLoop('buff', botconfig.getSpellCount('buff'), BuffEval, {
         skipInterruptForBRD = true,
+        runPriority = runPriority,
         entryValid = function(i)
             local entry = botconfig.getSpellEntry('buff', i)
             if not entry then return false end
@@ -549,7 +545,6 @@ local function CureEval(index)
             if id then return id, hit end
         end
     end
-    if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
     if cureindex.groupcure then
         local id, hit = CureEvalGroupCure(index, entry)
         if id then return id, hit end
@@ -583,10 +578,8 @@ local function CureEval(index)
                     if id then return id, hit end
                 end
             end
-            if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
         end
     end
-    if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
     if cureindex.pc and botcount then
         for i = 1, botcount do
             local botname = bots[i]
@@ -601,15 +594,15 @@ local function CureEval(index)
             end
         end
     end
-    if state.getRunState() == 'buffs_populate_wait' then return nil, nil end
     return nil, nil
 end
 
-function botcast.CureCheck()
+function botcast.CureCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     local priority = myconfig.cure.prioritycure
     return spellutils.RunSpellCheckLoop('cure', botconfig.getSpellCount('cure'), CureEval, {
         skipInterruptForBRD = true,
+        runPriority = runPriority,
         priority = priority,
         afterCast = priority and function(i)
             local e, c = CureEval(i)
@@ -940,8 +933,9 @@ function botcast.ValidateHeal()
     return healtar and healtar > 0
 end
 
-function botcast.HealCheck()
+function botcast.HealCheck(runPriority)
     return spellutils.RunSpellCheckLoop('heal', botconfig.getSpellCount('heal'), HPEval, {
+        runPriority = runPriority,
         priority = false,
         afterCast = function(i)
             local entry = botconfig.getSpellEntry('heal', i)
@@ -1258,7 +1252,7 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     return true
 end
 
-function botcast.DebuffCheck()
+function botcast.DebuffCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     local mobcountstart = state.getRunconfig().MobCount
     local botmelee = require('botmelee')
@@ -1269,6 +1263,7 @@ function botcast.DebuffCheck()
     end
     return spellutils.RunSpellCheckLoop('debuff', botconfig.getSpellCount('debuff'), DebuffEval, {
         skipInterruptForBRD = true,
+        runPriority = runPriority,
         immuneCheck = true,
         beforeCast = DebuffOnBeforeCast,
         entryValid = function(i)
@@ -1305,39 +1300,34 @@ end
 
 do
     local hookregistry = require('lib.hookregistry')
-    hookregistry.registerMainloopHook('ADSpawnCheck', function()
+    hookregistry.registerHookFn('ADSpawnCheck', function(hookName)
         botcast.ADSpawnCheck()
-    end, 400)
-    hookregistry.registerMainloopHook('priorityCure', function()
+    end)
+    hookregistry.registerHookFn('priorityCure', function(hookName)
         if not myconfig.settings.docure or not (myconfig.cure.spells and #myconfig.cure.spells > 0) or not myconfig.cure.prioritycure then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Cure Check' end
-        botcast.CureCheck()
-    end, 700)
-    hookregistry.registerMainloopHook('doHeal', function()
+        botcast.CureCheck(bothooks.getPriority(hookName))
+    end)
+    hookregistry.registerHookFn('doHeal', function(hookName)
         if not myconfig.settings.doheal or not (myconfig.heal.spells and #myconfig.heal.spells > 0) then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Heal Check' end
-        botcast.HealCheck()
-    end, 900)
-    hookregistry.registerMainloopHook('doDebuff', function()
+        botcast.HealCheck(bothooks.getPriority(hookName))
+    end)
+    hookregistry.registerHookFn('doDebuff', function(hookName)
         if not myconfig.settings.dodebuff or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) or not state.getRunconfig().MobList[1] then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Debuff Check' end
-        botcast.DebuffCheck()
-    end, 1000)
-    hookregistry.registerMainloopHook('doBuff', function()
+        botcast.DebuffCheck(bothooks.getPriority(hookName))
+    end)
+    hookregistry.registerHookFn('doBuff', function(hookName)
         if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Buff Check' end
-        botcast.BuffCheck()
-    end, 1100)
-    hookregistry.registerMainloopHook('doCure', function()
+        botcast.BuffCheck(bothooks.getPriority(hookName))
+    end)
+    hookregistry.registerHookFn('doCure', function(hookName)
         if not myconfig.settings.docure or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
-        if state.isBusy() and state.getRunState() ~= 'casting' and state.getRunState() ~= 'loading_gem' then return end
         if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Cure Check' end
-        botcast.CureCheck()
-    end, 1200)
+        botcast.CureCheck(bothooks.getPriority(hookName))
+    end)
 end
 
 return botcast

@@ -30,6 +30,14 @@ end
 -- Expose for botlogic zoneCheck hook (same handler as MQ zone events).
 botevents.DelayOnZone = DelayOnZone
 
+-- Zone event wrapper: delay 1s then run DelayOnZone (used by MQ event bindings).
+local function DelayOnZoneWithDelay()
+    state.getRunconfig().statusMessage = 'Zone change, waiting...'
+    mq.delay(1000)
+    DelayOnZone()
+    state.getRunconfig().statusMessage = ''
+end
+
 function botevents.Event_Slain()
     local respawntimeleft = (state.getRunconfig().HoverEchoTimer - mq.gettime()) / 1000
     printf('\ayCZBot:\axI died and am hovering, %s seconds until I release', respawntimeleft)
@@ -172,8 +180,8 @@ function botevents.BindEvents()
     mq.event('Slain1', "#*#You have been slain by#*#", botevents.Event_Slain)
     mq.event('Slain2', "#*#Returning to Bind Location#*#", botevents.Event_Slain)
     mq.event('Slain3', "You died.", botevents.Event_Slain)
-    mq.event('DelayOnZone1', "#*#You have entered#*#", DelayOnZone)
-    mq.event('DelayOnZone2', "#*#LOADING, PLEASE WAIT.#*#", DelayOnZone)
+    mq.event('DelayOnZone1', "#*#You have entered#*#", DelayOnZoneWithDelay)
+    mq.event('DelayOnZone2', "#*#LOADING, PLEASE WAIT.#*#", DelayOnZoneWithDelay)
     mq.event('CastRst1', "Your target resisted the#*#", botevents.Event_CastRst)
     mq.event('CastRst2', "#*#resisted your#*#!#*#", botevents.Event_CastRst)
     mq.event('CastRst3', "#*#avoided your#*#!#*#", botevents.Event_CastRst)

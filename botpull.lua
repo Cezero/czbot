@@ -2,6 +2,7 @@ local mq = require('mq')
 local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
+local bothooks = require('lib.bothooks')
 local botcast = require('botcast')
 local botmelee = require('botmelee')
 local botmove = require('botmove')
@@ -258,7 +259,7 @@ function botpull.StartPull()
     rc.pullState = 'navigating'
     rc.pullPhase = nil
     rc.pullDeadline = nil
-    state.setRunState('pulling')
+    state.setRunState('pulling', { priority = bothooks.getPriority('doPull') })
     rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawn.ID())
 end
 
@@ -460,7 +461,7 @@ end
 
 do
     local hookregistry = require('lib.hookregistry')
-    hookregistry.registerMainloopHook('doPull', function()
+    hookregistry.registerHookFn('doPull', function(hookName)
         if not myconfig.settings.dopull then return end
         if state.getRunState() == 'raid_mechanic' then return end
         if state.getRunState() == 'pulling' then
@@ -478,7 +479,7 @@ do
         end
         if (state.getRunconfig().MobCount < myconfig.pull.chainpullcnt) then botpull.StartPull() end
         if (state.getRunconfig().MobCount == 0) and not state.getRunconfig().engageTargetId then botpull.StartPull() end
-    end, 800)
+    end)
 end
 
 return botpull

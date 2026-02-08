@@ -53,7 +53,9 @@
 
 local M = {}
 
--- Run states that mean "busy" (skip buff/heal/pull etc when true)
+-- Run states that mean "busy". When busy, the main loop runs only hooks with
+-- hook.priority <= payload.priority (see hookregistry.runNormalHooks).
+-- Payload should include priority = mainloop hook priority of the "owner" of this activity.
 local BUSY_STATES = {
     pulling = true,
     raid_mechanic = true,
@@ -61,12 +63,8 @@ local BUSY_STATES = {
     dragging = true,
     camp_return = true,
     engage_return_follow = true,
-    targeting = true,
     unstuck = true,
     chchain = true,
-    zone_changing = true,
-    loading_gem = true,
-    load_raid = true,
 }
 M._runconfig = nil
 
@@ -128,9 +126,11 @@ function M.resetRunconfig()
     return M._runconfig
 end
 
----Set current run state and optional payload (deadline, phase, or custom table).
----@param name string One of: idle, pulling, raid_mechanic, casting, dragging, camp_return, engage_return_follow, targeting, melee, unstuck, chchain, zone_changing, loading_gem, load_raid
----@param payload table|nil Optional: { deadline = number?, phase = string?, ... }
+---Set current run state and optional payload (deadline, phase, priority, or custom table).
+---When setting a busy state (any in BUSY_STATES), payload should include priority (number) =
+---mainloop hook priority of the owner so the main loop can filter which hooks run.
+---@param name string One of: idle, pulling, raid_mechanic, casting, dragging, camp_return, engage_return_follow, melee, unstuck, chchain
+---@param payload table|nil Optional: { deadline = number?, phase = string?, priority = number?, ... }
 function M.setRunState(name, payload)
     local rc = M.getRunconfig()
     rc.runState = name or 'idle'
@@ -154,7 +154,7 @@ function M.getRunState()
     return M.getRunconfig().runState or 'idle'
 end
 
----True when runState is a "busy" state (skip buff/pull etc).
+---True when runState is a "busy" state. Main loop uses isBusy() and payload.priority to run only hooks with hook.priority <= payload.priority.
 ---@return boolean
 function M.isBusy()
     local s = M.getRunState()

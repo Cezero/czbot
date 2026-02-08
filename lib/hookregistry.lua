@@ -4,8 +4,10 @@
 -- Always-run hooks (runWhenPaused = true): Must run every tick; never block. Use for:
 --   - plugin.charinfo (network sync)
 --   - Any logic that must fire regardless of runState (pulling, casting, etc.)
--- Normal hooks: Skipped when MasterPause; some skip when state.isBusy() (e.g. buff/heal/pull).
+-- Normal hooks: Skipped when MasterPause. When state is busy and payload has priority,
+--   only hooks with hook.priority <= payload.priority run (higher-priority hooks and the busy-holding hook).
 local _hooks = {}
+local _hookFns = {} -- name -> function (implementations registered by modules)
 local _sortedNormal = nil
 local _sortedRunWhenPaused = nil
 
@@ -30,6 +32,25 @@ local function _rebuildSorted()
 end
 
 local hookregistry = {}
+
+function hookregistry.registerHookFn(name, fn)
+    _hookFns[name] = fn
+end
+
+function hookregistry.getHookFn(name)
+    return _hookFns[name]
+end
+
+--- Wire all hooks from bothooks config. Call after all modules have registerHookFn'd.
+function hookregistry.registerAllFromConfig()
+    local bothooks = require('lib.bothooks')
+    for _, entry in ipairs(bothooks.getHooks()) do
+        local fn = _hookFns[entry.name]
+        if fn then
+            hookregistry.registerMainloopHook(entry.name, fn, entry.priority, entry.runWhenPaused)
+        end
+    end
+end
 
 function hookregistry.registerMainloopHook(name, fn, priority, runWhenPaused)
     _hooks[#_hooks + 1] = {
@@ -56,14 +77,24 @@ end
 function hookregistry.runRunWhenPausedHooks()
     if _sortedRunWhenPaused == nil then _rebuildSorted() end
     for _, h in ipairs(_sortedRunWhenPaused) do
-        h.fn()
+        h.fn(h.name)
     end
 end
 
 function hookregistry.runNormalHooks()
     if _sortedNormal == nil then _rebuildSorted() end
+    local state = require('lib.state')
+    local maxPriority = nil
+    if state.isBusy() then
+        local payload = state.getRunStatePayload()
+        if payload and type(payload.priority) == 'number' then
+            maxPriority = payload.priority
+        end
+    end
     for _, h in ipairs(_sortedNormal) do
-        h.fn()
+        if maxPriority == nil or h.priority <= maxPriority then
+            h.fn(h.name)
+        end
     end
 end
 
