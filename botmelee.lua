@@ -190,6 +190,7 @@ end
 
 -- When no engageTargetId: stick off, attack off, pet back, clear NPC target.
 local function disengageCombat()
+    state.getRunconfig().statusMessage = ''
     combat.ResetCombatState()
 end
 
@@ -224,6 +225,14 @@ function botmelee.AdvCombat()
     end
 
     if rc.engageTargetId then
+        local name = mq.TLO.Spawn(rc.engageTargetId).CleanName() or tostring(rc.engageTargetId)
+        if tankrole.AmIMainTank() then
+            rc.statusMessage = string.format('Tanking %s (%s)', name, rc.engageTargetId)
+        elseif myconfig.melee.offtank then
+            rc.statusMessage = string.format('Off-tanking %s (%s)', name, rc.engageTargetId)
+        else
+            rc.statusMessage = string.format('Assisting on %s (%s)', name, rc.engageTargetId)
+        end
         engageTarget()
     else
         disengageCombat()

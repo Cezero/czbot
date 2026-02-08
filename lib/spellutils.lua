@@ -326,6 +326,7 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             cont = options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
         end
         rc.CurSpell = {}
+        rc.statusMessage = ''
         state.clearRunState()
         if not cont then return true end
         if not options.priority then return true end
@@ -337,6 +338,7 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         if mq.TLO.Me.Moving() then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return false end
             rc.CurSpell = {}
+            rc.statusMessage = ''
             state.clearRunState()
             return false
         end
@@ -349,6 +351,7 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
         if mq.TLO.Target.ID() ~= rc.CurSpell.target then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return false end
             rc.CurSpell = {}
+            rc.statusMessage = ''
             state.clearRunState()
             return false
         end
@@ -626,6 +629,7 @@ function spellutils.InterruptCheck()
                     entry.spell)
                 mq.cmd('/interrupt')
                 rc.CurSpell = {}
+                rc.statusMessage = ''
             end
         end
     end
@@ -644,6 +648,7 @@ function spellutils.InterruptCheck()
                 if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
                 rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
                 rc.CurSpell = {}
+                rc.statusMessage = ''
             elseif sub == 'debuff' and mq.TLO.Spell(spellid).CategoryID() ~= 20 then
                 mq.cmdf('/multiline ; /echo Interrupt %s on MobID %s, debuff already present ; /interrupt', spellname,
                     target)
@@ -651,6 +656,7 @@ function spellutils.InterruptCheck()
                 spellstates.DebuffListUpdate(target, spellid, spelldur)
                 mq.cmd('/interrupt')
                 rc.CurSpell = {}
+                rc.statusMessage = ''
             end
         end
         if mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() and mq.TLO.Spell(spellid).StacksTarget() == 'FALSE' then
@@ -660,6 +666,7 @@ function spellutils.InterruptCheck()
                 if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
                 rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
                 rc.CurSpell = {}
+                rc.statusMessage = ''
             elseif sub == 'debuff' then
                 printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target,
                     targetname)
@@ -667,6 +674,7 @@ function spellutils.InterruptCheck()
                     mq.TLO.Target.Buff(spellname).Duration() + mq.gettime())
                 mq.cmd('/interrupt')
                 rc.CurSpell = {}
+                rc.statusMessage = ''
             end
         end
     end
@@ -683,6 +691,7 @@ function spellutils.InterruptCheck()
                 printf('\ayCZBot:\axInterrupt %s, is no longer %s', spellname, criteria)
                 mq.cmd('/interrupt')
                 rc.CurSpell = {}
+                rc.statusMessage = ''
             end
         end
     end
@@ -708,6 +717,20 @@ function spellutils.CastSpell(index, EvalID, targethit, sub)
     local spell = string.lower(entry.spell or '')
     local gem = entry.gem
     local targetname = mq.TLO.Spawn(EvalID).CleanName()
+    local spellname = entry.spell or spell
+    if not resuming then
+        if sub == 'heal' then
+            rc.statusMessage = string.format('Healing %s with %s', targetname, spellname)
+        elseif sub == 'buff' then
+            rc.statusMessage = string.format('Buffing %s with %s', targetname, spellname)
+        elseif sub == 'debuff' or sub == 'ad' then
+            rc.statusMessage = string.format('Nuking %s with %s', targetname, spellname)
+        elseif sub == 'cure' then
+            rc.statusMessage = string.format('Curing %s with %s', targetname, spellname)
+        else
+            rc.statusMessage = string.format('Casting %s on %s', spellname, targetname)
+        end
+    end
 
     if not resuming and (mq.TLO.Spell(spell).MyCastTime() and mq.TLO.Spell(spell).MyCastTime() > 0 and (mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()) and mq.TLO.Me.Class.ShortName() ~= 'BRD') then
         mq.cmd('/multiline ; /nav stop log=off ; /stick off)')

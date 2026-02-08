@@ -159,6 +159,7 @@ end
 -- Build a short human-readable status line from run state and runconfig.
 local function getStatusLine()
     local rc = state.getRunconfig()
+    if rc.statusMessage and rc.statusMessage ~= '' then return rc.statusMessage end
     local runState = state.getRunState()
     if runState == 'pulling' then return 'Pulling' end
     if runState == 'dragging' then
@@ -180,35 +181,22 @@ local function getStatusLine()
 end
 
 -- Build key/value pairs for Status tab (read-only).
+-- statusMessage (shown in getStatusLine) covers current cast and activity; no Payload or Current cast rows.
 local function getStatusRows()
     local rc = state.getRunconfig()
     local runState = state.getRunState()
-    local payload = state.getRunStatePayload()
     local rows = {}
     rows[#rows + 1] = { 'Run state', runState }
-    if payload and (payload.phase or payload.deadline or payload.spell) then
-        local parts = {}
-        if payload.phase then parts[#parts + 1] = 'phase=' .. tostring(payload.phase) end
-        if payload.deadline then parts[#parts + 1] = 'deadline=' .. tostring(payload.deadline) end
-        if payload.spell then parts[#parts + 1] = 'spell=' .. tostring(payload.spell) end
-        if payload.gem then parts[#parts + 1] = 'gem=' .. tostring(payload.gem) end
-        if #parts > 0 then rows[#rows + 1] = { 'Payload', table.concat(parts, ' ') } end
+    if rc.followid and rc.followid > 0 then
+        rows[#rows + 1] = { 'Follow', rc.followname or tostring(rc.followid) }
+    elseif rc.campstatus then
+        local campVal = 'on'
+        if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
+            campVal = string.format('on at %.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)
+        end
+        rows[#rows + 1] = { 'Camp', campVal }
     end
-    rows[#rows + 1] = { 'Camp', rc.campstatus and 'on' or 'off' }
-    if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
-        rows[#rows + 1] = { 'Camp loc', string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0) }
-    end
-    rows[#rows + 1] = { 'Follow', (rc.followid and rc.followid > 0) and (rc.followname or tostring(rc.followid)) or '-' }
-    rows[#rows + 1] = { 'Engage target', rc.engageTargetId and tostring(rc.engageTargetId) or '-' }
     rows[#rows + 1] = { 'Mob count', tostring(rc.MobCount or 0) }
-    rows[#rows + 1] = { 'Pull state', rc.pullState or '-' }
-    if rc.pullPhase then rows[#rows + 1] = { 'Pull phase', rc.pullPhase } end
-    if rc.pulledmob then rows[#rows + 1] = { 'Pulled mob', tostring(rc.pulledmob) } end
-    if rc.CurSpell and rc.CurSpell.sub then
-        rows[#rows + 1] = { 'Current cast', string.format('%s (target %s)', rc.CurSpell.sub, tostring(rc.CurSpell.target or '-')) }
-    end
-    rows[#rows + 1] = { 'Terminate', tostring(rc.terminate) }
-    rows[#rows + 1] = { 'DragHack', tostring(rc.DragHack) }
     return rows
 end
 

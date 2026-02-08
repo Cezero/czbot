@@ -22,6 +22,7 @@ local function clearPullState()
     rc.pullReturnTimer = nil
     rc.pullPhase = nil
     rc.pullDeadline = nil
+    rc.statusMessage = ''
     state.clearRunState()
 end
 
@@ -258,6 +259,7 @@ function botpull.StartPull()
     rc.pullPhase = nil
     rc.pullDeadline = nil
     state.setRunState('pulling')
+    rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawn.ID())
 end
 
 -- One tick of navigating state.

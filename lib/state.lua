@@ -49,6 +49,7 @@
 ---@field stucktimer number|nil
 ---@field mobprobtimer number
 ---@field spellNotInBook table|nil
+---@field statusMessage string User-facing activity line for GUI
 
 local M = {}
 
@@ -122,6 +123,7 @@ function M.resetRunconfig()
         stucktimer = 0,
         mobprobtimer = 0,
         spellNotInBook = {},
+        statusMessage = '',
     }
     return M._runconfig
 end
