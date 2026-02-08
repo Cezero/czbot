@@ -430,7 +430,8 @@ function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
             or (runState == 'cures_resume' and sub == 'cure' and p and p.cureIndex and i ~= p.cureIndex) then
             -- skip this index; only run eval for the index we are resuming
         else
-            if (not options.entryValid or options.entryValid(i)) then
+            local spellNotInBook = rc.spellNotInBook and rc.spellNotInBook[sub] and rc.spellNotInBook[sub][i]
+            if (not options.entryValid or options.entryValid(i)) and not spellNotInBook then
                 local EvalID, targethit = evalFn(i)
                 if state.getRunState() == 'buffs_populate_wait' then
                     return false
@@ -562,6 +563,10 @@ function spellutils.LoadSpell(Sub, ID)
             else
                 printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', Sub, ID, spell)
                 entry.enabled = false
+                if not rc.spellNotInBook then rc.spellNotInBook = {} end
+                if not rc.spellNotInBook[Sub] then rc.spellNotInBook[Sub] = {} end
+                rc.spellNotInBook[Sub][ID] = true
+                state.clearRunState()
                 return false
             end
         end

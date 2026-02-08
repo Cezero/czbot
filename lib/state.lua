@@ -48,6 +48,7 @@
 ---@field pullDeadline number|nil
 ---@field stucktimer number|nil
 ---@field mobprobtimer number
+---@field spellNotInBook table|nil
 
 local M = {}
 
@@ -120,6 +121,7 @@ function M.resetRunconfig()
         pullDeadline = nil,
         stucktimer = 0,
         mobprobtimer = 0,
+        spellNotInBook = {},
     }
     return M._runconfig
 end
