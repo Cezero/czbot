@@ -62,6 +62,14 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | [Pets configuration](pets-configuration.md) | Pet summon (buff + petspell), petassist, pet buffing, charm (link to debuff). |
 
 
+## Bot logic (state and flow)
+
+
+| Document | Description |
+| -------- | ----------- |
+| [Bot logic](botlogic/README.md) | Charts state and decision logic so you can trace the flow of any bot action; main loop, run state machine, hooks, events, spell casting, and movement. |
+
+
 ## Reference
 
 
