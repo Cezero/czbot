@@ -243,7 +243,6 @@ local function tickDragging(payload)
         return true
     end
     if payload.phase == 'navigating' then
-        mq.doevents()
         if not mq.TLO.Navigation.Active() then
             state.clearRunState()
             return true

@@ -20,8 +20,43 @@ local CureClass = {}
 local CureType = {}
 local AHThreshold = {}
 local XTList = {}
-local HealList = {}
 local DebuffBands = {}
+
+-- Normalize spell entry: script gem handling and enabled default. Used by LoadSpellSectionConfig.
+local function normalizeSpellEntry(entry)
+    if entry.gem == 'script' then
+        if not myconfig.script[entry.spell] then
+            print('making script ', entry.spell)
+            myconfig.script[entry.spell] = "test"
+        end
+        table.insert(state.getRunconfig().ScriptList, entry.spell)
+    end
+    if entry.enabled == nil then entry.enabled = true end
+end
+
+-- Generic spell-section config loader. opts: defaultEntry(), bandsKey, storeIn, preLoad?, postLoad?, perEntryNormalize?(entry), perEntryAfterBands?(entry, i).
+function botcast.LoadSpellSectionConfig(section, opts)
+    if opts.preLoad then opts.preLoad() end
+    local spells = myconfig[section].spells
+    if not spells then
+        myconfig[section].spells = {}; spells = myconfig[section].spells
+    end
+    while #spells < 2 do
+        table.insert(spells, opts.defaultEntry())
+    end
+    for i = 1, #spells do
+        local entry = spells[i]
+        if not entry then
+            spells[i] = opts.defaultEntry()
+            entry = spells[i]
+        end
+        if opts.perEntryNormalize then opts.perEntryNormalize(entry) end
+        normalizeSpellEntry(entry)
+        opts.storeIn[i] = spellbands.applyBands(opts.bandsKey, entry, i)
+        if opts.perEntryAfterBands then opts.perEntryAfterBands(entry, i) end
+    end
+    if opts.postLoad then opts.postLoad() end
+end
 
 -- ---------------------------------------------------------------------------
 -- Buff
@@ -42,30 +77,12 @@ local function defaultBuffEntry()
 end
 
 function botcast.LoadBuffConfig()
-    if not myconfig.buff.spells then myconfig.buff.spells = {} end
-    while #myconfig.buff.spells < 2 do
-        table.insert(myconfig.buff.spells, defaultBuffEntry())
-    end
-    for i = 1, #myconfig.buff.spells do
-        local entry = myconfig.buff.spells[i]
-        if not entry then
-            myconfig.buff.spells[i] = defaultBuffEntry(); entry = myconfig.buff.spells[i]
-        end
-        if entry.gem == 'script' then
-            if not myconfig.script[entry.spell] then
-                print('making script ', entry.spell) -- this doesn't look like debug, but needs more context to be meaningful
-                myconfig.script[entry.spell] = "test"
-            end
-            table.insert(state.getRunconfig().ScriptList, entry.spell)
-        end
-        if entry.enabled == nil then entry.enabled = true end
-        BuffClass[i] = spellbands.applyBands('buff', entry, i)
-    end
+    botcast.LoadSpellSectionConfig('buff', {
+        defaultEntry = defaultBuffEntry,
+        bandsKey = 'buff',
+        storeIn = BuffClass,
+    })
 end
-
-botconfig.RegisterConfigLoader(function()
-    if botconfig.config.settings.dobuff then botcast.LoadBuffConfig() end
-end)
 
 local function IconCheck(index, EvalID)
     local entry = botconfig.getSpellEntry('buff', index)
@@ -137,21 +154,6 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
     return nil, nil
 end
 
-local function BuffEvalByName(index, entry, spellid, range)
-    if not BuffClass[index].name then return nil, nil end
-    for name, _ in pairs(BuffClass[index]) do
-        if name ~= 'name' and charinfo.GetInfo(name) then
-            local botid = mq.TLO.Spawn('pc =' .. name).ID()
-            local botclass = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
-            if botid and botclass then
-                local id, hit = BuffEvalBotNeedsBuff(botid, name, spellid, range, index, botclass:lower())
-                if id then return id, hit end
-            end
-        end
-    end
-    return nil, nil
-end
-
 local function BuffEvalTank(index, entry, spell, spellid, range, tank, tankid)
     if not tank or not entry or not BuffClass[index].tank or not tankid or tankid <= 0 then return nil, nil end
     if not IconCheck(index, tankid) then return nil, nil end
@@ -171,91 +173,60 @@ local function BuffEvalTank(index, entry, spell, spellid, range, tank, tankid)
     return nil, nil
 end
 
-local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
-    if not BuffClass[index].groupbuff then return nil, nil end
-    local tartype = mq.TLO.Spell(spell).TargetType()
+-- Group AE count-and-threshold: count members where needMemberFn(grpmember, grpid, grpname, peer) is true;
+-- if count >= entry.tarcnt return (Group v1 -> 1 else Me.ID()), targethit. opts.aeRange: when set, only count PC in range.
+-- opts.includeMemberZero: when true, loop from 0 (Group.Member(0) is self); otherwise 1 to Members().
+local function evalGroupAECount(entry, targethit, index, bandTable, phaseKey, needMemberFn, opts)
+    if not bandTable[index] or not bandTable[index][phaseKey] then return nil, nil end
+    local tartype = mq.TLO.Spell(entry.spell).TargetType()
     if tartype ~= 'Group v1' and tartype ~= 'Group v2' then return nil, nil end
-    local aeRange = mq.TLO.Spell(spell).AERange()
-    if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then aeRange = mq.TLO.FindItem(entry.spell).Spell.AERange() end
-    if not aeRange or aeRange <= 0 then return nil, nil end
+    opts = opts or {}
+    local aeRange = opts.aeRange
+    local startIdx = (opts.includeMemberZero and 0) or 1
     local needCount = 0
-    for i = 1, mq.TLO.Group.Members() do
+    for i = startIdx, mq.TLO.Group.Members() do
         local grpmember = mq.TLO.Group.Member(i)
         if grpmember then
             local grpspawn = grpmember.Spawn
             local grpname = grpmember.Name()
             local grpid = grpmember.ID()
-            local grpdist = grpspawn and grpspawn.Distance() or nil
-            if grpid and grpid > 0 and mq.TLO.Spawn(grpid).Type() == 'PC' and grpdist and grpdist <= aeRange then
-                local peer = charinfo.GetInfo(grpname)
-                if peer then
-                    local hasBuff = spellutils.PeerHasBuff(peer, spellid)
-                    local stacks = peer:Stacks(spellid)
-                    local free = peer.FreeBuffSlots
-                    if not hasBuff and stacks and free and free > 0 then needCount = needCount + 1 end
+            if grpid and grpid > 0 then
+                if aeRange then
+                    local grpdist = grpspawn and grpspawn.Distance() or nil
+                    if mq.TLO.Spawn(grpid).Type() ~= 'PC' or not grpdist or grpdist > aeRange then
+                        -- skip
+                    else
+                        local peer = charinfo.GetInfo(grpname)
+                        if needMemberFn(grpmember, grpid, grpname, peer) then needCount = needCount + 1 end
+                    end
                 else
-                    if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then needCount = needCount + 1 end
+                    local peer = charinfo.GetInfo(grpname)
+                    if needMemberFn(grpmember, grpid, grpname, peer) then needCount = needCount + 1 end
                 end
             end
         end
     end
     if needCount >= (entry.tarcnt or 1) then
-        if tartype == 'Group v1' then return 1, 'groupbuff' end
-        return mq.TLO.Me.ID(), 'groupbuff'
+        if tartype == 'Group v1' then return 1, targethit end
+        return mq.TLO.Me.ID(), targethit
     end
     return nil, nil
 end
 
-local function BuffEvalGroupMember(index, entry, spell, spellid, range, startFromGroupIndex)
-    if not BuffClass[index].groupmember then return nil, nil end
-    local members = mq.TLO.Group.Members()
-    if not members or members == 0 then return nil, nil end
-    for i = (startFromGroupIndex or 1), members do
-        local grpmember = mq.TLO.Group.Member(i)
-        if grpmember and grpmember.Class then
-            local grpspawn = grpmember.Spawn
-            local grpname = grpmember.Name()
-            local grpid = grpmember.ID()
-            local grpclass = grpmember.Class.ShortName()
-            local grpdist = grpspawn and grpspawn.Distance() or nil
-            if grpid and grpid > 0 and grpclass and mq.TLO.Spawn(grpid).Type() == 'PC' then
-                if range and grpdist and grpdist <= range then
-                    local lc = grpclass:lower()
-                    if (BuffClass[index].classes == 'all' or (BuffClass[index].classes and BuffClass[index].classes[lc])) and IconCheck(index, grpid) then
-                        local peer = charinfo.GetInfo(grpname)
-                        if peer then
-                            local id, hit = BuffEvalBotNeedsBuff(grpid, grpname, spellid, range, index, lc)
-                            if id then return id, hit end
-                        else
-                            if not spellutils.EnsureSpawnBuffsPopulated(grpid, 'buff', index, lc, nil, 'groupmember', i) then
-                                return nil, nil
-                            end
-                            if spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon) then return grpid, lc end
-                        end
-                    end
-                end
-            end
+local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
+    local aeRange = mq.TLO.Spell(spell).AERange()
+    if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then aeRange = mq.TLO.FindItem(entry.spell).Spell.AERange() end
+    if not aeRange or aeRange <= 0 then return nil, nil end
+    local function needBuff(grpmember, grpid, grpname, peer)
+        if peer then
+            local hasBuff = spellutils.PeerHasBuff(peer, spellid)
+            local stacks = peer:Stacks(spellid)
+            local free = peer.FreeBuffSlots
+            return not hasBuff and stacks and free and free > 0
         end
+        return spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon)
     end
-    return nil, nil
-end
-
-local function BuffEvalPc(index, entry, spellid, range, bots, botcount)
-    if not BuffClass[index].pc then return nil, nil end
-    for i = 1, botcount do
-        if bots[i] then
-            local botname = mq.TLO.Spawn('pc =' .. bots[i]).Name()
-            if botname then
-                local botid = mq.TLO.Spawn('pc =' .. bots[i]).ID()
-                local botclass = mq.TLO.Spawn('pc =' .. bots[i]).Class.ShortName()
-                if IconCheck(index, botid) and botid > 0 and botclass and BuffClass[index][botclass:lower()] then
-                    local id, hit = BuffEvalBotNeedsBuff(botid, botname, spellid, range, index, botclass:lower())
-                    if id then return id, hit end
-                end
-            end
-        end
-    end
-    return nil, nil
+    return evalGroupAECount(entry, 'groupbuff', index, BuffClass, 'groupbuff', needBuff, { aeRange = aeRange })
 end
 
 local function BuffEvalMyPet(index, entry, spell, spellid, range)
@@ -292,61 +263,199 @@ local function BuffEvalPets(index, entry, spellid, range, bots, botcount)
     return nil, nil
 end
 
-local function BuffEval(index)
-    local entry = botconfig.getSpellEntry('buff', index)
-    if not entry then return nil, nil end
-    local bots = spellutils.GetBotListShuffled()
-    local spell, spellrange, spelltartype, spellid = spellutils.GetSpellInfo(entry)
+-- Phase-first buff: phase order and helpers for RunPhaseFirstSpellCheck.
+local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
+
+-- Shared get-targets helpers for buff/cure/heal GetTargetsForPhase.
+-- opts for getTargetsGroupMember: botsFirst (add bots in group first), excludeBotsFromGroup (in group loop skip names that have charinfo).
+local function getTargetsSelf()
+    local out = {}
+    local myid = mq.TLO.Me.ID()
+    if myid and myid > 0 then out[#out + 1] = { id = myid, targethit = 'self' } end
+    return out
+end
+
+local function getTargetsTank(context)
+    local out = {}
+    if context.tankid and context.tankid > 0 then
+        out[#out + 1] = { id = context.tankid, targethit = 'tank' }
+    end
+    return out
+end
+
+local function getTargetsGroupCaster(targethit)
+    local out = {}
+    local meid = mq.TLO.Me.ID()
+    if meid then out[#out + 1] = { id = meid, targethit = targethit } end
+    return out
+end
+
+local function getTargetsGroupMember(context, opts)
+    local out = {}
+    opts = opts or {}
+    if opts.botsFirst and context.bots then
+        for i = 1, #context.bots do
+            local name = context.bots[i]
+            if name and mq.TLO.Group.Member(name).ID() then
+                local botid = mq.TLO.Spawn('pc =' .. name).ID()
+                local botclass = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
+                if botid and botid > 0 and botclass then out[#out + 1] = { id = botid, targethit = botclass:lower() } end
+            end
+        end
+    end
+    if mq.TLO.Group.Members() and mq.TLO.Group.Members() > 0 then
+        for i = 1, mq.TLO.Group.Members() do
+            local grpmember = mq.TLO.Group.Member(i)
+            if grpmember and grpmember.Class then
+                local grpname = grpmember.Name()
+                local grpid = grpmember.ID()
+                local grpclass = grpmember.Class.ShortName()
+                if grpid and grpid > 0 and grpclass then
+                    if opts.excludeBotsFromGroup and charinfo.GetInfo(grpname) then
+                        -- skip (already added in botsFirst or is a bot)
+                    else
+                        out[#out + 1] = { id = grpid, targethit = grpclass:lower() }
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
+local function getTargetsPc(context)
+    local out = {}
+    local bots = context.bots
+    if not bots then return out end
+    local n = context.botcount or #bots
+    for i = 1, n do
+        local name = bots[i]
+        if name then
+            local botid = mq.TLO.Spawn('pc =' .. name).ID()
+            local botclass = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
+            if botid and botid > 0 and botclass then out[#out + 1] = { id = botid, targethit = botclass:lower() } end
+        end
+    end
+    return out
+end
+
+local function getTargetsMypet()
+    local out = {}
+    local mypetid = mq.TLO.Me.Pet.ID()
+    if mypetid and mypetid > 0 then out[#out + 1] = { id = mypetid, targethit = 'mypet' } end
+    return out
+end
+
+local function getTargetsPet(context)
+    local out = {}
+    if not context.bots then return out end
+    local n = context.botcount or #context.bots
+    for i = 1, n do
+        local petid = mq.TLO.Spawn('pc =' .. context.bots[i]).Pet.ID()
+        if petid and petid > 0 then out[#out + 1] = { id = petid, targethit = 'pet' } end
+    end
+    return out
+end
+
+local function bandHasPhaseSimple(bandTable, spellIndex, phase)
+    return bandTable[spellIndex] and bandTable[spellIndex][phase] and true or false
+end
+
+local function buffGetTargetsForPhase(phase, context)
+    if phase == 'self' then return getTargetsSelf() end
+    if phase == 'tank' then return getTargetsTank(context) end
+    if phase == 'groupbuff' then return getTargetsGroupCaster('groupbuff') end
+    if phase == 'groupmember' then return getTargetsGroupMember(context, {}) end
+    if phase == 'pc' then return getTargetsPc(context) end
+    if phase == 'mypet' then return getTargetsMypet() end
+    if phase == 'pet' then return getTargetsPet(context) end
+    if phase == 'byname' and context.buffCount then
+        local out = {}
+        local seen = {}
+        for idx = 1, context.buffCount do
+            if BuffClass[idx] and BuffClass[idx].name then
+                for name, c in pairs(BuffClass[idx]) do
+                    if name ~= 'name' and name ~= 'classes' and name ~= 'classesAll' and type(name) == 'string' and charinfo.GetInfo(name) and not seen[name] then
+                        seen[name] = true
+                        local botid = mq.TLO.Spawn('pc =' .. name).ID()
+                        local botclass = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
+                        if botid and botid > 0 then out[#out + 1] = { id = botid, targethit = 'byname' } end
+                    end
+                end
+            end
+        end
+        return out
+    end
+    return {}
+end
+
+local function buffBandHasPhase(spellIndex, phase)
+    if phase == 'byname' then return BuffClass[spellIndex] and BuffClass[spellIndex].name and true or false end
+    return bandHasPhaseSimple(BuffClass, spellIndex, phase)
+end
+
+local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
+    local entry = botconfig.getSpellEntry('buff', spellIndex)
+    if not entry or not BuffClass[spellIndex] then return nil, nil end
+    local spell, _, _, spellid = spellutils.GetSpellInfo(entry)
     if not spell or not spellid then return nil, nil end
-    local sid = (spellid == 1536) and 1538 or spellid -- temp fix heroic bond
+    local sid = (spellid == 1536) and 1538 or spellid
     local gem = entry.gem
+    local range = (mq.TLO.Spell(spell).MyRange() and mq.TLO.Spell(spell).MyRange() > 0) and mq.TLO.Spell(spell).MyRange()
+        or mq.TLO.Spell(spell).AERange() or
+        (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.MyRange())
     local tank, tankid, tanktar = spellutils.GetTankInfo(false)
     tanktar = tanktar or
     (tank and charinfo.GetInfo(tank) and charinfo.GetInfo(tank).Target and charinfo.GetInfo(tank).Target.ID or nil)
     local myid = mq.TLO.Me.ID()
     local myclass = mq.TLO.Me.Class.ShortName()
-    local range = (mq.TLO.Spell(spell).MyRange() and mq.TLO.Spell(spell).MyRange() > 0) and mq.TLO.Spell(spell).MyRange()
-        or mq.TLO.Spell(spell).AERange() or
-        (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.MyRange())
-    local botcount = charinfo.GetPeerCnt() or 0
-    if not BuffClass[index] then return nil, nil end
-    local resumeFrom = nil
-    if state.getRunState() == 'buffs_resume' then
-        local payload = state.getRunStatePayload()
-        if payload and payload.buffIndex == index then
-            resumeFrom = { phase = payload.phase, nextGroupMemberIndex = payload.nextGroupMemberIndex }
-            state.clearRunState()
-        end
+
+    if targethit == 'self' then
+        return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar)
     end
-    if myclass ~= 'BRD' then
-        local id, hit = BuffEvalSelf(index, entry, spell, sid, range, myid, myclass, tanktar)
-        if id then return id, hit end
-        id, hit = BuffEvalByName(index, entry, sid, range)
-        if id then return id, hit end
-        if resumeFrom and (resumeFrom.phase == 'after_tank' or resumeFrom.phase == 'groupmember') then
-            if resumeFrom.phase == 'after_tank' then resumeFrom = nil end
-        else
-            id, hit = BuffEvalTank(index, entry, spell, sid, range, tank, tankid)
+    if targethit == 'tank' then
+        local id, hit = BuffEvalTank(spellIndex, entry, spell, sid, range, context.tank, context.tankid)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'groupbuff' then
+        return BuffEvalGroupBuff(spellIndex, entry, spell, sid, range)
+    end
+    if targethit == 'mypet' then
+        local id, hit = BuffEvalMyPet(spellIndex, entry, spell, sid, range)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'pet' then
+        local id, hit = BuffEvalPets(spellIndex, entry, sid, range, context.bots,
+            context.botcount or #(context.bots or {}))
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'byname' then
+        if not BuffClass[spellIndex].name then return nil, nil end
+        local name = mq.TLO.Spawn(targetId).CleanName()
+        if name then
+            local id, hit = BuffEvalBotNeedsBuff(targetId, name, sid, range, spellIndex, 'byname')
             if id then return id, hit end
         end
-        id, hit = BuffEvalGroupBuff(index, entry, spell, sid, range)
-        if id then return id, hit end
-        local startFrom = 1
-        if resumeFrom and resumeFrom.phase == 'groupmember' then
-            startFrom = resumeFrom.nextGroupMemberIndex or 1
-            resumeFrom = nil
+        return nil, nil
+    end
+    -- groupmember or pc (class key)
+    if BuffClass[spellIndex].groupmember or BuffClass[spellIndex].pc then
+        local grpname = mq.TLO.Spawn(targetId).CleanName()
+        local lc = targethit
+        if (BuffClass[spellIndex].classes == 'all' or (BuffClass[spellIndex].classes and BuffClass[spellIndex].classes[lc])) and IconCheck(spellIndex, targetId) then
+            local peer = charinfo.GetInfo(grpname)
+            if peer then
+                local id, hit = BuffEvalBotNeedsBuff(targetId, grpname, sid, range, spellIndex, lc)
+                if id then return id, hit end
+            else
+                if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, lc, nil, nil, nil) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
+                    return targetId, lc
+                end
+            end
         end
-        id, hit = BuffEvalGroupMember(index, entry, spell, sid, range, startFrom)
-        if id then return id, hit end
-        id, hit = BuffEvalPc(index, entry, sid, range, bots, botcount)
-        if id then return id, hit end
-        id, hit = BuffEvalMyPet(index, entry, spell, sid, range)
-        if id then return id, hit end
-        id, hit = BuffEvalPets(index, entry, sid, range, bots, botcount)
-        if id then return id, hit end
-    else
-        local id, hit = BuffEvalSelf(index, entry, spell, sid, range, myid, myclass, tanktar)
-        if id then return id, hit end
     end
     return nil, nil
 end
@@ -354,7 +463,12 @@ end
 function botcast.BuffCheck(runPriority)
     local mobList = state.getRunconfig().MobList
     local hasMob = mobList and mobList[1]
-    return spellutils.RunSpellCheckLoop('buff', botconfig.getSpellCount('buff'), BuffEval, {
+    local count = botconfig.getSpellCount('buff')
+    if count <= 0 then return false end
+    local tank, tankid = spellutils.GetTankInfo(false)
+    local bots = spellutils.GetBotListShuffled()
+    local ctx = { tank = tank, tankid = tankid, bots = bots, botcount = #bots, buffCount = count }
+    local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
         entryValid = function(i)
@@ -367,7 +481,12 @@ function botcast.BuffCheck(runPriority)
             local idlespell = BuffClass[i] and BuffClass[i].idle
             return (not hasMob and (not cbtspell or idlespell)) or (hasMob and cbtspell)
         end,
-    })
+    }
+    local function getSpellIndices(phase)
+        return spellutils.getSpellIndicesForPhase(count, phase, buffBandHasPhase)
+    end
+    return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, buffGetTargetsForPhase, getSpellIndices,
+        buffTargetNeedsSpell, ctx, options)
 end
 
 -- ---------------------------------------------------------------------------
@@ -390,34 +509,18 @@ local function defaultCureEntry()
 end
 
 function botcast.LoadCureConfig()
-    if not myconfig.cure.spells then myconfig.cure.spells = {} end
-    while #myconfig.cure.spells < 2 do
-        table.insert(myconfig.cure.spells, defaultCureEntry())
-    end
-    for i = 1, #myconfig.cure.spells do
-        local entry = myconfig.cure.spells[i]
-        if not entry then
-            myconfig.cure.spells[i] = defaultCureEntry(); entry = myconfig.cure.spells[i]
-        end
-        if entry.gem == 'script' then
-            if not myconfig.script[entry.spell] then
-                print('making script ', entry.spell) -- doesn't look like debug, but needs more context to be meaningful
-                myconfig.script[entry.spell] = "test"
+    botcast.LoadSpellSectionConfig('cure', {
+        defaultEntry = defaultCureEntry,
+        bandsKey = 'cure',
+        storeIn = CureClass,
+        perEntryAfterBands = function(entry, i)
+            CureType[i] = {}
+            for word in (entry.curetype or 'all'):gmatch("%S+") do
+                CureType[i][word] = word
             end
-            table.insert(state.getRunconfig().ScriptList, entry.spell)
-        end
-        if entry.enabled == nil then entry.enabled = true end
-        CureClass[i] = spellbands.applyBands('cure', entry, i)
-        CureType[i] = {}
-        for word in (entry.curetype or 'all'):gmatch("%S+") do
-            CureType[i][word] = word
-        end
-    end
+        end,
+    })
 end
-
-botconfig.RegisterConfigLoader(function()
-    if botconfig.config.settings.docure then botcast.LoadCureConfig() end
-end)
 
 local function CureTypeList(index)
     local list = {}
@@ -451,25 +554,37 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
                 local curetype = key and (peer[key] or nil) or nil
                 if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
                     if targethit == 'tank' then return botid, 'tank' end
-                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid,
-                            'groupmember' end
-                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return
-                        botid, botclass end
+                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then
+                        return botid,
+                            'groupmember'
+                    end
+                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
+                        return
+                            botid, botclass
+                    end
                 end
                 if string.lower(v) ~= 'all' and curetype and curetype > 0 then
-                    if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then return
-                        botid, 'tank' end
-                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then return botid,
-                            'groupmember' end
-                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then return
-                        botid, botclass end
+                    if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then
+                        return
+                            botid, 'tank'
+                    end
+                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then
+                        return botid,
+                            'groupmember'
+                    end
+                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
+                        return
+                            botid, botclass
+                    end
                 end
             end
         end
     end
     if botname and botid and not charinfo.GetInfo(botname) then
-        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then return
-            nil, nil end
+        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then
+            return
+                nil, nil
+        end
         local typelist = CureTypeList(index)
         local needCure = spellutils.SpawnDetrimentalsForCure(botid, typelist)
         if needCure and spellutils.DistanceCheck('cure', index, botid) then
@@ -481,39 +596,22 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
 end
 
 local function CureEvalGroupCure(index, entry)
-    if not CureClass[index] or not CureClass[index].groupcure then return nil, nil end
-    local tartype = mq.TLO.Spell(entry.spell).TargetType()
-    if tartype ~= 'Group v1' and tartype ~= 'Group v2' then return nil, nil end
     local typelist = CureTypeList(index)
-    local needCount = 0
-    for i = 1, mq.TLO.Group.Members() do
-        local grpmember = mq.TLO.Group.Member(i)
-        if grpmember then
-            local grpname = grpmember.Name()
-            local grpid = grpmember.ID()
-            if grpid and grpid > 0 then
-                local peer = charinfo.GetInfo(grpname)
-                if peer then
-                    for _, v in pairs(CureType[index] or {}) do
-                        local detrimentals = peer.Detrimentals or nil
-                        local key = (string.lower(v) ~= 'all') and CureTypeToPeerKey[string.lower(v)]
-                        local curetype = key and (peer[key] or nil) or nil
-                        if (string.lower(v) == 'all' and detrimentals and detrimentals > 0) or (string.lower(v) ~= 'all' and curetype and curetype > 0) then
-                            needCount = needCount + 1
-                            break
-                        end
-                    end
-                else
-                    if spellutils.SpawnDetrimentalsForCure(grpid, typelist) then needCount = needCount + 1 end
+    local function needCure(grpmember, grpid, grpname, peer)
+        if peer then
+            for _, v in pairs(CureType[index] or {}) do
+                local detrimentals = peer.Detrimentals or nil
+                local key = (string.lower(v) ~= 'all') and CureTypeToPeerKey[string.lower(v)]
+                local curetype = key and (peer[key] or nil) or nil
+                if (string.lower(v) == 'all' and detrimentals and detrimentals > 0) or (string.lower(v) ~= 'all' and curetype and curetype > 0) then
+                    return true
                 end
             end
+            return false
         end
+        return spellutils.SpawnDetrimentalsForCure(grpid, typelist)
     end
-    if needCount >= (entry.tarcnt or 1) then
-        if tartype == 'Group v1' then return 1, 'groupcure' end
-        return mq.TLO.Me.ID(), 'groupcure'
-    end
-    return nil, nil
+    return evalGroupAECount(entry, 'groupcure', index, CureClass, 'groupcure', needCure, {})
 end
 
 local function CureEval(index)
@@ -525,25 +623,13 @@ local function CureEval(index)
     local tank, tankid = spellutils.GetTankInfo(false)
     local cureindex = CureClass[index]
     if not cureindex then return nil, nil end
-    local resumeFrom = nil
-    if state.getRunState() == 'cures_resume' then
-        local payload = state.getRunStatePayload()
-        if payload and payload.cureIndex == index then
-            resumeFrom = { phase = payload.phase, nextGroupMemberIndex = payload.nextGroupMemberIndex }
-            state.clearRunState()
-        end
-    end
     if cureindex.self then
         local id, hit = CureEvalForTarget(index, nil, nil, nil, 'self', spelltartype)
         if id then return id, hit end
     end
     if cureindex.tank and tankid then
-        if resumeFrom and (resumeFrom.phase == 'after_tank' or resumeFrom.phase == 'groupmember') then
-            if resumeFrom.phase == 'after_tank' then resumeFrom = nil end
-        else
-            local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype, 'after_tank', nil)
-            if id then return id, hit end
-        end
+        local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype, 'after_tank', nil)
+        if id then return id, hit end
     end
     if cureindex.groupcure then
         local id, hit = CureEvalGroupCure(index, entry)
@@ -560,12 +646,7 @@ local function CureEval(index)
                 if id then return id, hit end
             end
         end
-        local startFrom = 1
-        if resumeFrom and resumeFrom.phase == 'groupmember' then
-            startFrom = resumeFrom.nextGroupMemberIndex or 1
-            resumeFrom = nil
-        end
-        for i = startFrom, mq.TLO.Group.Members() do
+        for i = 1, mq.TLO.Group.Members() do
             local grpmember = mq.TLO.Group.Member(i)
             if grpmember and grpmember.Class then
                 local grpname = grpmember.Name()
@@ -597,10 +678,55 @@ local function CureEval(index)
     return nil, nil
 end
 
+-- Phase-first cure: phase order and helpers for RunPhaseFirstSpellCheck.
+local CURE_PHASE_ORDER = { 'self', 'tank', 'groupcure', 'groupmember', 'pc' }
+
+local function cureGetTargetsForPhase(phase, context)
+    if phase == 'self' then return getTargetsSelf() end
+    if phase == 'tank' then return getTargetsTank(context) end
+    if phase == 'groupcure' then return getTargetsGroupCaster('groupcure') end
+    if phase == 'groupmember' then return getTargetsGroupMember(context,
+            { botsFirst = true, excludeBotsFromGroup = true }) end
+    if phase == 'pc' then return getTargetsPc(context) end
+    return {}
+end
+
+local function cureBandHasPhase(spellIndex, phase)
+    return bandHasPhaseSimple(CureClass, spellIndex, phase)
+end
+
+local function cureTargetNeedsSpell(spellIndex, targetId, targethit, context)
+    local entry = botconfig.getSpellEntry('cure', spellIndex)
+    if not entry or not CureClass[spellIndex] then return nil, nil end
+    local spell, _, spelltartype = spellutils.GetSpellInfo(entry)
+    if not spell then return nil, nil end
+    local botname = (targethit ~= 'self') and mq.TLO.Spawn(targetId).CleanName() or nil
+    local botclass = targethit
+    if targethit == 'self' then
+        return CureEvalForTarget(spellIndex, nil, nil, nil, 'self', spelltartype)
+    end
+    if targethit == 'tank' then
+        local id, hit = CureEvalForTarget(spellIndex, context.tank, context.tankid, nil, 'tank', spelltartype, nil, nil)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'groupcure' then
+        return CureEvalGroupCure(spellIndex, entry)
+    end
+    local id, hit = CureEvalForTarget(spellIndex, botname, targetId, botclass, targethit, spelltartype, nil, nil)
+    if id == targetId then return id, hit end
+    return nil, nil
+end
+
 function botcast.CureCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
+    local count = botconfig.getSpellCount('cure')
+    if count <= 0 then return false end
+    local tank, tankid = spellutils.GetTankInfo(false)
+    local bots = spellutils.GetBotListShuffled()
+    local ctx = { tank = tank, tankid = tankid, bots = bots }
     local priority = myconfig.cure.prioritycure
-    return spellutils.RunSpellCheckLoop('cure', botconfig.getSpellCount('cure'), CureEval, {
+    local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
         priority = priority,
@@ -614,7 +740,12 @@ function botcast.CureCheck(runPriority)
             local gem = entry.gem
             return (entry.enabled ~= false) and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
         end,
-    })
+    }
+    local function getSpellIndices(phase)
+        return spellutils.getSpellIndicesForPhase(count, phase, cureBandHasPhase)
+    end
+    return spellutils.RunPhaseFirstSpellCheck('cure', 'doCure', CURE_PHASE_ORDER, cureGetTargetsForPhase, getSpellIndices,
+        cureTargetNeedsSpell, ctx, options)
 end
 
 -- ---------------------------------------------------------------------------
@@ -638,44 +769,49 @@ local function defaultHealEntry()
 end
 
 function botcast.LoadHealConfig()
-    if myconfig.heal.rezoffset == nil then myconfig.heal.rezoffset = 0 end
-    if myconfig.heal.interruptlevel == nil then myconfig.heal.interruptlevel = 0.80 end
-    if myconfig.heal.xttargets == nil then myconfig.heal.xttargets = 0 end
-    if not myconfig.heal.spells then myconfig.heal.spells = {} end
-    while #myconfig.heal.spells < 2 do
-        table.insert(myconfig.heal.spells, defaultHealEntry())
-    end
-    for i = 1, #myconfig.heal.spells do
-        local entry = myconfig.heal.spells[i]
-        if not entry then
-            myconfig.heal.spells[i] = defaultHealEntry(); entry = myconfig.heal.spells[i]
-        end
-        if entry.gem == 'script' then
-            if not myconfig.script[entry.spell] then
-                print('making script ', entry.spell) -- doesn't look like debug, but needs more context to be meaningful
-                myconfig.script[entry.spell] = "test"
+    botcast.LoadSpellSectionConfig('heal', {
+        defaultEntry = defaultHealEntry,
+        bandsKey = 'heal',
+        storeIn = AHThreshold,
+        preLoad = function()
+            if myconfig.heal.rezoffset == nil then myconfig.heal.rezoffset = 0 end
+            if myconfig.heal.interruptlevel == nil then myconfig.heal.interruptlevel = 0.80 end
+            if myconfig.heal.xttargets == nil then myconfig.heal.xttargets = 0 end
+        end,
+        postLoad = function()
+            if myconfig.heal.xttargets then
+                for num in string.gmatch(tostring(myconfig.heal.xttargets), "%d+") do
+                    local n = tonumber(num)
+                    if n then XTList[n] = n end
+                end
             end
-            table.insert(state.getRunconfig().ScriptList, entry.spell)
-        end
-        if entry.enabled == nil then entry.enabled = true end
-        AHThreshold[i] = spellbands.applyBands('heal', entry, i)
-    end
-    if myconfig.heal.xttargets then
-        for num in string.gmatch(tostring(myconfig.heal.xttargets), "%d+") do
-            local n = tonumber(num)
-            if n then XTList[n] = n end
-        end
-    end
-    _G.AHThreshold = AHThreshold
-    _G.XTList = XTList
+            _G.AHThreshold = AHThreshold
+            _G.XTList = XTList
+        end,
+    })
 end
-
-botconfig.RegisterConfigLoader(function()
-    if botconfig.config.settings.doheal then botcast.LoadHealConfig() end
-end)
 
 local function hpInBand(pct, th)
     return spellbands.hpInBand(pct, th)
+end
+
+-- Get spawn HP and check band. spawnIdOrSpawn: spawn ID (number) or spawn-like object with PctHPs(). band: { min, max }.
+local function hpEvalSpawn(spawnIdOrSpawn, band)
+    local pct
+    if type(spawnIdOrSpawn) == 'number' then
+        pct = mq.TLO.Spawn(spawnIdOrSpawn).PctHPs()
+    else
+        pct = spawnIdOrSpawn.PctHPs and spawnIdOrSpawn.PctHPs()
+    end
+    return pct and spellbands.hpInBand(pct, band)
+end
+
+-- Returns (id, targethit) if band allows phase, pct in band, and (distOk is nil or true); else (nil, nil).
+local function hpEvalReturn(index, phaseKey, pct, id, targethit, distOk)
+    if not AHThreshold[index] or not AHThreshold[index][phaseKey] then return nil, nil end
+    if not pct or not hpInBand(pct, AHThreshold[index][phaseKey]) then return nil, nil end
+    if distOk ~= nil and not distOk then return nil, nil end
+    return id, targethit
 end
 
 local function HPEvalContext(index)
@@ -748,8 +884,10 @@ end
 
 local function HPEvalCorpse(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].corpse then return nil, nil end
-    if not AHThreshold[index].cbt and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then return nil,
-            nil end
+    if not AHThreshold[index].cbt and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then
+        return nil,
+            nil
+    end
     if AHThreshold[index].all then
         local rezid = CorpseRezIdForFilter(index, ctx, 'all')
         if rezid then return rezid, 'corpse' end
@@ -766,48 +904,35 @@ local function HPEvalCorpse(index, ctx)
 end
 
 local function HPEvalSelf(index, ctx)
-    if not AHThreshold[index] or not AHThreshold[index].self then return nil, nil end
     local pct = mq.TLO.Me.PctHPs()
-    if not hpInBand(pct, AHThreshold[index].self) then return nil, nil end
-    if mq.TLO.Spell(ctx.entry.spell).TargetType() == 'Self' then return 1, 'self' end
-    return mq.TLO.Me.ID(), 'self'
+    local id = mq.TLO.Spell(ctx.entry.spell).TargetType() == 'Self' and 1 or mq.TLO.Me.ID()
+    return hpEvalReturn(index, 'self', pct, id, 'self', nil)
 end
 
 local function HPEvalGrp(index, ctx)
-    if not AHThreshold[index] or not AHThreshold[index].groupheal then return nil, nil end
     local aeRange = mq.TLO.Spell(ctx.entry.spell).AERange()
-    if ctx.gem == 'item' and mq.TLO.FindItem(ctx.entry.spell)() then aeRange = mq.TLO.FindItem(ctx.entry.spell).Spell
-        .AERange() end
-    local grpmatch = 0
-    for k = 0, mq.TLO.Group.Members() do
-        local grpmem = mq.TLO.Group.Member(k)
-        if grpmem then
-            local grpspawn = grpmem.Spawn
-            if grpspawn then
-                local grpmempcthp = grpspawn.PctHPs()
-                local grpmemdist = grpspawn.Distance()
-                if grpmem.Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal) and grpmemdist and aeRange and grpmemdist <= aeRange then
-                    if grpspawn.Type() ~= 'Corpse' then grpmatch = grpmatch + 1 end
-                end
-            end
-        end
+    if ctx.gem == 'item' and mq.TLO.FindItem(ctx.entry.spell)() then
+        aeRange = mq.TLO.FindItem(ctx.entry.spell).Spell.AERange()
     end
-    if grpmatch >= (ctx.entry.tarcnt or 1) then
-        if mq.TLO.Spell(ctx.entry.spell).TargetType() == 'Group v1' then return 1, 'groupheal' end
-        return mq.TLO.Me.ID(), 'groupheal'
+    if not aeRange or aeRange <= 0 then return nil, nil end
+    local function needHeal(grpmember, grpid, grpname, peer)
+        local grpspawn = grpmember.Spawn
+        if not grpspawn then return false end
+        local grpmempcthp = grpspawn.PctHPs()
+        local grpmemdist = grpspawn.Distance()
+        return grpmember.Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal)
+            and grpmemdist and grpmemdist <= aeRange and grpspawn.Type() ~= 'Corpse'
     end
-    return nil, nil
+    return evalGroupAECount(ctx.entry, 'groupheal', index, AHThreshold, 'groupheal', needHeal, { aeRange = aeRange, includeMemberZero = true })
 end
 
 local function HPEvalTank(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].tank or not ctx.tank then return nil, nil end
-    local tankmember = mq.TLO.Group.Member(ctx.tank)
-    local tankhp = tankmember and tankmember.Spawn and tankmember.Spawn.PctHPs() or nil
     local tankdist = mq.TLO.Spawn(ctx.tankid).Distance()
     local tankinfo = charinfo.GetInfo(ctx.tank)
     local tanknbhp = tankinfo and tankinfo.PctHPs or nil
     if not ctx.tanknbid and ctx.tankid and mq.TLO.Group.Member(ctx.tank).Index() then
-        if mq.TLO.Spawn(ctx.tankid).Type() == 'PC' and tankhp and hpInBand(tankhp, AHThreshold[index].tank) and tankdist and ctx.spellrange and tankdist <= ctx.spellrange then
+        if mq.TLO.Spawn(ctx.tankid).Type() == 'PC' and hpEvalSpawn(ctx.tankid, AHThreshold[index].tank) and tankdist and ctx.spellrange and tankdist <= ctx.spellrange then
             return mq.TLO.Group.Member(ctx.tank).ID(), 'tank'
         end
     elseif ctx.tanknbid then
@@ -835,9 +960,8 @@ local function HPEvalPc(index, ctx)
                 local grpspawn = grpmember.Spawn
                 local grpclass = grpmember.Class.ShortName()
                 local grpid = grpmember.ID()
-                local grphp = grpspawn and grpspawn.PctHPs() or nil
                 local grpdist = grpspawn and grpspawn.Distance() or nil
-                if classOk(grpclass) and mq.TLO.Spawn(grpid).Type() == 'PC' and grphp and th.groupmember and hpInBand(grphp, th.groupmember) then
+                if classOk(grpclass) and mq.TLO.Spawn(grpid).Type() == 'PC' and th.groupmember and hpEvalSpawn(grpid, th.groupmember) then
                     if ctx.spellrange and grpdist and grpdist <= ctx.spellrange then return grpid, grpclass:lower() end
                 end
             end
@@ -863,9 +987,9 @@ local function HPEvalMyPet(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].mypet then return nil, nil end
     local mypetid = mq.TLO.Me.Pet.ID()
     local mypetdist = mq.TLO.Me.Pet.Distance()
-    local mypethp = mq.TLO.Me.Pet.PctHPs()
-    if mypetid and mypetid > 0 and mypethp and hpInBand(mypethp, AHThreshold[index].mypet) and mypetdist <= ctx.spellrange then
-        return mypetid, 'mypet'
+    if mypetid and mypetid > 0 then
+        local distOk = mypetdist and ctx.spellrange and mypetdist <= ctx.spellrange
+        if hpEvalSpawn(mypetid, AHThreshold[index].mypet) and distOk then return mypetid, 'mypet' end
     end
     return nil, nil
 end
@@ -874,11 +998,10 @@ local function HPEvalPets(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].pet or not ctx.botcount then return nil, nil end
     for i = 1, ctx.botcount do
         local petid = mq.TLO.Spawn('pc =' .. ctx.bots[i]).Pet.ID()
-        local peer = charinfo.GetInfo(ctx.bots[i])
-        local pethp = peer and peer.PetHP or nil
-        local petdist = mq.TLO.Spawn(petid).Distance()
-        if petid and pethp and pethp > 0 and hpInBand(pethp, AHThreshold[index].pet) and ctx.spellrange and petdist and petdist <= ctx.spellrange then
-            return petid, 'pet'
+        local petdist = petid and mq.TLO.Spawn(petid).Distance()
+        if petid and petid > 0 then
+            local distOk = ctx.spellrange and petdist and petdist <= ctx.spellrange
+            if hpEvalSpawn(petid, AHThreshold[index].pet) and distOk then return petid, 'pet' end
         end
     end
     return nil, nil
@@ -891,11 +1014,11 @@ local function HPEvalXtgt(index, ctx)
         if XTList[i] then
             local xtar = mq.TLO.Me.XTarget(i)()
             if xtar then
-                local xtpchpt = mq.TLO.Me.XTarget(i).PctHPs() or 101
                 local xtrange = mq.TLO.Me.XTarget(i).Distance() or 500
                 local xtid = mq.TLO.Me.XTarget(i).ID() or 0
-                if hpInBand(xtpchpt, AHThreshold[index].xtgt) and xtrange <= ctx.spellrange and xtid > 0 then
-                    return xtid, 'xtgt'
+                if xtid and xtid > 0 then
+                    local distOk = xtrange <= ctx.spellrange
+                    if hpEvalSpawn(xtid, AHThreshold[index].xtgt) and distOk then return xtid, 'xtgt' end
                 end
             end
         end
@@ -926,6 +1049,109 @@ local function HPEval(index)
     return nil, nil
 end
 
+-- Phase-first heal: phase order and helpers for RunPhaseFirstSpellCheck.
+local HEAL_PHASE_ORDER = { 'corpse', 'self', 'groupheal', 'tank', 'groupmember', 'pc', 'mypet', 'pet', 'xtgt' }
+
+local function healGetTargetsForPhase(phase, context)
+    if phase == 'self' then return getTargetsSelf() end
+    if phase == 'tank' then return getTargetsTank(context) end
+    if phase == 'groupheal' then return getTargetsGroupCaster('groupheal') end
+    if phase == 'groupmember' then return getTargetsGroupMember(context, {}) end
+    if phase == 'pc' then return getTargetsPc(context) end
+    if phase == 'mypet' then return getTargetsMypet() end
+    if phase == 'pet' then return getTargetsPet(context) end
+    if phase == 'xtgt' and XTList then
+        local out = {}
+        local n = mq.TLO.Me.XTargetSlots() or 0
+        for i = 1, n do
+            if XTList[i] and mq.TLO.Me.XTarget(i)() then
+                local xtid = mq.TLO.Me.XTarget(i).ID()
+                if xtid and xtid > 0 then out[#out + 1] = { id = xtid, targethit = 'xtgt' } end
+            end
+        end
+        return out
+    end
+    if phase == 'corpse' then
+        local count = botconfig.getSpellCount('heal')
+        for idx = 1, count do
+            if AHThreshold[idx] and AHThreshold[idx].corpse then
+                local filter = AHThreshold[idx].all and 'all' or AHThreshold[idx].bots and 'bots' or
+                AHThreshold[idx].raid and 'raid' or 'all'
+                local rezid = CorpseRezIdForFilter(idx, context, filter)
+                if rezid then return { { id = rezid, targethit = 'corpse' } } end
+            end
+        end
+        return {}
+    end
+    return {}
+end
+
+local function healBandHasPhase(spellIndex, phase)
+    if not AHThreshold[spellIndex] then return false end
+    if phase == 'corpse' then return AHThreshold[spellIndex].corpse end
+    if phase == 'groupmember' or phase == 'pc' then
+        return (AHThreshold[spellIndex].groupmember or AHThreshold[spellIndex].pc) and true or false
+    end
+    return AHThreshold[spellIndex][phase] and true or false
+end
+
+local function healTargetNeedsSpell(spellIndex, targetId, targethit, context)
+    local ctx = HPEvalContext(spellIndex)
+    if not ctx then return nil, nil end
+    if targethit == 'self' then return HPEvalSelf(spellIndex, ctx) end
+    if targethit == 'tank' then
+        local id, hit = HPEvalTank(spellIndex, ctx)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'groupheal' then return HPEvalGrp(spellIndex, ctx) end
+    if targethit == 'corpse' then
+        local id, hit = HPEvalCorpse(spellIndex, ctx)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'mypet' then
+        local id, hit = HPEvalMyPet(spellIndex, ctx)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'pet' then
+        local id, hit = HPEvalPets(spellIndex, ctx)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'xtgt' then
+        local id, hit = HPEvalXtgt(spellIndex, ctx)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    -- groupmember or pc (class key)
+    if AHThreshold[spellIndex] then
+        local th = AHThreshold[spellIndex]
+        local classOk = function(cls)
+            if not cls then return false end
+            local c = cls:lower()
+            if th.classes == 'all' then return true end
+            return th.classes and th.classes[c] == true
+        end
+        local sp = mq.TLO.Spawn(targetId)
+        if sp and sp.ID() == targetId and mq.TLO.Spawn(targetId).Type() == 'PC' then
+            local dist = sp.Distance()
+            if th.groupmember and hpEvalSpawn(targetId, th.groupmember) and ctx.spellrange and dist and dist <= ctx.spellrange and classOk(targethit) then
+                return targetId, targethit
+            end
+            if th.pc and context.botcount then
+                local peer = charinfo.GetInfo(mq.TLO.Spawn(targetId).CleanName())
+                local bothp = peer and peer.PctHPs or nil
+                if bothp and hpInBand(bothp, th.pc) and dist and ctx.spellrange and dist <= ctx.spellrange and classOk(targethit) then
+                    return targetId, targethit
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
 function botcast.ValidateHeal()
     local target = state.getRunconfig().CurSpell.target
     local index = state.getRunconfig().CurSpell.spell
@@ -934,11 +1160,16 @@ function botcast.ValidateHeal()
 end
 
 function botcast.HealCheck(runPriority)
-    return spellutils.RunSpellCheckLoop('heal', botconfig.getSpellCount('heal'), HPEval, {
+    local count = botconfig.getSpellCount('heal')
+    if count <= 0 then return false end
+    local ctx = HPEvalContext(1)
+    if not ctx then return false end
+    local options = {
         runPriority = runPriority,
         priority = false,
-        afterCast = function(i)
-            local entry = botconfig.getSpellEntry('heal', i)
+        afterCast = function(_, _target, targethit)
+            local entry = botconfig.getSpellEntry('heal',
+                state.getRunconfig().CurSpell and state.getRunconfig().CurSpell.spell)
             if entry and entry.priority then return botcast.ValidateHeal() end
             return false
         end,
@@ -954,7 +1185,12 @@ function botcast.HealCheck(runPriority)
             if mymana and (mymana < minmanapct or mymana > maxmanapct) then return false end
             return true
         end,
-    })
+    }
+    local function getSpellIndices(phase)
+        return spellutils.getSpellIndicesForPhase(count, phase, healBandHasPhase)
+    end
+    return spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER, healGetTargetsForPhase, getSpellIndices,
+        healTargetNeedsSpell, ctx, options)
 end
 
 -- ---------------------------------------------------------------------------
@@ -978,32 +1214,34 @@ local function defaultDebuffEntry()
 end
 
 function botcast.LoadDebuffConfig()
-    spellstates.EnsureDebuffState()
-    if not myconfig.debuff.spells then myconfig.debuff.spells = {} end
-    while #myconfig.debuff.spells < 2 do
-        table.insert(myconfig.debuff.spells, defaultDebuffEntry())
-    end
-    for i = 1, #myconfig.debuff.spells do
-        local entry = myconfig.debuff.spells[i]
-        if not entry then
-            myconfig.debuff.spells[i] = defaultDebuffEntry(); entry = myconfig.debuff.spells[i]
-        end
-        if not entry.delay then entry.delay = 0 end
-        if entry.gem == 'script' then
-            if not myconfig.script[entry.spell] then
-                print('making script ', entry.spell) -- doesn't look like debug, but needs more context to be meaningful
-                myconfig.script[entry.spell] = "test"
-            end
-            table.insert(state.getRunconfig().ScriptList, entry.spell)
-        end
-        if entry.enabled == nil then entry.enabled = true end
-        DebuffBands[i] = spellbands.applyBands('debuff', entry, i)
-    end
+    botcast.LoadSpellSectionConfig('debuff', {
+        defaultEntry = defaultDebuffEntry,
+        bandsKey = 'debuff',
+        storeIn = DebuffBands,
+        preLoad = spellstates.EnsureDebuffState,
+        perEntryNormalize = function(entry)
+            if not entry.delay then entry.delay = 0 end
+        end,
+    })
 end
 
-botconfig.RegisterConfigLoader(function()
-    if botconfig.config.settings.dodebuff then botcast.LoadDebuffConfig() end
-end)
+local sectionLoaders = {
+    buff = botcast.LoadBuffConfig,
+    cure = botcast.LoadCureConfig,
+    heal = botcast.LoadHealConfig,
+    debuff = botcast.LoadDebuffConfig,
+}
+
+function botcast.RegisterSectionLoader(section, settingsKey)
+    botconfig.RegisterConfigLoader(function()
+        if botconfig.config.settings[settingsKey] then sectionLoaders[section]() end
+    end)
+end
+
+botcast.RegisterSectionLoader('buff', 'dobuff')
+botcast.RegisterSectionLoader('cure', 'docure')
+botcast.RegisterSectionLoader('heal', 'doheal')
+botcast.RegisterSectionLoader('debuff', 'dodebuff')
 
 local noncombatzones = { 'GuildHall', 'GuildLobby', 'PoKnowledge', 'Nexus', 'Bazaar', 'AbysmalSea', 'potranquility' }
 
@@ -1049,7 +1287,7 @@ local function ADSpawnCheck_FilterSpawn(spawn, rc)
     end
     if myconfig.settings.TargetFilter == 0 then
         return (spawn.Type() == 'NPC' or (spawn.Type() == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.Aggressive() and
-        spawn.LineOfSight()
+            spawn.LineOfSight()
     end
     return false
 end
@@ -1133,9 +1371,7 @@ local function DebuffEvalTankTar(index, ctx)
     local gem = entry.gem
     local db = DebuffBands[index]
     if not db or not db.tanktar or not ctx.tanktar then return nil, nil end
-    local tanktarhp = ctx.tanktarhp
-    if tanktarhp == nil then tanktarhp = mq.TLO.Spawn(ctx.tanktar).PctHPs() end
-    if not spellbands.hpInBand(tanktarhp, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
+    if not hpEvalSpawn(ctx.tanktar, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar then
             local myrange = ctx.myrange
@@ -1165,8 +1401,7 @@ local function DebuffEvalNotanktar(index, ctx)
     if not db or not db.notanktar or not ctx.mobList[1] then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() ~= ctx.tanktar then
-            local mobhp = v.PctHPs()
-            if spellbands.hpInBand(mobhp, { min = db.mobMin, max = db.mobMax }) then
+            if hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
                 local myrange = ctx.myrange
                 if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
                 if not (myrange and v.Distance() and v.Distance() > myrange) then
@@ -1191,9 +1426,7 @@ local function DebuffEvalNamedTankTar(index, ctx)
     local gem = entry.gem
     local db = DebuffBands[index]
     if not db or not db.named or not ctx.tanktar then return nil, nil end
-    local tanktarhp = ctx.tanktarhp
-    if tanktarhp == nil then tanktarhp = mq.TLO.Spawn(ctx.tanktar).PctHPs() end
-    if not spellbands.hpInBand(tanktarhp, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
+    if not hpEvalSpawn(ctx.tanktar, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar and v.Named() then
             local myrange = ctx.myrange
@@ -1237,6 +1470,111 @@ local function DebuffEval(index)
     return nil, nil
 end
 
+-- Phase-first debuff: phase order and helpers.
+local DEBUFF_PHASE_ORDER = { 'charm', 'tanktar', 'notanktar', 'named' }
+
+local function debuffGetTargetsForPhase(phase, context)
+    local out = {}
+    local mobList = context.mobList or state.getRunconfig().MobList or {}
+    if phase == 'charm' then
+        if context.charmRecasts then
+            for _, v in pairs(context.charmRecasts) do
+                if v and v.id then out[#out + 1] = { id = v.id, targethit = v.targethit or 'charmtar' } end
+            end
+        end
+        local count = context.debuffCount or botconfig.getSpellCount('debuff')
+        for i = 1, count do
+            local dctx = DebuffEvalBuildContext(i)
+            if dctx then
+                local id, hit = charm.EvalTarget(i, dctx)
+                if id then out[#out + 1] = { id = id, targethit = hit or 'charmtar' } end
+            end
+        end
+        return out
+    end
+    if phase == 'tanktar' and context.tanktar and context.tanktar > 0 then
+        out[#out + 1] = { id = context.tanktar, targethit = 'tanktar' }
+        return out
+    end
+    if phase == 'notanktar' then
+        for _, v in ipairs(mobList) do
+            local vid = v.ID and v.ID() or v
+            if vid and vid ~= context.tanktar then out[#out + 1] = { id = vid, targethit = 'notanktar' } end
+        end
+        return out
+    end
+    if phase == 'named' and context.tanktar and context.tanktar > 0 then
+        local sp = mq.TLO.Spawn(context.tanktar)
+        if sp and sp.ID() == context.tanktar and sp.Named() then
+            out[#out + 1] = { id = context.tanktar, targethit = 'named' }
+        end
+        return out
+    end
+    return out
+end
+
+local function debuffBandHasPhase(spellIndex, phase)
+    return bandHasPhaseSimple(DebuffBands, spellIndex, phase)
+end
+
+local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
+    local entry = botconfig.getSpellEntry('debuff', spellIndex)
+    if not entry then return nil, nil end
+    if entry.tarcnt and entry.tarcnt > state.getRunconfig().MobCount then return nil, nil end
+    if targethit == 'charmtar' or targethit == 'charm' then
+        if context.charmRecasts and context.charmRecasts[spellIndex] and context.charmRecasts[spellIndex].id == targetId then
+            return targetId, context.charmRecasts[spellIndex].targethit or 'charmtar'
+        end
+        local ctx = DebuffEvalBuildContext(spellIndex)
+        if ctx then
+            local id, hit = charm.EvalTarget(spellIndex, ctx)
+            if id == targetId then return id, hit or 'charmtar' end
+        end
+        return nil, nil
+    end
+    local ctx = DebuffEvalBuildContext(spellIndex)
+    if not ctx then return nil, nil end
+    if targethit == 'tanktar' then
+        local id, hit = DebuffEvalTankTar(spellIndex, ctx)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'named' then
+        local id, hit = DebuffEvalNamedTankTar(spellIndex, ctx)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+    if targethit == 'notanktar' then
+        local entry = ctx.entry
+        local gem = entry.gem
+        local db = DebuffBands[spellIndex]
+        if not db or not db.notanktar then return nil, nil end
+        for _, v in ipairs(ctx.mobList) do
+            local vid = v.ID and v.ID() or v
+            if vid == targetId then
+                if hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
+                    local myrange = ctx.myrange
+                    if entry.gem == 'ability' then myrange = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange end
+                    if not (myrange and v.Distance and v.Distance() and v.Distance() > myrange) then
+                        local tarstacks = mq.TLO.Spell(entry.spell).StacksSpawn(targetId)() or
+                            (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(targetId))
+                        local vlevel = v.Level and v.Level() or mq.TLO.Spawn(targetId).Level()
+                        if not (ctx.spellid and vlevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < vlevel) then
+                            if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
+                                if not (tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(targetId, ctx.spellid, 6000)) then
+                                    return targetId, 'notanktar'
+                                end
+                            end
+                        end
+                    end
+                end
+                break
+            end
+        end
+    end
+    return nil, nil
+end
+
 local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
     if entry ~= nil and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
@@ -1261,7 +1599,21 @@ function botcast.DebuffCheck(runPriority)
         if tanktar and tanktar > 0 and mq.TLO.Pet.Target.ID() ~= tanktar and not mq.TLO.Me.Pet.Combat() then botmelee
                 .AdvCombat() end
     end
-    return spellutils.RunSpellCheckLoop('debuff', botconfig.getSpellCount('debuff'), DebuffEval, {
+    local count = botconfig.getSpellCount('debuff')
+    if count <= 0 then return false end
+    local _, _, tanktar = spellutils.GetTankInfo(true)
+    local charmRecasts = {}
+    for i = 1, count do
+        local id, hit = charm.GetRecastRequestForIndex(i)
+        if id then charmRecasts[i] = { id = id, targethit = hit or 'charmtar' } end
+    end
+    local ctx = {
+        tanktar = tanktar,
+        charmRecasts = charmRecasts,
+        debuffCount = count,
+        mobList = state.getRunconfig().MobList or {},
+    }
+    local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
         immuneCheck = true,
@@ -1295,7 +1647,30 @@ function botcast.DebuffCheck(runPriority)
             end
             return false
         end,
-    })
+    }
+    local function getSpellIndices(phase)
+        if phase == 'charm' then
+            local out = {}
+            for i = 1, count do
+                if ctx.charmRecasts[i] then out[#out + 1] = i end
+            end
+            for i = 1, count do
+                local dctx = DebuffEvalBuildContext(i)
+                if dctx and charm.EvalTarget(i, dctx) then
+                    local found = false
+                    for _, si in ipairs(out) do if si == i then
+                            found = true
+                            break
+                        end end
+                    if not found then out[#out + 1] = i end
+                end
+            end
+            return out
+        end
+        return spellutils.getSpellIndicesForPhase(count, phase, debuffBandHasPhase)
+    end
+    return spellutils.RunPhaseFirstSpellCheck('debuff', 'doDebuff', DEBUFF_PHASE_ORDER, debuffGetTargetsForPhase,
+        getSpellIndices, debuffTargetNeedsSpell, ctx, options)
 end
 
 do

@@ -47,17 +47,18 @@ function hookregistry.registerAllFromConfig()
     for _, entry in ipairs(bothooks.getHooks()) do
         local fn = _hookFns[entry.name]
         if fn then
-            hookregistry.registerMainloopHook(entry.name, fn, entry.priority, entry.runWhenPaused)
+            hookregistry.registerMainloopHook(entry.name, fn, entry.priority, entry.runWhenPaused, entry.runWhenDead)
         end
     end
 end
 
-function hookregistry.registerMainloopHook(name, fn, priority, runWhenPaused)
+function hookregistry.registerMainloopHook(name, fn, priority, runWhenPaused, runWhenDead)
     _hooks[#_hooks + 1] = {
         name = name,
         fn = fn,
         priority = priority or 500,
         runWhenPaused = runWhenPaused == true,
+        runWhenDead = runWhenDead == true,
     }
     _sortedNormal = nil
     _sortedRunWhenPaused = nil
@@ -84,6 +85,15 @@ end
 function hookregistry.runNormalHooks()
     if _sortedNormal == nil then _rebuildSorted() end
     local state = require('lib.state')
+    local runState = state.getRunState()
+    if runState == 'dead' then
+        for _, h in ipairs(_sortedNormal) do
+            if h.runWhenDead then
+                h.fn(h.name)
+            end
+        end
+        return
+    end
     local maxPriority = nil
     if state.isBusy() then
         local payload = state.getRunStatePayload()

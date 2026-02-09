@@ -11,8 +11,11 @@ local charinfo = require("mqcharinfo")
 
 local botevents = {}
 
--- Reset zone-specific variables (called on zone change from MQ events and botlogic zoneCheck hook).
+-- Internal: reset zone-specific variables. Used by OnZoneChange only.
 local function DelayOnZone()
+    if state.getRunState() == 'dead' then
+        state.clearRunState()
+    end
     state.getRunconfig().zonename = mq.TLO.Zone.ShortName()
     if state.getRunconfig().campstatus == true then
         state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
@@ -27,11 +30,9 @@ local function DelayOnZone()
     MountCastFailed = false
 end
 
--- Expose for botlogic zoneCheck hook (same handler as MQ zone events).
-botevents.DelayOnZone = DelayOnZone
-
--- Zone event wrapper: delay 1s then run DelayOnZone (used by MQ event bindings).
-local function DelayOnZoneWithDelay()
+-- Single entry point for zone change: used by zoneCheck hook and MQ zone events.
+function botevents.OnZoneChange()
+    print('Zone detected') -- not debug, keep
     state.getRunconfig().statusMessage = 'Zone change, waiting...'
     mq.delay(1000)
     DelayOnZone()
@@ -180,8 +181,8 @@ function botevents.BindEvents()
     mq.event('Slain1', "#*#You have been slain by#*#", botevents.Event_Slain)
     mq.event('Slain2', "#*#Returning to Bind Location#*#", botevents.Event_Slain)
     mq.event('Slain3', "You died.", botevents.Event_Slain)
-    mq.event('DelayOnZone1', "#*#You have entered#*#", DelayOnZoneWithDelay)
-    mq.event('DelayOnZone2', "#*#LOADING, PLEASE WAIT.#*#", DelayOnZoneWithDelay)
+    mq.event('DelayOnZone1', "#*#You have entered#*#", botevents.OnZoneChange)
+    mq.event('DelayOnZone2', "#*#LOADING, PLEASE WAIT.#*#", botevents.OnZoneChange)
     mq.event('CastRst1', "Your target resisted the#*#", botevents.Event_CastRst)
     mq.event('CastRst2', "#*#resisted your#*#!#*#", botevents.Event_CastRst)
     mq.event('CastRst3', "#*#avoided your#*#!#*#", botevents.Event_CastRst)

@@ -77,7 +77,8 @@ local function CharState(...)
         end
     end
     if botconfig.config.settings.domount and botconfig.config.settings.mountcast then spellutils.MountCheck() end
-    if mq.TLO.Me.State() == 'DEAD' or mq.TLO.Me.State() == 'HOVER' and mq.TLO.Me.Hovering() then
+    if mq.TLO.Me.State() == 'DEAD' or (mq.TLO.Me.State() == 'HOVER' and mq.TLO.Me.Hovering()) then
+        state.setRunState('dead', nil)
         if not state.getRunconfig().HoverEchoTimer or state.getRunconfig().HoverEchoTimer == 0 then
             state.getRunconfig().HoverEchoTimer =
                 mq.gettime() + 300000
@@ -85,6 +86,10 @@ local function CharState(...)
         if state.getRunconfig().HoverTimer < mq.gettime() then
             botevents.Event_Slain()
         end
+        return
+    end
+    if state.getRunState() == 'dead' then
+        state.clearRunState()
     end
     if tarname and string.find(tarname, 'corpse') then
         mq.cmd('/squelch /multiline ; /attack off ; /target clear ; /stick off')
@@ -151,11 +156,7 @@ end
 local function _registerBuiltinHooks()
     hookregistry.registerHookFn('zoneCheck', function(hookName)
         if state.getRunconfig().zonename ~= mq.TLO.Zone.ShortName() then
-            print('Zone detected') -- not debug, keep
-            state.getRunconfig().statusMessage = 'Zone change, waiting...'
-            mq.delay(1000)
-            botevents.DelayOnZone()
-            state.getRunconfig().statusMessage = ''
+            botevents.OnZoneChange()
         end
     end)
 
@@ -237,7 +238,7 @@ function botlogic.mainloop()
     end
 end
 
--- Register all MQ events (zone reset lives in botevents.DelayOnZone).
+-- Register all MQ events (zone reset lives in botevents.OnZoneChange).
 botevents.BindEvents()
 
 return botlogic

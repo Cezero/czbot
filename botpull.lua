@@ -436,7 +436,6 @@ function botpull.PullTick()
         clearPullState()
         return
     end
-    mq.doevents()
     if MasterPause then
         clearPullState()
         return

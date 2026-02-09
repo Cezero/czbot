@@ -258,14 +258,13 @@ function spellutils.GetTankInfo(includeTarget)
     return mainTankName, tankid, tanktar, tanktarhp
 end
 
--- Post-cast logic when CastTimeLeft() has reached 0 (called from RunSpellCheckLoop).
+-- Post-cast logic when CastTimeLeft() has reached 0 (called from handleSpellCheckReentry / phase-first re-entry).
 function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return end
     local spell = string.lower(entry.spell or '')
     local spellid = mq.TLO.Spell(spell).ID()
-    mq.doevents()
     if SpellResisted then
         rc.CurSpell.resisted = true
         SpellResisted = false
@@ -287,107 +286,182 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     if rc.MissedNote then rc.MissedNote = false end
 end
 
--- Common spell-check loop: re-entrant; one step per tick. No mq.delay.
--- If CurSpell.phase is casting/precast, handle that first. If loading_gem, check deadline/gem.
--- Otherwise iterate indices and optionally start a cast (CastSpell sets phase and returns).
-function spellutils.RunSpellCheckLoop(sub, count, evalFn, options)
+-- ---------------------------------------------------------------------------
+-- Phase-first spell-check utilities (small, reusable)
+-- ---------------------------------------------------------------------------
+
+--- Returns resume cursor if run state is hookName .. '_resume', else nil.
+function spellutils.getResumeCursor(hookName)
+    local runState = state.getRunState()
+    local expected = (hookName or '') .. '_resume'
+    if runState ~= expected then return nil end
+    return state.getRunStatePayload()
+end
+
+--- On leaving a cast: if payload has spellcheckResume, set that hook's _resume state; else clearRunState().
+function spellutils.clearCastingStateOrResume()
+    local rc = state.getRunconfig()
+    rc.CurSpell = {}
+    rc.statusMessage = ''
+    local p = state.getRunStatePayload()
+    if p and p.spellcheckResume and p.spellcheckResume.hook then
+        state.setRunState(p.spellcheckResume.hook .. '_resume', p.spellcheckResume)
+    else
+        state.clearRunState()
+    end
+end
+
+--- Handles CurSpell re-entry (casting, precast, precast_wait_move). Returns true if handled (caller should return), false to run the phase-first loop.
+function spellutils.handleSpellCheckReentry(sub, options)
     options = options or {}
     local skipInterruptForBRD = options.skipInterruptForBRD ~= false
     local rc = state.getRunconfig()
 
-    mq.doevents()
-    if mq.TLO.Me.State() == 'DEAD' or mq.TLO.Me.State() == 'HOVER' then return false end
+    if rc.CurSpell and rc.CurSpell.phase == 'cast_complete_pending_resist' then
+        spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
+        local cont = true
+        if options.afterCast then
+            cont = options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
+        end
+        spellutils.clearCastingStateOrResume()
+        if not cont then return true end
+        if not options.priority then return true end
+        return true
+    end
 
-    -- Re-entry: currently casting
     if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' then
         if mq.TLO.Me.CastTimeLeft() > 0 and (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') then
             spellutils.InterruptCheck()
         end
         if mq.TLO.Me.CastTimeLeft() > 0 then
-            -- Same category: stay in cast, don't re-enter loop.
             if sub == rc.CurSpell.sub then
-                return false
+                return true
             end
-            -- Different category just checking: do not interrupt here. Fall through to for-loop;
-            -- we only interrupt when the loop actually finds something to cast (see below).
-        end
-        -- Cast just finished (CurSpell still set; we did not interrupt).
-        if rc.CurSpell and rc.CurSpell.sub then
-            spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
-            local cont = true
-            if options.afterCast then
-                cont = options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
-            end
-            rc.CurSpell = {}
-            rc.statusMessage = ''
-            state.clearRunState()
-            if not cont then return true end
-            if not options.priority then return true end
-            -- fall through to try next spell index
+        else
+            rc.CurSpell.phase = 'cast_complete_pending_resist'
+            return true
         end
     end
 
-    -- Re-entry: waiting for move to stop (do not clear phase so CastSpell sees resuming = true)
     if rc.CurSpell and rc.CurSpell.phase == 'precast_wait_move' then
         if mq.TLO.Me.Moving() then
-            if mq.gettime() < (rc.CurSpell.deadline or 0) then return false end
-            rc.CurSpell = {}
-            rc.statusMessage = ''
-            state.clearRunState()
-            return false
+            if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
+            spellutils.clearCastingStateOrResume()
+            return true
         end
-        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub, options.runPriority)
-        return false
+        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub,
+            options.runPriority, rc.CurSpell.spellcheckResume)
+        return true
     end
 
-    -- Re-entry: waiting for target (do not clear phase so CastSpell sees resuming = true)
     if rc.CurSpell and rc.CurSpell.phase == 'precast' then
         if mq.TLO.Target.ID() ~= rc.CurSpell.target then
-            if mq.gettime() < (rc.CurSpell.deadline or 0) then return false end
-            rc.CurSpell = {}
-            rc.statusMessage = ''
-            state.clearRunState()
-            return false
+            if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
+            spellutils.clearCastingStateOrResume()
+            return true
         end
-        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub, options.runPriority)
+        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub,
+            options.runPriority, rc.CurSpell.spellcheckResume)
+        return true
+    end
+
+    return false
+end
+
+--- Returns list of spell indices (1..count) for which bandHasPhaseFn(i, phase) is true.
+function spellutils.getSpellIndicesForPhase(count, phase, bandHasPhaseFn)
+    if not bandHasPhaseFn or type(bandHasPhaseFn) ~= 'function' then return {} end
+    local out = {}
+    for i = 1, count do
+        if bandHasPhaseFn(i, phase) then
+            out[#out + 1] = i
+        end
+    end
+    return out
+end
+
+--- For one target, finds first spell in spellIndices that needs to be cast. Returns spellIndex, EvalID, targethit or nil.
+function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, targethit, context, options, targetNeedsSpellFn)
+    if not targetNeedsSpellFn or not spellIndices then return nil end
+    options = options or {}
+    local rc = state.getRunconfig()
+    for _, spellIndex in ipairs(spellIndices) do
+        if MasterPause then return nil end
+        local spellNotInBook = rc.spellNotInBook and rc.spellNotInBook[sub] and rc.spellNotInBook[sub][spellIndex]
+        if not spellNotInBook and (not options.entryValid or options.entryValid(spellIndex)) then
+            local EvalID, hit = targetNeedsSpellFn(spellIndex, targetId, targethit, context)
+            if EvalID and hit then
+                if (not options.beforeCast or options.beforeCast(spellIndex, EvalID, hit))
+                    and (not options.immuneCheck or spellutils.ImmuneCheck(sub, spellIndex, EvalID))
+                    and spellutils.PreCondCheck(sub, spellIndex, EvalID) then
+                    return spellIndex, EvalID, hit
+                end
+            end
+        end
+    end
+    return nil
+end
+
+--- Thin phase-first orchestrator. phaseOrder = ordered list of phase names; getTargetsFn(phase, context) returns list of { id, targethit }; getSpellIndicesFn(phase) returns list of indices; targetNeedsSpellFn(spellIndex, targetId, targethit, context) returns EvalID, targethit or nil.
+function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTargetsFn, getSpellIndicesFn,
+                                            targetNeedsSpellFn, context, options)
+    options = options or {}
+    local runPriority = options.runPriority
+    local rc = state.getRunconfig()
+
+    if spellutils.handleSpellCheckReentry(sub, options) then
         return false
     end
 
-    for i = 1, count do
-        if MasterPause then return false end
-        local runState = state.getRunState()
-        local p = state.getRunStatePayload()
-        -- If resume index is no longer valid (e.g. disabled after spell not in book), clear so full loop runs
-        if runState == 'buffs_resume' and sub == 'buff' and p and p.buffIndex and options.entryValid and not options.entryValid(p.buffIndex) then
-            state.clearRunState()
-            runState = state.getRunState()
-            p = state.getRunStatePayload()
-        elseif runState == 'cures_resume' and sub == 'cure' and p and p.cureIndex and options.entryValid and not options.entryValid(p.cureIndex) then
-            state.clearRunState()
-            runState = state.getRunState()
-            p = state.getRunStatePayload()
+    local cursor = spellutils.getResumeCursor(hookName)
+    local startPhaseIdx = 1
+    local startTargetIdx = 1
+    local startSpellIdx = 1
+    if cursor and cursor.phase and cursor.targetIndex and cursor.spellIndex then
+        for pi, p in ipairs(phaseOrder) do
+            if p == cursor.phase then
+                startPhaseIdx = pi
+                startTargetIdx = cursor.targetIndex or 1
+                startSpellIdx = cursor.spellIndex or 1
+                break
+            end
         end
-        if (runState == 'buffs_resume' and sub == 'buff' and p and p.buffIndex and i ~= p.buffIndex)
-            or (runState == 'cures_resume' and sub == 'cure' and p and p.cureIndex and i ~= p.cureIndex) then
-            -- skip this index; only run eval for the index we are resuming
-        else
-            local spellNotInBook = rc.spellNotInBook and rc.spellNotInBook[sub] and rc.spellNotInBook[sub][i]
-            if (not options.entryValid or options.entryValid(i)) and not spellNotInBook then
-                local EvalID, targethit = evalFn(i)
-                if EvalID and targethit
-                    and (not options.beforeCast or options.beforeCast(i, EvalID, targethit))
-                    and (not options.immuneCheck or spellutils.ImmuneCheck(sub, i, EvalID))
-                    and spellutils.PreCondCheck(sub, i, EvalID) then
-                    -- Different category is currently casting: interrupt it only when we have something to cast.
-                    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 then
-                        mq.cmd('/stopcast')
-                        rc.CurSpell = {}
-                        rc.statusMessage = ''
-                        state.clearRunState()
-                    end
-                    -- Only exit when we actually started a cast (or precast); otherwise try next index
-                    if spellutils.CastSpell(i, EvalID, targethit, sub, options.runPriority) then
-                        return false
+    end
+    if cursor and options.entryValid and cursor.spellIndex and not options.entryValid(cursor.spellIndex) then
+        state.clearRunState()
+    end
+
+    for phaseIdx = startPhaseIdx, #phaseOrder do
+        local phase = phaseOrder[phaseIdx]
+        local targets = getTargetsFn(phase, context)
+        if targets and #targets > 0 then
+            local spellIndices = getSpellIndicesFn(phase)
+            if spellIndices and #spellIndices > 0 then
+                local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
+                for targetIdx = targetStart, #targets do
+                    local target = targets[targetIdx]
+                    if target and target.id then
+                        local spellStart = (phaseIdx == startPhaseIdx and targetIdx == targetStart) and startSpellIdx or
+                        1
+                        local fromSpellIndices = {}
+                        for _, si in ipairs(spellIndices) do
+                            if si >= spellStart then fromSpellIndices[#fromSpellIndices + 1] = si end
+                        end
+                        if #fromSpellIndices > 0 then
+                            local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
+                                fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn)
+                            if spellIndex and EvalID and targethit then
+                                if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 then
+                                    mq.cmd('/stopcast')
+                                    spellutils.clearCastingStateOrResume()
+                                end
+                                local spellcheckResume = { hook = hookName, phase = phase, targetIndex = targetIdx, spellIndex =
+                                spellIndex }
+                                if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
+                                    return false
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -573,8 +647,7 @@ function spellutils.InterruptCheck()
                 mq.cmdf('/multiline ; /interrupt ; /echo Interrupting Spell %s, target is above the threshold',
                     entry.spell)
                 mq.cmd('/interrupt')
-                rc.CurSpell = {}
-                rc.statusMessage = ''
+                spellutils.clearCastingStateOrResume()
             end
         end
     end
@@ -592,16 +665,14 @@ function spellutils.InterruptCheck()
                 mq.cmd('/interrupt')
                 if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
                 rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
-                rc.CurSpell = {}
-                rc.statusMessage = ''
+                spellutils.clearCastingStateOrResume()
             elseif sub == 'debuff' and mq.TLO.Spell(spellid).CategoryID() ~= 20 then
                 mq.cmdf('/multiline ; /echo Interrupt %s on MobID %s, debuff already present ; /interrupt', spellname,
                     target)
                 local spelldur = mq.TLO.Target.Buff(spellname).Duration() + mq.gettime()
                 spellstates.DebuffListUpdate(target, spellid, spelldur)
                 mq.cmd('/interrupt')
-                rc.CurSpell = {}
-                rc.statusMessage = ''
+                spellutils.clearCastingStateOrResume()
             end
         end
         if mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() and mq.TLO.Spell(spellid).StacksTarget() == 'FALSE' then
@@ -610,39 +681,20 @@ function spellutils.InterruptCheck()
                 mq.cmd('/interrupt')
                 if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
                 rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
-                rc.CurSpell = {}
-                rc.statusMessage = ''
+                spellutils.clearCastingStateOrResume()
             elseif sub == 'debuff' then
                 printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target,
                     targetname)
                 spellstates.DebuffListUpdate(target, spellname,
                     mq.TLO.Target.Buff(spellname).Duration() + mq.gettime())
                 mq.cmd('/interrupt')
-                rc.CurSpell = {}
-                rc.statusMessage = ''
-            end
-        end
-    end
-    if mq.TLO.Me.CastTimeLeft() > 0 and sub == 'cure' and false then
-        if criteria == 'all' then criteria = 'Detrimentals' end
-        local tarname = mq.TLO.Target.CleanName()
-        local curtar = mq.TLO.Target.ID()
-        local buffspop = mq.TLO.Target.BuffsPopulated()
-        if tarname then
-            local peer = charinfo.GetInfo(tarname)
-            local nbid = peer and peer.ID or nil
-            local nbdebuff = peer and peer[criteria] or nil
-            if curtar and nbid and curtar == target and buffspop and not nbdebuff then
-                printf('\ayCZBot:\axInterrupt %s, is no longer %s', spellname, criteria)
-                mq.cmd('/interrupt')
-                rc.CurSpell = {}
-                rc.statusMessage = ''
+                spellutils.clearCastingStateOrResume()
             end
         end
     end
 end
 
-function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority)
+function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellcheckResume)
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return false end
@@ -656,8 +708,11 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority)
             target = EvalID,
             targethit = targethit,
             resisted = false,
+            spellcheckResume = spellcheckResume,
         }
         if targethit == 'charmtar' then rc.charmid = EvalID end
+    else
+        if spellcheckResume then rc.CurSpell.spellcheckResume = spellcheckResume end
     end
     local spell = string.lower(entry.spell or '')
     local gem = entry.gem
@@ -677,11 +732,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority)
         end
     end
 
-        if not resuming and (mq.TLO.Spell(spell).MyCastTime() and mq.TLO.Spell(spell).MyCastTime() > 0 and (mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()) and mq.TLO.Me.Class.ShortName() ~= 'BRD') then
-        mq.cmd('/multiline ; /nav stop log=off ; /stick off)')
+    if not resuming and (mq.TLO.Spell(spell).MyCastTime() and mq.TLO.Spell(spell).MyCastTime() > 0 and (mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()) and mq.TLO.Me.Class.ShortName() ~= 'BRD') then
+        mq.cmd('/multiline ; /nav stop log=off ; /stick off')
         rc.CurSpell.phase = 'precast_wait_move'
         rc.CurSpell.deadline = mq.gettime() + 3000
-        state.setRunState('casting', { deadline = mq.gettime() + 3000, priority = runPriority })
+        state.setRunState('casting',
+            { deadline = mq.gettime() + 3000, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
     end
     -- TODO: Revisit bard mez + melee cycle. Current behavior: attack off when mezzing notanktar, and bard never
@@ -703,7 +759,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority)
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'
             rc.CurSpell.deadline = mq.gettime() + 1000
-            state.setRunState('casting', { priority = runPriority })
+            state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
             return true
         end
     end
@@ -743,7 +799,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority)
         mq.cmdf('/doability %s', spell)
     end
     rc.CurSpell.phase = 'casting'
-    state.setRunState('casting', { priority = runPriority })
+    state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
     return true
 end
 
