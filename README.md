@@ -1,6 +1,6 @@
 # CZBot
 
-Fork of LUA TrotsBot
+Fork of LUA TrotsBot which is a fork of Woobs Modbot
 
 Base documentation: [README](docs/README.md)
 
