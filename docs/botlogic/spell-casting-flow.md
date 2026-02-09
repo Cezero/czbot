@@ -40,7 +40,7 @@ Phase order and target types are per section. See [Spell targeting and bands](..
 
 ## CastSpell / casting state
 
-CastSpell sets `CurSpell`, may wait for movement or target, then issues the cast and sets `runState = 'casting'`.
+CastSpell sets `CurSpell`, may wait for movement or target, then issues the cast and sets `runState = 'casting'`. When MQ2Cast is loaded, spell/item/alt casts use `/casting` (with `-targetid` when needed and `-maxtries|2` for debuff) and skip the precast target step; completion and resist/immune are detected via `Cast.Result` in re-entry instead of chat events.
 
 ```mermaid
 flowchart TB
@@ -48,29 +48,37 @@ flowchart TB
     SpellCheck --> CurSpell[Set CurSpell sub/spell/target/targethit etc]
     CurSpell --> Moving{Moving and cast time > 0 and not BRD?}
     Moving -->|Yes| PrecastMove[phase = precast_wait_move, setRunState casting, return]
-    Moving -->|No| TargetOk{Target.ID == EvalID?}
+    Moving -->|No| MQ2Cast{MQ2Cast loaded and spell/item/alt?}
+    MQ2Cast -->|Yes| DoCasting["/casting with -targetid, -maxtries for debuff; viaMQ2Cast, spellid"]
+    MQ2Cast -->|No| TargetOk{Target.ID == EvalID?}
     TargetOk -->|No| Precast[phase = precast, /tar, setRunState casting, return]
     TargetOk -->|Yes| DoCast[/cast or /disc or /doability]
-    DoCast --> Casting[phase = casting, setRunState casting with spellcheckResume]
+    DoCasting --> Casting[phase = casting, setRunState casting with spellcheckResume]
+    DoCast --> Casting
 ```
 
 - **SpellCheck:** Reagents, mana/endurance, gem ready, etc.
-- **LoadSpell:** Mem spell in gem if needed; set gemInUse; wait for mem if necessary. On spell-not-in-book, disables entry and clearRunState.
+- **LoadSpell:** Mem spell in gem if needed (uses MQ2Cast `/memorize` when the plugin is loaded, else `/memspell`); set gemInUse; wait for mem if necessary. On spell-not-in-book, disables entry and clearRunState.
 - **precast_wait_move:** If we are moving (or nav/stick active) and the spell has cast time, we set a 3s deadline and return; next tick we stop moving then re-call CastSpell.
-- **precast:** If target is not set, we /tar and set a 1s deadline; next tick we re-call CastSpell.
+- **precast:** If target is not set (and not using MQ2Cast), we /tar and set a 1s deadline; next tick we re-call CastSpell.
+- **MQ2Cast:** When the plugin is loaded and gem is spell/item/alt, we build `/casting "Spell" gem -targetid|id` (and `-maxtries|2` for debuff), set `CurSpell.viaMQ2Cast` and `CurSpell.spellid`, then set phase and run state. Completion is detected in handleSpellCheckReentry via `Cast.Status` / `Cast.Result` / `Cast.Stored`.
 - After the actual cast is fired, `rc.CurSpell.phase = 'casting'` and `state.setRunState('casting', { priority = runPriority, spellcheckResume })`.
 
 ---
 
 ## handleSpellCheckReentry (CurSpell phases)
 
-When a hook runs and we are already in a cast, handleSpellCheckReentry handles waiting, interrupt, or completion instead of starting a new phase-first search.
+When a hook runs and we are already in a cast, handleSpellCheckReentry handles waiting, interrupt, or completion instead of starting a new phase-first search. Two completion paths exist: **viaMQ2Cast** (poll `Cast.Status` / `Cast.Result` / `Cast.Stored`; resist/immune applied from `Cast.Result`), and **legacy** (CastTimeLeft + events).
 
 ```mermaid
 flowchart TB
     Reentry[handleSpellCheckReentry] --> P1{phase == cast_complete_pending_resist?}
     P1 -->|Yes| OnCastResist[OnCastComplete, afterCast, clearCastingStateOrResume]
-    P1 -->|No| P2{phase == casting?}
+    P1 -->|No| P1b{phase == casting and viaMQ2Cast?}
+    P1b -->|Yes| MQ2Complete{Cast.Status not C and Stored == spellid?}
+    MQ2Complete -->|Yes| OnCastMQ2[Set resisted from Cast.Result, immune if CAST_IMMUNE, OnCastComplete, afterCast, clear]
+    MQ2Complete -->|No| WaitReentry[return true]
+    P1b -->|No| P2{phase == casting?}
     P2 -->|Yes| Interrupt{CastTimeLeft > 0?}
     Interrupt -->|Yes| InterruptCheck[InterruptCheck]
     Interrupt --> No
@@ -90,7 +98,8 @@ flowchart TB
 ```
 
 - **cast_complete_pending_resist:** Used for debuff so we can run OnCastComplete after resist check (Event_CastRst). We run OnCastComplete, afterCast, then clearCastingStateOrResume.
-- **casting:** If CastTimeLeft > 0 we run InterruptCheck (target lost, corpse, heal over-threshold, buff/debuff already present, etc.). If CastTimeLeft == 0: non-debuff runs OnCastComplete and clearCastingStateOrResume; debuff sets phase to cast_complete_pending_resist and returns (next tick we exit via P1).
+- **casting (viaMQ2Cast):** Completion is when `Cast.Status` does not contain 'C' and `Cast.Stored.ID()` equals `CurSpell.spellid`. Then set `CurSpell.resisted` from `Cast.Result`, call `immune.processList` on CAST_IMMUNE, then OnCastComplete, afterCast, clearCastingStateOrResume. No CastTimeLeft or cast_complete_pending_resist for this path.
+- **casting (legacy):** If CastTimeLeft > 0 we run InterruptCheck (target lost, corpse, heal over-threshold, buff/debuff already present, etc.). If CastTimeLeft == 0: non-debuff runs OnCastComplete and clearCastingStateOrResume; debuff sets phase to cast_complete_pending_resist and returns (next tick we exit via P1).
 - **precast_wait_move / precast:** Wait for deadline or condition; then either clearCastingStateOrResume or call CastSpell again to actually cast.
 
 ---

@@ -93,6 +93,12 @@ When **charmnames** is set to a comma-separated list of mob names, the debuff lo
 
 ---
 
+## MQ2Cast and -maxtries
+
+When the **MQ2Cast** plugin is loaded, the bot uses `/casting` for debuff spells and appends **`-maxtries|2`** so MQ2Cast may retry once on resist/fizzle before returning a final result. The bot still sees one “logical” cast completion: **recast** (disable after N resists per spawn) and **afterCast** logic run once per cast using the final `Cast.Result`. Without MQ2Cast, the bot uses `/cast` and chat events (CastRst) for resist.
+
+---
+
 ## Runtime control
 
 - **Toggle debuffing:** `/cz dodebuff on` or `/cz dodebuff off` (or `/cz dodebuff` to toggle).

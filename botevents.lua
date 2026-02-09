@@ -54,10 +54,12 @@ function botevents.Event_Slain()
 end
 
 function botevents.Event_CastRst()
+    if state.getRunconfig().CurSpell and state.getRunconfig().CurSpell.viaMQ2Cast then return end
     SpellResisted = true
 end
 
 function botevents.Event_CastImm(line)
+    if state.getRunconfig().CurSpell and state.getRunconfig().CurSpell.viaMQ2Cast then return end
     local curtarget = mq.TLO.Target.ID()
     local sub = state.getRunconfig().CurSpell.sub
     local spell = state.getRunconfig().CurSpell.spell

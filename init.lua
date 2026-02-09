@@ -1,3 +1,30 @@
+local mq = require('mq')
+
+-- Require MQCharinfo before loading bot (so we can end macro if unavailable).
+local ok, _ = pcall(require, 'mqcharinfo')
+if not ok then
+    print('\ayCZBot:\ax MQCharinfo (mqcharinfo) is required but failed to load.')
+    return
+end
+
+-- Load required MQ plugins and end macro if any fail to load.
+if not mq.TLO.Plugin('MQ2Cast').IsLoaded() then mq.cmd('/squelch /plugin MQ2Cast load') end
+if not mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() then mq.cmd('/squelch /plugin MQ2MoveUtils load') end
+if not mq.TLO.Plugin('MQ2Twist').IsLoaded() then mq.cmd('/squelch /plugin MQ2Twist load') end
+mq.delay(2000)
+if not mq.TLO.Plugin('MQ2Cast').IsLoaded() then
+    print('\ayCZBot:\ax MQ2Cast is required but failed to load.')
+    return
+end
+if not mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() then
+    print('\ayCZBot:\ax MQ2MoveUtils is required but failed to load.')
+    return
+end
+if not mq.TLO.Plugin('MQ2Twist').IsLoaded() then
+    print('\ayCZBot:\ax MQ2Twist is required but failed to load.')
+    return
+end
+
 local botmelee = require('botmelee')
 local botlogic = require('botlogic')
 local spellutils = require('lib.spellutils')

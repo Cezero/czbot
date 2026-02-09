@@ -181,23 +181,14 @@ function botlogic.StartUp(...)
         state.getRunconfig().terminate = true
         return
     end
-    -- verify mq2 and plugin requirements are met
-    if (mq.TLO.Plugin('MQ2Cast').IsLoaded() == nil) then
-        mq.cmd('/squelch /plugin MQ2Cast load')
-    end
+    -- Optional plugins (load if not loaded; no terminate)
     if (mq.TLO.Plugin('MQRemote').IsLoaded() == nil) then
         mq.cmd('/squelch /plugin MQRemote load')
     end
     if (mq.TLO.Plugin('MQ2Exchange').IsLoaded() == nil) then
         mq.cmd('/squelch /plugin MQ2Exchange load')
     end
-    if (mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() == nil) then
-        mq.cmd('/squelch /plugin MQ2MoveUtils load')
-    end
-    if (mq.TLO.Plugin('MQ2Twist').IsLoaded() == nil) then
-        mq.cmd('/squelch /plugin MQ2Twist load')
-    end
-    -- Peer data is via mqcharinfo (no MQ2NetBots).
+    -- MQ2Cast, MQ2MoveUtils, MQ2Twist, MQCharinfo are required and verified in init.lua before this runs.
     --load config file
     state.resetRunconfig()
     ---@type RunConfig

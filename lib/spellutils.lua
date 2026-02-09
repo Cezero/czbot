@@ -266,7 +266,7 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     if not entry then return end
     local spell = string.lower(entry.spell or '')
     local spellid = mq.TLO.Spell(spell).ID()
-    if SpellResisted then
+    if not rc.CurSpell.viaMQ2Cast and SpellResisted then
         rc.CurSpell.resisted = true
         SpellResisted = false
     end
@@ -325,6 +325,30 @@ function spellutils.handleSpellCheckReentry(sub, options)
         end
         spellutils.clearCastingStateOrResume()
         return true
+    end
+
+    -- MQ2Cast completion: poll Cast.Status and Cast.Result; do not use CastTimeLeft.
+    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.viaMQ2Cast then
+        if (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') then
+            spellutils.InterruptCheck()
+        end
+        local status = mq.TLO.Cast.Status() or ''
+        local storedId = mq.TLO.Cast.Stored.ID() or 0
+        if not string.find(status, 'C') and storedId == (rc.CurSpell.spellid or 0) then
+            rc.CurSpell.resisted = (mq.TLO.Cast.Result() == 'CAST_RESIST')
+            if mq.TLO.Cast.Result() == 'CAST_IMMUNE' and rc.CurSpell.target then
+                immune.processList(rc.CurSpell.target)
+            end
+            spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
+            if options.afterCast then
+                options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
+            end
+            spellutils.clearCastingStateOrResume()
+            return true
+        end
+        if sub == rc.CurSpell.sub then
+            return true
+        end
     end
 
     if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' then
@@ -581,7 +605,7 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
         -- is spell loaded?
         if mq.TLO.Me.Gem(spell)() ~= gem then
             if mq.TLO.Me.Book(spell)() then
-                mq.cmdf('/memspell %s "%s"', gem, spell)
+                mq.cmdf('/memorize "%s" %s', spell, gem)
                 rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
                 rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
                 mq.delay(10000, function()
@@ -633,7 +657,7 @@ function spellutils.InterruptCheck()
             mq.cmd('/squelch /multiline; /stick off ; /target clear')
             if mq.TLO.Me.CastTimeLeft() > 0 and target ~= 1 and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
                 mq.cmd('/echo I lost my target, interrupting')
-                mq.cmd('/stopcast')
+                if rc.CurSpell.viaMQ2Cast then mq.cmd('/interrupt') else mq.cmd('/stopcast') end
                 if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
             end
             if state.getRunconfig().domelee and _deps.AdvCombat then _deps.AdvCombat() end
@@ -760,7 +784,8 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         end
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
-    if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
+    local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
+    if not useMQ2Cast and (EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then
         if mq.TLO.Target.ID() ~= EvalID then
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'
@@ -775,6 +800,26 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     -- Stand before cast when sitting (not on mount); MQ2Cast does not do this.
     if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() then
         mq.cmd('/stand')
+    end
+    if useMQ2Cast then
+        local castSpellId = mq.TLO.Spell(entry.spell).ID()
+        if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then
+            castSpellId = mq.TLO.FindItem(entry.spell).Spell.ID()
+        end
+        local castArg = (type(gem) == 'number') and tostring(gem) or gem
+        local cmd = string.format('/casting "%s" %s', spellname, castArg)
+        if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
+            cmd = cmd .. string.format(' -targetid|%s', EvalID)
+        end
+        if sub == 'debuff' then
+            cmd = cmd .. ' -maxtries|2'
+        end
+        rc.CurSpell.viaMQ2Cast = true
+        rc.CurSpell.spellid = castSpellId
+        mq.cmd(cmd)
+        rc.CurSpell.phase = 'casting'
+        state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        return true
     end
     if type(gem) == 'number' or gem == 'item' or gem == 'alt' or gem == 'script' then
         if EvalID == 1 and (targethit == 'self' or targethit == 'groupheal' or targethit == 'groupbuff' or targethit == 'groupcure') then

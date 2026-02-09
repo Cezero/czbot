@@ -526,7 +526,7 @@ local function cmd_chchain(args)
         if not aminlist then return false end
         if mq.TLO.Me.Gem(spell)() ~= gem then
             if mq.TLO.Me.Book(spell)() then
-                mq.cmdf('/memspell %s "%s"', gem, spell)
+                mq.cmdf('/memorize "%s" %s', spell, gem)
                 state.getRunconfig().gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
                 state.getRunconfig().statusMessage = 'CHChain: memorizing Complete Heal'
                 mq.delay(10000, function()

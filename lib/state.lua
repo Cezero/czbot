@@ -22,7 +22,7 @@
 ---@field pullarc number|nil
 ---@field FTEList table
 ---@field FTECount number
----@field CurSpell table
+---@field CurSpell table When casting: phase, sub, spell (index), target, targethit, spellcheckResume; when via MQ2Cast: viaMQ2Cast, spellid.
 ---@field gemInUse table
 ---@field HoverTimer number
 ---@field DragHack boolean
