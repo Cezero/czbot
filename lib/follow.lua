@@ -5,7 +5,7 @@
 local mq = require('mq')
 local state = require('lib.state')
 local botmove = require('botmove')
-local charinfo = require('plugin.charinfo')
+local charinfo = require("mqcharinfo")
 
 local follow = {}
 
@@ -26,7 +26,7 @@ function follow.StartFollow(name)
 end
 
 local function event_FollowChat(line, speaker)
-    if not charinfo.GetPeer(speaker) then return end
+    if not charinfo.GetInfo(speaker) then return end
     follow.StartFollow(speaker)
 end
 

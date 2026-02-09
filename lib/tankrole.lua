@@ -6,7 +6,7 @@
 
 local mq = require('mq')
 local state = require('lib.state')
-local charinfo = require('plugin.charinfo')
+local charinfo = require("mqcharinfo")
 
 local tankrole = {}
 

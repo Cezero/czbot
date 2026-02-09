@@ -7,7 +7,7 @@ local spellstates = require('lib.spellstates')
 local mobfilter = require('lib.mobfilter')
 local chchain = require('lib.chchain')
 local follow = require('lib.follow')
-local charinfo = require('plugin.charinfo')
+local charinfo = require("mqcharinfo")
 
 local botevents = {}
 

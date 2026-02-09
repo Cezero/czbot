@@ -9,7 +9,7 @@ local hookregistry = require('lib.hookregistry')
 local spellutils = require('lib.spellutils')
 local botevents = require('botevents')
 local utils = require('lib.utils')
-local charinfo = require('plugin.charinfo')
+local charinfo = require("mqcharinfo")
 
 local bothooks = require('lib.bothooks')
 local botlogic = {}
@@ -196,7 +196,7 @@ function botlogic.StartUp(...)
     if (mq.TLO.Plugin('MQ2Twist').IsLoaded() == nil) then
         mq.cmd('/squelch /plugin MQ2Twist load')
     end
-    -- Peer data is via plugin.charinfo (no MQ2NetBots).
+    -- Peer data is via mqcharinfo (no MQ2NetBots).
     --load config file
     state.resetRunconfig()
     ---@type RunConfig

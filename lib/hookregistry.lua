@@ -2,7 +2,7 @@
 -- Lower priority runs first. runWhenPaused = true runs every iteration even when MasterPause is set.
 --
 -- Always-run hooks (runWhenPaused = true): Must run every tick; never block. Use for:
---   - plugin.charinfo (network sync)
+--   - mqcharinfo (network sync)
 --   - Any logic that must fire regardless of runState (pulling, casting, etc.)
 -- Normal hooks: Skipped when MasterPause. When state is busy and payload has priority,
 --   only hooks with hook.priority <= payload.priority run (higher-priority hooks and the busy-holding hook).

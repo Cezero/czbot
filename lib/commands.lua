@@ -16,7 +16,7 @@ local mobfilter = require('lib.mobfilter')
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local groupmanager = require('lib.groupmanager')
-local charinfo = require('plugin.charinfo')
+local charinfo = require("mqcharinfo")
 local utils = require('lib.utils')
 local command_dispatcher = require('lib.command_dispatcher')
 local follow = require('lib.follow')
@@ -234,7 +234,7 @@ local function cmd_attack(args)
         printf('\ayCZBot:\ax\ar No Main Assist set, cannot engage')
         return
     end
-    local maInfo = charinfo.GetPeer(assistName)
+    local maInfo = charinfo.GetInfo(assistName)
     local KillTarget = maInfo and maInfo.Target and maInfo.Target.ID or nil
     state.getRunconfig().engageTargetId = KillTarget
     if KillTarget then

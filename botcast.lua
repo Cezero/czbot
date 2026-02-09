@@ -6,7 +6,7 @@ local spellutils = require('lib.spellutils')
 local spellstates = require('lib.spellstates')
 local state = require('lib.state')
 local utils = require('lib.utils')
-local charinfo = require('plugin.charinfo')
+local charinfo = require("mqcharinfo")
 local bothooks = require('lib.bothooks')
 local myconfig = botconfig.config
 
@@ -80,7 +80,7 @@ end
 
 local function BuffEvalBotNeedsBuff(botid, botname, spellid, range, index, targethit)
     local spawnid = mq.TLO.Spawn(botid).ID()
-    local peer = charinfo.GetPeer(botname)
+    local peer = charinfo.GetInfo(botname)
     if not peer then return nil, nil end
     local botbuff = spellutils.PeerHasBuff(peer, spellid)
     local botbuffstack = peer:Stacks(spellid)
@@ -155,7 +155,7 @@ end
 local function BuffEvalTank(index, entry, spell, spellid, range, tank, tankid)
     if not tank or not entry or not BuffClass[index].tank or not tankid or tankid <= 0 then return nil, nil end
     if not IconCheck(index, tankid) then return nil, nil end
-    local peer = charinfo.GetPeer(tank)
+    local peer = charinfo.GetInfo(tank)
     if peer then
         return BuffEvalBotNeedsBuff(tankid, tank, spellid, range, index, 'tank')
     end
@@ -187,7 +187,7 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
             local grpid = grpmember.ID()
             local grpdist = grpspawn and grpspawn.Distance() or nil
             if grpid and grpid > 0 and mq.TLO.Spawn(grpid).Type() == 'PC' and grpdist and grpdist <= aeRange then
-                local peer = charinfo.GetPeer(grpname)
+                local peer = charinfo.GetInfo(grpname)
                 if peer then
                     local hasBuff = spellutils.PeerHasBuff(peer, spellid)
                     local stacks = peer:Stacks(spellid)
@@ -222,7 +222,7 @@ local function BuffEvalGroupMember(index, entry, spell, spellid, range, startFro
                 if range and grpdist and grpdist <= range then
                     local lc = grpclass:lower()
                     if (BuffClass[index].classes == 'all' or (BuffClass[index].classes and BuffClass[index].classes[lc])) and IconCheck(index, grpid) then
-                        local peer = charinfo.GetPeer(grpname)
+                        local peer = charinfo.GetInfo(grpname)
                         if peer then
                             local id, hit = BuffEvalBotNeedsBuff(grpid, grpname, spellid, range, index, lc)
                             if id then return id, hit end
@@ -263,7 +263,7 @@ local function BuffEvalMyPet(index, entry, spell, spellid, range)
     local mypetid = mq.TLO.Me.Pet.ID()
     local petbuff = mq.TLO.Me.Pet.Buff(spell)()
     local petrange = mq.TLO.Me.Pet.Distance()
-    local myPeer = charinfo.GetPeer(mq.TLO.Me.Name())
+    local myPeer = charinfo.GetInfo(mq.TLO.Me.Name())
     local petstacks = myPeer and myPeer:StacksPet(spellid)
     if mypetid > 0 and petstacks and not petbuff and petrange and range and range >= petrange then
         return mypetid, 'mypet'
@@ -275,7 +275,7 @@ local function BuffEvalPets(index, entry, spellid, range, bots, botcount)
     if not BuffClass[index].pet then return nil, nil end
     for i = 1, botcount do
         if bots[i] then
-            local peer = charinfo.GetPeer(bots[i])
+            local peer = charinfo.GetInfo(bots[i])
             if peer then
                 local botpet = mq.TLO.Spawn('pc =' .. bots[i]).Pet.ID()
                 local petrange = mq.TLO.Spawn(botpet).Distance()
@@ -302,7 +302,7 @@ local function BuffEval(index)
     local gem = entry.gem
     local tank, tankid, tanktar = spellutils.GetTankInfo(false)
     tanktar = tanktar or
-    (tank and charinfo.GetPeer(tank) and charinfo.GetPeer(tank).Target and charinfo.GetPeer(tank).Target.ID or nil)
+    (tank and charinfo.GetInfo(tank) and charinfo.GetInfo(tank).Target and charinfo.GetInfo(tank).Target.ID or nil)
     local myid = mq.TLO.Me.ID()
     local myclass = mq.TLO.Me.Class.ShortName()
     local range = (mq.TLO.Spell(spell).MyRange() and mq.TLO.Spell(spell).MyRange() > 0) and mq.TLO.Spell(spell).MyRange()

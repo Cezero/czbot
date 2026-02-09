@@ -4,7 +4,7 @@ local combat = require('lib.combat')
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
-local charinfo = require('plugin.charinfo')
+local charinfo = require("mqcharinfo")
 local myconfig = botconfig.config
 
 local botmove = {}
