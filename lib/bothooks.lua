@@ -9,7 +9,7 @@ local hooks = {
     { name = 'doEvents', priority = 200, runWhenDead = true },
     { name = 'charState', priority = 300, runWhenDead = true },
     { name = 'doRaid', priority = 350, provider = 'botraid' },
-    { name = 'ADSpawnCheck', priority = 400, provider = 'botdebuff' },
+    { name = 'AddSpawnCheck', priority = 400, provider = 'lib.spawnutils' },
     { name = 'chchainTick', priority = 500, provider = 'lib.chchain' },
     { name = 'doMelee', priority = 600, provider = 'botmelee' },
     { name = 'priorityCure', priority = 700, provider = 'botcure' },

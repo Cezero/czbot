@@ -27,81 +27,6 @@ end
 
 castutils.RegisterSectionLoader('debuff', 'dodebuff', botdebuff.LoadDebuffConfig)
 
-local function ADSpawnCheck_ValidateAcmTarget(rc)
-    if rc.engageTargetId then
-        if not mq.TLO.Spawn(rc.engageTargetId).ID() or mq.TLO.Spawn(rc.engageTargetId).Type() == 'Corpse' then
-            rc.engageTargetId = nil
-        end
-    end
-    if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return false end
-    return true
-end
-
-local function ADSpawnCheck_BuildSpawnList()
-    local myconfig = botconfig.config
-    local function buildMobListPredicate(spawn)
-        local distance2D = spawn.Distance() or 5000
-        return distance2D <= myconfig.settings.acleash
-    end
-    return mq.getFilteredSpawns(buildMobListPredicate)
-end
-
-local function ADSpawnCheck_FilterSpawn(spawn, rc)
-    local myconfig = botconfig.config
-    local distance2D = spawn.Distance() or 5000
-    local distanceZ = spawn.DistanceZ() or 5000
-    local spawnname = spawn.CleanName() or 'none'
-    if rc.campstatus then
-        local spawnx, spawny, spawnz = spawn.X(), spawn.Y(), spawn.Z()
-        distance2D = utils.calcDist2D(spawnx, spawny, rc.makecamp.x, rc.makecamp.y)
-        if spawnz then distanceZ = math.abs(spawnz - rc.makecamp.z) end
-    end
-    if rc.FTECount and spawn.ID() and rc.FTEList and rc.FTEList[spawn.ID()] and rc.FTEList[spawn.ID()].timer > mq.gettime() then
-        return false
-    end
-    if not (spawnname and distance2D and distanceZ and distance2D <= myconfig.settings.acleash and distanceZ <= myconfig.settings.zradius) then
-        return false
-    end
-    if string.find(rc.ExcludeList or '', spawnname) then return false end
-    if myconfig.settings.TargetFilter == 2 then
-        return not string.find('pc,banner,campfire,mercenary,mount,aura,corpse', string.lower(spawn.Type()))
-    end
-    if myconfig.settings.TargetFilter == 1 then
-        return (spawn.Type() == 'NPC' or (spawn.Type() == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.LineOfSight()
-    end
-    if myconfig.settings.TargetFilter == 0 then
-        return (spawn.Type() == 'NPC' or (spawn.Type() == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.Aggressive() and
-            spawn.LineOfSight()
-    end
-    return false
-end
-
-local function ADSpawnCheck_ApplyFilter(spawnlist, rc)
-    rc.MobList = {}
-    for _, spawn in ipairs(spawnlist) do
-        if ADSpawnCheck_FilterSpawn(spawn, rc) then
-            table.insert(rc.MobList, spawn)
-        end
-    end
-end
-
-function botdebuff.ADSpawnCheck()
-    local rc = state.getRunconfig()
-    if not ADSpawnCheck_ValidateAcmTarget(rc) then return end
-    local spawnlist = ADSpawnCheck_BuildSpawnList()
-    ADSpawnCheck_ApplyFilter(spawnlist, rc)
-    table.sort(rc.MobList, function(a, b) return a.ID() < b.ID() end)
-    local mobcount = 0
-    local killtarpresent = false
-    if KillTarget and (mq.TLO.Spawn(KillTarget).Type() == 'Corpse' or not mq.TLO.Spawn(KillTarget).ID()) then KillTarget = nil end
-    for k, v in ipairs(rc.MobList) do
-        mobcount = mobcount + 1
-        if v.ID() == KillTarget then killtarpresent = true end
-    end
-    if not killtarpresent and KillTarget then table.insert(rc.MobList, mq.TLO.Spawn(KillTarget)) end
-    rc.MobCount = mobcount
-end
-
 local function DebuffEvalBuildContext(index)
     local myconfig = botconfig.config
     local entry = botconfig.getSpellEntry('debuff', index)
@@ -458,11 +383,6 @@ function botdebuff.DebuffCheck(runPriority)
 end
 
 function botdebuff.getHookFn(name)
-    if name == 'ADSpawnCheck' then
-        return function()
-            botdebuff.ADSpawnCheck()
-        end
-    end
     if name == 'doDebuff' then
         return function(hookName)
             local myconfig = botconfig.config

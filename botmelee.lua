@@ -8,6 +8,7 @@ local botmove = require('botmove')
 local utils = require('lib.utils')
 local charinfo = require("mqcharinfo")
 local tankrole = require('lib.tankrole')
+local spawnutils = require('lib.spawnutils')
 local myconfig = botconfig.config
 local botmelee = {}
 
@@ -69,20 +70,12 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     end
     if mtTarId == maTarId then
         -- Same target: pick an add (Nth mob in MobList that is not that target).
-        local actarid, acname
-        local otcounter = 0
-        for _, v in ipairs(rc.MobList) do
-            if v.ID() ~= maTarId and not actarid then
-                if otcounter == myconfig.melee.otoffset then
-                    actarid = v.ID()
-                    acname = v.CleanName()
-                end
-                otcounter = otcounter + 1
-            end
-        end
-        if actarid then
+        local otoffset = myconfig.melee.otoffset or 0
+        local nthSpawn = spawnutils.selectNthAdd(rc.MobList, maTarId, otoffset + 1)
+        if nthSpawn then
+            local actarid = nthSpawn.ID()
             if actarid ~= mq.TLO.Target.ID() then
-                printf('\ayCZBot:\ax\arOff-tanking\ax a \ag%s id %s', acname, actarid)
+                printf('\ayCZBot:\ax\arOff-tanking\ax a \ag%s id %s', nthSpawn.CleanName(), actarid)
             end
             rc.engageTargetId = actarid
         elseif maInfo and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) and maTarId and maTarId > 0 then

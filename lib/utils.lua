@@ -1,5 +1,5 @@
 -- Generic helpers (table copy, list membership, distance).
--- Non-combat zones: hooks (ADSpawnCheck, doPull, doMelee, etc.) can skip combat logic when zone is in this list.
+-- Non-combat zones: hooks (AddSpawnCheck, doPull, doMelee, etc.) can skip combat logic when zone is in this list.
 
 local utils = {}
 

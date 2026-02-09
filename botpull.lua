@@ -3,7 +3,7 @@ local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
-local botdebuff = require('botdebuff')
+local spawnutils = require('lib.spawnutils')
 local botmelee = require('botmelee')
 local botmove = require('botmove')
 local utils = require('lib.utils')
@@ -11,9 +11,6 @@ local charinfo = require("mqcharinfo")
 local myconfig = botconfig.config
 
 local botpull = {}
-
--- Arc state for directional pulling (module-level to avoid new runconfig fields).
-local arcLside, arcRside, arcMid
 
 local function clearPullState()
     local rc = state.getRunconfig()
@@ -31,9 +28,6 @@ function botpull.LoadPullConfig()
     state.getRunconfig().pulledmob = nil
     state.getRunconfig().pullreturntimer = nil
     if not state.getRunconfig().pullarc then state.getRunconfig().pullarc = nil end
-    arcLside = nil
-    arcRside = nil
-    arcMid = nil
 end
 
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.dopull then botpull.LoadPullConfig() end end)
@@ -51,49 +45,17 @@ end
 
 function botpull.SetPullArc(arc)
     local rc = state.getRunconfig()
-    local fdir = mq.TLO.Me.Heading.Degrees()
     if not arc and rc.pullarc then
         mq.cmd('/echo \arTurning off Directional Pulling.')
         rc.pullarc = 0
     else
         rc.pullarc = tonumber(arc)
     end
-    if not rc.pullarc then return end
-    if (fdir - (rc.pullarc * .5)) < 0 then
-        arcLside = 360 - ((rc.pullarc * .5) - fdir)
-    else
-        arcLside = fdir - (rc.pullarc * .5)
-    end
-    if (fdir + (rc.pullarc * .5)) > 360 then
-        arcRside = ((rc.pullarc * .5) + fdir) - 360
-    else
-        arcRside = fdir + (rc.pullarc * .5)
-    end
-    arcMid = fdir
-    if arc then printf('Setting Pull Arc to %s at heading %s', arc, fdir) end -- not debug, keep
-end
-
-local function figureMobAngle(spawn)
-    if not spawn then return false end
-    local rc = state.getRunconfig()
-    local DirToMob = spawn.HeadingTo(rc.makecamp.y, rc.makecamp.x).Degrees()
-    if arcLside >= arcRside then
-        if DirToMob < arcLside and DirToMob > arcRside then return false end
-    else
-        if DirToMob < arcLside or DirToMob > arcRside then return false end
-    end
-    return true
+    if arc then printf('Setting Pull Arc to %s at heading %s', arc, mq.TLO.Me.Heading.Degrees()) end -- not debug, keep
 end
 
 function botpull.FTECheck(spawnid)
-    if not spawnid then return true end
-    local rc = state.getRunconfig()
-    for k, v in pairs(rc.engagetracker) do
-        if mq.gettime() > v then rc.engagetracker[k] = nil end
-        if k == spawnid then return true end
-    end
-    if spawnid and rc.FTEList[spawnid] and (rc.FTEList[spawnid].timer + 60000) > mq.gettime() + 60000 then return true end
-    return false
+    return spawnutils.FTECheck(spawnid, state.getRunconfig())
 end
 
 function botpull.EngageCheck()
@@ -161,39 +123,6 @@ local function ensureCampAndAnchor(rc)
     end
 end
 
--- Build filtered spawn list for pulling.
-local function buildPullMobList(rc)
-    local x, y, z = rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
-    local radius = myconfig.pull.radius
-    local zrange = myconfig.pull.zrange
-    local minlevel = myconfig.pull.minlevel
-    local maxlevel = myconfig.pull.maxlevel
-    local excludelist = rc.ExcludeList or ''
-    local moblist = rc.MobList
-
-    local function filter(spawn)
-        if spawn.Type() ~= 'NPC' then return false end
-        if spawn.Level() < minlevel or spawn.Level() > maxlevel then return false end
-        local pdist = utils.calcDist2D(spawn.X(), spawn.Y(), x, y)
-        if rc.pullarc and rc.pullarc > 0 then
-            if not figureMobAngle(spawn) then return false end
-        end
-        local zdist = z and spawn.Z() and math.sqrt((z - spawn.Z()) ^ 2)
-        if not pdist or pdist > radius then return false end
-        if zdist and zdist > zrange then return false end
-        if botpull.FTECheck(spawn.ID()) or string.find(excludelist, spawn.CleanName()) then return false end
-        if not mq.TLO.Navigation.PathExists('id ' .. spawn.ID())() then return false end
-        if moblist then
-            for _, v in pairs(moblist) do
-                if v.ID() == spawn.ID() then return false end
-            end
-        end
-        return true
-    end
-
-    return mq.getFilteredSpawns(filter)
-end
-
 -- Pick one spawn from list (closest by path length; priority list if usepriority).
 local function selectPullTarget(apmoblist, rc)
     if not apmoblist or not apmoblist[1] then return nil end
@@ -230,7 +159,7 @@ function botpull.StartPull()
     local rc = state.getRunconfig()
     if not canStartPull(rc) then return end
     ensureCampAndAnchor(rc)
-    local apmoblist = buildPullMobList(rc)
+    local apmoblist = spawnutils.buildPullMobList(rc)
     local spawn = selectPullTarget(apmoblist, rc)
     if not spawn then return end
 
@@ -408,7 +337,6 @@ local function tickWaitingCombat(rc)
         end
         return false
     end
-    botdebuff.ADSpawnCheck()
     if (rc.MobList and rc.MobList[1]) and myconfig.settings.domelee then botmelee.AdvCombat() end
     if isAPTarInCamp() or (rc.pullReturnTimer and mq.gettime() >= rc.pullReturnTimer) then
         clearPullState()
