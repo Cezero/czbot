@@ -3,7 +3,7 @@ local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
-local botcast = require('botcast')
+local botdebuff = require('botdebuff')
 local botmelee = require('botmelee')
 local botmove = require('botmove')
 local utils = require('lib.utils')
@@ -28,19 +28,6 @@ local function clearPullState()
 end
 
 function botpull.LoadPullConfig()
-    if (myconfig.pull.radius == nil) then myconfig.pull.radius = 400 end
-    if (myconfig.pull.zrange == nil) then myconfig.pull.zrange = 150 end
-    if (myconfig.pull.chainpullcnt == nil) then myconfig.pull.chainpullcnt = 0 end
-    if (myconfig.pull.chainpullhp == nil) then myconfig.pull.chainpullhp = 0 end
-    if (myconfig.pull.pullability == nil) then myconfig.pull.pullability = 'melee' end
-    if (myconfig.pull.abilityrange == nil) then myconfig.pull.abilityrange = 60 end
-    if (myconfig.pull.maxlevel == nil) then myconfig.pull.maxlevel = 200 end
-    if (myconfig.pull.minlevel == nil) then myconfig.pull.minlevel = 0 end
-    if (myconfig.pull.hunter == nil or myconfig.pull.hunter ~= (false or true)) then myconfig.pull.hunter = false end
-    if (myconfig.pull.mana == nil) then myconfig.pull.mana = 60 end
-    if (myconfig.pull.manaclass == nil) then myconfig.pull.manaclass = 'clr, dru, shm' end
-    if (myconfig.pull.leash == nil) then myconfig.pull.leash = 500 end
-    if (myconfig.pull.usepriority == nil or myconfig.pull.usepriority ~= (false or true)) then myconfig.pull.usepriority = false end
     state.getRunconfig().pulledmob = nil
     state.getRunconfig().pullreturntimer = nil
     if not state.getRunconfig().pullarc then state.getRunconfig().pullarc = nil end
@@ -421,7 +408,7 @@ local function tickWaitingCombat(rc)
         end
         return false
     end
-    botcast.ADSpawnCheck()
+    botdebuff.ADSpawnCheck()
     if (rc.MobList and rc.MobList[1]) and myconfig.settings.domelee then botmelee.AdvCombat() end
     if isAPTarInCamp() or (rc.pullReturnTimer and mq.gettime() >= rc.pullReturnTimer) then
         clearPullState()
@@ -458,27 +445,30 @@ function botpull.PullTick()
     end
 end
 
-do
-    local hookregistry = require('lib.hookregistry')
-    hookregistry.registerHookFn('doPull', function(hookName)
-        if not myconfig.settings.dopull then return end
-        if state.getRunState() == 'raid_mechanic' then return end
-        if state.getRunState() == 'pulling' then
-            botpull.PullTick()
-            return
-        end
-        if state.getRunconfig().MobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0 then
-            if mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs() then
-                local tempcnt = myconfig.pull.chainpullcnt == 0 and (myconfig.pull.chainpullcnt + 1) or
-                myconfig.pull.chainpullcnt
-                if (tonumber(mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs()) <= myconfig.pull.chainpullhp) and state.getRunconfig().MobCount <= tempcnt then
-                    botpull.StartPull()
+function botpull.getHookFn(name)
+    if name == 'doPull' then
+        return function(hookName)
+            if not myconfig.settings.dopull then return end
+            if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
+            if state.getRunState() == 'raid_mechanic' then return end
+            if state.getRunState() == 'pulling' then
+                botpull.PullTick()
+                return
+            end
+            if state.getRunconfig().MobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0 then
+                if mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs() then
+                    local tempcnt = myconfig.pull.chainpullcnt == 0 and (myconfig.pull.chainpullcnt + 1) or
+                    myconfig.pull.chainpullcnt
+                    if (tonumber(mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs()) <= myconfig.pull.chainpullhp) and state.getRunconfig().MobCount <= tempcnt then
+                        botpull.StartPull()
+                    end
                 end
             end
+            if (state.getRunconfig().MobCount < myconfig.pull.chainpullcnt) then botpull.StartPull() end
+            if (state.getRunconfig().MobCount == 0) and not state.getRunconfig().engageTargetId then botpull.StartPull() end
         end
-        if (state.getRunconfig().MobCount < myconfig.pull.chainpullcnt) then botpull.StartPull() end
-        if (state.getRunconfig().MobCount == 0) and not state.getRunconfig().engageTargetId then botpull.StartPull() end
-    end)
+    end
+    return nil
 end
 
 return botpull

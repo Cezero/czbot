@@ -48,7 +48,7 @@ local function CharState(...)
         local rc = state.getRunconfig()
         if rc.followid and rc.followid > 0 and mq.TLO.Me.Sitting() then
             local d = mq.TLO.Spawn(rc.followid).Distance()
-            local thresh = botconfig.config.settings.followdistance or 35
+            local thresh = botconfig.config.settings.followdistance
             if d and d >= thresh then mq.cmd('/stand') end
         end
     end
@@ -57,7 +57,7 @@ local function CharState(...)
         local skipSitForFollow = false
         if rc.followid and rc.followid > 0 then
             local d = mq.TLO.Spawn(rc.followid).Distance()
-            local thresh = botconfig.config.settings.followdistance or 35
+            local thresh = botconfig.config.settings.followdistance
             if d and d >= thresh then skipSitForFollow = true end
         end
         if not skipSitForFollow then

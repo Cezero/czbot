@@ -34,7 +34,7 @@ local function shouldCallFollow(rc)
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
     local engageId = rc.engageTargetId or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
-    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'CORPSE' and followdistance >= (myconfig.settings.followdistance or 35)
+    return followid > 0 and followdistance > 0 and engageId == 0 and followtype ~= 'CORPSE' and followdistance >= myconfig.settings.followdistance
 end
 
 local function updateStuckTimerWithinLeash(rc)
@@ -328,7 +328,7 @@ function botmove.StartReturnToFollowAfterEngage()
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
-    if followdistance < (myconfig.settings.followdistance or 35) or not followid or followtype == 'CORPSE' then return end
+    if followdistance < myconfig.settings.followdistance or not followid or followtype == 'CORPSE' then return end
     mq.cmd('/multiline ; /stick off ; /squelch /attack off ; /target self')
     botmove.FollowCall()
     state.setRunState('engage_return_follow', { phase = 'delay_400', deadline = mq.gettime() + 400, priority = bothooks.getPriority('doMiscTimer') })

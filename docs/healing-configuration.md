@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **healing** behavior: which 
 ## Overview
 
 - **Master switch:** Healing runs only when **`settings.doheal`** is `true`. Default is `false`.
-- **Heal target:** The heal loop uses a **fixed evaluation order** (see [Heal bands](#heal-bands)): corpse (rez) → self → groupheal → tank → groupmember → pc → mypet → pet → xtgt. The first matching target in that order gets the heal — e.g. self heals are always considered before tank or groupmember. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
+- **Heal target:** The heal loop evaluates **phases** in order (see [Heal bands](#heal-bands)): corpse (rez) → self → groupheal → tank → groupmember → pc → mypet → pet → xtgt. For each phase it gets the list of targets for that phase, then for **each target** checks all heal spells that have that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
 - **Where to configure:** Set **`settings.doheal`** in the `settings` section and all heal options under the **`heal`** section. See [Config file reference](#config-file-reference) below.
 
 ---
@@ -42,21 +42,20 @@ Each entry in **`heal.spells`** can have:
 | **minmanapct** / **maxmanapct** | Your mana % must be within this range to use this spell (default 0–100). |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **tarcnt** | Optional. Only used for **group/AE heals**: minimum number of group members in the HP band (and in range) required to trigger the spell. When omitted, group heals fire when at least 1 member is in band. Not used for single-target heals. |
-| **bands** | Who and at what HP % this spell applies. Each band has **targetphase** (priority stages) and **validtargets** (within-phase types). See [Heal bands](#heal-bands) below. |
-| **priority** | If true, after casting the bot re-checks that the target still needs the heal (validate). |
+| **bands** | Who and at what HP % this spell applies. Each band has **targetphase** (phase stages) and **validtargets** (within-phase types). See [Heal bands](#heal-bands) below. |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip this spell for this evaluation; **string** — Lua script run with `mq` and `EvalID` (current target spawn ID) in scope; return a truthy value to allow the cast, otherwise the spell is skipped (e.g. only cast when target HP > X%, or only when not in a certain zone). |
 
 ### Heal bands
 
 Bands define **who** can receive the spell and **at what HP %**. Each band has two distinct concepts:
 
-- **targetphase:** Priority stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`; optionally `cbt` for corpse (allow rez in combat). Do **not** put `all`, `bots`, or `raid` in targetphase — those go in **validtargets** for the corpse phase.
-- **validtargets:** Within a priority stage, which target types to consider. For **corpse** phase use `all`, `bots`, or `raid` (which corpses to rez). For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `['validtargets'] = { 'all' }`. **Tank** and **self** need no validtargets.
+- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`; optionally `cbt` for corpse (allow rez in combat). Do **not** put `all`, `bots`, or `raid` in targetphase — those go in **validtargets** for the corpse phase.
+- **validtargets:** Within a phase stage, which target types to consider. For **corpse** phase use `all`, `bots`, or `raid` (which corpses to rez). For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `['validtargets'] = { 'all' }`. **Tank** and **self** need no validtargets.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For corpse-related targets the effective max is 200 (special).
 
-**Evaluation order (priority)**
+**Phase order**
 
-The bot evaluates heal targets in a **fixed, literal order**. The list below is the actual priority: the bot checks each phase in this sequence and picks the **first** matching target in range. So for example **self** heals are always considered before **tank** or **groupmember**; **tank** is always before **pc**; and so on. The order is:
+The **phase order** is the evaluation order. The bot evaluates phases in this sequence; for each phase it gets the list of targets for that phase and, for **each target**, checks all heal spells that include that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The order is:
 
 1. **corpse** (rez)
 2. **self**
@@ -68,15 +67,15 @@ The bot evaluates heal targets in a **fixed, literal order**. The list below is 
 8. **pet** (other pets)
 9. **xtgt** (extended targets)
 
-If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bot still follows this global order: it does not prefer one phase over another within the same spell. The first phase in the list above that has a valid, in-range target for that spell wins. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
+If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bot still follows this global phase order: it does not prefer one phase over another within the same spell. The first phase in the list above that has a valid, in-range target for that spell wins. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
 
 **Heal bands: behavior summary**
 
-- **targetphase vs validtargets:** targetphase = at which priority stage; validtargets = what target types within that stage (classes for pc/groupmember; all/bots/raid for corpse).
+- **targetphase vs validtargets:** targetphase = at which phase stage; validtargets = what target types within that stage (classes for pc/groupmember; all/bots/raid for corpse).
 - **self vs pc:** Add `'self'` in targetphase for self-heals; they are evaluated before tank, groupmember, and pc (see evaluation order above).
 - **tank:** No validtargets needed; main tank by role; `'tank'` alone in targetphase is enough.
 - **groupheal vs groupmember:** **groupheal** = group AE heal (count group members in band, cast on group/self). **groupmember** = single-target heals only for characters in the bot’s (EQ) group; if no group member needs a heal, out-of-group PCs are not considered. Add **pc** in targetphase to also heal peers outside the group (evaluated after groupmember in the order above).
-- **Selection:** First matching target in the evaluation order; within pc/groupmember, first in iteration order (not lowest HP).
+- **Selection:** For each phase, each target is checked against all heal spells that have that phase; first spell (in config order) that the target needs is cast. Within pc/groupmember, targets are in iteration order (not lowest HP).
 
 **Special tokens (targetphase):**
 - **cbt** (combat) — When in targetphase with **corpse**, the bot may rez even when there are mobs in the camp list. Without **cbt**, corpse rez is only considered when there are no mobs in camp (safe rez only).
@@ -107,8 +106,7 @@ PC heal candidates come from **peers** (characters known via the actor net). Put
       ['maxmanapct'] = 100,
       ['bands'] = {
         { ['targetphase'] = { 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'all' }, ['min'] = 0, ['max'] = 70 }
-      },
-      ['priority'] = false
+      }
     },
     {
       ['gem'] = 2,
@@ -120,7 +118,6 @@ PC heal candidates come from **peers** (characters known via the actor net). Put
       ['bands'] = {
         { ['targetphase'] = { 'groupheal' }, ['validtargets'] = { 'all' }, ['min'] = 0, ['max'] = 80 }
       },
-      ['priority'] = false,
       ['precondition'] = true
     }
   }

@@ -6,7 +6,7 @@ This document explains how to configure the bot’s **curing** behavior: which c
 
 - **Master switch:** Curing runs only when **`settings.docure`** is `true`. Default is `false`.
 - **Cure types:** Each spell entry has **curetype**: either **all** (any detrimental) or space-separated types (e.g. **poison**, **disease**, **curse**, **corruption**). The bot only considers the spell when the target has a matching effect.
-- **Priority cure:** When **prioritycure** is `true`, the cure loop runs in a higher-priority hook (before the normal cure hook), so cures can be processed before heals. After casting a cure, the bot may re-evaluate to cure again if needed.
+- **Priority cure:** Spells that include the **priority** phase in a band’s **targetphase** run in a separate, higher-priority hook (before the normal cure hook and before heals). No top-level flag is required: if at least one cure spell has **priority** in its band, the priority pass runs. After casting a cure in the main pass, the bot may re-evaluate to cure again if needed.
 
 ---
 
@@ -20,9 +20,7 @@ This document explains how to configure the bot’s **curing** behavior: which c
 
 ### Cure section (top-level)
 
-| Option | Default | Purpose |
-|--------|--------|---------|
-| **prioritycure** | `false` | When true, cure runs in a higher-priority hook and can re-evaluate after each cast so multiple cures fire before heals. |
+The cure section has **spells** only. Priority behavior is controlled per spell via bands (see [Cure bands](#cure-bands)).
 
 ### Cure spell entries
 
@@ -38,33 +36,24 @@ Each entry in **`config.cure.spells`** can have:
 | **curetype** | **all** or space-separated types: e.g. **poison**, **disease**, **curse**, **corruption**. The spell is only used when the target has at least one matching detrimental. |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **bands** | Who can be cured. See [Cure bands](#cure-bands) below. |
-| **priority** | Optional. Affects post-cast behavior when **prioritycure** is true. |
+| **priority** | Deprecated. Use the **priority** phase in a band’s **targetphase** instead (see [Cure bands](#cure-bands)). |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
 ### Cure bands
 
-Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). Each band is a table with **targetphase** = list of stage tokens and **validtargets** = list of class tokens or `all`. No min/max for cures.
+Bands use **targetphase** (phase stages) and **validtargets** (classes or `all`). Each band is a table with **targetphase** = list of stage tokens and **validtargets** = list of class tokens or `all`. No min/max for cures.
 
-- **targetphase** tokens: **self**, **tank**, **groupcure**, **groupmember**, **pc**. **groupmember** = in-group only (peers first, then non-peer group members via Group TLO); **pc** = all peers by class. **groupcure** = group AE cure (spell targets group; cast when at least **tarcnt** group members have a matching detrimental; optional **tarcnt** on spell entry, default 1).
+- **targetphase** tokens: **self**, **tank**, **groupcure**, **groupmember**, **pc**, and **priority**. **groupmember** = in-group only (peers first, then non-peer group members via Group TLO); **pc** = all peers by class. **groupcure** = group AE cure (spell targets group; cast when at least **tarcnt** group members have a matching detrimental; optional **tarcnt** on spell entry, default 1). **priority** = this spell runs in the priority cure pass (before the main cure pass and before heals); include it alongside other phases (e.g. `{ 'priority', 'tank', 'groupmember' }`) so the spell runs in both the priority pass and the main pass for those targets.
 - **validtargets**: Class shorts (e.g. `war`, `clr`, `shd`, …) or `all`. Absent = all classes.
 
-**Evaluation order (priority)**
+**Phase order and how cures are chosen**
 
-The bot evaluates cure targets in a **fixed, literal order**:
+The bot uses the same phase-first logic as heal and buff. The **phase order** for the main cure pass is: self, tank, groupcure, groupmember, pc. For each phase, the bot gets the list of targets for that phase, then for **each target** checks **all** cure spells that have that phase in their bands (in config order). The first spell that the target needs (matching detrimental, in range) is cast. For non-peers (e.g. non-bot group members or tank), detrimentals are only known from the **Spawn** TLO after you have targeted that spawn until **Spawn.BuffsPopulated** is true (same as buffs/mobs). **tank** can be a non-bot when explicitly named (TankName); we only cure the configured tank when not a peer. See [Out-of-group peers](out-of-group-peers.md).
 
-1. **self**
-2. **tank**
-3. **groupcure** (group AE)
-4. **groupmember** (in-group only)
-5. **pc** (all peers)
-
-The first phase in this list that has a valid, in-range target needing the cure wins. For non-peers (e.g. non-bot group members or tank), detrimentals are only known from the **Spawn** TLO after you have targeted that spawn until **Spawn.BuffsPopulated** is true (same as buffs/mobs). **tank** can be a non-bot when explicitly named (TankName); we only cure the configured tank when not a peer. See [Out-of-group peers](out-of-group-peers.md).
-
-**Example: poison/disease and all**
+**Example: poison/disease with priority tank/groupmember**
 
 ```lua
 ['cure'] = {
-  ['prioritycure'] = true,
   ['spells'] = {
     {
       ['gem'] = 5,
@@ -73,9 +62,8 @@ The first phase in this list that has a valid, in-range target needing the cure 
       ['minmana'] = 0,
       ['curetype'] = 'poison',
       ['bands'] = {
-        { ['targetphase'] = { 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
-      },
-      ['priority'] = false
+        { ['targetphase'] = { 'priority', 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
+      }
     },
     {
       ['gem'] = 6,
@@ -85,12 +73,13 @@ The first phase in this list that has a valid, in-range target needing the cure 
       ['curetype'] = 'disease',
       ['bands'] = {
         { ['targetphase'] = { 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'all' } }
-      },
-      ['priority'] = false
+      }
     }
   }
 }
 ```
+
+Spells that include **priority** in **targetphase** run in the priority pass (before heals); the first spell above runs in both the priority pass and the main cure pass for its targets.
 
 ---
 
@@ -104,5 +93,6 @@ The first phase in this list that has a valid, in-range target needing the cure 
 
 ## Behavior summary
 
-- **prioritycure:** When **prioritycure** is true, the cure loop runs in a higher-priority hook (before the main cure hook and before heals). After a cure is cast, the bot can re-evaluate and cast another cure if a target still has a matching detrimental. This helps clear multiple effects or multiple targets quickly.
+- **Priority pass:** If at least one cure spell has **priority** in a band’s **targetphase**, a separate priority cure pass runs before the main cure hook and before heals. Only those spells run in that pass; the main cure pass then runs (skipping the priority phase) so the same spell can run again for its other phases. No top-level flag is required.
+- **Re-eval after cast:** After casting a cure in the main pass, the bot can re-evaluate and cast another cure if a target still has a matching detrimental.
 - **Distance:** Targets must be within the spell’s range (and in group where applicable) to be considered.

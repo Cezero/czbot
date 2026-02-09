@@ -145,8 +145,8 @@ function botevents.Event_FTELocked()
         print('clearing pull target because FTELock detected') -- not debug, real error message
         APTarget = false
     end
-    local botcast = require('botcast')
-    botcast.ADSpawnCheck()
+    local botdebuff = require('botdebuff')
+    botdebuff.ADSpawnCheck()
 end
 
 function botevents.Event_GMDetected()

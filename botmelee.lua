@@ -5,17 +5,13 @@ local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local botmove = require('botmove')
+local utils = require('lib.utils')
 local charinfo = require("mqcharinfo")
 local tankrole = require('lib.tankrole')
 local myconfig = botconfig.config
 local botmelee = {}
 
 function botmelee.LoadMeleeConfig()
-    if (myconfig.melee.stickcmd == nil) then myconfig.melee.stickcmd = 'hold uw 7' end
-    if (myconfig.melee.offtank == nil) then myconfig.melee.offtank = false end
-    if (myconfig.melee.otoffset == nil) then myconfig.melee.otoffset = 0 end
-    if (myconfig.melee.minmana == nil) then myconfig.melee.minmana = 0 end
-    if (myconfig.melee.assistpct == nil) then myconfig.melee.assistpct = 99 end
 end
 
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee then botmelee.LoadMeleeConfig() end end)
@@ -250,32 +246,35 @@ function botmelee.GetPCTarget(pcName)
     return nil
 end
 
-do
-    local hookregistry = require('lib.hookregistry')
-    hookregistry.registerHookFn('doMelee', function(hookName)
-        if state.getRunState() == 'engage_return_follow' then
-            botmove.TickReturnToFollowAfterEngage()
-            return
+function botmelee.getHookFn(name)
+    if name == 'doMelee' then
+        return function(hookName)
+            if state.getRunState() == 'engage_return_follow' then
+                botmove.TickReturnToFollowAfterEngage()
+                return
+            end
+            if not myconfig.settings.domelee then return end
+            if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
+            if not state.getRunconfig().MobList[1] then
+                if state.getRunState() == 'melee' then state.clearRunState() end
+                return
+            end
+            local payload = (state.getRunState() == 'melee') and state.getRunStatePayload() or nil
+            state.setRunState('melee', payload and payload or { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+            if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then
+                botmelee.AdvCombat()
+                return
+            end
+            if myconfig.melee.minmana == 0 then
+                botmelee.AdvCombat()
+                return
+            end
+            if (tonumber(myconfig.melee.minmana) < mq.TLO.Me.PctMana() or mq.TLO.Me.MaxMana() == 0) then
+                botmelee.AdvCombat()
+            end
         end
-        if not myconfig.settings.domelee then return end
-        if not state.getRunconfig().MobList[1] then
-            if state.getRunState() == 'melee' then state.clearRunState() end
-            return
-        end
-        local payload = (state.getRunState() == 'melee') and state.getRunStatePayload() or nil
-        state.setRunState('melee', payload and payload or { phase = 'idle', priority = bothooks.getPriority('doMelee') })
-        if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then
-            botmelee.AdvCombat()
-            return
-        end
-        if myconfig.melee.minmana == 0 then
-            botmelee.AdvCombat()
-            return
-        end
-        if (tonumber(myconfig.melee.minmana) < mq.TLO.Me.PctMana() or mq.TLO.Me.MaxMana() == 0) then
-            botmelee.AdvCombat()
-        end
-    end)
+    end
+    return nil
 end
 
 return botmelee

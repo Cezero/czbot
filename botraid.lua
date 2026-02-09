@@ -63,16 +63,18 @@ function botraid.RaidCheck()
     end
 end
 
-do
-    local hookregistry = require('lib.hookregistry')
-    hookregistry.registerHookFn('doRaid', function(hookName)
-        if not myconfig.settings.doraid then return end
-        if botraid.RaidCheck() then
-            state.setRunState('raid_mechanic', { priority = bothooks.getPriority('doRaid') })
-        else
-            state.setRunState('idle')
+function botraid.getHookFn(name)
+    if name == 'doRaid' then
+        return function(hookName)
+            if not myconfig.settings.doraid then return end
+            if botraid.RaidCheck() then
+                state.setRunState('raid_mechanic', { priority = bothooks.getPriority('doRaid') })
+            else
+                state.setRunState('idle')
+            end
         end
-    end)
+    end
+    return nil
 end
 
 return botraid

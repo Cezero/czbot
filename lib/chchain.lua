@@ -6,7 +6,6 @@ local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local spellutils = require('lib.spellutils')
-local hookregistry = require('lib.hookregistry')
 local command_dispatcher = require('lib.command_dispatcher')
 
 local chchain = {}
@@ -85,28 +84,33 @@ function chchain.OnGo(line, arg1)
     state.setRunState('chchain', { deadline = chtimer, chnextclr = chnextclr, priority = bothooks.getPriority('chchainTick') })
 end
 
-hookregistry.registerHookFn('chchainTick', function(hookName)
-    if state.getRunState() ~= 'chchain' then return end
-    local p = state.getRunStatePayload()
-    if not p or not p.chnextclr then state.clearRunState() return end
-    if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then
-        mq.cmdf('/cast "Complete Heal"')
-        return
+function chchain.getHookFn(name)
+    if name == 'chchainTick' then
+        return function(hookName)
+            if state.getRunState() ~= 'chchain' then return end
+            local p = state.getRunStatePayload()
+            if not p or not p.chnextclr then state.clearRunState() return end
+            if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then
+                mq.cmdf('/cast "Complete Heal"')
+                return
+            end
+            if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
+                mq.cmdf('/multiline ; /rs CHChain: Target died, interrupting cast ; /interrupt')
+                mq.cmdf('/rs <<Go %s>>', p.chnextclr)
+                state.clearRunState()
+                return
+            end
+            if mq.gettime() >= (p.deadline or 0) then
+                mq.cmdf('/rs <<Go %s>>', p.chnextclr)
+                state.clearRunState()
+                return
+            end
+            if not mq.TLO.Me.Sitting() and not mq.TLO.Me.CastTimeLeft() then
+                mq.cmd('/sit on')
+            end
+        end
     end
-    if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
-        mq.cmdf('/multiline ; /rs CHChain: Target died, interrupting cast ; /interrupt')
-        mq.cmdf('/rs <<Go %s>>', p.chnextclr)
-        state.clearRunState()
-        return
-    end
-    if mq.gettime() >= (p.deadline or 0) then
-        mq.cmdf('/rs <<Go %s>>', p.chnextclr)
-        state.clearRunState()
-        return
-    end
-    if not mq.TLO.Me.Sitting() and not mq.TLO.Me.CastTimeLeft() then
-        mq.cmd('/sit on')
-    end
-end)
+    return nil
+end
 
 return chchain

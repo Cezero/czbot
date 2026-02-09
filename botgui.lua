@@ -4,7 +4,6 @@ local botconfig = require('lib.config')
 local mobfilter = require('lib.mobfilter')
 local botmelee = require('botmelee')
 local botpull = require('botpull')
-local botcast = require('botcast')
 local state = require('lib.state')
 
 local M = {}

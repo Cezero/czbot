@@ -1,6 +1,19 @@
 -- Generic helpers (table copy, list membership, distance).
+-- Non-combat zones: hooks (ADSpawnCheck, doPull, doMelee, etc.) can skip combat logic when zone is in this list.
 
 local utils = {}
+
+local NONCOMBAT_ZONES = { 'GuildHall', 'GuildLobby', 'PoKnowledge', 'Nexus', 'Bazaar', 'AbysmalSea', 'potranquility' }
+
+function utils.getNonCombatZones()
+    return NONCOMBAT_ZONES
+end
+
+---@param zone string|nil Zone short name (e.g. mq.TLO.Zone.ShortName()). If nil, returns false.
+function utils.isNonCombatZone(zone)
+    if not zone then return false end
+    return utils.isInList(zone, NONCOMBAT_ZONES)
+end
 
 -- Create full copy of a table instead of a reference (recursive, including metatable).
 function utils.DeepCopy(orig)

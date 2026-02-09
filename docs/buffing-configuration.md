@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **buffing** behavior: which 
 ## Overview
 
 - **Master switch:** Buffing runs only when **`settings.dobuff`** is `true`. Default is `false`.
-- **Evaluation order:** The buff loop uses a **fixed evaluation order** (see [Buff bands](#buff-bands)): self → byname → tank → groupbuff → groupmember → pc → mypet → pet. The first valid target in range gets the buff. **pc** = all peers (any character known via charinfo), not limited to group members. **groupmember** = in-group only (including non-bot group members, via Group TLO). The only out-of-group non-bot PC we buff is the **explicitly configured tank** (TankName).
+- **Evaluation order:** The buff loop evaluates **phases** in order (see [Buff bands](#buff-bands)): self → byname → tank → groupbuff → groupmember → pc → mypet → pet. For each phase it considers each target and checks **all** buff spells that have that phase in their bands before moving to the next phase. **pc** = all peers (any character known via charinfo), not limited to group members. **groupmember** = in-group only (including non-bot group members, via Group TLO). The only out-of-group non-bot PC we buff is the **explicitly configured tank** (TankName).
 - **When buffs run:** Each spell entry can be marked for **idle** only, **combat** only, or both (by band tokens **idle** and **cbt**). With no mobs in camp, idle-only and combat buffs can run; with mobs, only combat buffs run.
 
 ---

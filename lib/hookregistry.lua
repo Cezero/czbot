@@ -41,11 +41,18 @@ function hookregistry.getHookFn(name)
     return _hookFns[name]
 end
 
---- Wire all hooks from bothooks config. Call after all modules have registerHookFn'd.
+--- Wire all hooks from bothooks config. Call after built-in hooks have registerHookFn'd.
+--- For entries with provider, requires that module and calls mod.getHookFn(entry.name).
 function hookregistry.registerAllFromConfig()
     local bothooks = require('lib.bothooks')
     for _, entry in ipairs(bothooks.getHooks()) do
-        local fn = _hookFns[entry.name]
+        local fn
+        if entry.provider then
+            local mod = require(entry.provider)
+            if mod.getHookFn then fn = mod.getHookFn(entry.name) end
+        else
+            fn = _hookFns[entry.name]
+        end
         if fn then
             hookregistry.registerMainloopHook(entry.name, fn, entry.priority, entry.runWhenPaused, entry.runWhenDead)
         end

@@ -8,7 +8,7 @@
 ---@field doraid boolean|nil
 ---@field dodrag boolean|nil
 ---@field domount boolean|nil
----@field mountcast boolean|nil
+---@field mountcast string|nil
 ---@field dosit boolean|nil
 ---@field sitmana number|nil
 ---@field sitendur number|nil
@@ -58,7 +58,6 @@
 
 ---@class ConfigCure
 ---@field spells table[]|nil
----@field prioritycure boolean|nil
 
 ---@class Config
 ---@field settings ConfigSettings|nil
@@ -81,22 +80,57 @@ M._common = nil
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'dopet' },
     pull = { 'pullability', 'abilityrange', 'radius', 'zrange', 'maxlevel', 'minlevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
-    cure = { 'prioritycure', 'spells' },
+    cure = { 'spells' },
     script = {}
 }
 
 local spellSlotOrder = {
-    heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'tarcnt', 'bands', 'priority', 'precondition' },
+    heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'tarcnt', 'bands', 'precondition' },
     buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'spellicon', 'precondition' },
     debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'charmnames', 'recast', 'delay', 'precondition' },
-    cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'priority', 'precondition' },
+    cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
 }
+
+local function applySectionDefaults(section, defaults)
+    local t = M.config[section]
+    if not t then return end
+    for k, v in pairs(defaults) do
+        if t[k] == nil then t[k] = v end
+    end
+end
+
+-- Canonical default spell entry per section. getDefaultSpellEntry returns a copy so callers do not mutate.
+local defaultSpellEntries = {
+    heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, precondition = true },
+    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = true },
+    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true },
+    cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = true },
+}
+
+function M.getDefaultSpellEntry(section)
+    local src = defaultSpellEntries[section]
+    if not src then return nil end
+    local t = {}
+    for k, v in pairs(src) do
+        if type(v) == "table" and v[1] then
+            local copy = {}
+            for i, band in ipairs(v) do
+                copy[i] = {}
+                for bk, bv in pairs(band) do copy[i][bk] = bv end
+            end
+            t[k] = copy
+        else
+            t[k] = v
+        end
+    end
+    return t
+end
 
 function M.getPath()
     return mq.configDir .. '\\cz_' .. mq.TLO.Me.CleanName() .. '.lua'
@@ -387,7 +421,7 @@ function M.Load(path)
     if (M.config.settings.doraid == nil) then M.config.settings.doraid = false end
     if (M.config.settings.dodrag == nil) then M.config.settings.dodrag = false end
     if (M.config.settings.domount == nil) then M.config.settings.domount = false end
-    if (M.config.settings.mountcast == nil) then M.config.settings.mountcast = false end
+    if (M.config.settings.mountcast == nil) then M.config.settings.mountcast = 'none' end
     if (M.config.settings.dosit == nil) then M.config.settings.dosit = true end
     if (M.config.settings.sitmana == nil) then M.config.settings.sitmana = 90 end
     if (M.config.settings.sitendur == nil) then M.config.settings.sitendur = 90 end
@@ -398,6 +432,15 @@ function M.Load(path)
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = '0' end
     if (M.config.settings.petassist == nil) then M.config.settings.petassist = false end
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
+    if (M.config.settings.dopet == nil) then M.config.settings.dopet = false end
+    applySectionDefaults('pull', {
+        radius = 400, zrange = 150, chainpullcnt = 0, chainpullhp = 0, pullability = 'melee', abilityrange = 60,
+        maxlevel = 200, minlevel = 0, hunter = false, mana = 60, manaclass = 'clr, dru, shm', leash = 500, usepriority = false,
+    })
+    applySectionDefaults('melee', {
+        stickcmd = 'hold uw 7', offtank = false, otoffset = 0, minmana = 0, assistpct = 99,
+    })
+    applySectionDefaults('heal', { rezoffset = 0, interruptlevel = 0.80, xttargets = 0 })
 end
 
 function M.Save(path)

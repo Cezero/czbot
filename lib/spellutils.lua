@@ -16,7 +16,8 @@ function spellutils.Init(deps)
 end
 
 function spellutils.MountCheck()
-    local mountcast = botconfig.config.settings.mountcast or 'none'
+    local mountcast = botconfig.config.settings.mountcast
+    if not mountcast or mountcast == 'none' then return end
     local mount, spelltype = mountcast:match("^%s*(.-)%s*|%s*(.-)%s*$")
     botconfig.config['mount1'] = { gem = spelltype, spell = mount }
     if not mq.TLO.Me.Mount() and not MountCastFailed then
@@ -319,13 +320,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     if rc.CurSpell and rc.CurSpell.phase == 'cast_complete_pending_resist' then
         spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
-        local cont = true
         if options.afterCast then
-            cont = options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
+            options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
         end
         spellutils.clearCastingStateOrResume()
-        if not cont then return true end
-        if not options.priority then return true end
         return true
     end
 
@@ -338,6 +336,14 @@ function spellutils.handleSpellCheckReentry(sub, options)
                 return true
             end
         else
+            if rc.CurSpell.sub ~= 'debuff' then
+                spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
+                if options.afterCast then
+                    options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
+                end
+                spellutils.clearCastingStateOrResume()
+                return true
+            end
             rc.CurSpell.phase = 'cast_complete_pending_resist'
             return true
         end

@@ -1,5 +1,5 @@
 -- Charm logic: target selection, before-cast (pet leave), and charm-broke recast request.
--- Used by botcast (debuff eval/beforeCast) and botevents (CharmBroke handler).
+-- Used by botdebuff (debuff eval/beforeCast) and botevents (CharmBroke handler).
 
 local mq = require('mq')
 local state = require('lib.state')

@@ -6,20 +6,26 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 
 | Section  | What "target" means | Count gate | Bands (main idea) |
 | -------- | ------------------- | ---------- | ----------------- |
-| **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (priority stages) + **validtargets** (within-phase types) + min/max HP % |
+| **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (phase stages) + **validtargets** (within-phase types) + min/max HP % |
 | **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **cbt** / **idle** control when spell can run |
 | **debuff** | Mobs in camp (MA target + adds) | **tarcnt** = min mobs in camp to consider spell | **targetphase** only (tanktar, notanktar, named) + min/max HP % |
-| **cure**  | Self, tank, group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **groupmember** (in-group, incl. non-bots), **groupcure**, **pc** |
+| **cure**  | Self, tank, group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **priority** in targetphase runs an earlier pass when any cure spell has it (no top-level setting). **groupmember**, **groupcure**, **pc** |
+
+---
+
+## How spell casting runs
+
+For heal, buff, debuff, and cure, the bot uses the same pattern. It evaluates **phases** in a fixed order (each section has its own phase list below). For each phase, the bot gets the list of **targets** for that phase. For **each target**, it then checks **all spells** that have that phase in their bands (in config order). The **first** spell that the target needs is cast. Typically one cast per tick; the loop resumes (or the bot is busy until the cast finishes). So spell choice is driven by phase order first, then by which spell in that phase first matches the target—not by walking spell-by-spell and picking the first target.
 
 ---
 
 ## Heal targeting
 
-Heal spells choose a target by walking a fixed **evaluation order**; the first valid target in range gets the heal. Bands define **who** can receive the spell and **at what HP %**.
+Heal spells use the phase-first pattern above. The **phase order** is the evaluation order. For each phase, the bot gets the list of targets for that phase (e.g. self, tank, group members, peers), then for **each target** checks **all** heal spells that have that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. Bands define **who** can receive the spell and **at what HP %**.
 
-### Evaluation order
+### Phase order
 
-From `HPEval` in the code, the order is:
+The heal phase order is:
 
 1. **corpse** (rez) — Corpses in range; subject to rezoffset and **validtargets** for corpse (`all`, `bots`, `raid`); **cbt** in targetphase allows rez in combat.
 2. **self** — Yourself.
@@ -31,7 +37,7 @@ From `HPEval` in the code, the order is:
 8. **pet** — Other peers’ pets.
 9. **xtgt** — Extended target (XTarget) slots when **heal.xttargets** is set.
 
-The first matching target in range wins.
+For a given target, the first heal spell (in config order) that has that phase in its bands and for which the target is in HP band and in range is the one cast.
 
 ### tarcnt (heal)
 
@@ -39,7 +45,7 @@ The first matching target in range wins.
 
 ### Bands
 
-Each band has **targetphase** (priority stages only: corpse, self, groupheal, tank, pc, groupmember, mypet, pet, xtgt; optionally cbt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; `all`, `bots`, or `raid` for corpse). **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. Special tokens are described in [Healing configuration](healing-configuration.md).
+Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, pc, groupmember, mypet, pet, xtgt; optionally cbt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; `all`, `bots`, or `raid` for corpse). **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. Special tokens are described in [Healing configuration](healing-configuration.md).
 
 ---
 
@@ -117,11 +123,13 @@ Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **
 
 ## Cure targeting
 
-Cure spells choose a target in a fixed order. Bands use **targetphase** and **validtargets**. **groupmember** = in-group only (peers then non-peer group members via Group TLO). **groupcure** = group AE cure. **pc** = all peers.
+Cure spells use the same phase-first, per-target spell-check as heal and buff. The **phase order** for the main cure pass is: self → tank → groupcure → groupmember → pc. For each phase, the bot gets the list of targets for that phase, then for **each target** checks **all** cure spells that have that phase in their bands (in config order). The first spell that the target needs (matching detrimental, in range) is cast. Bands use **targetphase** and **validtargets**. **groupmember** = in-group only (peers then non-peer group members via Group TLO). **groupcure** = group AE cure. **pc** = all peers.
 
-### Evaluation order
+### Priority cure pass
 
-From `CureEval` in the code, the order is:
+When **at least one cure spell has priority in its band targetphase**, an earlier hook runs (before heals and before the main cure hook). That hook **only considers those spells**. Those spells are evaluated in the same target order (self, tank, groupcure, groupmember, pc). No top-level setting is required. After casting a cure in the main pass, the bot may re-evaluate so multiple cures can fire in sequence.
+
+### Phase order (main pass)
 
 1. **self** — Yourself (if bands allow).
 2. **tank** — Main Tank (if bands allow; can be non-bot when explicitly named; only out-of-group non-bot we cure). Non-peer detrimentals from Spawn after targeting (BuffsPopulated).
@@ -133,7 +141,7 @@ See [Curing configuration](curing-configuration.md) and [Out-of-group peers](out
 
 ### Bands
 
-Bands use **targetphase** and **validtargets** (no min/max). targetphase: **self**, **tank**, **groupcure**, **groupmember**, **pc**. validtargets: class shorts or **all**. **tarcnt** optional for **groupcure**. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the order above.
+Bands use **targetphase** and **validtargets** (no min/max). **targetphase** tokens: **self**, **tank**, **groupcure**, **groupmember**, **pc**, and **priority**. When any cure spell has **priority** in targetphase, the priority cure pass runs (earlier hook); no separate configuration is needed. **validtargets**: class shorts or **all**. **tarcnt** optional for **groupcure**. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the phase order above.
 
 ---
 
@@ -142,7 +150,7 @@ Bands use **targetphase** and **validtargets** (no min/max). targetphase: **self
 - [Healing configuration](healing-configuration.md) — Heal bands, rez, interrupt, XT targets.
 - [Buffing configuration](buffing-configuration.md) — Buff bands, spellicon, combat vs idle.
 - [Debuffing configuration](debuffing-configuration.md) — Debuff bands, charmnames, recast, delay.
-- [Curing configuration](curing-configuration.md) — Cure bands, curetype, prioritycure.
+- [Curing configuration](curing-configuration.md) — Cure bands, curetype, priority phase.
 - [Nuking configuration](nuking-configuration.md) — Nukes as debuffs (tanktar, notanktar).
 - [Mezzing configuration](mezzing-configuration.md) — Mez as debuffs (notanktar, charmnames).
 - [Out-of-group peers](out-of-group-peers.md) — How peers outside your group are treated for heals, buffs, cures.

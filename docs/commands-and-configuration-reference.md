@@ -125,7 +125,7 @@ StoredConfig = {
   ['heal'] = { ['rezoffset'] = 0, ['interruptlevel'] = 0.80, ['xttargets'] = 0, ['spells'] = { ... } },
   ['buff'] = { ['spells'] = { ... } },
   ['debuff'] = { ['spells'] = { ... } },
-  ['cure'] = { ['prioritycure'] = false, ['spells'] = { ... } },
+  ['cure'] = { ['spells'] = { ... } },
   ['script'] = {}
 }
 return StoredConfig
@@ -175,10 +175,10 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 
 ### Heal / Buff / Debuff / Cure sections
 
-- **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **enabled**, **tarcnt** (optional; group heals only), **bands**, **priority**, **precondition** (optional; default true; boolean or Lua script when set). See [Healing configuration](healing-configuration.md).
+- **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **enabled**, **tarcnt** (optional; group heals only), **bands**, **precondition** (optional; default true; boolean or Lua script when set). See [Healing configuration](healing-configuration.md).
 - **buff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands**, **spellicon**, **precondition** (optional; default true; boolean or Lua script when set). See [Buffing configuration](buffing-configuration.md).
 - **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **tarcnt** (optional; minimum total mobs in camp — MA target + adds; e.g. 2 = at least one add), **bands**, **charmnames**, **recast**, **delay**, **precondition** (optional; default true; boolean or Lua script when set). See [Debuffing configuration](debuffing-configuration.md) and [Spell targeting and bands](spell-targeting-and-bands.md).
-- **cure:** Top-level: **prioritycure**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **curetype**, **enabled**, **bands**, **priority**, **precondition** (optional; default true; boolean or Lua script when set). See [Curing configuration](curing-configuration.md).
+- **cure:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **curetype**, **enabled**, **bands** (add **priority** to band **targetphase** to run in the priority cure pass; no top-level setting), **precondition** (optional; default true; boolean or Lua script when set). See [Curing configuration](curing-configuration.md).
 
 **Example: one heal spell entry**
 
@@ -191,9 +191,8 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
   ['minmanapct'] = 0,
   ['maxmanapct'] = 100,
   ['bands'] = {
-    { ['validtargets'] = { 'tank', 'pc' }, ['min'] = 0, ['max'] = 70 }
-  },
-  ['priority'] = false
+    { ['targetphase'] = { 'tank', 'pc' }, ['validtargets'] = { 'all' }, ['min'] = 0, ['max'] = 70 }
+  }
 }
 ```
 

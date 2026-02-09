@@ -8,7 +8,10 @@ local botgui = require('botgui')
 local spellutils = require('lib.spellutils')
 local botmove = require('botmove')
 local botpull = require('botpull')
-local botcast = require('botcast')
+local botbuff = require('botbuff')
+local botcure = require('botcure')
+local botheal = require('botheal')
+local botdebuff = require('botdebuff')
 local botraid = require('botraid')
 local botevents = require('botevents')
 local chchain = require('lib.chchain')
@@ -333,10 +336,10 @@ local function cmd_cast(args)
             end
         end
     end
-    do_spell_section('debuff', botcast.LoadDebuffConfig, 'dodebuff')
-    do_spell_section('buff', botcast.LoadBuffConfig, 'dobuff')
-    do_spell_section('heal', botcast.LoadHealConfig, 'doheal')
-    do_spell_section('cure', botcast.LoadCureConfig, 'docure')
+    do_spell_section('debuff', botdebuff.LoadDebuffConfig, 'dodebuff')
+    do_spell_section('buff', botbuff.LoadBuffConfig, 'dobuff')
+    do_spell_section('heal', botheal.LoadHealConfig, 'doheal')
+    do_spell_section('cure', botcure.LoadCureConfig, 'docure')
 end
 
 local function cmd_setvar(args)
@@ -414,13 +417,6 @@ local function cmd_setvar(args)
     if not valfound then printf('\ayCZBot:\ax\ar%s not found', args[2]) end
 end
 
-local defaultSpellEntry = {
-    heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, priority = false, precondition = true },
-    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = true },
-    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true },
-    cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, priority = false, precondition = true },
-}
-
 local function copyEntry(src)
     if not src then return nil end
     local t = {}
@@ -451,15 +447,15 @@ local function cmd_addspell(args)
     local tempconfig = (temploadconfig and temploadconfig()) or {}
     if not tempconfig[sub] then tempconfig[sub] = {} end
     if not tempconfig[sub].spells then tempconfig[sub].spells = {} end
-    local newEntry = copyEntry(defaultSpellEntry[sub])
+    local newEntry = botconfig.getDefaultSpellEntry(sub)
     table.insert(tempconfig[sub].spells, key, newEntry)
     botconfig.WriteToFile(tempconfig, botconfig.getPath())
     botconfig.Load(botconfig.getPath())
     botconfig.RunConfigLoaders()
-    if sub == 'heal' then botcast.LoadHealConfig() end
-    if sub == 'buff' then botcast.LoadBuffConfig() end
-    if sub == 'debuff' then botcast.LoadDebuffConfig() end
-    if sub == 'cure' then botcast.LoadCureConfig() end
+    if sub == 'heal' then botheal.LoadHealConfig() end
+    if sub == 'buff' then botbuff.LoadBuffConfig() end
+    if sub == 'debuff' then botdebuff.LoadDebuffConfig() end
+    if sub == 'cure' then botcure.LoadCureConfig() end
     printf('\ayCZBot:\axadded new %s entry at position %s', sub, key)
 end
 

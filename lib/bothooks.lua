@@ -3,20 +3,21 @@
 -- Modules that set busy state use getPriority(ownerName) for payload.priority.
 -- runWhenDead: when runState is 'dead' (DEAD/HOVER), only hooks with runWhenDead = true run; default false.
 
+-- Hook names and priorities. Optional 'provider': module name; registry will require it and call mod.getHookFn(name).
 local hooks = {
     { name = 'zoneCheck', priority = 100 },
     { name = 'doEvents', priority = 200, runWhenDead = true },
     { name = 'charState', priority = 300, runWhenDead = true },
-    { name = 'doRaid', priority = 350 },
-    { name = 'ADSpawnCheck', priority = 400 },
-    { name = 'chchainTick', priority = 500 },
-    { name = 'doMelee', priority = 600 },
-    { name = 'priorityCure', priority = 700 },
-    { name = 'doPull', priority = 800 },
-    { name = 'doHeal', priority = 900 },
-    { name = 'doDebuff', priority = 1000 },
-    { name = 'doBuff', priority = 1100 },
-    { name = 'doCure', priority = 1200 },
+    { name = 'doRaid', priority = 350, provider = 'botraid' },
+    { name = 'ADSpawnCheck', priority = 400, provider = 'botdebuff' },
+    { name = 'chchainTick', priority = 500, provider = 'lib.chchain' },
+    { name = 'doMelee', priority = 600, provider = 'botmelee' },
+    { name = 'priorityCure', priority = 700, provider = 'botcure' },
+    { name = 'doPull', priority = 800, provider = 'botpull' },
+    { name = 'doHeal', priority = 900, provider = 'botheal' },
+    { name = 'doDebuff', priority = 1000, provider = 'botdebuff' },
+    { name = 'doBuff', priority = 1100, provider = 'botbuff' },
+    { name = 'doCure', priority = 1200, provider = 'botcure' },
     { name = 'doMiscTimer', priority = 1400 },
 }
 
