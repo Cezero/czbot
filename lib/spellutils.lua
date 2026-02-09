@@ -497,6 +497,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
             end
         end
     end
+    -- Clear _resume state when loop completes without starting a new cast (so we don't stay stuck in doHeal_resume etc.)
+    if state.getRunState() == hookName .. '_resume' then
+        state.clearRunState()
+    end
     return false
 end
 
