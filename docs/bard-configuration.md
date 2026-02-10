@@ -17,11 +17,11 @@ This document explains the nuances and considerations when configuring a **bard 
 
 When **MQ2Twist** is loaded and you are a bard, the bot maintains a default twist based on mode:
 
-| Mode      | When used                         | Contents |
-|-----------|-----------------------------------|----------|
-| **idle**  | No mobs in camp                   | All buffs with **self** and numeric gem (config order). |
-| **combat**| Mobs in camp, assisting (not pulling) | Buffs with **cbt** (config order) then all debuff entries with **tanktar** and numeric gem (config order). |
-| **pull**  | Pull state (navigating / returning)   | Buffs with **self** and **pull** (e.g. Selo's) in bands. |
+| Mode       | When used                             | Contents                                                                                                   |
+| ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **idle**   | No mobs in camp                       | All buffs with **self** and numeric gem (config order).                                                    |
+| **combat** | Mobs in camp, assisting (not pulling) | Buffs with **cbt** (config order) then all debuff entries with **tanktar** and numeric gem (config order). |
+| **pull**   | Pull state (navigating / returning)   | Buffs with **self** and **pull** (e.g. Selo's) in bands.                                                   |
 
 - The bot only issues `/twist` when the desired list differs from the current list or twist is stopped, so it does not restart the sequence every tick.
 - **Item / alt** buffs are **not** in the default twist; they are cast normally (stop twist → cast → resume). To use clickies in a twist, configure the MQ2Twist INI (slots 21–40) and run `/twist` manually or combine with your list.
@@ -160,14 +160,14 @@ The "already on target" and resist handling for debuffs treat bards specially (e
 
 ## Summary
 
-| Area | What to do |
-|------|------------|
-| **Buffs** | Use **self**, **cbt**, **idle**, and **pull** in bands as needed. Tank, groupbuff, groupmember, pc, mypet, pet have no effect for bards. Self buffs are sustained by the default twist. |
-| **Default twist** | Noncombat = all self buffs; combat = cbt buffs + tanktar debuffs; pull = buffs with **pull**. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI. |
-| **Pull** | Add **pull** to buff bands for pull twist (e.g. Selo's). Optional **pull.engage_gem** or **pull.engage_spell** for agro song. |
-| **Debuffs** | **tanktar** → in combat twist. **notanktar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
-| **Cures** | No special config; twist stops then resumes after cast. |
-| **Interrupts** | Automatic; the bot does not interrupt bard casts. |
-| **Movement** | Automatic; bards can move while casting. |
-| **Melee** | Set **settings.domelee** if you want the bard to re-engage melee when not casting. |
-| **Twist** | Automatic; twist is stopped before any single cast and resumed when the cast completes. |
+| Area              | What to do                                                                                                                                                                                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Buffs**         | Use **self**, **cbt**, **idle**, and **pull** in bands as needed. Tank, groupbuff, groupmember, pc, mypet, pet have no effect for bards. Self buffs are sustained by the default twist.                                                            |
+| **Default twist** | Noncombat = all self buffs; combat = cbt buffs + tanktar debuffs; pull = buffs with **pull**. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI.                                                                            |
+| **Pull**          | Add **pull** to buff bands for pull twist (e.g. Selo's). Optional **pull.engage_gem** or **pull.engage_spell** for agro song.                                                                                                                      |
+| **Debuffs**       | **tanktar** → in combat twist. **notanktar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
+| **Cures**         | No special config; twist stops then resumes after cast.                                                                                                                                                                                            |
+| **Interrupts**    | Automatic; the bot does not interrupt bard casts.                                                                                                                                                                                                  |
+| **Movement**      | Automatic; bards can move while casting.                                                                                                                                                                                                           |
+| **Melee**         | Set **settings.domelee** if you want the bard to re-engage melee when not casting.                                                                                                                                                                 |
+| **Twist**         | Automatic; twist is stopped before any single cast and resumed when the cast completes.                                                                                                                                                            |
