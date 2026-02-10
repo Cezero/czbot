@@ -24,8 +24,8 @@ When **doraid** is on, the bot checks each tick whether zone-specific raid mecha
 **Example (in settings):**
 
 ```lua
-['settings'] = {
-  ['doraid'] = true
+settings = {
+  doraid = true
 }
 ```
 

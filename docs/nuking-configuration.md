@@ -27,19 +27,19 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
 **Example: single-target nuke on tank target**
 
 ```lua
-['debuff'] = {
-  ['spells'] = {
+debuff = {
+  spells = {
     {
-      ['gem'] = 1,
-      ['spell'] = 'Chaos Flame',
-      ['alias'] = 'nuke',
-      ['minmana'] = 0,
-      ['bands'] = {
-        { ['validtargets'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
+      gem = 1,
+      spell = 'Chaos Flame',
+      alias = 'nuke',
+      minmana = 0,
+      bands = {
+        { validtargets = { 'tanktar' }, min = 5, max = 100 }
       },
-      ['charmnames'] = '',
-      ['recast'] = 0,
-      ['delay'] = 0
+      charmnames = '',
+      recast = 0,
+      delay = 0
     }
   }
 }
@@ -50,8 +50,8 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
 Use **tanktar** and **notanktar** in the same band (or separate bands) so the nuke can fire on the MA’s target and on other mobs in the list:
 
 ```lua
-['bands'] = {
-  { ['validtargets'] = { 'tanktar', 'notanktar' }, ['min'] = 10, ['max'] = 100 }
+bands = {
+  { validtargets = { 'tanktar', 'notanktar' }, min = 10, max = 100 }
 }
 ```
 

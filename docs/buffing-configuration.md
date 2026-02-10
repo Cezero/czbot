@@ -67,26 +67,26 @@ The first phase in this list that has a valid, in-range target that needs the bu
 **Example: self buff, tank buff, and group class buff**
 
 ```lua
-['buff'] = {
-  ['spells'] = {
+buff = {
+  spells = {
     {
-      ['gem'] = 3,
-      ['spell'] = 'Spirit of the Wolf',
-      ['alias'] = 'sow',
-      ['minmana'] = 0,
-      ['bands'] = {
-        { ['targetphase'] = { 'self' }, ['validtargets'] = { 'all' } }
+      gem = 3,
+      spell = 'Spirit of the Wolf',
+      alias = 'sow',
+      minmana = 0,
+      bands = {
+        { targetphase = { 'self' }, validtargets = { 'all' } }
       },
-      ['spellicon'] = 0
+      spellicon = 0
     },
     {
-      ['gem'] = 4,
-      ['spell'] = 'Talisman of the Tribunal',
-      ['minmana'] = 0,
-      ['bands'] = {
-        { ['targetphase'] = { 'tank', 'pc' }, ['validtargets'] = { 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
+      gem = 4,
+      spell = 'Talisman of the Tribunal',
+      minmana = 0,
+      bands = {
+        { targetphase = { 'tank', 'pc' }, validtargets = { 'war', 'shd', 'pal', 'rng', 'mnk', 'rog', 'ber' } }
       },
-      ['spellicon'] = 0
+      spellicon = 0
     }
   }
 }

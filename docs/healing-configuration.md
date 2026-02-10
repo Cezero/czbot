@@ -51,7 +51,7 @@ Each entry in **`heal.spells`** can have:
 Bands define **who** can receive the spell and **at what HP %**. Each band has two distinct concepts:
 
 - **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`; optionally `cbt` for corpse (allow rez in combat). Do **not** put `all`, `bots`, or `raid` in targetphase — those go in **validtargets** for the corpse phase.
-- **validtargets:** Within a phase stage, which target types to consider. For **corpse** phase use `all`, `bots`, or `raid` (which corpses to rez). For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `['validtargets'] = { 'all' }`. **Tank** and **self** need no validtargets.
+- **validtargets:** Within a phase stage, which target types to consider. For **corpse** phase use `all`, `bots`, or `raid` (which corpses to rez). For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `validtargets = { 'all' }`. **Tank** and **self** need no validtargets.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For corpse-related targets the effective max is 200 (special).
 
 **Phase order**
@@ -97,33 +97,33 @@ PC heal candidates come from **peers** (characters known via the actor net). Put
 **Example: single-target tank heal and group heal**
 
 ```lua
-['heal'] = {
-  ['rezoffset'] = 0,
-  ['interruptlevel'] = 0.80,
-  ['xttargets'] = 0,
-  ['spells'] = {
+heal = {
+  rezoffset = 0,
+  interruptlevel = 0.80,
+  xttargets = 0,
+  spells = {
     {
-      ['gem'] = 1,
-      ['spell'] = 'Superior Healing',
-      ['alias'] = 'cht',
-      ['minmana'] = 0,
-      ['minmanapct'] = 0,
-      ['maxmanapct'] = 100,
-      ['bands'] = {
-        { ['targetphase'] = { 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'all' }, ['min'] = 0, ['max'] = 70 }
+      gem = 1,
+      spell = 'Superior Healing',
+      alias = 'cht',
+      minmana = 0,
+      minmanapct = 0,
+      maxmanapct = 100,
+      bands = {
+        { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' }, min = 0, max = 70 }
       }
     },
     {
-      ['gem'] = 2,
-      ['spell'] = 'Superior Group Heal',
-      ['minmana'] = 0,
-      ['minmanapct'] = 0,
-      ['maxmanapct'] = 100,
-      ['tarcnt'] = 2,
-      ['bands'] = {
-        { ['targetphase'] = { 'groupheal' }, ['validtargets'] = { 'all' }, ['min'] = 0, ['max'] = 80 }
+      gem = 2,
+      spell = 'Superior Group Heal',
+      minmana = 0,
+      minmanapct = 0,
+      maxmanapct = 100,
+      tarcnt = 2,
+      bands = {
+        { targetphase = { 'groupheal' }, validtargets = { 'all' }, min = 0, max = 80 }
       },
-      ['precondition'] = true
+      precondition = true
     }
   }
 }

@@ -28,16 +28,16 @@ This document explains how to set up **melee combat abilities** (disciplines and
 **Example: one discipline on tank target**
 
 ```lua
-['debuff'] = {
-  ['spells'] = {
+debuff = {
+  spells = {
     {
-      ['gem'] = 'disc',
-      ['spell'] = 'Name of Your Discipline',
-      ['bands'] = {
-        { ['validtargets'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
+      gem = 'disc',
+      spell = 'Name of Your Discipline',
+      bands = {
+        { validtargets = { 'tanktar' }, min = 5, max = 100 }
       },
-      ['enabled'] = true,
-      ['delay'] = 0
+      enabled = true,
+      delay = 0
     }
   }
 }
@@ -49,13 +49,13 @@ Add a second entry for an ability such as kick; use **gem** `'ability'` and the 
 
 ```lua
 {
-  ['gem'] = 'ability',
-  ['spell'] = 'Kick',
-  ['bands'] = {
-    { ['validtargets'] = { 'tanktar' }, ['min'] = 1, ['max'] = 100 }
+  gem = 'ability',
+  spell = 'Kick',
+  bands = {
+    { validtargets = { 'tanktar' }, min = 1, max = 100 }
   },
-  ['enabled'] = true,
-  ['delay'] = 0
+  enabled = true,
+  delay = 0
 }
 ```
 

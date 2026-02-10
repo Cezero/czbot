@@ -29,19 +29,19 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
 You do not need to set **mintar** here; for notanktar-only bands it defaults to 2.
 
 ```lua
-['debuff'] = {
-  ['spells'] = {
+debuff = {
+  spells = {
     {
-      ['gem'] = 2,
-      ['spell'] = 'Bellow of the Mastruq',
-      ['alias'] = 'mez',
-      ['minmana'] = 0,
-      ['bands'] = {
-        { ['targetphase'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
+      gem = 2,
+      spell = 'Bellow of the Mastruq',
+      alias = 'mez',
+      minmana = 0,
+      bands = {
+        { targetphase = { 'notanktar' }, min = 20, max = 100 }
       },
-      ['charmnames'] = '',
-      ['recast'] = 2,
-      ['delay'] = 0
+      charmnames = '',
+      recast = 2,
+      delay = 0
     }
   }
 }
@@ -52,9 +52,9 @@ You do not need to set **mintar** here; for notanktar-only bands it defaults to 
 Set **charmnames** to mob names the bot is allowed to charm. The bot will **pet leave** before casting and can request a recast when charm breaks:
 
 ```lua
-['charmnames'] = 'a mob name,another mob',
-['bands'] = {
-  { ['targetphase'] = { 'notanktar' }, ['min'] = 30, ['max'] = 100 }
+charmnames = 'a mob name,another mob',
+bands = {
+  { targetphase = { 'notanktar' }, min = 30, max = 100 }
 }
 ```
 

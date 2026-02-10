@@ -44,11 +44,11 @@ For **BRD**, only **self** is evaluated for buffs; tank, groupbuff, groupmember,
 Order of entries = order in the twist. Only **self** + numeric **gem** matter for bards.
 
 ```lua
-['buff'] = {
-  ['spells'] = {
-    { ['gem'] = 1, ['spell'] = 'Selo\'s Sonata',     ['bands'] = { { ['targetphase'] = { 'self', 'pull' } } } },
-    { ['gem'] = 2, ['spell'] = 'Kelin\'s Lucid Lament', ['bands'] = { { ['targetphase'] = { 'self', 'cbt' } } } },
-    { ['gem'] = 3, ['spell'] = 'Psalm of Veeshan',   ['bands'] = { { ['targetphase'] = { 'self', 'idle' } } } },
+buff = {
+  spells = {
+    { gem = 1, spell = 'Selo\'s Sonata',     bands = { { targetphase = { 'self', 'pull' } } } },
+    { gem = 2, spell = 'Kelin\'s Lucid Lament', bands = { { targetphase = { 'self', 'cbt' } } } },
+    { gem = 3, spell = 'Psalm of Veeshan',   bands = { { targetphase = { 'self', 'idle' } } } },
   }
 }
 ```
@@ -62,10 +62,10 @@ Order of entries = order in the twist. Only **self** + numeric **gem** matter fo
 **tanktar** = in combat twist. **notanktar** = twist-once (target add, sing once, re-target MA). Optional **bard.mez_remez_sec** for re-mez before duration ends.
 
 ```lua
-['debuff'] = {
-  ['spells'] = {
-    { ['gem'] = 4, ['spell'] = 'Requiem of Time', ['bands'] = { { ['targetphase'] = { 'tanktar' }, ['min'] = 1, ['max'] = 100 } } } },
-    { ['gem'] = 5, ['spell'] = 'Lullaby',         ['bands'] = { { ['targetphase'] = { 'notanktar' }, ['min'] = 90, ['max'] = 100 } } } },
+debuff = {
+  spells = {
+    { gem = 4, spell = 'Requiem of Time', bands = { { targetphase = { 'tanktar' }, min = 1, max = 100 } } },
+    { gem = 5, spell = 'Lullaby',         bands = { { targetphase = { 'notanktar' }, min = 90, max = 100 } } },
   }
 }
 ```

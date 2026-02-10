@@ -60,33 +60,33 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff u
 **Example: nuke on tank target and slow on adds**
 
 ```lua
-['debuff'] = {
-  ['spells'] = {
+debuff = {
+  spells = {
     {
-      ['gem'] = 1,
-      ['spell'] = 'Chaos Flame',
-      ['alias'] = 'nuke',
-      ['minmana'] = 0,
-      ['bands'] = {
-        { ['targetphase'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100, ['mintar'] = 10 }
+      gem = 1,
+      spell = 'Chaos Flame',
+      alias = 'nuke',
+      minmana = 0,
+      bands = {
+        { targetphase = { 'tanktar' }, min = 5, max = 100, mintar = 10 }
       },
-      ['charmnames'] = '',
-      ['recast'] = 0,
-      ['delay'] = 0,
-      ['precondition'] = true
+      charmnames = '',
+      recast = 0,
+      delay = 0,
+      precondition = true
     },
     {
-      ['gem'] = 2,
-      ['spell'] = 'Turgur\'s Insects',
-      ['alias'] = 'slow',
-      ['minmana'] = 0,
-      ['bands'] = {
-        { ['targetphase'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100, ['mintar'] = 5 }
+      gem = 2,
+      spell = 'Turgur\'s Insects',
+      alias = 'slow',
+      minmana = 0,
+      bands = {
+        { targetphase = { 'notanktar' }, min = 20, max = 100, mintar = 5 }
       },
-      ['charmnames'] = '',
-      ['recast'] = 2,
-      ['delay'] = 0,
-      ['precondition'] = true
+      charmnames = '',
+      recast = 2,
+      delay = 0,
+      precondition = true
     }
   }
 }

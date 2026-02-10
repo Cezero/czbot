@@ -53,26 +53,26 @@ The bot uses the same phase-first logic as heal and buff. The **phase order** fo
 **Example: poison/disease with priority tank/groupmember**
 
 ```lua
-['cure'] = {
-  ['spells'] = {
+cure = {
+  spells = {
     {
-      ['gem'] = 5,
-      ['spell'] = 'Counteract Poison',
-      ['alias'] = 'curepoison',
-      ['minmana'] = 0,
-      ['curetype'] = 'poison',
-      ['bands'] = {
-        { ['targetphase'] = { 'priority', 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
+      gem = 5,
+      spell = 'Counteract Poison',
+      alias = 'curepoison',
+      minmana = 0,
+      curetype = 'poison',
+      bands = {
+        { targetphase = { 'priority', 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
       }
     },
     {
-      ['gem'] = 6,
-      ['spell'] = 'Counteract Disease',
-      ['alias'] = 'curedisease',
-      ['minmana'] = 0,
-      ['curetype'] = 'disease',
-      ['bands'] = {
-        { ['targetphase'] = { 'self', 'tank', 'groupmember', 'pc' }, ['validtargets'] = { 'all' } }
+      gem = 6,
+      spell = 'Counteract Disease',
+      alias = 'curedisease',
+      minmana = 0,
+      curetype = 'disease',
+      bands = {
+        { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } }
       }
     }
   }

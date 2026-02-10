@@ -100,35 +100,35 @@ The config file is a Lua script that returns a table. Path: **`cz_<CharName>.lua
 
 ```lua
 StoredConfig = {
-  ['settings'] = {
-    ['domelee'] = false,
-    ['doheal'] = false,
-    ['dobuff'] = false,
-    ['dodebuff'] = false,
-    ['docure'] = false,
-    ['dopull'] = false,
-    ['doraid'] = false,
-    ['dodrag'] = false,
-    ['domount'] = false,
-    ['mountcast'] = false,
-    ['dosit'] = true,
-    ['sitmana'] = 90,
-    ['sitendur'] = 90,
-    ['TankName'] = "manual",
-    ['AssistName'] = nil,
-    ['TargetFilter'] = '0',
-    ['petassist'] = false,
-    ['acleash'] = 75,
-    ['followdistance'] = 35,
-    ['zradius'] = 75
+  settings = {
+    domelee = false,
+    doheal = false,
+    dobuff = false,
+    dodebuff = false,
+    docure = false,
+    dopull = false,
+    doraid = false,
+    dodrag = false,
+    domount = false,
+    mountcast = false,
+    dosit = true,
+    sitmana = 90,
+    sitendur = 90,
+    TankName = "manual",
+    AssistName = nil,
+    TargetFilter = '0',
+    petassist = false,
+    acleash = 75,
+    followdistance = 35,
+    zradius = 75
   },
-  ['pull'] = { ... },
-  ['melee'] = { ... },
-  ['heal'] = { ['rezoffset'] = 0, ['interruptlevel'] = 0.80, ['xttargets'] = 0, ['spells'] = { ... } },
-  ['buff'] = { ['spells'] = { ... } },
-  ['debuff'] = { ['spells'] = { ... } },
-  ['cure'] = { ['spells'] = { ... } },
-  ['script'] = {}
+  pull = { ... },
+  melee = { ... },
+  heal = { rezoffset = 0, interruptlevel = 0.80, xttargets = 0, spells = { ... } },
+  buff = { spells = { ... } },
+  debuff = { spells = { ... } },
+  cure = { spells = { ... } },
+  script = {}
 }
 return StoredConfig
 ```
@@ -186,14 +186,14 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 
 ```lua
 {
-  ['gem'] = 1,
-  ['spell'] = 'Superior Healing',
-  ['alias'] = 'cht',
-  ['minmana'] = 0,
-  ['minmanapct'] = 0,
-  ['maxmanapct'] = 100,
-  ['bands'] = {
-    { ['targetphase'] = { 'tank', 'pc' }, ['validtargets'] = { 'all' }, ['min'] = 0, ['max'] = 70 }
+  gem = 1,
+  spell = 'Superior Healing',
+  alias = 'cht',
+  minmana = 0,
+  minmanapct = 0,
+  maxmanapct = 100,
+  bands = {
+    { targetphase = { 'tank', 'pc' }, validtargets = { 'all' }, min = 0, max = 70 }
   }
 }
 ```
