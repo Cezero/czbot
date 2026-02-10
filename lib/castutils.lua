@@ -3,10 +3,32 @@ local botconfig = require('lib.config')
 local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
 local state = require('lib.state')
+local utils = require('lib.utils')
 local charinfo = require('mqcharinfo')
 local myconfig = botconfig.config
 
 local castutils = {}
+
+-- Count mobs in mobList within aeRange 3D distance of spawnId. Used for targettedAE tarcnt (mobs in AE of candidate).
+function castutils.CountMobsWithinAERangeOfSpawn(mobList, spawnId, aeRange)
+    if not mobList or not spawnId or not aeRange or aeRange <= 0 then return 0 end
+    local sp = mq.TLO.Spawn(spawnId)
+    local cx, cy, cz = sp.X(), sp.Y(), sp.Z()
+    if not cx or not cy or not cz then return 0 end
+    local count = 0
+    for _, v in ipairs(mobList) do
+        local vid = (v.ID and v.ID()) or v
+        if vid and vid ~= 0 then
+            local s = mq.TLO.Spawn(vid)
+            local x, y, z = s.X(), s.Y(), s.Z()
+            if x and y and z then
+                local d = utils.calcDist3D(cx, cy, cz, x, y, z)
+                if d and d <= aeRange then count = count + 1 end
+            end
+        end
+    end
+    return count
+end
 
 -- Normalize spell entry: script gem handling and enabled default. Used by LoadSpellSectionConfig.
 function castutils.normalizeSpellEntry(entry)

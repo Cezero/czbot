@@ -19,12 +19,14 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
    - **gem** — Spell gem number (1–12) or `'item'`, `'alt'`, `'disc'`.
    - **spell** — Exact spell name (e.g. an Enthrall or mez spell).
    - **enabled** — Optional; default is `true`. When `false`, the spell is not used.
-   - **tarcnt** — Optional. When set, only consider mez when total mobs in camp is ≥ tarcnt (count includes the MA’s target plus adds). E.g. **tarcnt 2** = mez when there are at least two mobs in camp (one add). See [Debuffing configuration](debuffing-configuration.md).
-   - **bands** — For mezzing **adds**, use **notanktar**. Optionally add **named** to allow mezzing named mobs that are not the tank target. Use **min**/ **max** to restrict by mob HP % (e.g. mez only when mob is 20–100% HP so you don’t mez nearly-dead adds). See [Spell targeting and bands](spell-targeting-and-bands.md) for targeting and band details.
+   - **tarcnt** — Optional. When set, the spell is only considered when total mobs in camp is ≥ tarcnt (count includes the MA’s target plus adds). E.g. **tarcnt 2** = mez when there are at least two mobs in camp (one add). When **omitted**, if the spell has only **notanktar** in its bands, **tarcnt** defaults to **2** so the optimization applies automatically and you do not need to set it for "mez adds only." See [Debuffing configuration](debuffing-configuration.md).
+   - **bands** — For mezzing **adds**, use **notanktar** in **targetphase** (debuff uses **targetphase** only, not validtargets; use **targetphase** for tanktar, notanktar, named). Optionally add **named** to allow mezzing named mobs that are not the tank target. Use **min**/ **max** to restrict by mob HP % (e.g. mez only when mob is 20–100% HP so you don’t mez nearly-dead adds). See [Spell targeting and bands](spell-targeting-and-bands.md) for targeting and band details.
 
-3. **Optional:** **recast** (after this many resists on the same spawn, the spell is disabled for that spawn for a duration), **delay** (ms before the spell can be used again), **charmnames** (for charm mez: comma-separated mob names; bot will **pet leave** before casting and can recast when charm breaks), **alias**, **minmana**, **precondition** (default true when missing; when set, boolean or Lua script to allow/skip the cast).
+3. **Optional:** **targettedAE** — For **AE mez** (e.g. Mezmerization) that would hit the caster if the target is too close: set to `true` so the bot only casts on targets farther than the spell's AERange + 2, and **tarcnt** is the minimum number of adds within AE range of the chosen target (avoids wasting the AE on a lone add). See [Debuffing configuration](debuffing-configuration.md). **recast**, **delay**, **charmnames** (for charm mez: comma-separated mob names; bot will **pet leave** before casting and can recast when charm breaks), **alias**, **minmana**, **precondition** (default true when missing; when set, boolean or Lua script to allow/skip the cast).
 
 **Example: mez adds only**
+
+You do not need to set **tarcnt** here; for notanktar-only bands it defaults to 2.
 
 ```lua
 ['debuff'] = {
@@ -35,7 +37,7 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
       ['alias'] = 'mez',
       ['minmana'] = 0,
       ['bands'] = {
-        { ['validtargets'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
+        { ['targetphase'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
       },
       ['charmnames'] = '',
       ['recast'] = 2,
@@ -52,7 +54,7 @@ Set **charmnames** to mob names the bot is allowed to charm. The bot will **pet 
 ```lua
 ['charmnames'] = 'a mob name,another mob',
 ['bands'] = {
-  { ['validtargets'] = { 'notanktar' }, ['min'] = 30, ['max'] = 100 }
+  { ['targetphase'] = { 'notanktar' }, ['min'] = 30, ['max'] = 100 }
 }
 ```
 

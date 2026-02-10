@@ -31,7 +31,8 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 | **announce** | Optional. If true, announce when casting. |
 | **minmana** | Minimum mana (absolute) to cast. |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
-| **tarcnt** | Optional. When set, the spell is only considered when total mobs in camp is **≥ tarcnt**. The count includes the MA’s target plus all adds (the full camp list). So e.g. **tarcnt 2** = at least 2 mobs in camp = one add. When omitted, no mob-count minimum is applied. |
+| **targettedAE** | Optional. When `true`, the spell is treated as a **targeted AE** (e.g. AE mez or nuke that hits the target and everything in the spell's AERange): (1) only targets whose distance from the caster is **> AERange + 2** are considered (so the caster is not hit), and (2) **tarcnt** is the minimum number of mobs **within AERange of the chosen target** (not total camp count). If global camp mob count is &lt; tarcnt, the spell is skipped (short-circuit). Recommend setting for AE mez/nuke that would hit the caster if the target is too close. Default is `false`. |
+| **tarcnt** | Optional. When set, the spell is only considered when a mob-count condition is met. **Normal:** total mobs in camp is **≥ tarcnt**. The count includes the MA’s target plus all adds (the full camp list). E.g. **tarcnt 2** = at least 2 mobs in camp. **When targettedAE is true:** tarcnt is the minimum number of mobs **within the spell's AERange of the candidate target**; the spell is not cast on a lone add with no other mobs in AE range. If global camp mob count is &lt; tarcnt, the spell is skipped. When omitted: if the spell's bands include **only notanktar** (adds only), **tarcnt** defaults to **2** so the spell is only considered when there is at least one add (optimization); otherwise no mob-count minimum is applied. |
 | **bands** | Which mobs and at what HP %. See [Debuff bands](#debuff-bands) below. |
 | **charmnames** | Optional. Comma-separated mob **names**. When set, the bot can target those mobs for charm (recast when charm breaks). Before casting charm, the bot sends **pet leave** if your pet is charmed. |
 | **recast** | Optional. After this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. |
@@ -47,6 +48,8 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff u
   - **notanktar** — Any other mob in the list (adds).
   - **named** — Only named mobs; when used with tanktar, only the tank target if it is named.
 - **min** / **max:** Mob HP % range (0–100). The mob’s HP must be in this range to be considered.
+
+If a spell has only **notanktar** in its bands and **tarcnt** is not set, the bot defaults **tarcnt** to 2 (see **tarcnt** above).
 
 **Example: nuke on tank target and slow on adds**
 

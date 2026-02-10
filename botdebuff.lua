@@ -22,6 +22,13 @@ function botdebuff.LoadDebuffConfig()
         defaultEntry = defaultDebuffEntry,
         bandsKey = 'debuff',
         storeIn = DebuffBands,
+        perEntryAfterBands = function(entry, i)
+            if entry.tarcnt ~= nil then return end
+            local db = DebuffBands[i]
+            if db and db.notanktar and not db.tanktar and not db.named then
+                entry.tarcnt = 2
+            end
+        end,
     })
 end
 
@@ -53,6 +60,14 @@ local function DebuffEvalBuildContext(index)
         (mq.TLO.Spell(spellid).MyRange() or (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.MyRange()))
         or (gem == 'ability' and 20) or nil
     if mq.TLO.Spell(spellid).Category() == 'Pet' then myrange = myconfig.settings.acleash end
+    local aeRange, minCastDist = nil, nil
+    if entry.targettedAE then
+        local ar = mq.TLO.Spell(spell).AERange() or (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.AERange())
+        if ar and ar > 0 then
+            aeRange = ar
+            minCastDist = aeRange + 2
+        end
+    end
     local db = DebuffBands[index]
     local mobMin = db and db.mobMin or 0
     local mobMax = db and db.mobMax or 100
@@ -70,6 +85,8 @@ local function DebuffEvalBuildContext(index)
         tanktarlvl = tanktarlvl,
         spellmaxlvl = spellmaxlvl,
         myrange = myrange,
+        aeRange = aeRange,
+        minCastDist = minCastDist,
         mobList = state.getRunconfig().MobList or {},
         mobMin = mobMin,
         mobMax = mobMax,
@@ -86,6 +103,9 @@ local function DebuffEvalTankTar(index, ctx)
         if v.ID() == ctx.tanktar then
             local myrange = ctx.myrange
             if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
+            if ctx.minCastDist and v.Distance() and v.Distance() < ctx.minCastDist then
+                return nil, nil
+            end
             if not (myrange and v.Distance() and v.Distance() > myrange) then
                 if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
                     local tanktarstack = mq.TLO.Spell(entry.spell).StacksSpawn(ctx.tanktar)() or
@@ -94,6 +114,9 @@ local function DebuffEvalTankTar(index, ctx)
                         return nil, nil
                     end
                     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
+                        return nil, nil
+                    end
+                    if ctx.aeRange and entry.tarcnt and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < entry.tarcnt then
                         return nil, nil
                     end
                     return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
@@ -114,13 +137,19 @@ local function DebuffEvalNotanktar(index, ctx)
             if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
                 local myrange = ctx.myrange
                 if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
-                if not (myrange and v.Distance() and v.Distance() > myrange) then
-                    local tarstacks = mq.TLO.Spell(entry.spell).StacksSpawn(v.ID())() or
-                        (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(v.ID()))
-                    if not (ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()) then
-                        if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
-                            if not (tonumber(ctx.spelldur) > 0 and v.ID() and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
-                                return v.ID(), 'notanktar'
+                if ctx.minCastDist and v.Distance() and v.Distance() < ctx.minCastDist then
+                    -- skip this add (target too close for targetted AE)
+                else
+                    if not (myrange and v.Distance() and v.Distance() > myrange) then
+                        local tarstacks = mq.TLO.Spell(entry.spell).StacksSpawn(v.ID())() or
+                            (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(v.ID()))
+                        if not (ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()) then
+                            if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
+                                if not (tonumber(ctx.spelldur) > 0 and v.ID() and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
+                                    if not (ctx.aeRange and entry.tarcnt and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, v.ID(), ctx.aeRange) < entry.tarcnt) then
+                                        return v.ID(), 'notanktar'
+                                    end
+                                end
                             end
                         end
                     end
@@ -141,6 +170,7 @@ local function DebuffEvalNamedTankTar(index, ctx)
         if v.ID() == ctx.tanktar and v.Named() then
             local myrange = ctx.myrange
             if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
+            if ctx.minCastDist and v.Distance() and v.Distance() < ctx.minCastDist then return nil, nil end
             if myrange and v.Distance() and v.Distance() > myrange then return nil, nil end
             if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
                 local tanktarstack = mq.TLO.Spell(entry.spell).StacksSpawn(ctx.tanktar)() or
@@ -149,6 +179,9 @@ local function DebuffEvalNamedTankTar(index, ctx)
                     return nil, nil
                 end
                 if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
+                    return nil, nil
+                end
+                if ctx.aeRange and entry.tarcnt and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < entry.tarcnt then
                     return nil, nil
                 end
                 return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
@@ -262,6 +295,9 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
             local vid = v.ID and v.ID() or v
             if vid == targetId then
                 if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
+                    if ctx.minCastDist and v.Distance and v.Distance() and v.Distance() < ctx.minCastDist then
+                        break
+                    end
                     local myrange = ctx.myrange
                     if entry.gem == 'ability' then myrange = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange end
                     if not (myrange and v.Distance and v.Distance() and v.Distance() > myrange) then
@@ -271,7 +307,9 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
                         if not (ctx.spellid and vlevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < vlevel) then
                             if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
                                 if not (tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(targetId, ctx.spellid, 6000)) then
-                                    return targetId, 'notanktar'
+                                    if not (ctx.aeRange and entry.tarcnt and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, targetId, ctx.aeRange) < entry.tarcnt) then
+                                        return targetId, 'notanktar'
+                                    end
                                 end
                             end
                         end
