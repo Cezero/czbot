@@ -675,6 +675,22 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
         -- is spell loaded?
         if mq.TLO.Me.Gem(spell)() ~= gem then
             if mq.TLO.Me.Book(spell)() then
+                if string.find(mq.TLO.Cast.Status() or '', 'M') then
+                    rc.CurSpell = { phase = 'memorizing', sub = Sub, spell = ID, gem = gem }
+                    rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
+                    if state.getRunState() ~= 'loading_gem' then
+                        rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
+                        state.setRunState('loading_gem', {
+                            sub = Sub,
+                            id = ID,
+                            spell = spell,
+                            gem = gem,
+                            deadline = mq.gettime() + 10000,
+                            priority = runPriority,
+                        })
+                    end
+                    return false
+                end
                 mq.cmdf('/memorize "%s" %s', spell, gem)
                 rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
                 rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
@@ -708,6 +724,7 @@ end
 
 function spellutils.InterruptCheck()
     if state.getRunState() == 'loading_gem' then return false end
+    if string.find(mq.TLO.Cast.Status() or '', 'M') then return false end
     local rc = state.getRunconfig()
     if rc.CurSpell.phase == 'memorizing' then return false end
     if not rc.CurSpell.sub then return false end
@@ -858,7 +875,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
             if _deps.AdvCombat then _deps.AdvCombat() end
         end
-        if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
+        if state.getRunState() ~= 'loading_gem' and type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
     local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
     if not useMQ2Cast and (EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then
