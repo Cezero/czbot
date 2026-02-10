@@ -227,6 +227,7 @@ end
 local function cmd_abort(args)
     if not args[2] then
         if mq.TLO.Me.CastTimeLeft() > 0 and state.getRunconfig().CurSpell.sub and state.getRunconfig().CurSpell.sub == 'ad' then
+            printf('[MQ2TWIST] commands: cmd_abort, /stopcast')
             mq.cmd('/stopcast')
         end
         if mq.TLO.Me.Combat() then mq.cmd('/attack off') end

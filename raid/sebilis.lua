@@ -11,7 +11,10 @@ function TrakBreathOut()
     local meleeclass = { brd = true, ber = true, bst = true, mnk = true, pal = true, rng = true, rog = true, shd = true, war = true }
     local myclass = string.lower(mq.TLO.Me.Class.ShortName())
     if myconfig.settings.doraid and mq.TLO.Zone.ID() == 89 then
-        if casterclass[myclass] then mq.cmd('/interrupt') end
+        if casterclass[myclass] then
+            printf('[MQ2TWIST] sebilis: TrakBreathOut, /interrupt')
+            mq.cmd('/interrupt')
+        end
         if meleeclass[myclass] or casterclass[myclass] then
             raidsactive = true
             myconfig.settings.domelee = false
@@ -30,7 +33,10 @@ function TrakBreathIn()
     if myconfig.settings.doraid and mq.TLO.Zone.ID() == 89 then
         raidtimer = 30000 + mq.gettime()
         raidsactive = false
-        if casterclass[myclass] then mq.cmd('/interrupt') end
+        if casterclass[myclass] then
+            printf('[MQ2TWIST] sebilis: TrakBreathIn, /interrupt')
+            mq.cmd('/interrupt')
+        end
         if meleeclass[myclass] or casterclass[myclass] then
             raidsactive = true
             if meleeclass[myclass] then myconfig.settings.domelee = true end

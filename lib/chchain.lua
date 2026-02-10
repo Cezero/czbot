@@ -95,6 +95,7 @@ function chchain.getHookFn(name)
                 return
             end
             if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
+                printf('[MQ2TWIST] chchain: target died (corpse), /interrupt')
                 mq.cmdf('/multiline ; /rs CHChain: Target died, interrupting cast ; /interrupt')
                 mq.cmdf('/rs <<Go %s>>', p.chnextclr)
                 state.clearRunState()

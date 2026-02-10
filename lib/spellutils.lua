@@ -533,6 +533,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                 fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn)
                             if spellIndex and EvalID and targethit then
                                 if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 then
+                                    printf('[MQ2TWIST] spellutils: RunPhaseFirstSpellCheck: CurSpell phase conflict, /stopcast')
                                     mq.cmd('/stopcast')
                                     spellutils.clearCastingStateOrResume()
                                 end
@@ -651,6 +652,7 @@ function spellutils.InterruptCheck()
             mq.cmd('/squelch /multiline; /stick off ; /target clear')
             if mq.TLO.Me.CastTimeLeft() > 0 and target ~= 1 and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
                 mq.cmd('/echo I lost my target, interrupting')
+                printf('[MQ2TWIST] spellutils: InterruptCheck: lost target, %s', rc.CurSpell.viaMQ2Cast and '/interrupt' or '/stopcast')
                 if rc.CurSpell.viaMQ2Cast then mq.cmd('/interrupt') else mq.cmd('/stopcast') end
                 if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
             end
@@ -659,6 +661,7 @@ function spellutils.InterruptCheck()
     end
     if criteria ~= 'corpse' then
         if mq.TLO.Target.Type() == 'Corpse' and criteria ~= 'corpse' then
+            printf('[MQ2TWIST] spellutils: InterruptCheck: target dead, /interrupt')
             mq.cmd(
                 '/multiline ; /interrupt ; /squelch /target clear ; /echo My target is dead, interrupting')
         end
@@ -668,6 +671,7 @@ function spellutils.InterruptCheck()
         if th and mq.TLO.Target.PctHPs() and mq.TLO.Target.ID() == target then
             local maxVal = type(th) == 'table' and th.max or th
             if (maxVal + (math.abs(maxVal - 100) * botconfig.config.heal.interruptlevel)) <= mq.TLO.Target.PctHPs() then
+                printf('[MQ2TWIST] spellutils: InterruptCheck: heal target above threshold spell=%s, /interrupt', entry.spell or '')
                 mq.cmdf('/multiline ; /interrupt ; /echo Interrupting Spell %s, target is above the threshold',
                     entry.spell)
                 mq.cmd('/interrupt')
@@ -681,6 +685,7 @@ function spellutils.InterruptCheck()
         if tag then
             printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
             spellutils.RecordDontStackDebuffFromTarget(target, entry.spell, tag)
+            printf('[MQ2TWIST] spellutils: InterruptCheck: dontStack debuff category, /interrupt')
             mq.cmd('/interrupt')
             spellutils.clearCastingStateOrResume()
         end
@@ -692,6 +697,7 @@ function spellutils.InterruptCheck()
         if mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() and buffid and buffstaleness < 2000 and buffdur > (spelldur * .10) then
             if sub == 'buff' then
                 if mq.TLO.Spell(spellid).StacksTarget() then
+                    printf('[MQ2TWIST] spellutils: InterruptCheck: buff already present / no stack, /interrupt')
                     mq.cmdf('/multiline ; /echo Interrupt %s, buff does not stack on target: %s ; /interrupt', spellname,
                         spellname, targetname)
                 end
@@ -701,6 +707,7 @@ function spellutils.InterruptCheck()
                 rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
                 spellutils.clearCastingStateOrResume()
             elseif sub == 'debuff' and mq.TLO.Spell(spellid).CategoryID() ~= 20 then
+                printf('[MQ2TWIST] spellutils: InterruptCheck: debuff already present, /interrupt')
                 mq.cmdf('/multiline ; /echo Interrupt %s on MobID %s, debuff already present ; /interrupt', spellname,
                     target)
                 local spelldur = mq.TLO.Target.Buff(spellname).Duration() + mq.gettime()
@@ -712,6 +719,7 @@ function spellutils.InterruptCheck()
         if mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() and mq.TLO.Spell(spellid).StacksTarget() == 'FALSE' then
             if sub == 'buff' then
                 printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, spellname, targetname)
+                printf('[MQ2TWIST] spellutils: InterruptCheck: buff StacksTarget FALSE, /interrupt')
                 mq.cmd('/interrupt')
                 if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
                 rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
@@ -721,6 +729,7 @@ function spellutils.InterruptCheck()
                     targetname)
                 spellstates.DebuffListUpdate(target, spellname,
                     mq.TLO.Target.Buff(spellname).Duration() + mq.gettime())
+                printf('[MQ2TWIST] spellutils: InterruptCheck: debuff StacksTarget FALSE, /interrupt')
                 mq.cmd('/interrupt')
                 spellutils.clearCastingStateOrResume()
             end
@@ -801,12 +810,16 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     -- pulse mez, wait for land, re-assist MA, attack on (optionally twist DPS song), stay on MA target ~12-15s,
     -- then attack off, target add, re-pulse mez, repeat. Implement in a later plan (state/timers per mez target).
     if (sub == 'debuff' and targethit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
+    printf('[MQ2TWIST] spellutils: clearCastingStateOrResume (before cast), calling StopTwist')
     if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
             if _deps.AdvCombat then _deps.AdvCombat() end
         end
-        if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
+        if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then
+            printf('[MQ2TWIST] spellutils: CastSpell (BRD): spell ready, /stopcast before cast')
+            mq.cmd('/squelch /stopcast')
+        end
     end
     local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
     if not useMQ2Cast and (EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then

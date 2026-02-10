@@ -165,6 +165,7 @@ function bardtwist.EnsureTwistForMode(mode)
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
     local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
     if twisting and twistListsEqual(currentGems, desiredGems) then return end
+    printf('[MQ2TWIST] bardtwist: EnsureTwistForMode(mode=%s) issuing /twist', mode)
     mq.cmd('/squelch /twist ' .. table.concat(desiredGems, ' '))
 end
 
@@ -176,6 +177,7 @@ end
 function bardtwist.StopTwist()
     if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
+        printf('[MQ2TWIST] bardtwist: StopTwist() issuing /twist stop')
         mq.cmd('/squelch /twist stop')
     end
 end
@@ -192,8 +194,10 @@ function bardtwist.ResumeTwist()
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
     local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
     if twistListsEqual(currentGems, desiredGems) then
+        printf('[MQ2TWIST] bardtwist: ResumeTwist() list match, issuing /twist start')
         mq.cmd('/squelch /twist start')
     else
+        printf('[MQ2TWIST] bardtwist: ResumeTwist() list differs, issuing /twist')
         mq.cmd('/squelch /twist ' .. table.concat(desiredGems, ' '))
     end
 end
@@ -201,6 +205,7 @@ end
 function bardtwist.SetTwistOnce(gemList)
     if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     if not gemList or #gemList == 0 then return end
+    printf('[MQ2TWIST] bardtwist: SetTwistOnce(gems=%s)', table.concat(gemList, ' '))
     mq.cmd('/squelch /twist once ' .. table.concat(gemList, ' '))
 end
 
