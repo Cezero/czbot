@@ -349,7 +349,13 @@ function spellutils.handleSpellCheckReentry(sub, options)
         end
         local status = mq.TLO.Cast.Status() or ''
         local storedId = mq.TLO.Cast.Stored.ID() or 0
-        if not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0) then
+        local castResult = mq.TLO.Cast.Result() or ''
+        printf('\at[MQ2CAST]\ax entry sub=%s CurSpell.sub=%s status=%s storedId=%s spellid=%s result=%s', tostring(sub), tostring(rc.CurSpell.sub), string.format('%q', status), tostring(storedId), tostring(rc.CurSpell.spellid or 0), string.format('%q', castResult))
+        local complete = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
+        if complete then
+            printf('\at[MQ2CAST]\ax completion condition TRUE, treating as complete and clearing')
+        end
+        if complete then
             rc.CurSpell.resisted = (mq.TLO.Cast.Result() == 'CAST_RESIST')
             if mq.TLO.Cast.Result() == 'CAST_IMMUNE' and rc.CurSpell.target then
                 immune.processList(rc.CurSpell.target)
@@ -362,6 +368,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
             return true
         end
         if sub == rc.CurSpell.sub then
+            printf('\at[MQ2CAST]\ax same sub, returning true (still casting) sub=%s status=%s', tostring(sub), string.format('%q', status))
             return true
         end
     end
@@ -410,6 +417,11 @@ function spellutils.handleSpellCheckReentry(sub, options)
         return true
     end
 
+    local runState = state.getRunState()
+    local hadCurSpell = rc.CurSpell and (rc.CurSpell.phase or rc.CurSpell.sub)
+    if hadCurSpell or runState == 'casting' then
+        printf('\at[MQ2CAST]\ax fall-through return false runState=%s CurSpell=%s phase=%s CurSpell.sub=%s sub=%s', tostring(runState), (rc.CurSpell and 'set' or 'nil'), (rc.CurSpell and rc.CurSpell.phase) or 'n/a', (rc.CurSpell and rc.CurSpell.sub) or 'n/a', tostring(sub))
+    end
     return false
 end
 
@@ -458,6 +470,11 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
         return false
     end
 
+    local runState = state.getRunState()
+    if runState == 'casting' or (rc.CurSpell and rc.CurSpell.phase == 'casting') then
+        printf('\at[MQ2CAST]\ax about to run phase loop despite casting runState=%s CurSpell.phase=%s CurSpell.sub=%s CurSpell.spell=%s sub=%s', tostring(runState), (rc.CurSpell and rc.CurSpell.phase) or 'n/a', (rc.CurSpell and rc.CurSpell.sub) or 'n/a', (rc.CurSpell and rc.CurSpell.spell) or 'n/a', tostring(sub))
+    end
+
     local cursor = spellutils.getResumeCursor(hookName)
     local startPhaseIdx = 1
     local startTargetIdx = 1
@@ -500,6 +517,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                     mq.cmd('/stopcast')
                                     spellutils.clearCastingStateOrResume()
                                 end
+                                printf('\at[MQ2CAST]\ax calling CastSpell sub=%s spellIndex=%s EvalID=%s', tostring(sub), tostring(spellIndex), tostring(EvalID))
                                 local spellcheckResume = { hook = hookName, phase = phase, targetIndex = targetIdx, spellIndex =
                                 spellIndex }
                                 if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
@@ -770,7 +788,8 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end
     -- Stand before cast when sitting (not on mount); MQ2Cast does not do this.
-    if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() then
+    -- Do not stand when we're already in phase 'casting' (re-entry would interrupt mem/cast).
+    if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and (not rc.CurSpell or rc.CurSpell.phase ~= 'casting') then
         mq.cmd('/stand')
     end
     if useMQ2Cast then
