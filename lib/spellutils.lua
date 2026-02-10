@@ -350,7 +350,9 @@ function spellutils.handleSpellCheckReentry(sub, options)
         local status = mq.TLO.Cast.Status() or ''
         local storedId = mq.TLO.Cast.Stored.ID() or 0
         local castResult = mq.TLO.Cast.Result() or ''
-        printf('\at[MQ2CAST]\ax entry sub=%s CurSpell.sub=%s status=%s storedId=%s spellid=%s result=%s', tostring(sub), tostring(rc.CurSpell.sub), string.format('%q', status), tostring(storedId), tostring(rc.CurSpell.spellid or 0), string.format('%q', castResult))
+        printf('\at[MQ2CAST]\ax entry sub=%s CurSpell.sub=%s status=%s storedId=%s spellid=%s result=%s', tostring(sub),
+            tostring(rc.CurSpell.sub), string.format('%q', status), tostring(storedId),
+            tostring(rc.CurSpell.spellid or 0), string.format('%q', castResult))
         local complete = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
         if complete then
             printf('\at[MQ2CAST]\ax completion condition TRUE, treating as complete and clearing')
@@ -368,7 +370,8 @@ function spellutils.handleSpellCheckReentry(sub, options)
             return true
         end
         if sub == rc.CurSpell.sub then
-            printf('\at[MQ2CAST]\ax same sub, returning true (still casting) sub=%s status=%s', tostring(sub), string.format('%q', status))
+            printf('\at[MQ2CAST]\ax same sub, returning true (still casting) sub=%s status=%s', tostring(sub),
+                string.format('%q', status))
             return true
         end
     end
@@ -420,7 +423,9 @@ function spellutils.handleSpellCheckReentry(sub, options)
     local runState = state.getRunState()
     local hadCurSpell = rc.CurSpell and (rc.CurSpell.phase or rc.CurSpell.sub)
     if hadCurSpell or runState == 'casting' then
-        printf('\at[MQ2CAST]\ax fall-through return false runState=%s CurSpell=%s phase=%s CurSpell.sub=%s sub=%s', tostring(runState), (rc.CurSpell and 'set' or 'nil'), (rc.CurSpell and rc.CurSpell.phase) or 'n/a', (rc.CurSpell and rc.CurSpell.sub) or 'n/a', tostring(sub))
+        printf('\at[MQ2CAST]\ax fall-through return false runState=%s CurSpell=%s phase=%s CurSpell.sub=%s sub=%s',
+            tostring(runState), (rc.CurSpell and 'set' or 'nil'), (rc.CurSpell and rc.CurSpell.phase) or 'n/a',
+            (rc.CurSpell and rc.CurSpell.sub) or 'n/a', tostring(sub))
     end
     return false
 end
@@ -472,7 +477,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
 
     local runState = state.getRunState()
     if runState == 'casting' or (rc.CurSpell and rc.CurSpell.phase == 'casting') then
-        printf('\at[MQ2CAST]\ax about to run phase loop despite casting runState=%s CurSpell.phase=%s CurSpell.sub=%s CurSpell.spell=%s sub=%s', tostring(runState), (rc.CurSpell and rc.CurSpell.phase) or 'n/a', (rc.CurSpell and rc.CurSpell.sub) or 'n/a', (rc.CurSpell and rc.CurSpell.spell) or 'n/a', tostring(sub))
+        printf(
+        '\at[MQ2CAST]\ax about to run phase loop despite casting runState=%s CurSpell.phase=%s CurSpell.sub=%s CurSpell.spell=%s sub=%s',
+            tostring(runState), (rc.CurSpell and rc.CurSpell.phase) or 'n/a', (rc.CurSpell and rc.CurSpell.sub) or 'n/a',
+            (rc.CurSpell and rc.CurSpell.spell) or 'n/a', tostring(sub))
     end
 
     local cursor = spellutils.getResumeCursor(hookName)
@@ -504,7 +512,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                     local target = targets[targetIdx]
                     if target and target.id then
                         local spellStart = (phaseIdx == startPhaseIdx and targetIdx == targetStart) and startSpellIdx or
-                        1
+                            1
                         local fromSpellIndices = {}
                         for _, si in ipairs(spellIndices) do
                             if si >= spellStart then fromSpellIndices[#fromSpellIndices + 1] = si end
@@ -513,13 +521,22 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                 fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn)
                             if spellIndex and EvalID and targethit then
+                                if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub then
+                                    printf('\at[MQ2CAST]\ax phase loop sub=%s FOUND WORK (will interrupt current cast sub=%s)', tostring(sub), tostring(rc.CurSpell.sub))
+                                end
                                 if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 then
                                     mq.cmd('/stopcast')
                                     spellutils.clearCastingStateOrResume()
                                 end
-                                printf('\at[MQ2CAST]\ax calling CastSpell sub=%s spellIndex=%s EvalID=%s', tostring(sub), tostring(spellIndex), tostring(EvalID))
-                                local spellcheckResume = { hook = hookName, phase = phase, targetIndex = targetIdx, spellIndex =
-                                spellIndex }
+                                printf('\at[MQ2CAST]\ax calling CastSpell sub=%s spellIndex=%s EvalID=%s', tostring(sub),
+                                    tostring(spellIndex), tostring(EvalID))
+                                local spellcheckResume = {
+                                    hook = hookName,
+                                    phase = phase,
+                                    targetIndex = targetIdx,
+                                    spellIndex =
+                                        spellIndex
+                                }
                                 if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
                                     return false
                                 end
@@ -529,6 +546,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                 end
             end
         end
+    end
+    -- Log when this section ran its phase loop but did not find work, while another section's cast is in progress (confirms we are not incorrectly interrupting).
+    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub then
+        printf('\at[MQ2CAST]\ax phase loop sub=%s no work this tick (current cast sub=%s)', tostring(sub), tostring(rc.CurSpell.sub))
     end
     -- Clear _resume state when loop completes without starting a new cast (so we don't stay stuck in doHeal_resume etc.)
     if state.getRunState() == hookName .. '_resume' then
