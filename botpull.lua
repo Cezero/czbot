@@ -96,7 +96,7 @@ function botpull.TagTimeCalc(trip, spawnId, x, y, z)
     end
     if trip == 'return' and x and y and z then
         return (((mq.TLO.Navigation.PathLength('locxyz ' .. x .. ',' .. y .. ',' .. z)() + 100) / 100) * 18000) +
-        mq.gettime()
+            mq.gettime()
     end
     return mq.gettime() + 60000
 end
@@ -149,7 +149,7 @@ local function canStartPull(rc)
     if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then return false end
     if not mq.TLO.Navigation.MeshLoaded() then
         printf(
-        '\ayCZBot:\axI have DoPull set TRUE but have \arno MQ2Nav Mesh loaded\ax, please generate a NavMesh before using DoPull, \arsetting DoPull to FALSE\ax')
+            '\ayCZBot:\axI have DoPull set TRUE but have \arno MQ2Nav Mesh loaded\ax, please generate a NavMesh before using DoPull, \arsetting DoPull to FALSE\ax')
         myconfig.settings.dopull = false
         return false
     end
@@ -514,7 +514,7 @@ function botpull.getHookFn(name)
             if state.getRunconfig().MobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0 then
                 if mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs() then
                     local tempcnt = myconfig.pull.chainpullcnt == 0 and (myconfig.pull.chainpullcnt + 1) or
-                    myconfig.pull.chainpullcnt
+                        myconfig.pull.chainpullcnt
                     if (tonumber(mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs()) <= myconfig.pull.chainpullhp) and state.getRunconfig().MobCount <= tempcnt then
                         botpull.StartPull()
                     end

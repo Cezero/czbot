@@ -227,15 +227,26 @@ local function writeConfigToFile(config, filename)
         return false, "Could not open file for writing."
     end
 
+    local function isValidLuaIdentifier(key)
+        return type(key) == "string" and key ~= "" and key:match("^[%a_][%w_]*$")
+    end
+
+    local function formatKey(key)
+        if isValidLuaIdentifier(key) then
+            return key
+        end
+        return "['" .. tostring(key):gsub("'", "\\'") .. "']"
+    end
+
     local function writeBands(bands, indent)
         if type(bands) ~= "table" then return end
-        file:write(indent .. "['bands'] = {\n")
+        file:write(indent .. formatKey('bands') .. " = {\n")
         file:flush()
         for _, band in ipairs(bands) do
             if type(band) == "table" then
                 file:write(indent .. "  {\n")
                 if type(band.targetphase) == "table" then
-                    file:write(indent .. "    ['targetphase'] = { ")
+                    file:write(indent .. "    " .. formatKey('targetphase') .. " = { ")
                     local parts = {}
                     for _, c in ipairs(band.targetphase) do
                         parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
@@ -244,7 +255,7 @@ local function writeConfigToFile(config, filename)
                     file:write(" },\n")
                 end
                 if type(band.validtargets) == "table" then
-                    file:write(indent .. "    ['validtargets'] = { ")
+                    file:write(indent .. "    " .. formatKey('validtargets') .. " = { ")
                     local parts = {}
                     for _, c in ipairs(band.validtargets) do
                         parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
@@ -254,17 +265,20 @@ local function writeConfigToFile(config, filename)
                 elseif type(band.targetphase) == "table" and #band.targetphase > 0 then
                     local isDebuffOnly = true
                     for _, p in ipairs(band.targetphase) do
-                        if p ~= 'tanktar' and p ~= 'notanktar' and p ~= 'named' then isDebuffOnly = false break end
+                        if p ~= 'tanktar' and p ~= 'notanktar' and p ~= 'named' then
+                            isDebuffOnly = false
+                            break
+                        end
                     end
                     if not isDebuffOnly then
-                        file:write(indent .. "    ['validtargets'] = { 'all' },\n")
+                        file:write(indent .. "    " .. formatKey('validtargets') .. " = { 'all' },\n")
                     end
                 end
                 if band.min ~= nil then
-                    file:write(indent .. "    ['min'] = " .. tonumber(band.min) .. ",\n")
+                    file:write(indent .. "    " .. formatKey('min') .. " = " .. tonumber(band.min) .. ",\n")
                 end
                 if band.max ~= nil then
-                    file:write(indent .. "    ['max'] = " .. tonumber(band.max) .. ",\n")
+                    file:write(indent .. "    " .. formatKey('max') .. " = " .. tonumber(band.max) .. ",\n")
                 end
                 file:write(indent .. "  },\n")
             end
@@ -283,7 +297,7 @@ local function writeConfigToFile(config, filename)
                 if value == nil then
                     -- omit nil keys to keep config sparse
                 elseif key == 'dontStack' and type(value) == "table" and #value > 0 then
-                    file:write(indent .. "['dontStack'] = { ")
+                    file:write(indent .. formatKey('dontStack') .. " = { ")
                     local parts = {}
                     for _, c in ipairs(value) do
                         parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
@@ -297,23 +311,23 @@ local function writeConfigToFile(config, filename)
                     print("detected a corrupted value for:", key, " = ", value)
                     print("setting ", key, " to nil, please check your config")
                     valueStr = nil
-                    file:write(indent .. "['" .. key .. "'] =  nil ,\n")
+                    file:write(indent .. formatKey(key) .. " =  nil ,\n")
                     file:flush()
                 else
                     if tonumber(value) then
                         valueStr = tonumber(value)
-                        file:write(indent .. "['" .. key .. "'] = ", valueStr, ",\n")
+                        file:write(indent .. formatKey(key) .. " = ", valueStr, ",\n")
                         file:flush()
                     elseif value == true then
                         valueStr = true
-                        file:write(indent .. "['" .. key .. "'] = true,\n")
+                        file:write(indent .. formatKey(key) .. " = true,\n")
                         file:flush()
                     elseif value == false then
                         valueStr = false
-                        file:write(indent .. "['" .. key .. "'] = false ,\n")
+                        file:write(indent .. formatKey(key) .. " = false ,\n")
                     else
                         valueStr = type(value) == "string" and '"' .. value .. '"' or tostring(value)
-                        file:write(indent .. "['" .. key .. "'] = " .. valueStr .. ",\n")
+                        file:write(indent .. formatKey(key) .. " = " .. valueStr .. ",\n")
                         file:flush()
                     end
                 end
@@ -328,7 +342,7 @@ local function writeConfigToFile(config, filename)
             for _, key in ipairs(order1) do
                 value = t[key]
                 if type(value) == "table" then
-                    file:write(indent .. "['" .. key .. "'] = {\n")
+                    file:write(indent .. formatKey(key) .. " = {\n")
                     file:flush()
                     if key == 'heal' or key == 'buff' or key == 'debuff' or key == 'cure' then
                         for _, subkey in ipairs(subOrder[key]) do
@@ -337,19 +351,19 @@ local function writeConfigToFile(config, filename)
                                 if subval == nil then
                                     -- omit nil keys to keep config sparse
                                 elseif tonumber(subval) then
-                                    file:write(indent .. "  ['" .. subkey .. "'] = ", tonumber(subval), ",\n")
+                                    file:write(indent .. "  " .. formatKey(subkey) .. " = ", tonumber(subval), ",\n")
                                 elseif subval == true then
-                                    file:write(indent .. "  ['" .. subkey .. "'] = true,\n")
+                                    file:write(indent .. "  " .. formatKey(subkey) .. " = true,\n")
                                 elseif subval == false then
-                                    file:write(indent .. "  ['" .. subkey .. "'] = false ,\n")
+                                    file:write(indent .. "  " .. formatKey(subkey) .. " = false ,\n")
                                 else
                                     local subvalStr = type(subval) == "string" and '"' .. subval .. '"' or
-                                    tostring(subval)
-                                    file:write(indent .. "  ['" .. subkey .. "'] = " .. subvalStr .. ",\n")
+                                        tostring(subval)
+                                    file:write(indent .. "  " .. formatKey(subkey) .. " = " .. subvalStr .. ",\n")
                                 end
                                 file:flush()
                             else
-                                file:write(indent .. "  ['spells'] = {\n")
+                                file:write(indent .. "  " .. formatKey('spells') .. " = {\n")
                                 file:flush()
                                 local spells = value.spells or {}
                                 for si, entry in ipairs(spells) do
@@ -371,20 +385,20 @@ local function writeConfigToFile(config, filename)
                             if subval == nil then
                                 -- omit nil keys
                             elseif subkey == 'spell' and type(subval) == "table" then
-                                file:write(indent .. "  ['spell'] = {\n")
+                                file:write(indent .. "  " .. formatKey('spell') .. " = {\n")
                                 file:flush()
                                 writesubTable(subval, spellSlotOrder.pull, indent .. "    ")
                                 file:write(indent .. "  },\n")
                                 file:flush()
                             elseif tonumber(subval) then
-                                file:write(indent .. "  ['" .. subkey .. "'] = ", tonumber(subval), ",\n")
+                                file:write(indent .. "  " .. formatKey(subkey) .. " = ", tonumber(subval), ",\n")
                             elseif subval == true then
-                                file:write(indent .. "  ['" .. subkey .. "'] = true,\n")
+                                file:write(indent .. "  " .. formatKey(subkey) .. " = true,\n")
                             elseif subval == false then
-                                file:write(indent .. "  ['" .. subkey .. "'] = false ,\n")
+                                file:write(indent .. "  " .. formatKey(subkey) .. " = false ,\n")
                             else
                                 local subvalStr = type(subval) == "string" and '"' .. subval .. '"' or tostring(subval)
-                                file:write(indent .. "  ['" .. subkey .. "'] = " .. subvalStr .. ",\n")
+                                file:write(indent .. "  " .. formatKey(subkey) .. " = " .. subvalStr .. ",\n")
                             end
                             file:flush()
                         end
@@ -398,13 +412,13 @@ local function writeConfigToFile(config, filename)
                 else
                     local valueStr = type(value) == "string" and '"' .. value .. '"' or tostring(value)
                     if tonumber(value) then
-                        file:write(indent .. "['" .. key .. "'] = ", tonumber(value), ",\n")
+                        file:write(indent .. formatKey(key) .. " = ", tonumber(value), ",\n")
                     elseif value == true then
-                        file:write(indent .. "['" .. key .. "'] = true,\n")
+                        file:write(indent .. formatKey(key) .. " = true,\n")
                     elseif value == false then
-                        file:write(indent .. "['" .. key .. "'] = false ,\n")
+                        file:write(indent .. formatKey(key) .. " = false ,\n")
                     else
-                        file:write(indent .. "['" .. key .. "'] = " .. valueStr .. ",\n")
+                        file:write(indent .. formatKey(key) .. " = " .. valueStr .. ",\n")
                     end
                     file:flush()
                 end
@@ -476,8 +490,17 @@ function M.Load(path)
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
     if (M.config.settings.dopet == nil) then M.config.settings.dopet = false end
     applySectionDefaults('pull', {
-        radius = 400, zrange = 150, chainpullcnt = 0, chainpullhp = 0,
-        maxlevel = 200, minlevel = 0, hunter = false, mana = 60, manaclass = 'clr, dru, shm', leash = 500, usepriority = false,
+        radius = 400,
+        zrange = 150,
+        chainpullcnt = 0,
+        chainpullhp = 0,
+        maxlevel = 200,
+        minlevel = 0,
+        hunter = false,
+        mana = 60,
+        manaclass = 'clr, dru, shm',
+        leash = 500,
+        usepriority = false,
     })
     if not M.config.pull.spell or type(M.config.pull.spell) ~= 'table' then
         M.config.pull.spell = { gem = 'melee', spell = '', range = nil }

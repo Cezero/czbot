@@ -15,27 +15,27 @@ When pulling is enabled, the bot can automatically find mobs within range of cam
 
 ### Settings
 
-| Option | Default | Purpose |
-|--------|--------|---------|
+| Option     | Default | Purpose                                                                                 |
+| ---------- | ------- | --------------------------------------------------------------------------------------- |
 | **dopull** | `false` | Boolean. Enables or disables the pull loop. When `true`, the `pull` section is applied. |
 
 ### Pull section
 
 All pull options live under **`config.pull`**. If a value is omitted, the default in the table below is used.
 
-| Option | Default | Purpose |
-|--------|--------|---------|
-| **spell** | see below | Single pull spell block: `{ gem, spell, range? }`. How to aggro. Omit or leave empty for melee. |
-| **radius** | 400 | Max horizontal distance from camp (X,Y) for pullable mobs. |
-| **zrange** | 150 | Max vertical (Z) difference from camp; mobs outside this are ignored. |
-| **minlevel** / **maxlevel** | 0 / 200 | Only mobs with level in this range are considered for pulling. |
-| **chainpullcnt** | 0 | Allow chain-pulling when current mob count is ≤ this value. See [When does the bot start a pull?](#when-does-the-bot-start-a-pull). |
-| **chainpullhp** | 0 | When the current engage target’s HP % is ≤ this (and chain conditions are met), the bot may start the next pull. |
-| **mana** | 60 | Minimum mana % required for designated healer classes before a new pull is allowed. |
-| **manaclass** | `'clr, dru, shm'` | Comma-separated class short names (e.g. clr, dru, shm) that are checked for **mana** before allowing a pull. |
-| **leash** | 500 | While returning to camp with a mob, navigation is paused if the mob is farther than this distance (avoids over-chasing). |
-| **usepriority** | `false` | If `true`, prefer mobs that match the runtime **Priority** list over path distance when choosing a pull target. |
-| **hunter** | `false` | Hunter mode: no makecamp; anchor is set once. The puller can be far from camp. See [Hunter mode vs camp mode](#hunter-mode-vs-camp-mode). |
+| Option                      | Default           | Purpose                                                                                                                                   |
+| --------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **spell**                   | see below         | Single pull spell block: `{ gem, spell, range? }`. How to aggro. Omit or leave empty for melee.                                           |
+| **radius**                  | 400               | Max horizontal distance from camp (X,Y) for pullable mobs.                                                                                |
+| **zrange**                  | 150               | Max vertical (Z) difference from camp; mobs outside this are ignored.                                                                     |
+| **minlevel** / **maxlevel** | 0 / 200           | Only mobs with level in this range are considered for pulling.                                                                            |
+| **chainpullcnt**            | 0                 | Allow chain-pulling when current mob count is ≤ this value. See [When does the bot start a pull?](#when-does-the-bot-start-a-pull).       |
+| **chainpullhp**             | 0                 | When the current engage target’s HP % is ≤ this (and chain conditions are met), the bot may start the next pull.                          |
+| **mana**                    | 60                | Minimum mana % required for designated healer classes before a new pull is allowed.                                                       |
+| **manaclass**               | `'clr, dru, shm'` | Comma-separated class short names (e.g. clr, dru, shm) that are checked for **mana** before allowing a pull.                              |
+| **leash**                   | 500               | While returning to camp with a mob, navigation is paused if the mob is farther than this distance (avoids over-chasing).                  |
+| **usepriority**             | `false`           | If `true`, prefer mobs that match the runtime **Priority** list over path distance when choosing a pull target.                           |
+| **hunter**                  | `false`           | Hunter mode: no makecamp; anchor is set once. The puller can be far from camp. See [Hunter mode vs camp mode](#hunter-mode-vs-camp-mode). |
 
 **Note:** **pullarc** (directional pulling) is not in the config file; it is set at runtime with **`/cz xarc <degrees>`**. See [Runtime control](#runtime-control-commands).
 
@@ -44,14 +44,14 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 The **`pull.spell`** table configures how the bot gets aggro. It has the same shape as other spell blocks (e.g. heal, debuff): **`gem`**, **`spell`**, and optional **`range`**.
 
 - **gem** — How the pull is performed. Allowed values:
-  - **`'melee'`** — Navigate in and attack (no cast). Default when `pull.spell` is omitted or empty.
-  - **`'ranged'`** — Use a ranged weapon (bow). **`spell`** must be the **item name** of the bow. The bot will swap in that item to the range slot if needed, fire, then swap the previous item back. Requires **MQ2Exchange**; your cursor must be empty when the bot swaps the bow in or out.
-  - **`1`–`12`** — Spell gem slot (cast the spell in that gem).
-  - **`'item'`** — Cast from an item; **`spell`** = item name.
-  - **`'alt'`** — Use an alternate ability; **`spell`** = AA name.
-  - **`'disc'`** — Use a discipline; **`spell`** = disc name.
-  - **`'ability'`** — Use a combat ability; **`spell`** = ability name. If **range** is omitted, the bot uses **10** (melee) as the pull range.
-  - **`'script'`** — Run a script from **`config.script[spell]`**; **`spell`** = script key. Use **`spell = 'warp'`** for built-in warp pull (instant move to target and back).
+    - **`'melee'`** — Navigate in and attack (no cast). Default when `pull.spell` is omitted or empty.
+    - **`'ranged'`** — Use a ranged weapon (bow). **`spell`** must be the **item name** of the bow. The bot will swap in that item to the range slot if needed, fire, then swap the previous item back. Requires **MQ2Exchange**; your cursor must be empty when the bot swaps the bow in or out.
+    - **`1`–`12`** — Spell gem slot (cast the spell in that gem).
+    - **`'item'`** — Cast from an item; **`spell`** = item name.
+    - **`'alt'`** — Use an alternate ability; **`spell`** = AA name.
+    - **`'disc'`** — Use a discipline; **`spell`** = disc name.
+    - **`'ability'`** — Use a combat ability; **`spell`** = ability name. If **range** is omitted, the bot uses **10** (melee) as the pull range.
+    - **`'script'`** — Run a script from **`config.script[spell]`**; **`spell`** = script key. Use **`spell = 'warp'`** for built-in warp pull (instant move to target and back).
 - **spell** — Spell name, item name (for **gem** `'item'` or `'ranged'`), AA/disc/ability name, or script key. Ignored for **gem** `'melee'`.
 - **range** — (Optional.) Distance at which the pull is used. If omitted, the bot derives it when possible from the spell or ability (e.g. spell gem → spell's MyRange − 5; **gem** `'ranged'` → item range; **gem** `'ability'` → 10).
 
