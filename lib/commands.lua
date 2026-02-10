@@ -515,7 +515,6 @@ local function cmd_chchain(args)
         end
     end
     if args[2] == 'setup' then
-        local gem = 5
         local spell = 'complete heal'
         if not dochchain then state.getRunconfig().PreCH = utils.DeepCopy(botconfig.config.settings) end
         local tmpchchainlist = args[3]
@@ -524,24 +523,9 @@ local function cmd_chchain(args)
             if string.lower(v) == string.lower(mq.TLO.Me.CleanName()) then aminlist = true end
         end
         if not aminlist then return false end
-        if mq.TLO.Me.Gem(spell)() ~= gem then
-            if mq.TLO.Me.Book(spell)() then
-                mq.cmdf('/memorize "%s" %s', spell, gem)
-                state.getRunconfig().gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
-                state.getRunconfig().statusMessage = 'CHChain: memorizing Complete Heal'
-                state.setRunState('loading_gem', {
-                    source = 'chchain_setup',
-                    spell = spell,
-                    gem = gem,
-                    deadline = mq.gettime() + 10000,
-                    priority = bothooks.getPriority('chchainTick'),
-                    setupArgs = { args[3], args[4], args[5] },
-                })
-                return
-            else
-                printf('\ayCZBot:\axCZBot CHChain: Spell %s not found in your book, failed to start CHChain', spell)
-                return false
-            end
+        if not mq.TLO.Me.Book(spell)() then
+            printf('\ayCZBot:\axCZBot CHChain: Spell %s not found in your book, failed to start CHChain', spell)
+            return false
         end
         M.chchainSetupContinuation({ args[3], args[4], args[5] })
     end
@@ -726,7 +710,7 @@ function M.czpause(...)
     end
 end
 
---- Called when loading_gem completes for chchain_setup. setupArgs = { chchainlist, chchainpause, tanklist }.
+--- Called to finish CHChain setup. setupArgs = { chchainlist, chchainpause, tanklist }.
 function M.chchainSetupContinuation(setupArgs)
     if not setupArgs or not setupArgs[1] then return end
     chchainlist = setupArgs[1]

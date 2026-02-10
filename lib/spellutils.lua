@@ -62,8 +62,6 @@ function spellutils.SpellCheck(Sub, ID)
     if entry and entry.spell then spell = entry.spell end
     minmana = (entry and entry.minmana ~= nil) and entry.minmana or 0
     if entry and entry.gem then gem = entry.gem end
-    --check gemInUse (prevents spells fighting over the same gem)
-    --spell
     if mq.TLO.Window('SpellBookWnd').Open() then mq.cmd('/book') end
     if spellstates.GetReagentDelay(Sub, ID) and spellstates.GetReagentDelay(Sub, ID) > mq.gettime() then return false end
     if not spellutils.HasReagents(Sub, ID) then
@@ -332,9 +330,6 @@ end
 --- Handles CurSpell re-entry (casting, precast, precast_wait_move). Returns true if handled (caller should return), false to run the phase-first loop.
 function spellutils.handleSpellCheckReentry(sub, options)
     options = options or {}
-    if state.getRunState() == 'loading_gem' then
-        return false
-    end
     local skipInterruptForBRD = options.skipInterruptForBRD ~= false
     local rc = state.getRunconfig()
 
@@ -354,7 +349,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
         end
         local status = mq.TLO.Cast.Status() or ''
         local storedId = mq.TLO.Cast.Stored.ID() or 0
-        if not string.find(status, 'C') and storedId == (rc.CurSpell.spellid or 0) then
+        if not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0) then
             rc.CurSpell.resisted = (mq.TLO.Cast.Result() == 'CAST_RESIST')
             if mq.TLO.Cast.Result() == 'CAST_IMMUNE' and rc.CurSpell.target then
                 immune.processList(rc.CurSpell.target)
@@ -586,132 +581,9 @@ function spellutils.RunScript(script, Sub, ID)
     end
 end
 
---- Check loading_gem completion. Returns 'still_waiting', 'done_ok', or 'done_fail'.
---- Payload must have spell, gem, deadline. Uses Cast.Status() "M" and Me.Gem(gem)() to decide.
---- When Status() does not yet show "M", we treat as still_waiting until deadline (avoids aborting before MQ2Cast sets "M").
-function spellutils.LoadingGemComplete(payload)
-    if not payload or not payload.spell or not payload.gem then return 'done_fail' end
-    if mq.gettime() >= (payload.deadline or 0) then
-        local g = mq.TLO.Me.Gem(payload.gem)()
-        return (g and string.lower(g) == string.lower(payload.spell)) and 'done_ok' or 'done_fail'
-    end
-    if string.find(mq.TLO.Cast.Status() or '', 'M') then return 'still_waiting' end
-    local g = mq.TLO.Me.Gem(payload.gem)()
-    if g and string.lower(g) == string.lower(payload.spell) then return 'done_ok' end
-    -- No "M" and spell not in gem yet: may be before MQ2Cast set "M" or mem in progress. Wait until deadline.
-    return 'still_waiting'
-end
-
-function spellutils.LoadSpell(Sub, ID, runPriority)
-    local entry = botconfig.getSpellEntry(Sub, ID)
-    if not entry then return false end
-    if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then
-        return false
-    end
-    local spell = entry.spell
-    local gem = entry.gem
-    local rc = state.getRunconfig()
-    -- Re-entry: we're in loading_gem; drive completion (even when this call is for a different spell, so we don't get stuck).
-    if state.getRunState() == 'loading_gem' then
-        local p = state.getRunStatePayload()
-        if not p or not p.spell or not p.gem then
-            state.clearRunState()
-            rc.CurSpell = {}
-            return false
-        end
-        if p.source == 'chchain_setup' then return false end
-        local result = spellutils.LoadingGemComplete(p)
-        if result == 'still_waiting' then return false end
-        rc.statusMessage = ''
-        state.clearRunState()
-        if result == 'done_ok' then
-            if p.sub == Sub and p.id == ID then return true end
-            rc.CurSpell = {}
-            return false
-        end
-        -- done_fail
-        local failEntry = botconfig.getSpellEntry(p.sub, p.id)
-        if failEntry then
-            printf('\ayCZBot:\ax %s[%s]: Spell %s could not be memorized in gem %s', p.sub, p.id, p.spell, p.gem)
-            failEntry.enabled = false
-            if not rc.spellNotInBook then rc.spellNotInBook = {} end
-            if not rc.spellNotInBook[p.sub] then rc.spellNotInBook[p.sub] = {} end
-            rc.spellNotInBook[p.sub][p.id] = true
-        end
-        rc.CurSpell = {}
-        return false
-    end
-    -- if gem ready and spell loaded, return true, else run load logic
-    if type(gem) == 'number' and mq.TLO.Me.Gem(spell)() == gem and mq.TLO.Me.SpellReady(spell)() then return true end
-    if gem == 'item' then
-        if mq.TLO.Me.ItemReady(spell)() then
-            return true
-        else
-            return false
-        end
-    end
-    if gem == 'disc' then
-        if mq.TLO.Me.CombatAbilityReady(spell)() then return true else return false end
-    end
-    if gem == 'ability' then
-        if mq.TLO.Me.AbilityReady(spell)() then return true else return false end
-    end
-    if gem == 'alt' then
-        if mq.TLO.Me.AltAbilityReady(spell)() then return true else return false end
-    end
-    if gem == 'script' then
-        if spellutils.ProcessScript(spell, Sub, ID) then return true else return false end
-    end
-    --check gemInUse (prevents spells fighting over the same gem)
-    if type(gem) == 'number' then
-        if rc.gemInUse[gem] then
-            if mq.TLO.Me.Gem(gem)() and string.lower(mq.TLO.Me.Gem(gem)()) ~= string.lower(spell) and rc.gemInUse[gem] > mq.gettime() then
-                return false
-            elseif rc.gemInUse[gem] < mq.gettime() then
-                rc.gemInUse[gem] = nil
-            end
-        end
-        -- is gem ready if not and spell loaded, set gemInUse
-        -- is spell loaded?
-        if mq.TLO.Me.Gem(spell)() ~= gem then
-            if mq.TLO.Me.Book(spell)() then
-                mq.cmdf('/memorize "%s" %s', spell, gem)
-                mq.delay(50)
-                rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
-                rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
-                rc.CurSpell = { phase = 'memorizing', sub = Sub, spell = ID, gem = gem }
-                state.setRunState('loading_gem', {
-                    sub = Sub,
-                    id = ID,
-                    spell = spell,
-                    gem = gem,
-                    deadline = mq.gettime() + 10000,
-                    priority = runPriority,
-                })
-                return false
-            else
-                printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', Sub, ID, spell)
-                entry.enabled = false
-                if not rc.spellNotInBook then rc.spellNotInBook = {} end
-                if not rc.spellNotInBook[Sub] then rc.spellNotInBook[Sub] = {} end
-                rc.spellNotInBook[Sub][ID] = true
-                state.clearRunState()
-                return false
-            end
-        end
-        if not mq.TLO.Me.SpellReady(spell)() then
-            if mq.TLO.Me.Gem(spell)() == gem then rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime() + 5500) end
-            return false
-        end
-    end
-    return true
-end
-
 function spellutils.InterruptCheck()
-    if state.getRunState() == 'loading_gem' then return false end
     if string.find(mq.TLO.Cast.Status() or '', 'M') then return false end
     local rc = state.getRunconfig()
-    if rc.CurSpell.phase == 'memorizing' then return false end
     if not rc.CurSpell.sub then return false end
     local sub = rc.CurSpell.sub
     local spell = rc.CurSpell.spell
@@ -809,7 +681,29 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
     if not resuming then
         if not spellutils.SpellCheck(sub, index) then return false end
-        if not spellutils.LoadSpell(sub, index, runPriority) then return false end
+        local spell = entry.spell
+        local gem = entry.gem
+        if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then return false end
+        if type(gem) == 'number' then
+            if not mq.TLO.Me.Book(spell)() then
+                printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', sub, index, spell)
+                entry.enabled = false
+                if not rc.spellNotInBook then rc.spellNotInBook = {} end
+                if not rc.spellNotInBook[sub] then rc.spellNotInBook[sub] = {} end
+                rc.spellNotInBook[sub][index] = true
+                return false
+            end
+        elseif gem == 'item' then
+            if not mq.TLO.Me.ItemReady(spell)() then return false end
+        elseif gem == 'disc' then
+            if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
+        elseif gem == 'ability' then
+            if not mq.TLO.Me.AbilityReady(spell)() then return false end
+        elseif gem == 'alt' then
+            if not mq.TLO.Me.AltAbilityReady(spell)() then return false end
+        elseif gem == 'script' then
+            if not spellutils.ProcessScript(spell, sub, index) then return false end
+        end
         rc.CurSpell = {
             sub = sub,
             spell = index,
@@ -860,7 +754,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
             if _deps.AdvCombat then _deps.AdvCombat() end
         end
-        if state.getRunState() ~= 'loading_gem' and type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
+        if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
     local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
     if not useMQ2Cast and (EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then

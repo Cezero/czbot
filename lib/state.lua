@@ -22,8 +22,7 @@
 ---@field pullarc number|nil
 ---@field FTEList table
 ---@field FTECount number
----@field CurSpell table When casting: phase (e.g. casting, precast, precast_wait_move), sub, spell (index), target, targethit, spellcheckResume; when via MQ2Cast: viaMQ2Cast, spellid. When loading a gem: phase = 'memorizing', sub, spell, gem.
----@field gemInUse table
+---@field CurSpell table When casting: phase (e.g. casting, precast, precast_wait_move), sub, spell (index), target, targethit, spellcheckResume; when via MQ2Cast: viaMQ2Cast, spellid.
 ---@field HoverTimer number
 ---@field DragHack boolean
 ---@field HoverEchoTimer number
@@ -65,7 +64,6 @@ local BUSY_STATES = {
     engage_return_follow = true,
     unstuck = true,
     chchain = true,
-    loading_gem = true,
 }
 M._runconfig = nil
 
@@ -96,7 +94,6 @@ function M.resetRunconfig()
         FTEList = {},
         FTECount = 0,
         CurSpell = {},
-        gemInUse = {},
         HoverTimer = 0,
         DragHack = false,
         HoverEchoTimer = 0,

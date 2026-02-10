@@ -87,27 +87,11 @@ end
 function chchain.getHookFn(name)
     if name == 'chchainTick' then
         return function(hookName)
-            if state.getRunState() == 'loading_gem' then
-                local p = state.getRunStatePayload()
-                if p and p.source == 'chchain_setup' then
-                    local result = spellutils.LoadingGemComplete(p)
-                    if result == 'still_waiting' then return end
-                    state.getRunconfig().statusMessage = ''
-                    state.clearRunState()
-                    if result == 'done_ok' then
-                        local commands = require('lib.commands')
-                        commands.chchainSetupContinuation(p.setupArgs)
-                    else
-                        printf('\ayCZBot:\ax CHChain: Complete Heal could not be memorized in gem %s', p.gem or 5)
-                    end
-                    return
-                end
-            end
             if state.getRunState() ~= 'chchain' then return end
             local p = state.getRunStatePayload()
             if not p or not p.chnextclr then state.clearRunState() return end
             if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then
-                mq.cmdf('/cast "Complete Heal"')
+                mq.cmdf('/casting "Complete Heal" 5')
                 return
             end
             if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then

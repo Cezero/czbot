@@ -167,7 +167,6 @@ local function getStatusLine()
     end
     if runState == 'camp_return' then return 'Returning to camp' end
     if runState == 'casting' then return 'Casting' end
-    if runState == 'loading_gem' then return 'Loading gem' end
     if runState == 'melee' then return 'Melee' end
     if runState == 'engage_return_follow' then return 'Returning to follow' end
     if runState == 'zone_changing' then return 'Zone changing' end
