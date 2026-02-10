@@ -611,25 +611,35 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
     local spell = entry.spell
     local gem = entry.gem
     local rc = state.getRunconfig()
-    -- Re-entry: we're in loading_gem for this same spell; check completion.
+    -- Re-entry: we're in loading_gem; drive completion (even when this call is for a different spell, so we don't get stuck).
     if state.getRunState() == 'loading_gem' then
         local p = state.getRunStatePayload()
-        if p and p.sub == Sub and p.id == ID then
-            local result = spellutils.LoadingGemComplete(p)
-            if result == 'still_waiting' then return false end
-            rc.statusMessage = ''
+        if not p or not p.spell or not p.gem then
             state.clearRunState()
-            if result == 'done_ok' then return true end
-            printf('\ayCZBot:\ax %s[%s]: Spell %s could not be memorized in gem %s', Sub, ID, spell, p.gem)
-            entry.enabled = false
-            if not rc.spellNotInBook then rc.spellNotInBook = {} end
-            if not rc.spellNotInBook[Sub] then rc.spellNotInBook[Sub] = {} end
-            rc.spellNotInBook[Sub][ID] = true
             rc.CurSpell = {}
             return false
-        else
+        end
+        if p.source == 'chchain_setup' then return false end
+        local result = spellutils.LoadingGemComplete(p)
+        if result == 'still_waiting' then return false end
+        rc.statusMessage = ''
+        state.clearRunState()
+        if result == 'done_ok' then
+            if p.sub == Sub and p.id == ID then return true end
+            rc.CurSpell = {}
             return false
         end
+        -- done_fail
+        local failEntry = botconfig.getSpellEntry(p.sub, p.id)
+        if failEntry then
+            printf('\ayCZBot:\ax %s[%s]: Spell %s could not be memorized in gem %s', p.sub, p.id, p.spell, p.gem)
+            failEntry.enabled = false
+            if not rc.spellNotInBook then rc.spellNotInBook = {} end
+            if not rc.spellNotInBook[p.sub] then rc.spellNotInBook[p.sub] = {} end
+            rc.spellNotInBook[p.sub][p.id] = true
+        end
+        rc.CurSpell = {}
+        return false
     end
     -- if gem ready and spell loaded, return true, else run load logic
     if type(gem) == 'number' and mq.TLO.Me.Gem(spell)() == gem and mq.TLO.Me.SpellReady(spell)() then return true end
@@ -699,6 +709,7 @@ end
 function spellutils.InterruptCheck()
     if state.getRunState() == 'loading_gem' then return false end
     local rc = state.getRunconfig()
+    if rc.CurSpell.phase == 'memorizing' then return false end
     if not rc.CurSpell.sub then return false end
     local sub = rc.CurSpell.sub
     local spell = rc.CurSpell.spell
