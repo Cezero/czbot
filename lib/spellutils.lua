@@ -585,6 +585,7 @@ end
 
 --- Check loading_gem completion. Returns 'still_waiting', 'done_ok', or 'done_fail'.
 --- Payload must have spell, gem, deadline. Uses Cast.Status() "M" and Me.Gem(gem)() to decide.
+--- When Status() does not yet show "M", we treat as still_waiting until deadline (avoids aborting before MQ2Cast sets "M").
 function spellutils.LoadingGemComplete(payload)
     if not payload or not payload.spell or not payload.gem then return 'done_fail' end
     if mq.gettime() >= (payload.deadline or 0) then
@@ -593,7 +594,9 @@ function spellutils.LoadingGemComplete(payload)
     end
     if string.find(mq.TLO.Cast.Status() or '', 'M') then return 'still_waiting' end
     local g = mq.TLO.Me.Gem(payload.gem)()
-    return (g and string.lower(g) == string.lower(payload.spell)) and 'done_ok' or 'done_fail'
+    if g and string.lower(g) == string.lower(payload.spell) then return 'done_ok' end
+    -- No "M" and spell not in gem yet: may be before MQ2Cast set "M" or mem in progress. Wait until deadline.
+    return 'still_waiting'
 end
 
 function spellutils.LoadSpell(Sub, ID, runPriority)
