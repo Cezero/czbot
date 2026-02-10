@@ -43,13 +43,6 @@ function botevents.Event_Slain()
     local respawntimeleft = (state.getRunconfig().HoverEchoTimer - mq.gettime()) / 1000
     printf('\ayCZBot:\axI died and am hovering, %s seconds until I release', respawntimeleft)
     mq.cmd('/multiline ; /consent group ; /consent raid ; /consent guild')
-    if false and charinfo.GetPeerCnt() > 0 then
-        --disabling this as it doesnt seem needed and spams badly
-        local peers = charinfo.GetPeers()
-        for i = 1, charinfo.GetPeerCnt() do
-            mq.cmdf('/consent %s', peers[i])
-        end
-    end
     state.getRunconfig().HoverTimer = mq.gettime() + 30000
 end
 

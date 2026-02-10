@@ -14,8 +14,8 @@ function botraid.LoadRaidConfig()
     raidtimer = 0
 end
 
+-- TODO: implement in thenest or shared when finalized.
 local function BeltronDebuff()
-    -- Stub: Touch of Shadows / Beltron debuff; implement in thenest or shared when finalized
 end
 
 function botraid.RaidCheck()
@@ -48,7 +48,7 @@ function botraid.RaidCheck()
         end
     end
 
-    -- Hatchet emote block (DoDH; zone module not loaded - guard calls)
+    -- Hatchet/DoDH block: only active when a DoDH/unknown-style module sets hatchemote and related globals (e.g. raid/unknown.lua required manually).
     if hatchemote and mq.TLO.SpawnCount("Hatchet npc radius 5000 zradius 5000") then
         if type(HatchetKite) == 'function' and hatchetkite then HatchetKite() end
         if type(HatchetSafe) == 'function' and hatchetsafe then HatchetSafe() end

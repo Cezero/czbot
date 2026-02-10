@@ -2,6 +2,8 @@
 
 This document explains **raid mode**: what the **doraid** toggle does (raid mechanic handling), and how to **save and load** raid group formation. It is intended for operators running the bot in raids.
 
+**Note:** The file `raid/unknown.lua` is staging only and is **not** loaded by the bot. It contains event handlers for PoR, Solteris, SoF, SoD, and DoDH. If you want those events (e.g. Hatchet/DoDH emotes), you must require it manually (e.g. from a zone-specific script or your own entry point).
+
 ## Overview
 
 Raid mode covers two separate features:

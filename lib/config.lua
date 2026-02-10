@@ -175,10 +175,6 @@ function M.saveCommon()
     if M._common then mq.pickle(COMMON_FILENAME, M._common) end
 end
 
-function M.getKeyOrder()
-    return keyOrder
-end
-
 function M.getSubOrder()
     return subOrder
 end

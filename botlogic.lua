@@ -10,7 +10,6 @@ local spellutils = require('lib.spellutils')
 local bardtwist = require('lib.bardtwist')
 local botevents = require('botevents')
 local utils = require('lib.utils')
-local charinfo = require("mqcharinfo")
 
 local bothooks = require('lib.bothooks')
 local botlogic = {}
@@ -70,12 +69,18 @@ local function CharState(...)
             end
         end
     end
-    if (mq.TLO.Cursor.ID() and not OutOfSpace) then
-        if mq.TLO.Me.FreeInventory() == 0 then
-            printf('\ayCZBot:\axI\'m out of inventory space!')
-            OutOfSpace = true
-        else
-            mq.cmd('/autoinv')
+    do
+        local rc = state.getRunconfig()
+        if mq.TLO.Cursor.ID() and not rc.OutOfSpace then
+            if mq.TLO.Me.FreeInventory() == 0 then
+                printf('\ayCZBot:\axI\'m out of inventory space!')
+                rc.OutOfSpace = true
+            else
+                mq.cmd('/autoinv')
+                rc.OutOfSpace = false
+            end
+        elseif not mq.TLO.Cursor.ID() and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0 then
+            rc.OutOfSpace = false
         end
     end
     if botconfig.config.settings.domount and botconfig.config.settings.mountcast then spellutils.MountCheck() end

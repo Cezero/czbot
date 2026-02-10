@@ -53,10 +53,14 @@ function utils.getDistanceSquared3D(x1, y1, z1, x2, y2, z2)
     return (x2 - x1) ^ 2 + (y2 - y1) ^ 2 + (z2 - z1) ^ 2
 end
 
+--- Actual distance (sqrt). Use only for display or when an API requires real distance.
+--- For all normal comparisons (range checks, sorting) use getDistanceSquared2D/getDistanceSquared3D instead.
 function utils.calcDist3D(x1, y1, z1, x2, y2, z2)
     if x1 and y1 and x2 and y2 and z1 and z2 then return math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2 + (z2 - z1) ^ 2) end
 end
 
+--- Actual distance (sqrt). Use only for display or when an API requires real distance.
+--- For all normal comparisons (range checks, sorting) use getDistanceSquared2D instead.
 function utils.calcDist2D(x1, y1, x2, y2)
     if x1 and y1 and x2 and y2 then return math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2) end
 end

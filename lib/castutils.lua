@@ -111,6 +111,19 @@ end
 
 -- Shared get-targets helpers for buff/cure/heal GetTargetsForPhase.
 -- opts for getTargetsGroupMember: botsFirst (add bots in group first), excludeBotsFromGroup (in group loop skip names that have charinfo).
+local function addPcEntries(out, names, count, filterFn)
+    if not names then return end
+    count = count or #names
+    for i = 1, count do
+        local name = names[i]
+        if name and (not filterFn or filterFn(name)) then
+            local id = mq.TLO.Spawn('pc =' .. name).ID()
+            local class = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
+            if id and id > 0 and class then out[#out + 1] = { id = id, targethit = class:lower() } end
+        end
+    end
+end
+
 function castutils.getTargetsSelf()
     local out = {}
     local myid = mq.TLO.Me.ID()
@@ -137,14 +150,7 @@ function castutils.getTargetsGroupMember(context, opts)
     local out = {}
     opts = opts or {}
     if opts.botsFirst and context.bots then
-        for i = 1, #context.bots do
-            local name = context.bots[i]
-            if name and mq.TLO.Group.Member(name).ID() then
-                local botid = mq.TLO.Spawn('pc =' .. name).ID()
-                local botclass = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
-                if botid and botid > 0 and botclass then out[#out + 1] = { id = botid, targethit = botclass:lower() } end
-            end
-        end
+        addPcEntries(out, context.bots, #context.bots, function(name) return mq.TLO.Group.Member(name).ID() end)
     end
     if mq.TLO.Group.Members() and mq.TLO.Group.Members() > 0 then
         for i = 1, mq.TLO.Group.Members() do
@@ -170,15 +176,7 @@ function castutils.getTargetsPc(context)
     local out = {}
     local bots = context.bots
     if not bots then return out end
-    local n = context.botcount or #bots
-    for i = 1, n do
-        local name = bots[i]
-        if name then
-            local botid = mq.TLO.Spawn('pc =' .. name).ID()
-            local botclass = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
-            if botid and botid > 0 and botclass then out[#out + 1] = { id = botid, targethit = botclass:lower() } end
-        end
-    end
+    addPcEntries(out, bots, context.botcount, nil)
     return out
 end
 

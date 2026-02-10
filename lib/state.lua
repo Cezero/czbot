@@ -51,6 +51,7 @@
 ---@field statusMessage string User-facing activity line for GUI
 ---@field bardNotanktarWait table|nil BRD notanktar twist-once: { spellIndex, EvalID, entry } while waiting for cast to finish
 ---@field notanktarDebuffTimers table|nil BRD: spawn ID -> mq.gettime() when to re-apply notanktar debuff (e.g. mez)
+---@field OutOfSpace boolean|nil true when inventory was full (cursor item); cleared when space available again
 
 local M = {}
 
@@ -124,6 +125,7 @@ function M.resetRunconfig()
         statusMessage = '',
         bardNotanktarWait = nil,
         notanktarDebuffTimers = nil,
+        OutOfSpace = false,
     }
     return M._runconfig
 end

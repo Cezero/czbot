@@ -37,10 +37,6 @@ function hookregistry.registerHookFn(name, fn)
     _hookFns[name] = fn
 end
 
-function hookregistry.getHookFn(name)
-    return _hookFns[name]
-end
-
 --- Wire all hooks from bothooks config. Call after built-in hooks have registerHookFn'd.
 --- For entries with provider, requires that module and calls mod.getHookFn(entry.name).
 function hookregistry.registerAllFromConfig()
@@ -67,17 +63,6 @@ function hookregistry.registerMainloopHook(name, fn, priority, runWhenPaused, ru
         runWhenPaused = runWhenPaused == true,
         runWhenDead = runWhenDead == true,
     }
-    _sortedNormal = nil
-    _sortedRunWhenPaused = nil
-end
-
-function hookregistry.unregisterMainloopHook(name)
-    for i = #_hooks, 1, -1 do
-        if _hooks[i].name == name then
-            table.remove(_hooks, i)
-            break
-        end
-    end
     _sortedNormal = nil
     _sortedRunWhenPaused = nil
 end
