@@ -37,6 +37,31 @@ local function debuffHasTanktar(entry)
     return false
 end
 
+--- Parse twist list string (e.g. from Twist.List()) into array of gem/slot numbers.
+--- Accepts 1-12 (gems) and 21-29 (MQ2Twist clicky slots). Handles nil/empty and extra whitespace.
+local function parseTwistListString(s)
+    if s == nil or type(s) ~= 'string' then return {} end
+    s = s:match('^%s*(.-)%s*$') or ''  -- trim
+    if s == '' then return {} end
+    local out = {}
+    for token in s:gmatch('%S+') do
+        local n = tonumber(token)
+        if n and (n >= 1 and n <= 12 or n >= 21 and n <= 29) then
+            out[#out + 1] = n
+        end
+    end
+    return out
+end
+
+--- True if two gem arrays have same length and same values in order.
+local function twistListsEqual(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
 function bardtwist.IsBard()
     return mq.TLO.Me.Class.ShortName() == 'BRD'
 end
@@ -112,16 +137,20 @@ function bardtwist.GetCurrentTwistMode()
     return 'idle'
 end
 
+--- Build list for mode and return as array of gem numbers (for comparison /twist command).
+function bardtwist.GetTwistListForMode(mode)
+    if mode == 'pull' then
+        return bardtwist.BuildPullTwistList()
+    elseif mode == 'combat' then
+        return bardtwist.BuildCombatTwistList()
+    else
+        return bardtwist.BuildNoncombatTwistList()
+    end
+end
+
 --- Build list for mode and return as string for comparison with Twist.List().
 function bardtwist.GetTwistListStringForMode(mode)
-    local list
-    if mode == 'pull' then
-        list = bardtwist.BuildPullTwistList()
-    elseif mode == 'combat' then
-        list = bardtwist.BuildCombatTwistList()
-    else
-        list = bardtwist.BuildNoncombatTwistList()
-    end
+    local list = bardtwist.GetTwistListForMode(mode)
     if not list or #list == 0 then return '' end
     return table.concat(list, ' ')
 end
@@ -130,12 +159,13 @@ end
 function bardtwist.EnsureTwistForMode(mode)
     if not bardtwist.IsBard() then return end
     if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
-    local desiredList = bardtwist.GetTwistListStringForMode(mode)
-    if desiredList == '' then return end
+    local desiredGems = bardtwist.GetTwistListForMode(mode)
+    if not desiredGems or #desiredGems == 0 then return end
     local twisting = mq.TLO.Twist() and mq.TLO.Twist.Twisting()
-    local currentList = (mq.TLO.Twist() and mq.TLO.Twist.List()) or ''
-    if twisting and currentList == desiredList then return end
-    mq.cmd('/squelch /twist ' .. desiredList)
+    local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+    local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+    if twisting and twistListsEqual(currentGems, desiredGems) then return end
+    mq.cmd('/squelch /twist ' .. table.concat(desiredGems, ' '))
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
@@ -156,14 +186,15 @@ function bardtwist.ResumeTwist()
     if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     local mode = bardtwist.GetCurrentTwistMode()
     if not mode then return end
-    local desiredList = bardtwist.GetTwistListStringForMode(mode)
-    if desiredList == '' then return end
+    local desiredGems = bardtwist.GetTwistListForMode(mode)
+    if not desiredGems or #desiredGems == 0 then return end
     if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then return end
-    local currentList = (mq.TLO.Twist() and mq.TLO.Twist.List()) or ''
-    if currentList ~= desiredList then
-        mq.cmd('/squelch /twist ' .. desiredList)
-    else
+    local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+    local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+    if twistListsEqual(currentGems, desiredGems) then
         mq.cmd('/squelch /twist start')
+    else
+        mq.cmd('/squelch /twist ' .. table.concat(desiredGems, ' '))
     end
 end
 
