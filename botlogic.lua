@@ -52,7 +52,7 @@ local function CharState(...)
             if d and d >= thresh then mq.cmd('/stand') end
         end
     end
-    if botconfig.config.settings.dosit and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
+    if botconfig.config.settings.dosit and state.getRunState() ~= 'casting' and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
         local rc = state.getRunconfig()
         local skipSitForFollow = false
         if rc.followid and rc.followid > 0 then
