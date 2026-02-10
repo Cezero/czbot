@@ -41,6 +41,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | [Debuffing configuration](debuffing-configuration.md) | Debuff spells, bands (tanktar, notanktar, named), charmnames, recast, delay; links to nuking and mezzing. |
 | [Spell targeting and bands](spell-targeting-and-bands.md) | Targeting logic and band tags for all spell types (heal, buff, debuff, cure); evaluation order, tarcnt, tanktar/notanktar. |
 | [Curing configuration](curing-configuration.md)       | Cure spells, curetype (all / poison / disease / curse / corruption), priority phase, bands.                 |
+| [Bard configuration](bard-configuration.md)            | Class-specific behavior for bards: buff targeting (self only), movement while casting, interrupts, melee re-engage, twist, and mez limitation. |
 | [Out-of-group peers](out-of-group-peers.md)            | Who counts as a peer, how healing, buffing, curing, and corpse drag treat peers outside your group.      |
 
 

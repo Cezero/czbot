@@ -113,7 +113,7 @@ From `BuffEval` in the code, the order is:
 7. **mypet** — Your pet.
 8. **pet** — Other peers’ pets.
 
-For **BRD**, only **self** is tried after the initial self check (no tank/groupbuff/groupmember/pc/mypet/pet pass).
+For **BRD**, only **self** is tried after the initial self check (no tank/groupbuff/groupmember/pc/mypet/pet pass). See [Bard configuration](bard-configuration.md).
 
 ### Bands
 

@@ -60,6 +60,8 @@ The bot evaluates buff targets in a **fixed, literal order**. The list below is 
 7. **mypet**
 8. **pet**
 
+**Bards:** Only the **self** phase is evaluated; tank, groupbuff, groupmember, pc, mypet, and pet are skipped. See [Bard configuration](bard-configuration.md).
+
 The first phase in this list that has a valid, in-range target that needs the buff wins. See [Out-of-group peers](out-of-group-peers.md).
 
 **Example: self buff, tank buff, and group class buff**
