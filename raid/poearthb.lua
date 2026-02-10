@@ -1,5 +1,6 @@
 -- Zone 222: Rathe Council (PoP)
 local mq = require('mq')
+local utils = require('lib.utils')
 
 local M = {}
 
@@ -14,8 +15,12 @@ end
 
 function M.raid_check()
     if mq.TLO.Zone.ID() ~= 222 then return false end
-    if mq.TLO.Spawn("A Rathe Councilman").ID() and mq.TLO.Spawn("npc A Rathe Councilman").Distance() < 250 then
-        RatheCouncil()
+    local councilman = mq.TLO.Spawn("npc A Rathe Councilman")
+    if mq.TLO.Spawn("A Rathe Councilman").ID() and councilman.ID() then
+        local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), councilman.X(), councilman.Y())
+        if distSq and distSq < (250 * 250) then
+            RatheCouncil()
+        end
     end
     return false
 end

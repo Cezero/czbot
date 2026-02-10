@@ -17,7 +17,9 @@
 ---@field TargetFilter string|nil
 ---@field petassist boolean|nil
 ---@field acleash number|nil
+---@field acleashSq number|nil precomputed acleash^2 for distance-squared comparisons
 ---@field followdistance number|nil
+---@field followdistanceSq number|nil precomputed followdistance^2 for distance-squared comparisons
 ---@field zradius number|nil
 ---@field spelldb string|nil
 ---@field dopet boolean|nil
@@ -30,6 +32,10 @@
 ---@class ConfigPull
 ---@field spell ConfigPullSpell|nil single pull spell block
 ---@field radius number|nil
+---@field radiusSq number|nil precomputed radius^2 for distance-squared comparisons
+---@field radiusPlus40Sq number|nil precomputed (radius+40)^2 for nav-abort distance-squared comparison
+---@field engageRadius number|nil max distance (from puller or camp) to consider pull target "in range" to engage; default 200
+---@field engageRadiusSq number|nil precomputed engageRadius^2 for distance-squared comparisons
 ---@field zrange number|nil
 ---@field maxlevel number|nil
 ---@field minlevel number|nil
@@ -38,6 +44,7 @@
 ---@field mana number|nil
 ---@field manaclass string|nil
 ---@field leash number|nil
+---@field leashSq number|nil precomputed leash^2 for distance-squared comparisons
 ---@field usepriority boolean|nil
 ---@field hunter boolean|nil
 
@@ -89,7 +96,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'dopet' },
-    pull = { 'spell', 'radius', 'zrange', 'maxlevel', 'minlevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
+    pull = { 'spell', 'radius', 'engageRadius', 'zrange', 'maxlevel', 'minlevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
@@ -483,6 +490,8 @@ function M.Load(path)
     if (M.config.settings.sitendur == nil) then M.config.settings.sitendur = 90 end
     if (M.config.settings.acleash == nil) then M.config.settings.acleash = 75 end
     if (M.config.settings.followdistance == nil) then M.config.settings.followdistance = 35 end
+    M.config.settings.acleashSq = (M.config.settings.acleash or 0) * (M.config.settings.acleash or 0)
+    M.config.settings.followdistanceSq = (M.config.settings.followdistance or 0) * (M.config.settings.followdistance or 0)
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "manual" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = '0' end
@@ -491,6 +500,7 @@ function M.Load(path)
     if (M.config.settings.dopet == nil) then M.config.settings.dopet = false end
     applySectionDefaults('pull', {
         radius = 400,
+        engageRadius = 200,
         zrange = 150,
         chainpullcnt = 0,
         chainpullhp = 0,
@@ -510,6 +520,11 @@ function M.Load(path)
         if ps.gem == nil then ps.gem = 'melee' end
         if ps.spell == nil then ps.spell = '' end
     end
+    M.config.pull.radiusSq = (M.config.pull.radius or 0) * (M.config.pull.radius or 0)
+    local r40 = (M.config.pull.radius or 0) + 40
+    M.config.pull.radiusPlus40Sq = r40 * r40
+    M.config.pull.engageRadiusSq = (M.config.pull.engageRadius or 0) * (M.config.pull.engageRadius or 0)
+    M.config.pull.leashSq = (M.config.pull.leash or 0) * (M.config.pull.leash or 0)
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
         stickcmd = 'hold uw 7', offtank = false, otoffset = 0, minmana = 0, assistpct = 99,

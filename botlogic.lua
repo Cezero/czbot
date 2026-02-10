@@ -41,25 +41,26 @@ local function CharState(...)
         if not mq.TLO.Me.Moving() or (state.getRunStatePayload() and state.getRunStatePayload().deadline and mq.gettime() >= state.getRunStatePayload().deadline) then
             state.clearRunState()
         end
-    elseif state.getRunconfig().campstatus and utils.calcDist2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x, state.getRunconfig().makecamp.y) and utils.calcDist2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x, state.getRunconfig().makecamp.y) > botconfig.config.settings.acleash then
-        botmove.MakeCamp('return')
+    elseif state.getRunconfig().campstatus and state.getRunconfig().makecamp.x and state.getRunconfig().makecamp.y then
+        local campSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x, state.getRunconfig().makecamp.y)
+        if campSq and botconfig.config.settings.acleashSq and campSq > botconfig.config.settings.acleashSq then botmove.MakeCamp('return') end
     end
     -- Stand when follow is on and target is beyond follow distance (so follow logic can run)
     do
         local rc = state.getRunconfig()
         if rc.followid and rc.followid > 0 and mq.TLO.Me.Sitting() then
-            local d = mq.TLO.Spawn(rc.followid).Distance()
-            local thresh = botconfig.config.settings.followdistance
-            if d and d >= thresh then mq.cmd('/stand') end
+            local followSpawn = mq.TLO.Spawn(rc.followid)
+            local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), followSpawn.X(), followSpawn.Y())
+            if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then mq.cmd('/stand') end
         end
     end
     if botconfig.config.settings.dosit and state.getRunState() ~= 'casting' and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
         local rc = state.getRunconfig()
         local skipSitForFollow = false
         if rc.followid and rc.followid > 0 then
-            local d = mq.TLO.Spawn(rc.followid).Distance()
-            local thresh = botconfig.config.settings.followdistance
-            if d and d >= thresh then skipSitForFollow = true end
+            local followSpawn = mq.TLO.Spawn(rc.followid)
+            local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), followSpawn.X(), followSpawn.Y())
+            if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then skipSitForFollow = true end
         end
         if not skipSitForFollow then
             local sitcheck = true

@@ -44,8 +44,10 @@ local function selectTankTarget(mainTankName)
                 elseif v.ID() == rc.engageTargetId then
                     mtPick = v
                     engageTargetRefound = true
-                elseif not (pullerTarID and mtPick.ID() == pullerTarID) and v.Distance() < mtPick.Distance() then
-                    mtPick = v
+                elseif not (pullerTarID and mtPick.ID() == pullerTarID) then
+                    local vDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
+                    local mtDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mtPick.X(), mtPick.Y())
+                    if vDistSq and mtDistSq and vDistSq < mtDistSq then mtPick = v end
                 end
             else
                 mtPick = v
@@ -119,7 +121,13 @@ local function selectMATarget(mainTankName)
     for _, v in ipairs(rc.MobList) do
         if v.LineOfSight() then
             if v.Named() then
-                if not namedSpawn or v.Distance() < namedSpawn.Distance() then namedSpawn = v end
+                if not namedSpawn then
+                    namedSpawn = v
+                else
+                    local vDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
+                    local nDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), namedSpawn.X(), namedSpawn.Y())
+                    if vDistSq and nDistSq and vDistSq < nDistSq then namedSpawn = v end
+                end
             end
             if mtTarId and v.ID() == mtTarId then mtTarSpawn = v end
         end
@@ -139,7 +147,9 @@ local function engageTarget()
     if state.getRunState() == 'melee' then
         local p = state.getRunStatePayload()
         if p and p.phase == 'moving_closer' then
-            if mq.TLO.Target.Distance() and mq.TLO.Target.Distance() < mq.TLO.Target.MaxMeleeTo() then
+            local targetDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Target.X(), mq.TLO.Target.Y())
+            local maxMeleeTo = mq.TLO.Target.MaxMeleeTo()
+            if targetDistSq and maxMeleeTo and targetDistSq < (maxMeleeTo * maxMeleeTo) then
                 state.setRunState('melee', { phase = 'idle', priority = bothooks.getPriority('doMelee') })
                 return
             end

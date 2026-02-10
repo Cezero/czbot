@@ -72,12 +72,15 @@ local function DebuffEvalBuildContext(index)
         (mq.TLO.Spell(spellid).MyRange() or (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.MyRange()))
         or (gem == 'ability' and 20) or nil
     if mq.TLO.Spell(spellid).Category() == 'Pet' then myrange = myconfig.settings.acleash end
+    local myrangeSq = myrange and (myrange * myrange) or nil
     local aeRange, minCastDist = nil, nil
+    local minCastDistSq = nil
     if entry.targettedAE then
         local ar = mq.TLO.Spell(spell).AERange() or (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.AERange())
         if ar and ar > 0 then
             aeRange = ar
             minCastDist = aeRange + 2
+            minCastDistSq = minCastDist * minCastDist
         end
     end
     local db = DebuffBands[index]
@@ -97,8 +100,10 @@ local function DebuffEvalBuildContext(index)
         tanktarlvl = tanktarlvl,
         spellmaxlvl = spellmaxlvl,
         myrange = myrange,
+        myrangeSq = myrangeSq,
         aeRange = aeRange,
         minCastDist = minCastDist,
+        minCastDistSq = minCastDistSq,
         mobList = state.getRunconfig().MobList or {},
         mobMin = mobMin,
         mobMax = mobMax,
@@ -115,12 +120,13 @@ local function DebuffEvalTankTar(index, ctx)
     if not castutils.hpEvalSpawn(ctx.tanktar, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar then
-            local myrange = ctx.myrange
-            if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
-            if ctx.minCastDist and v.Distance() and v.Distance() < ctx.minCastDist then
+            local myrangeSq = ctx.myrangeSq
+            if entry.gem == 'ability' then local mr = v.MaxRangeTo(); myrangeSq = mr and (mr * mr) end
+            local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
+            if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
                 return nil, nil
             end
-            if not (myrange and v.Distance() and v.Distance() > myrange) then
+            if not (myrangeSq and distSq and distSq > myrangeSq) then
                 if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
                     local tanktarstack = mq.TLO.Spell(entry.spell).StacksSpawn(ctx.tanktar)() or
                         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(ctx.tanktar))
@@ -149,12 +155,13 @@ local function DebuffEvalNotanktar(index, ctx)
     for _, v in ipairs(ctx.mobList) do
         if v.ID() ~= ctx.tanktar then
             if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
-                local myrange = ctx.myrange
-                if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
-                if ctx.minCastDist and v.Distance() and v.Distance() < ctx.minCastDist then
+                local myrangeSq = ctx.myrangeSq
+                if entry.gem == 'ability' then local mr = v.MaxRangeTo(); myrangeSq = mr and (mr * mr) end
+                local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
+                if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
                     -- skip this add (target too close for targetted AE)
                 else
-                    if not (myrange and v.Distance() and v.Distance() > myrange) then
+                    if not (myrangeSq and distSq and distSq > myrangeSq) then
                         local tarstacks = mq.TLO.Spell(entry.spell).StacksSpawn(v.ID())() or
                             (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(v.ID()))
                         if not (ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()) then
@@ -182,10 +189,11 @@ local function DebuffEvalNamedTankTar(index, ctx)
     if not castutils.hpEvalSpawn(ctx.tanktar, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar and v.Named() then
-            local myrange = ctx.myrange
-            if entry.gem == 'ability' then myrange = v.MaxRangeTo() end
-            if ctx.minCastDist and v.Distance() and v.Distance() < ctx.minCastDist then return nil, nil end
-            if myrange and v.Distance() and v.Distance() > myrange then return nil, nil end
+            local myrangeSq = ctx.myrangeSq
+            if entry.gem == 'ability' then local mr = v.MaxRangeTo(); myrangeSq = mr and (mr * mr) end
+            local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
+            if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then return nil, nil end
+            if myrangeSq and distSq and distSq > myrangeSq then return nil, nil end
             if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
                 local tanktarstack = mq.TLO.Spell(entry.spell).StacksSpawn(ctx.tanktar)() or
                     (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(ctx.tanktar))
@@ -314,9 +322,10 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
                 local vid = v.ID and v.ID() or v
                 if vid == targetId then
                     if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
-                        local myrange = ctx.myrange
-                        if entry.gem == 'ability' then myrange = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange end
-                        if not (myrange and v.Distance and v.Distance() and v.Distance() > myrange) then
+                        local myrangeSq = ctx.myrangeSq
+                        if entry.gem == 'ability' then local mr = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange; myrangeSq = mr and (mr * mr) end
+                        local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
+                        if not (myrangeSq and distSq and distSq > myrangeSq) then
                             return targetId, 'notanktar'
                         end
                     end
@@ -328,12 +337,13 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
             local vid = v.ID and v.ID() or v
             if vid == targetId then
                 if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
-                    if ctx.minCastDist and v.Distance and v.Distance() and v.Distance() < ctx.minCastDist then
+                    local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
+                    if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
                         break
                     end
-                    local myrange = ctx.myrange
-                    if entry.gem == 'ability' then myrange = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange end
-                    if not (myrange and v.Distance and v.Distance() and v.Distance() > myrange) then
+                    local myrangeSq = ctx.myrangeSq
+                    if entry.gem == 'ability' then local mr = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange; myrangeSq = mr and (mr * mr) end
+                    if not (myrangeSq and distSq and distSq > myrangeSq) then
                         local tarstacks = mq.TLO.Spell(entry.spell).StacksSpawn(targetId)() or
                             (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(targetId))
                         local vlevel = v.Level and v.Level() or mq.TLO.Spawn(targetId).Level()

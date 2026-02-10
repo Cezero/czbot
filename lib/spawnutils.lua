@@ -12,11 +12,11 @@ local spawnutils = {}
 -- Local helpers (DRY)
 -- ---------------------------------------------------------------------------
 
-local function spawnInArea(spawn, x, y, z, radius2D, radiusZ)
+local function spawnInArea(spawn, x, y, z, radius2DSq, radiusZ)
     if not spawn or not x or not y then return false end
     local sx, sy, sz = spawn.X(), spawn.Y(), spawn.Z()
-    local pdist = utils.calcDist2D(sx, sy, x, y)
-    if not pdist or pdist > radius2D then return false end
+    local pdistSq = utils.getDistanceSquared2D(sx, sy, x, y)
+    if not pdistSq or not radius2DSq or pdistSq > radius2DSq then return false end
     if radiusZ and z and sz then
         local zdist = math.abs(sz - z)
         if zdist > radiusZ then return false end
@@ -24,7 +24,7 @@ local function spawnInArea(spawn, x, y, z, radius2D, radiusZ)
     return true
 end
 
-local function getSpawnsInArea(rc, radius2D, radiusZ)
+local function getSpawnsInArea(rc, radius2DSq, radiusZ)
     local cx, cy, cz
     if rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
         cx, cy, cz = rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
@@ -32,7 +32,7 @@ local function getSpawnsInArea(rc, radius2D, radiusZ)
         cx, cy, cz = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
     end
     local function predicate(spawn)
-        return spawnInArea(spawn, cx, cy, cz, radius2D, radiusZ)
+        return spawnInArea(spawn, cx, cy, cz, radius2DSq, radiusZ)
     end
     return mq.getFilteredSpawns(predicate)
 end
@@ -78,7 +78,7 @@ end
 
 local function filterSpawnForCamp(spawn, rc)
     local myconfig = botconfig.config
-    local acleash = myconfig.settings.acleash or 75
+    local acleashSq = myconfig.settings.acleashSq
     local zradius = myconfig.settings.zradius or 75
     local cx, cy, cz
     if rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
@@ -86,7 +86,7 @@ local function filterSpawnForCamp(spawn, rc)
     else
         cx, cy, cz = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
     end
-    if not spawnInArea(spawn, cx, cy, cz, acleash, zradius) then return false end
+    if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
     local tf = myconfig.settings.TargetFilter
     local tfNum = (type(tf) == 'number' and tf) or tonumber(tf and tostring(tf)) or 0
@@ -126,12 +126,12 @@ local function filterSpawnForPull(spawn, rc)
     local minlevel = pull.minlevel or 0
     local maxlevel = pull.maxlevel or 255
     if spawn.Level() < minlevel or spawn.Level() > maxlevel then return false end
-    local radius = pull.radius or 200
+    local radiusSq = pull.radiusSq
     local zrange = pull.zrange or 200
     local cx = (rc.makecamp and rc.makecamp.x) or mq.TLO.Me.X()
     local cy = (rc.makecamp and rc.makecamp.y) or mq.TLO.Me.Y()
     local cz = (rc.makecamp and rc.makecamp.z) or mq.TLO.Me.Z()
-    if not spawnInArea(spawn, cx, cy, cz, radius, zrange) then return false end
+    if not spawnInArea(spawn, cx, cy, cz, radiusSq, zrange) then return false end
     if not spawnInPullArc(spawn, rc) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
     if not mq.TLO.Navigation.PathExists('id ' .. spawn.ID())() then return false end
@@ -150,9 +150,9 @@ end
 function spawnutils.buildCampMobList(rc)
     rc = rc or state.getRunconfig()
     local myconfig = botconfig.config
-    local acleash = myconfig.settings.acleash or 75
+    local acleashSq = myconfig.settings.acleashSq
     local zradius = myconfig.settings.zradius or 75
-    local raw = getSpawnsInArea(rc, acleash, zradius)
+    local raw = getSpawnsInArea(rc, acleashSq, zradius)
     local out = {}
     for _, spawn in ipairs(raw) do
         if filterSpawnForCamp(spawn, rc) then
@@ -168,9 +168,9 @@ function spawnutils.buildPullMobList(rc)
     local myconfig = botconfig.config
     local pull = myconfig.pull
     if not pull then return {} end
-    local radius = pull.radius or 200
+    local radiusSq = pull.radiusSq
     local zrange = pull.zrange or 200
-    local raw = getSpawnsInArea(rc, radius, zrange)
+    local raw = getSpawnsInArea(rc, radiusSq, zrange)
     local out = {}
     for _, spawn in ipairs(raw) do
         if filterSpawnForPull(spawn, rc) then

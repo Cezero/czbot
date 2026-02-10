@@ -142,7 +142,6 @@ function botevents.Event_FTELocked()
     elseif state.getRunconfig().FTEList[spawn.ID()] and state.getRunconfig().FTEList[spawn.ID()].hitcount >= 2 then
         state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 3, timer = mq.gettime() + 90500 }
     end
-    printf('[MQ2TWIST] botevents: Event_FTELock, /stopcast')
     mq.cmd('/multiline ; /squelch /target myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
     if botconfig.config.settings.dopull then
         print('clearing pull target because FTELock detected') -- not debug, real error message

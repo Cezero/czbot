@@ -227,7 +227,6 @@ end
 local function cmd_abort(args)
     if not args[2] then
         if mq.TLO.Me.CastTimeLeft() > 0 and state.getRunconfig().CurSpell.sub and state.getRunconfig().CurSpell.sub == 'ad' then
-            printf('[MQ2TWIST] commands: cmd_abort, /stopcast')
             mq.cmd('/stopcast')
         end
         if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
@@ -300,6 +299,7 @@ end
 
 local function cmd_acleash(args)
     botconfig.config.settings.acleash = tonumber(args[2])
+    botconfig.config.settings.acleashSq = (botconfig.config.settings.acleash or 0) * (botconfig.config.settings.acleash or 0)
     printf('\ayCZBot:\axSetting acleash to %s', botconfig.config.settings.acleash)
 end
 

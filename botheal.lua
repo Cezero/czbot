@@ -3,6 +3,7 @@ local botconfig = require('lib.config')
 local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
 local state = require('lib.state')
+local utils = require('lib.utils')
 local charinfo = require('mqcharinfo')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
@@ -62,11 +63,13 @@ local function HPEvalContext(index)
     if gem == 'item' and mq.TLO.FindItem(entry.spell)() then
         spellrange = mq.TLO.FindItem(entry.spell).Spell.MyRange()
     end
+    local spellrangeSq = spellrange and (spellrange * spellrange) or nil
     return {
         entry = entry,
         gem = gem,
         spell = spell,
         spellrange = spellrange,
+        spellrangeSq = spellrangeSq,
         tank = tank,
         tankid = tankid,
         tanknbid = tanknbid,
@@ -149,77 +152,39 @@ local function HPEvalGrp(index, ctx)
         aeRange = mq.TLO.FindItem(ctx.entry.spell).Spell.AERange()
     end
     if not aeRange or aeRange <= 0 then return nil, nil end
+    local aeRangeSq = aeRange * aeRange
     local function needHeal(grpmember, grpid, grpname, peer)
         local grpspawn = grpmember.Spawn
         if not grpspawn then return false end
         local grpmempcthp = grpspawn.PctHPs()
-        local grpmemdist = grpspawn.Distance()
-        if not (grpmember.Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal)
-            and grpmemdist and grpmemdist <= aeRange and grpspawn.Type() ~= 'Corpse') then
+        if not (grpmember.Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal) and grpspawn.Type() ~= 'Corpse') then
             return false
         end
         if ctx.entry.isHoT then
             if grpid == mq.TLO.Me.ID() then
-                if mq.TLO.Me.Buff(ctx.entry.spell)() or mq.TLO.Me.ShortBuff(ctx.entry.spell)() then return false end
+                if mq.TLO.Me.FindBuff(ctx.entry.spell)() then return false end
             elseif peer then
                 if spellutils.PeerHasBuff(peer, mq.TLO.Spell(ctx.entry.spell).ID()) then return false end
             end
         end
         return true
     end
-    return castutils.evalGroupAECount(ctx.entry, 'groupheal', index, AHThreshold, 'groupheal', needHeal, { aeRange = aeRange, includeMemberZero = true })
+    return castutils.evalGroupAECount(ctx.entry, 'groupheal', index, AHThreshold, 'groupheal', needHeal, { aeRangeSq = aeRangeSq, includeMemberZero = true })
 end
 
 local function HPEvalTank(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].tank or not ctx.tank then return nil, nil end
-    local tankdist = mq.TLO.Spawn(ctx.tankid).Distance()
+    local tankspawn = mq.TLO.Spawn(ctx.tankid)
+    local tankdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), tankspawn.X(), tankspawn.Y())
     local tankinfo = charinfo.GetInfo(ctx.tank)
     local tanknbhp = tankinfo and tankinfo.PctHPs or nil
     if not ctx.tanknbid and ctx.tankid and mq.TLO.Group.Member(ctx.tank).Index() then
-        if mq.TLO.Spawn(ctx.tankid).Type() == 'PC' and castutils.hpEvalSpawn(ctx.tankid, AHThreshold[index].tank) and tankdist and ctx.spellrange and tankdist <= ctx.spellrange then
+        if mq.TLO.Spawn(ctx.tankid).Type() == 'PC' and castutils.hpEvalSpawn(ctx.tankid, AHThreshold[index].tank) and tankdistSq and ctx.spellrangeSq and tankdistSq <= ctx.spellrangeSq then
             return mq.TLO.Group.Member(ctx.tank).ID(), 'tank'
         end
     elseif ctx.tanknbid then
-        if mq.TLO.Spawn(ctx.tankid).Type() == 'PC' and tanknbhp and hpInBand(tanknbhp, AHThreshold[index].tank) and tankdist and ctx.spellrange and tankdist <= ctx.spellrange then
+        if mq.TLO.Spawn(ctx.tankid).Type() == 'PC' and tanknbhp and hpInBand(tanknbhp, AHThreshold[index].tank) and tankdistSq and ctx.spellrangeSq and tankdistSq <= ctx.spellrangeSq then
             return mq.TLO.Spawn('pc =' .. ctx.tank).ID(), 'tank'
-        end
-    end
-    return nil, nil
-end
-
-local function HPEvalPc(index, ctx)
-    if not AHThreshold[index] then return nil, nil end
-    local th = AHThreshold[index]
-    local classOk = function(cls)
-        if not cls then return false end
-        local c = cls:lower()
-        if th.classes == 'all' then return true end
-        return th.classes and th.classes[c] == true
-    end
-    if th.groupmember and mq.TLO.Group.Members() > 0 then
-        for i = 1, mq.TLO.Group.Members() do
-            local grpmember = mq.TLO.Group.Member(i)
-            if grpmember and grpmember.Class then
-                local grpspawn = grpmember.Spawn
-                local grpclass = grpmember.Class.ShortName()
-                local grpid = grpmember.ID()
-                local grpdist = grpspawn and grpspawn.Distance() or nil
-                if classOk(grpclass) and mq.TLO.Spawn(grpid).Type() == 'PC' and th.groupmember and castutils.hpEvalSpawn(grpid, th.groupmember) then
-                    if ctx.spellrange and grpdist and grpdist <= ctx.spellrange then return grpid, grpclass:lower() end
-                end
-            end
-        end
-    end
-    if th.pc and ctx.botcount then
-        for i = 1, ctx.botcount do
-            local botid = mq.TLO.Spawn('pc =' .. ctx.bots[i]).ID()
-            local botclass = mq.TLO.Spawn('pc =' .. ctx.bots[i]).Class.ShortName()
-            local peer = charinfo.GetInfo(ctx.bots[i])
-            local bothp = peer and peer.PctHPs or nil
-            local botdist = mq.TLO.Spawn(ctx.bots[i]).Distance()
-            if botid and botclass and classOk(botclass) and mq.TLO.Spawn(botid).Type() == 'PC' and bothp and th.pc and hpInBand(bothp, th.pc) then
-                if botdist and ctx.spellrange and botdist <= ctx.spellrange then return botid, botclass:lower() end
-            end
         end
     end
     return nil, nil
@@ -228,9 +193,9 @@ end
 local function HPEvalMyPet(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].mypet then return nil, nil end
     local mypetid = mq.TLO.Me.Pet.ID()
-    local mypetdist = mq.TLO.Me.Pet.Distance()
+    local mypetdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Pet.X(), mq.TLO.Me.Pet.Y())
     if mypetid and mypetid > 0 then
-        local distOk = mypetdist and ctx.spellrange and mypetdist <= ctx.spellrange
+        local distOk = mypetdistSq and ctx.spellrangeSq and mypetdistSq <= ctx.spellrangeSq
         if castutils.hpEvalSpawn(mypetid, AHThreshold[index].mypet) and distOk then return mypetid, 'mypet' end
     end
     return nil, nil
@@ -240,9 +205,10 @@ local function HPEvalPets(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].pet or not ctx.botcount then return nil, nil end
     for i = 1, ctx.botcount do
         local petid = mq.TLO.Spawn('pc =' .. ctx.bots[i]).Pet.ID()
-        local petdist = petid and mq.TLO.Spawn(petid).Distance()
+        local petspawn = petid and mq.TLO.Spawn(petid)
+        local petdistSq = petspawn and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), petspawn.X(), petspawn.Y())
         if petid and petid > 0 then
-            local distOk = ctx.spellrange and petdist and petdist <= ctx.spellrange
+            local distOk = ctx.spellrangeSq and petdistSq and petdistSq <= ctx.spellrangeSq
             if castutils.hpEvalSpawn(petid, AHThreshold[index].pet) and distOk then return petid, 'pet' end
         end
     end
@@ -256,10 +222,11 @@ local function HPEvalXtgt(index, ctx)
         if XTList[i] then
             local xtar = mq.TLO.Me.XTarget(i)()
             if xtar then
-                local xtrange = mq.TLO.Me.XTarget(i).Distance() or 500
                 local xtid = mq.TLO.Me.XTarget(i).ID() or 0
                 if xtid and xtid > 0 then
-                    local distOk = xtrange <= ctx.spellrange
+                    local xtspawn = mq.TLO.Spawn(xtid)
+                    local xtdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), xtspawn.X(), xtspawn.Y())
+                    local distOk = ctx.spellrangeSq and xtdistSq and xtdistSq <= ctx.spellrangeSq
                     if castutils.hpEvalSpawn(xtid, AHThreshold[index].xtgt) and distOk then return xtid, 'xtgt' end
                 end
             end
@@ -362,14 +329,14 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context)
         end
         local sp = mq.TLO.Spawn(targetId)
         if sp and sp.ID() == targetId and mq.TLO.Spawn(targetId).Type() == 'PC' then
-            local dist = sp.Distance()
-            if th.groupmember and castutils.hpEvalSpawn(targetId, th.groupmember) and ctx.spellrange and dist and dist <= ctx.spellrange and classOk(targethit) then
+            local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
+            if th.groupmember and castutils.hpEvalSpawn(targetId, th.groupmember) and ctx.spellrangeSq and distSq and distSq <= ctx.spellrangeSq and classOk(targethit) then
                 return rejectIfAlreadyHoT(ctx.entry, targetId, targethit)
             end
             if th.pc and context.botcount then
                 local peer = charinfo.GetInfo(mq.TLO.Spawn(targetId).CleanName())
                 local bothp = peer and peer.PctHPs or nil
-                if bothp and hpInBand(bothp, th.pc) and dist and ctx.spellrange and dist <= ctx.spellrange and classOk(targethit) then
+                if bothp and hpInBand(bothp, th.pc) and distSq and ctx.spellrangeSq and distSq <= ctx.spellrangeSq and classOk(targethit) then
                     return rejectIfAlreadyHoT(ctx.entry, targetId, targethit)
                 end
             end

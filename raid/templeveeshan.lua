@@ -1,5 +1,6 @@
 -- Zone 124: Lady Nevederia, Dozekar (Velious)
 local mq = require('mq')
+local utils = require('lib.utils')
 
 local M = {}
 
@@ -24,11 +25,15 @@ end
 
 function M.raid_check()
     if mq.TLO.Zone.ID() ~= 124 then return false end
-    if mq.TLO.Spawn("Lady Nevederia").ID() and mq.TLO.Me.XTarget("Lady Nevederia").ID() and (raidtimer < mq.gettime()) and mq.TLO.Spawn("Lady Nevederia").Distance() < 250 then
-        LadyNevBreathOut()
+    local ladynev = mq.TLO.Spawn("Lady Nevederia")
+    if ladynev.ID() and mq.TLO.Me.XTarget("Lady Nevederia").ID() and (raidtimer < mq.gettime()) then
+        local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), ladynev.X(), ladynev.Y())
+        if distSq and distSq < (250 * 250) then LadyNevBreathOut() end
     end
-    if mq.TLO.Spawn("Dozekar the Cursed").ID() and mq.TLO.Me.XTarget("Dozekar the Cursed").ID() and (raidtimer < mq.gettime()) and mq.TLO.Spawn("Dozekar the Cursed").Distance() < 250 then
-        DozeOut()
+    local dozekar = mq.TLO.Spawn("Dozekar the Cursed")
+    if dozekar.ID() and mq.TLO.Me.XTarget("Dozekar the Cursed").ID() and (raidtimer < mq.gettime()) then
+        local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), dozekar.X(), dozekar.Y())
+        if distSq and distSq < (250 * 250) then DozeOut() end
     end
     return raidsactive
 end

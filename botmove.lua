@@ -4,6 +4,7 @@ local combat = require('lib.combat')
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
+local utils = require('lib.utils')
 local charinfo = require("mqcharinfo")
 local myconfig = botconfig.config
 
@@ -143,7 +144,10 @@ end
 -- ---------------------------------------------------------------------------
 
 local function campDistanceOk(rc)
-    return mq.TLO.Math.Distance(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ':' .. rc.makecamp.x .. ',' .. rc.makecamp.y)() <= (myconfig.settings.acleash * 0.20)
+    -- camp "close" threshold is acleash * 0.20; (acleash*0.20)^2 = acleashSq * 0.04
+    local campCloseSq = myconfig.settings.acleashSq and (myconfig.settings.acleashSq * 0.04)
+    local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), rc.makecamp.x, rc.makecamp.y)
+    return distSq and campCloseSq and distSq <= campCloseSq
 end
 
 local function campLOSOk(rc)

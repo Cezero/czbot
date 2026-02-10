@@ -126,9 +126,9 @@ function botpull.EngageCheck()
     local bot = info and info.ID
     local rc = state.getRunconfig()
     if bot then
-        local targetdist = utils.calcDist3D(mq.TLO.Spawn(targetid).X(), mq.TLO.Spawn(targetid).Y(),
-            mq.TLO.Spawn(targetid).Z(), rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
-        if targetdist and targetdist > 200 and not myconfig.pull.hunter then return false end
+        local tspawn = mq.TLO.Spawn(targetid)
+        local targetDistSq = utils.getDistanceSquared3D(tspawn.X(), tspawn.Y(), tspawn.Z(), rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
+        if targetDistSq and myconfig.pull.engageRadiusSq and targetDistSq > myconfig.pull.engageRadiusSq and not myconfig.pull.hunter then return false end
     end
     if tartarid and tartarid > 0 and tartarid ~= mq.TLO.Me.ID() and (mq.TLO.Spawn(tartarid).Type() ~= 'NPC') and tartartype ~= 'Corpse' then
         printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arengaged\ax by someone else! Returning to camp!', target)
@@ -141,9 +141,13 @@ end
 
 -- Pre-checks: return false if we should not start a pull.
 local function canStartPull(rc)
-    if rc.pulledmob and mq.TLO.Spawn(rc.pulledmob).Distance3D() and mq.TLO.Spawn(rc.pulledmob).Distance3D() >= myconfig.settings.acleash then
-        if rc.pullreturntimer and rc.pullreturntimer >= mq.gettime() then return false end
-        rc.pulledmob = nil
+    if rc.pulledmob then
+        local pmob = mq.TLO.Spawn(rc.pulledmob)
+        local pulledDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), pmob.X(), pmob.Y(), pmob.Z())
+        if pulledDistSq and myconfig.settings.acleashSq and pulledDistSq >= myconfig.settings.acleashSq then
+            if rc.pullreturntimer and rc.pullreturntimer >= mq.gettime() then return false end
+            rc.pulledmob = nil
+        end
     end
     if MasterPause then return false end
     if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then return false end
@@ -272,21 +276,27 @@ local function tickNavigating(rc, spawn)
         clearPullState()
         return
     end
-    if rc.campstatus and utils.calcDist3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()) > (myconfig.pull.radius + 40) then
-        clearPullState()
-        return
+    if rc.campstatus then
+        local meToCampSq = utils.getDistanceSquared3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z())
+        if meToCampSq and myconfig.pull.radiusPlus40Sq and meToCampSq > myconfig.pull.radiusPlus40Sq then
+            clearPullState()
+            return
+        end
     end
-    if (spawn.Distance() and spawn.Distance() <= 200 and spawn.LineOfSight()) or (mq.TLO.Target.ID() == rc.pullAPTargetID) then
+    local spawnDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
+    local rangeSq = (getEffectiveAbilityRange() or 0) * (getEffectiveAbilityRange() or 0)
+    local engageRadiusSq = myconfig.pull.engageRadiusSq
+    if (spawnDistSq and engageRadiusSq and spawnDistSq <= engageRadiusSq and spawn.LineOfSight()) or (mq.TLO.Target.ID() == rc.pullAPTargetID) then
         if mq.TLO.Target.ID() ~= rc.pullAPTargetID then
             mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
         end
-        if mq.TLO.Me.TargetOfTarget.ID() and mq.TLO.Target.ID() and mq.TLO.Target.Type() == 'NPC' and spawn.Distance() and spawn.Distance() <= 200 then
+        if mq.TLO.Me.TargetOfTarget.ID() and mq.TLO.Target.ID() and mq.TLO.Target.Type() == 'NPC' and spawnDistSq and engageRadiusSq and spawnDistSq <= engageRadiusSq then
             if botpull.EngageCheck() then
                 clearPullState()
                 return
             end
         end
-        if spawn.Distance() and spawn.Distance() < getEffectiveAbilityRange() and spawn.LineOfSight() then
+        if spawnDistSq and rangeSq and spawnDistSq < rangeSq and spawn.LineOfSight() then
             rc.pullState = 'aggroing'
             rc.pullPhase = 'aggro_wait_target'
             rc.pullDeadline = mq.gettime() + 1000
@@ -299,7 +309,7 @@ local function tickNavigating(rc, spawn)
             return
         end
     end
-    if not mq.TLO.Navigation.Active() and spawn.Distance() and spawn.Distance() > getEffectiveAbilityRange() then
+    if not mq.TLO.Navigation.Active() and spawnDistSq and rangeSq and spawnDistSq > rangeSq then
         mq.cmdf('/nav id %s dist= 7 log=off los=on', rc.pullAPTargetID)
     end
 end
@@ -447,9 +457,10 @@ local function tickReturning(rc, spawn)
         clearPullState()
         return
     end
-    if spawn.Distance() and spawn.Distance() > myconfig.pull.leash and not mq.TLO.Navigation.Paused() then
+    local retSpawnDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
+    if retSpawnDistSq and myconfig.pull.leashSq and retSpawnDistSq > myconfig.pull.leashSq and not mq.TLO.Navigation.Paused() then
         mq.cmd('/nav pause on log=off')
-    elseif spawn.Distance() and spawn.Distance() < myconfig.pull.leash and mq.TLO.Navigation.Paused() then
+    elseif retSpawnDistSq and myconfig.pull.leashSq and retSpawnDistSq < myconfig.pull.leashSq and mq.TLO.Navigation.Paused() then
         mq.cmd('/nav pause off log=off')
     end
     if mq.TLO.Me.CombatState() == 'COMBAT' then

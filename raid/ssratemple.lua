@@ -1,5 +1,6 @@
 -- Zone 162: Vyzh`dra the Cursed (Luclin)
 local mq = require('mq')
+local utils = require('lib.utils')
 
 local M = {}
 
@@ -15,8 +16,10 @@ end
 
 function M.raid_check()
     if mq.TLO.Zone.ID() ~= 162 then return false end
-    if mq.TLO.Spawn("Vyzh`dra the Cursed").ID() and mq.TLO.Me.XTarget("Vyzh`dra the Cursed").ID() and not (raidtimer < mq.gettime()) and mq.TLO.Spawn("Vyzh`dra the Cursed").Distance() < 250 then
-        CursedOut()
+    local cursed = mq.TLO.Spawn("Vyzh`dra the Cursed")
+    if cursed.ID() and mq.TLO.Me.XTarget("Vyzh`dra the Cursed").ID() and not (raidtimer < mq.gettime()) then
+        local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), cursed.X(), cursed.Y())
+        if distSq and distSq < (250 * 250) then CursedOut() end
     end
     return raidsactive
 end

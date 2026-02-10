@@ -39,6 +39,20 @@ function utils.isInList(value, list)
     return false
 end
 
+--- Squared distance (no sqrt) for fast comparisons. Returns nil if any coord missing.
+--- @return number|nil (x2-x1)^2 + (y2-y1)^2
+function utils.getDistanceSquared2D(x1, y1, x2, y2)
+    if x1 == nil or y1 == nil or x2 == nil or y2 == nil then return nil end
+    return (x2 - x1) ^ 2 + (y2 - y1) ^ 2
+end
+
+--- Squared distance 3D (no sqrt) for fast comparisons. Returns nil if any coord missing.
+--- @return number|nil (x2-x1)^2 + (y2-y1)^2 + (z2-z1)^2
+function utils.getDistanceSquared3D(x1, y1, z1, x2, y2, z2)
+    if x1 == nil or y1 == nil or z1 == nil or x2 == nil or y2 == nil or z2 == nil then return nil end
+    return (x2 - x1) ^ 2 + (y2 - y1) ^ 2 + (z2 - z1) ^ 2
+end
+
 function utils.calcDist3D(x1, y1, z1, x2, y2, z2)
     if x1 and y1 and x2 and y2 and z1 and z2 then return math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2 + (z2 - z1) ^ 2) end
 end

@@ -10,8 +10,10 @@ local myconfig = botconfig.config
 local castutils = {}
 
 -- Count mobs in mobList within aeRange 3D distance of spawnId. Used for targettedAE tarcnt (mobs in AE of candidate).
+-- aeRange is spell-derived (passed per call from debuff/heal/buff context); we square once here per invocation.
 function castutils.CountMobsWithinAERangeOfSpawn(mobList, spawnId, aeRange)
     if not mobList or not spawnId or not aeRange or aeRange <= 0 then return 0 end
+    local aeRangeSq = aeRange * aeRange
     local sp = mq.TLO.Spawn(spawnId)
     local cx, cy, cz = sp.X(), sp.Y(), sp.Z()
     if not cx or not cy or not cz then return 0 end
@@ -22,8 +24,8 @@ function castutils.CountMobsWithinAERangeOfSpawn(mobList, spawnId, aeRange)
             local s = mq.TLO.Spawn(vid)
             local x, y, z = s.X(), s.Y(), s.Z()
             if x and y and z then
-                local d = utils.calcDist3D(cx, cy, cz, x, y, z)
-                if d and d <= aeRange then count = count + 1 end
+                local dSq = utils.getDistanceSquared3D(cx, cy, cz, x, y, z)
+                if dSq and dSq <= aeRangeSq then count = count + 1 end
             end
         end
     end
@@ -68,14 +70,14 @@ function castutils.LoadSpellSectionConfig(section, opts)
 end
 
 -- Group AE count-and-threshold: count members where needMemberFn(grpmember, grpid, grpname, peer) is true;
--- if count >= entry.tarcnt return (Group v1 -> 1 else Me.ID()), targethit. opts.aeRange: when set, only count PC in range.
+-- if count >= entry.tarcnt return (Group v1 -> 1 else Me.ID()), targethit. opts.aeRangeSq: when set, only count PC within squared range.
 -- opts.includeMemberZero: when true, loop from 0 (Group.Member(0) is self); otherwise 1 to Members().
 function castutils.evalGroupAECount(entry, targethit, index, bandTable, phaseKey, needMemberFn, opts)
     if not bandTable[index] or not bandTable[index][phaseKey] then return nil, nil end
     local tartype = mq.TLO.Spell(entry.spell).TargetType()
     if tartype ~= 'Group v1' and tartype ~= 'Group v2' then return nil, nil end
     opts = opts or {}
-    local aeRange = opts.aeRange
+    local aeRangeSq = opts.aeRangeSq
     local startIdx = (opts.includeMemberZero and 0) or 1
     local needCount = 0
     for i = startIdx, mq.TLO.Group.Members() do
@@ -85,9 +87,9 @@ function castutils.evalGroupAECount(entry, targethit, index, bandTable, phaseKey
             local grpname = grpmember.Name()
             local grpid = grpmember.ID()
             if grpid and grpid > 0 then
-                if aeRange then
-                    local grpdist = grpspawn and grpspawn.Distance() or nil
-                    if mq.TLO.Spawn(grpid).Type() ~= 'PC' or not grpdist or grpdist > aeRange then
+                if aeRangeSq then
+                    local grpdistSq = grpspawn and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), grpspawn.X(), grpspawn.Y()) or nil
+                    if mq.TLO.Spawn(grpid).Type() ~= 'PC' or not grpdistSq or grpdistSq > aeRangeSq then
                         -- skip
                     else
                         local peer = charinfo.GetInfo(grpname)
