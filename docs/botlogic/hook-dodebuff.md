@@ -18,7 +18,7 @@ flowchart TB
     RunPhase --> PhaseLoop[phase order: charm tanktar notanktar named]
 ```
 
-DebuffEval (per spell index): charm recast request → charm.EvalTarget → DebuffEvalTankTar → DebuffEvalNotanktar → DebuffEvalNamedTankTar. Bands control tanktar, notanktar, named, mobMin/mobMax. BeforeCast: recast check; for tanktar set engageTargetId (if not offtank) and pet attack. afterCast can increment resist counter and disable spell for spawn after N resists. See [Spell casting flow](spell-casting-flow.md) and charm module for charm-specific logic.
+DebuffEval (per spell index): charm recast request → charm.EvalTarget → DebuffEvalTankTar → DebuffEvalNotanktar → DebuffEvalNamedTankTar. Bands control tanktar, notanktar, named, mobMin/mobMax. BeforeCast: recast check; for tanktar set engageTargetId (if not offtank) and pet attack. afterCast can increment resist counter and disable spell for spawn after N resists. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md); see charm module for charm-specific logic.
 
 ## See also
 

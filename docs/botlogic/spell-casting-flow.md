@@ -44,7 +44,7 @@ CastSpell sets `CurSpell`, may wait for movement or target, then issues the cast
 
 ```mermaid
 flowchart TB
-    CastStart[CastSpell] --> SpellCheck[SpellCheck, LoadSpell]
+    CastStart[CastSpell] --> SpellCheck[SpellCheck]
     SpellCheck --> CurSpell[Set CurSpell sub/spell/target/targethit etc]
     CurSpell --> Moving{Moving and cast time > 0 and not BRD?}
     Moving -->|Yes| PrecastMove[phase = precast_wait_move, setRunState casting, return]
@@ -57,11 +57,10 @@ flowchart TB
     DoCast --> Casting
 ```
 
-- **SpellCheck:** Reagents, mana/endurance, gem ready, etc.
-- **LoadSpell:** Mem spell in gem if needed (uses MQ2Cast `/memorize` when the plugin is loaded, else `/memspell`); set gemInUse; wait for mem if necessary. On spell-not-in-book, disables entry and clearRunState.
+- **SpellCheck:** Reagents, mana/endurance, gem ready, etc. For gem spells, verifies the spell is in the character's book (`mq.TLO.Me.Book(spell)`); if not, the entry is disabled and the cast is aborted. There is no dynamic memorization or gemInUse in the current implementation. When using MQ2Cast, the bot relies on MQ2Cast to memorize the spell into the gem if needed as part of the `/casting` command; the script does not issue separate memorization commands.
 - **precast_wait_move:** If we are moving (or nav/stick active) and the spell has cast time, we set a 3s deadline and return; next tick we stop moving then re-call CastSpell.
 - **precast:** If target is not set (and not using MQ2Cast), we /tar and set a 1s deadline; next tick we re-call CastSpell.
-- **MQ2Cast:** When the plugin is loaded and gem is spell/item/alt, we build `/casting "Spell" gem -targetid|id` (and `-maxtries|2` for debuff), set `CurSpell.viaMQ2Cast` and `CurSpell.spellid`, then set phase and run state. Completion is detected in handleSpellCheckReentry via `Cast.Status` / `Cast.Result` / `Cast.Stored`.
+- **MQ2Cast:** When the plugin is loaded and gem is spell/item/alt, we build `/casting "Spell" gem -targetid|id` (and `-maxtries|2` for debuff), set `CurSpell.viaMQ2Cast` and `CurSpell.spellid`, then set phase and run state. MQ2Cast memorizes the spell into the gem if necessary as part of `/casting`, so the script does not manage gem slots. Completion is detected in handleSpellCheckReentry via `Cast.Status` / `Cast.Result` / `Cast.Stored`.
 - After the actual cast is fired, `rc.CurSpell.phase = 'casting'` and `state.setRunState('casting', { priority = runPriority, spellcheckResume })`.
 
 ---
@@ -75,8 +74,8 @@ flowchart TB
     Reentry[handleSpellCheckReentry] --> P1{phase == cast_complete_pending_resist?}
     P1 -->|Yes| OnCastResist[OnCastComplete, afterCast, clearCastingStateOrResume]
     P1 -->|No| P1b{phase == casting and viaMQ2Cast?}
-    P1b -->|Yes| MQ2Complete{Cast.Status not C and Stored == spellid?}
-    MQ2Complete -->|Yes| OnCastMQ2[Set resisted from Cast.Result, immune if CAST_IMMUNE, OnCastComplete, afterCast, clear]
+    P1b -->|Yes| MQ2Complete{Cast.Status not C and not M, Stored == spellid?}
+    MQ2Complete -->|Yes| OnCastMQ2[Set resisted from Cast.Result, immune.processList target if CAST_IMMUNE, OnCastComplete, afterCast, clear]
     MQ2Complete -->|No| WaitReentry[return true]
     P1b -->|No| P2{phase == casting?}
     P2 -->|Yes| Interrupt{CastTimeLeft > 0?}
@@ -98,7 +97,7 @@ flowchart TB
 ```
 
 - **cast_complete_pending_resist:** Used for debuff so we can run OnCastComplete after resist check (Event_CastRst). We run OnCastComplete, afterCast, then clearCastingStateOrResume.
-- **casting (viaMQ2Cast):** Completion is when `Cast.Status` does not contain 'C' and `Cast.Stored.ID()` equals `CurSpell.spellid`. Then set `CurSpell.resisted` from `Cast.Result`, call `immune.processList` on CAST_IMMUNE, then OnCastComplete, afterCast, clearCastingStateOrResume. No CastTimeLeft or cast_complete_pending_resist for this path.
+- **casting (viaMQ2Cast):** Completion is when `Cast.Status` does not contain 'C' and does not contain 'M', and `Cast.Stored.ID()` equals `CurSpell.spellid`. Then set `CurSpell.resisted` from `Cast.Result`; on CAST_IMMUNE call `immune.processList(CurSpell.target)` (the target spawn ID) to update the immune list for that mob. Then OnCastComplete, afterCast, clearCastingStateOrResume. No CastTimeLeft or cast_complete_pending_resist for this path.
 - **casting (legacy):** If CastTimeLeft > 0 we run InterruptCheck (target lost, corpse, heal over-threshold, buff/debuff already present, etc.). If CastTimeLeft == 0: non-debuff runs OnCastComplete and clearCastingStateOrResume; debuff sets phase to cast_complete_pending_resist and returns (next tick we exit via P1).
 - **precast_wait_move / precast:** Wait for deadline or condition; then either clearCastingStateOrResume or call CastSpell again to actually cast.
 
@@ -116,7 +115,7 @@ When a cast ends (complete or interrupted):
 
 ## InterruptCheck
 
-Runs while we are in `CurSpell.phase == 'casting'` and CastTimeLeft > 0. It can interrupt the cast and call clearCastingStateOrResume in cases such as:
+Runs when `CurSpell.phase == 'casting'` for **both** MQ2Cast and legacy paths (for legacy, the "wait vs complete" decision uses CastTimeLeft; InterruptCheck is still invoked each tick while casting). For MQ2Cast, completion is determined by Cast.Status/Result only—CastTimeLeft is not used for completion, but InterruptCheck still runs. It can interrupt the cast and call clearCastingStateOrResume in cases such as:
 
 - Target lost or target is corpse (and criteria is not corpse).
 - Heal: target HP above interrupt threshold for that band.

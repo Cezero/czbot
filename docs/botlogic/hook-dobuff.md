@@ -16,7 +16,7 @@ flowchart TB
     RunPhase --> PhaseLoop[phase order: self byname tank groupbuff groupmember pc mypet pet]
 ```
 
-BuffCheck calls RunPhaseFirstSpellCheck with buff-specific getTargetsForPhase and targetNeedsSpell. Bands control which phases each spell uses (self, tank, groupbuff, validtargets, mypet, pet, petspell). IconCheck and PeerHasBuff / Stacks / FreeBuffSlots determine if a target needs the spell. See [Spell casting flow](spell-casting-flow.md).
+BuffCheck calls RunPhaseFirstSpellCheck with buff-specific getTargetsForPhase and targetNeedsSpell. Bands control which phases each spell uses (self, tank, groupbuff, validtargets, mypet, pet, petspell). IconCheck and PeerHasBuff / Stacks / FreeBuffSlots determine if a target needs the spell. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md).
 
 ## See also
 

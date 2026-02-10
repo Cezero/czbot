@@ -57,6 +57,8 @@ Note: `melee` is not a busy state; it does not restrict which hooks run. It carr
 | melee | No | botmelee doMelee | botmelee when no MobList | phase, priority, deadline |
 | hook_resume | Yes | clearCastingStateOrResume (with spellcheckResume) | same hook re-enters and CastSpell | phase, targetIndex, spellIndex, hook name |
 
+When casting uses MQ2Cast, completion is detected via Cast.Status/Result in spellutils.handleSpellCheckReentry (see [Spell casting flow](spell-casting-flow.md)).
+
 Resume states are named `{hookName}_resume` (e.g. `doHeal_resume`). They are busy and carry the hook's priority so only that hook (and higher-priority hooks) run until the cast is finished and state is cleared or another cast starts.
 
 ## See also

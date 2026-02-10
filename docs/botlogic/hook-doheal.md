@@ -19,7 +19,7 @@ flowchart TB
     RunPhase --> PhaseLoop[phase order: corpse self groupheal tank groupmember pc mypet pet xtgt]
 ```
 
-HealCheck builds context (tank, bots, spell ranges, etc.) and calls spellutils.RunPhaseFirstSpellCheck with heal-specific getTargetsForPhase, getSpellIndicesForPhase, and targetNeedsSpell (HP bands, corpse rez filters, group/xt). Each phase returns targets (e.g. corpse IDs, self, tank, group members); spells that have that phase in their bands are tried in order; first valid (beforeCast, immuneCheck, PreCondCheck) triggers CastSpell. See [Spell casting flow](spell-casting-flow.md).
+HealCheck builds context (tank, bots, spell ranges, etc.) and calls spellutils.RunPhaseFirstSpellCheck with heal-specific getTargetsForPhase, getSpellIndicesForPhase, and targetNeedsSpell (HP bands, corpse rez filters, group/xt). Each phase returns targets (e.g. corpse IDs, self, tank, group members); spells that have that phase in their bands are tried in order; first valid (beforeCast, immuneCheck, PreCondCheck) triggers CastSpell. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md).
 
 ## See also
 
