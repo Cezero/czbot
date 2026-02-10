@@ -35,7 +35,7 @@ For full targeting and band details, see [Spell targeting and bands](spell-targe
 For **BRD**, only **self** is evaluated for buffs; tank, groupbuff, groupmember, pc, mypet, and pet are **never** tried. The buff hook does **not** schedule a cast for self — the default twist (above) sustains all self buffs. Put **self**, **cbt**, **idle**, and optionally **pull** in your buff bands:
 
 - **self** — Included in the twist (idle list uses all self; combat uses **cbt**; pull uses **pull**).
-- **cbt** — Buff is in the **combat** twist only (and optionally in pull if the same band also has **pull**).
+- **cbt** — Buff is included in the **combat** twist. Because the idle twist uses all buffs with **self**, a **cbt** buff (with **self**) is also in the **idle** twist. Add **pull** in the same band if it should also run in the pull twist.
 - **idle** — Buff is in the **noncombat (idle)** twist only.
 - **pull** — Buff is in the **pull** twist (e.g. Selo's). Only self buffs with a numeric gem; include **self** and **pull** in the same band.
 
