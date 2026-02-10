@@ -339,6 +339,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
         if options.afterCast then
             options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
         end
+        printf('\at[MQ2CAST]\ax clear call site: handleSpellCheckReentry cast_complete_pending_resist sub=%s', tostring(sub))
         spellutils.clearCastingStateOrResume()
         return true
     end
@@ -355,6 +356,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
             tostring(rc.CurSpell.sub), string.format('%q', status), tostring(storedId),
             tostring(rc.CurSpell.spellid or 0), string.format('%q', castResult))
         local complete = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
+        printf('\at[MQ2CAST]\ax MQ2Cast complete check sub=%s status=%q storedId=%s spellid=%s complete=%s', tostring(sub), status, tostring(storedId), tostring(rc.CurSpell.spellid or 0), tostring(complete))
         if complete then
             printf('\at[MQ2CAST]\ax completion condition TRUE, treating as complete and clearing')
         end
@@ -367,6 +369,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
             if options.afterCast then
                 options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
             end
+            printf('\at[MQ2CAST]\ax clear call site: handleSpellCheckReentry MQ2Cast_complete sub=%s complete=true', tostring(sub))
             spellutils.clearCastingStateOrResume()
             return true
         end
@@ -391,9 +394,11 @@ function spellutils.handleSpellCheckReentry(sub, options)
                 if options.afterCast then
                     options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
                 end
+                printf('\at[MQ2CAST]\ax clear call site: handleSpellCheckReentry nonMQ2Cast_CastTimeLeft0 sub=%s', tostring(sub))
                 spellutils.clearCastingStateOrResume()
                 return true
             end
+            printf('\at[MQ2CAST]\ax CurSpell.phase SET phase=cast_complete_pending_resist sub=%s', tostring(rc.CurSpell.sub))
             rc.CurSpell.phase = 'cast_complete_pending_resist'
             return true
         end
@@ -402,6 +407,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
     if rc.CurSpell and rc.CurSpell.phase == 'precast_wait_move' then
         if mq.TLO.Me.Moving() then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
+            printf('\at[MQ2CAST]\ax clear call site: handleSpellCheckReentry precast_wait_move_timeout sub=%s', tostring(sub))
             spellutils.clearCastingStateOrResume()
             return true
         end
@@ -413,6 +419,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
     if rc.CurSpell and rc.CurSpell.phase == 'precast' then
         if mq.TLO.Target.ID() ~= rc.CurSpell.target then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
+            printf('\at[MQ2CAST]\ax clear call site: handleSpellCheckReentry precast_target_mismatch sub=%s', tostring(sub))
             spellutils.clearCastingStateOrResume()
             return true
         end
@@ -530,6 +537,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                     printf('\at[MQ2CAST]\ax phase loop sub=%s FOUND WORK (will interrupt current cast sub=%s)', tostring(sub), tostring(rc.CurSpell.sub))
                                 end
                                 if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 then
+                                    printf('\at[MQ2CAST]\ax clear call site: phase_loop_interrupt_other_section sub=%s CurSpell.sub=%s', tostring(sub), tostring(rc.CurSpell.sub))
                                     mq.cmd('/stopcast')
                                     spellutils.clearCastingStateOrResume()
                                 end
@@ -668,6 +676,7 @@ function spellutils.InterruptCheck()
                 mq.cmdf('/multiline ; /interrupt ; /echo Interrupting Spell %s, target is above the threshold',
                     entry.spell)
                 mq.cmd('/interrupt')
+                printf('\at[MQ2CAST]\ax clear call site: OnCastComplete heal_threshold_above sub=%s', tostring(sub))
                 spellutils.clearCastingStateOrResume()
             end
         end
@@ -686,6 +695,7 @@ function spellutils.InterruptCheck()
                 mq.cmd('/interrupt')
                 if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
                 rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
+                printf('\at[MQ2CAST]\ax clear call site: OnCastComplete buff_already_present sub=%s', tostring(sub))
                 spellutils.clearCastingStateOrResume()
             elseif sub == 'debuff' and mq.TLO.Spell(spellid).CategoryID() ~= 20 then
                 mq.cmdf('/multiline ; /echo Interrupt %s on MobID %s, debuff already present ; /interrupt', spellname,
@@ -693,6 +703,7 @@ function spellutils.InterruptCheck()
                 local spelldur = mq.TLO.Target.Buff(spellname).Duration() + mq.gettime()
                 spellstates.DebuffListUpdate(target, spellid, spelldur)
                 mq.cmd('/interrupt')
+                printf('\at[MQ2CAST]\ax clear call site: OnCastComplete debuff_already_present sub=%s', tostring(sub))
                 spellutils.clearCastingStateOrResume()
             end
         end
@@ -702,6 +713,7 @@ function spellutils.InterruptCheck()
                 mq.cmd('/interrupt')
                 if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
                 rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
+                printf('\at[MQ2CAST]\ax clear call site: OnCastComplete buff_does_not_stack sub=%s', tostring(sub))
                 spellutils.clearCastingStateOrResume()
             elseif sub == 'debuff' then
                 printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target,
@@ -709,6 +721,7 @@ function spellutils.InterruptCheck()
                 spellstates.DebuffListUpdate(target, spellname,
                     mq.TLO.Target.Buff(spellname).Duration() + mq.gettime())
                 mq.cmd('/interrupt')
+                printf('\at[MQ2CAST]\ax clear call site: OnCastComplete debuff_does_not_stack sub=%s', tostring(sub))
                 spellutils.clearCastingStateOrResume()
             end
         end
@@ -753,6 +766,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
             resisted = false,
             spellcheckResume = spellcheckResume,
         }
+        printf('\at[MQ2CAST]\ax CurSpell SET (new) sub=%s spell=%s target=%s (phase not set yet)', tostring(sub), tostring(index), tostring(EvalID))
         if targethit == 'charmtar' then rc.charmid = EvalID end
     else
         if spellcheckResume then rc.CurSpell.spellcheckResume = spellcheckResume end
@@ -777,6 +791,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
 
     if not resuming and (mq.TLO.Spell(spell).MyCastTime() and mq.TLO.Spell(spell).MyCastTime() > 0 and (mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()) and mq.TLO.Me.Class.ShortName() ~= 'BRD') then
         mq.cmd('/multiline ; /nav stop log=off ; /stick off')
+        printf('\at[MQ2CAST]\ax CurSpell.phase SET phase=precast_wait_move sub=%s', tostring(sub))
         rc.CurSpell.phase = 'precast_wait_move'
         rc.CurSpell.deadline = mq.gettime() + 3000
         state.setRunState('casting',
@@ -801,6 +816,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     if not useMQ2Cast and (EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then
         if mq.TLO.Target.ID() ~= EvalID then
             mq.cmdf('/tar id %s', EvalID)
+            printf('\at[MQ2CAST]\ax CurSpell.phase SET phase=precast sub=%s', tostring(sub))
             rc.CurSpell.phase = 'precast'
             rc.CurSpell.deadline = mq.gettime() + 1000
             state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
@@ -831,6 +847,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.viaMQ2Cast = true
         rc.CurSpell.spellid = castSpellId
         mq.cmd(cmd)
+        printf('\at[MQ2CAST]\ax CurSpell.phase SET phase=casting (viaMQ2Cast) sub=%s', tostring(sub))
         rc.CurSpell.phase = 'casting'
         state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
@@ -863,6 +880,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmdf('/squelch /face fast')
         mq.cmdf('/doability %s', spell)
     end
+    printf('\at[MQ2CAST]\ax CurSpell.phase SET phase=casting (non-MQ2Cast) sub=%s', tostring(sub))
     rc.CurSpell.phase = 'casting'
     state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
     return true
