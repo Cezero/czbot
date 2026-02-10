@@ -319,7 +319,7 @@ local function updateImGui()
             botconfig.config.settings.dopull = not dopull
         end
         ImGui.SameLine()
-        ImGui.PushStyleColor(ImGui.Col.Button, RED)
+        ImGui.PushStyleColor(ImGuiCol.Button, RED)
         if ImGui.Button('End CZBot') then
             state.getRunconfig().terminate = true
         end
