@@ -57,6 +57,36 @@ The **`pull.spell`** table configures how the bot gets aggro. It has the same sh
 
 **Bard:** When **`pull.spell`** has a numeric **gem** (1–12), the bot uses that same gem and spell for twist-on-pull (e.g. agro song). There are no separate engage_gem/engage_spell options.
 
+#### Example pull configuration
+
+```lua
+pull = {
+    spell = { gem = 'melee', spell = '', range = nil },  -- melee pull (default)
+    radius = 400,
+    zrange = 150,
+    minlevel = 0,
+    maxlevel = 200,
+    chainpullcnt = 0,
+    chainpullhp = 0,
+    mana = 60,
+    manaclass = 'clr, dru, shm',
+    leash = 500,
+    usepriority = false,
+    hunter = false,
+},
+```
+
+**`pull.spell`** examples:
+
+- Melee (no cast): `spell = { gem = 'melee', spell = '' }`
+- Spell in gem 3: `spell = { gem = 3, spell = 'Blast of Cold' }` — range derived from spell
+- Ranged bow: `spell = { gem = 'ranged', spell = 'Short Bow of the Ykesha' }` — requires MQ2Exchange
+- Discipline: `spell = { gem = 'disc', spell = 'Assault', range = 50 }` — optional explicit range
+- Alt ability: `spell = { gem = 'alt', spell = 'Explosive Arrow' }`
+- Combat ability: `spell = { gem = 'ability', spell = 'Kick', range = 10 }` — range defaults to 10 if omitted
+
+Omit any **pull** option to use its default; you can set only **pull.spell** and **settings.dopull** for a minimal config.
+
 ---
 
 ## When does the bot start a pull?
