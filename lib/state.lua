@@ -49,6 +49,8 @@
 ---@field mobprobtimer number
 ---@field spellNotInBook table|nil
 ---@field statusMessage string User-facing activity line for GUI
+---@field bardNotanktarWait table|nil BRD notanktar twist-once: { spellIndex, EvalID, entry } while waiting for cast to finish
+---@field notanktarDebuffTimers table|nil BRD: spawn ID -> mq.gettime() when to re-apply notanktar debuff (e.g. mez)
 
 local M = {}
 
@@ -120,6 +122,8 @@ function M.resetRunconfig()
         mobprobtimer = 0,
         spellNotInBook = {},
         statusMessage = '',
+        bardNotanktarWait = nil,
+        notanktarDebuffTimers = nil,
     }
     return M._runconfig
 end

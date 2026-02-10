@@ -12,9 +12,20 @@ local castutils = require('lib.castutils')
 
 local botdebuff = {}
 local DebuffBands = {}
+local bardtwist = require('lib.bardtwist')
 
 local function defaultDebuffEntry()
     return botconfig.getDefaultSpellEntry('debuff')
+end
+
+local function normalizeDebuffEntry(entry)
+    if not entry or type(entry.dontStack) ~= 'table' then return end
+    local allowed = spellutils.GetDebuffDontStackAllowlist()
+    local filtered = {}
+    for _, tag in ipairs(entry.dontStack) do
+        if allowed[tag] then filtered[#filtered + 1] = tag end
+    end
+    entry.dontStack = #filtered > 0 and filtered or nil
 end
 
 function botdebuff.LoadDebuffConfig()
@@ -22,6 +33,7 @@ function botdebuff.LoadDebuffConfig()
         defaultEntry = defaultDebuffEntry,
         bandsKey = 'debuff',
         storeIn = DebuffBands,
+        perEntryNormalize = normalizeDebuffEntry,
     })
 end
 
@@ -295,6 +307,23 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         local gem = entry.gem
         local db = DebuffBands[spellIndex]
         if not db or not db.notanktar then return nil, nil end
+        -- Re-apply when bard notanktar timer expired (e.g. mez before duration ends).
+        local timers = context.notanktarDebuffTimers
+        if timers and timers[targetId] and mq.gettime() >= timers[targetId] then
+            for _, v in ipairs(ctx.mobList) do
+                local vid = v.ID and v.ID() or v
+                if vid == targetId then
+                    if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
+                        local myrange = ctx.myrange
+                        if entry.gem == 'ability' then myrange = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange end
+                        if not (myrange and v.Distance and v.Distance() and v.Distance() > myrange) then
+                            return targetId, 'notanktar'
+                        end
+                    end
+                    break
+                end
+            end
+        end
         for _, v in ipairs(ctx.mobList) do
             local vid = v.ID and v.ID() or v
             if vid == targetId then
@@ -344,9 +373,39 @@ end
 
 function botdebuff.DebuffCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
-    local mobcountstart = state.getRunconfig().MobCount
+    ---@type RunConfig
+    local rc = state.getRunconfig()
+    -- BRD notanktar twist-once: wait for cast to finish then post-cast (resist, DebuffListUpdate, timer, re-target MA).
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and state.getRunState() == 'doDebuff_bard_notanktar_wait' and rc.bardNotanktarWait then
+        local w = rc.bardNotanktarWait
+        if not w or not w.entry or not w.EvalID then
+            rc.bardNotanktarWait = nil
+            state.clearRunState()
+            return false
+        end
+        if mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0) then
+            return false
+        end
+        -- Cast done: check land, update state, re-target MA, clear wait.
+        rc.bardNotanktarWait = nil
+        state.clearRunState()
+        local spellid = mq.TLO.Spell(w.entry.spell).ID()
+        local duration_sec = tonumber(mq.TLO.Spell(spellid).MyDuration()) or 0
+        local duration_end = duration_sec > 0 and (mq.gettime() + duration_sec * 1000) or nil
+        if duration_end then
+            spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, duration_end)
+            local bardCfg = botconfig.config.bard
+            local mezSec = (bardCfg and type(bardCfg.mez_remez_sec) == 'number' and bardCfg.mez_remez_sec) or 6
+            if not rc.notanktarDebuffTimers then rc.notanktarDebuffTimers = {} end
+            rc.notanktarDebuffTimers[w.EvalID] = mq.gettime() + (duration_sec - mezSec) * 1000
+        end
+        local _, _, tanktar = spellutils.GetTankInfo(true)
+        if tanktar and tanktar > 0 then mq.cmdf('/tar id %s', tanktar) end
+        return false
+    end
+    local mobcountstart = rc.MobCount
     local botmelee = require('botmelee')
-    if state.getRunconfig().MobList and state.getRunconfig().MobList[1] then
+    if rc.MobList and rc.MobList[1] then
         local tank, _, tanktar = spellutils.GetTankInfo(true)
         if tanktar and tanktar > 0 and mq.TLO.Pet.Target.ID() ~= tanktar and not mq.TLO.Me.Pet.Combat() then botmelee.AdvCombat() end
     end
@@ -363,12 +422,25 @@ function botdebuff.DebuffCheck(runPriority)
         charmRecasts = charmRecasts,
         debuffCount = count,
         mobList = state.getRunconfig().MobList or {},
+        notanktarDebuffTimers = rc.notanktarDebuffTimers,
     }
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
         immuneCheck = true,
         beforeCast = DebuffOnBeforeCast,
+        customCastFn = function(spellIndex, EvalID, targethit, sub, _runPriority, _spellcheckResume)
+            if sub ~= 'debuff' or targethit ~= 'notanktar' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+            local entry = botconfig.getSpellEntry('debuff', spellIndex)
+            if not entry or type(entry.gem) ~= 'number' then return false end
+            mq.cmd('/squelch /attack off')
+            if mq.TLO.Target.ID() ~= EvalID then mq.cmdf('/tar id %s', EvalID) end
+            bardtwist.EnsureTwistForMode('combat')
+            bardtwist.SetTwistOnceGem(entry.gem)
+            rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry }
+            state.setRunState('doDebuff_bard_notanktar_wait', {})
+            return true
+        end,
         entryValid = function(i)
             local entry = botconfig.getSpellEntry('debuff', i)
             if not entry then return false end

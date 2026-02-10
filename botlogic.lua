@@ -7,6 +7,7 @@ local state = require('lib.state')
 local botmove = require('botmove')
 local hookregistry = require('lib.hookregistry')
 local spellutils = require('lib.spellutils')
+local bardtwist = require('lib.bardtwist')
 local botevents = require('botevents')
 local utils = require('lib.utils')
 local charinfo = require("mqcharinfo")
@@ -97,9 +98,7 @@ local function CharState(...)
     if mq.TLO.Me.State() == 'FEIGN' then
         mq.cmd('/stand')
     end
-    if (mq.TLO.Plugin('MQ2Twist').IsLoaded()) then
-        if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then mq.cmd('/squelch /twist stop') end
-    end
+    if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
     if not state.getRunconfig().engageTargetId or mq.TLO.Target.ID() ~= state.getRunconfig().engageTargetId then
         if mq.TLO.Me.Combat() then
             mq.cmd('/attack off')

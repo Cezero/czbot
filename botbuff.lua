@@ -9,6 +9,7 @@ local castutils = require('lib.castutils')
 
 local botbuff = {}
 local BuffClass = {}
+local bardtwist = require('lib.bardtwist')
 
 local function defaultBuffEntry()
     return botconfig.getDefaultSpellEntry('buff')
@@ -72,24 +73,9 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
         end
         return nil, nil
     end
-    if myclass == 'BRD' and BuffClass[index].self and IconCheck(index, myid) then
-        local mysong = mq.TLO.Me.Song(spell)() or mq.TLO.Me.Buff(spell)()
-        local mysongdur = mq.TLO.Me.Song(spell).Duration() or mq.TLO.Me.Buff(spell).Duration()
-        local songtartype = mq.TLO.Spell(spell).TargetType()
-        local songtype = mq.TLO.Spell(spell).SpellType()
-        if (not mysong) or (mysongdur and mysongdur < 6100) then
-            if songtartype and (songtartype == 'Group v1' or songtartype == 'Group v2' or songtartype == 'Self' or songtartype == 'AE PC v2') then
-                return 1, 'self'
-            elseif songtype and songtype == 'Detrimental' then
-                local mysongdur2 = mq.TLO.Target.MyBuff(spell).Duration()
-                local mysong2 = mq.TLO.Target.MyBuff(spell)()
-                if tanktar and tanktar > 0 and ((not mysong2) or (mysongdur2 and mysongdur2 < 6100)) then
-                    return tanktar, 'self'
-                end
-            else
-                return myid, 'self'
-            end
-        end
+    -- BRD: all self buffs are handled by twist (lib/bardtwist). No cast from buff hook; detrimental-on-tank removed.
+    if myclass == 'BRD' and BuffClass[index].self then
+        return nil, nil
     end
     return nil, nil
 end
@@ -265,6 +251,9 @@ function botbuff.BuffCheck(runPriority)
     local myconfig = botconfig.config
     local mobList = state.getRunconfig().MobList
     local hasMob = mobList and mobList[1]
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and myconfig.settings.dobuff then
+        bardtwist.EnsureDefaultTwistRunning()
+    end
     local count = botconfig.getSpellCount('buff')
     if count <= 0 then return false end
     local tank, tankid = spellutils.GetTankInfo(false)

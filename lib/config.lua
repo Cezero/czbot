@@ -36,6 +36,8 @@
 ---@field leash number|nil
 ---@field usepriority boolean|nil
 ---@field hunter boolean|nil
+---@field engage_gem number|nil bard puller: gem (1-12) for agro song
+---@field engage_spell string|nil bard puller: spell name (resolved to gem from book)
 
 ---@class ConfigMelee
 ---@field assistpct number|nil
@@ -59,9 +61,13 @@
 ---@class ConfigCure
 ---@field spells table[]|nil
 
+---@class ConfigBard
+---@field mez_remez_sec number|nil seconds before notanktar debuff (e.g. mez) ends to re-apply
+
 ---@class Config
 ---@field settings ConfigSettings|nil
 ---@field pull ConfigPull|nil
+---@field bard ConfigBard|nil
 ---@field melee ConfigMelee|nil
 ---@field heal ConfigHeal|nil
 ---@field buff ConfigBuff|nil
@@ -93,7 +99,7 @@ local subOrder = {
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'isHoT', 'tarcnt', 'bands', 'precondition' },
     buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'spellicon', 'precondition' },
-    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'targettedAE', 'bands', 'charmnames', 'recast', 'delay', 'precondition' },
+    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'targettedAE', 'bands', 'charmnames', 'recast', 'delay', 'precondition', 'dontStack' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
 }
 
@@ -109,7 +115,7 @@ end
 local defaultSpellEntries = {
     heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, isHoT = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, precondition = true },
     buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = true },
-    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, targettedAE = false, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true },
+    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, targettedAE = false, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true, dontStack = nil },
     cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = true },
 }
 
@@ -273,6 +279,15 @@ local function writeConfigToFile(config, filename)
                 value = t[key]
                 if value == nil then
                     -- omit nil keys to keep config sparse
+                elseif key == 'dontStack' and type(value) == "table" and #value > 0 then
+                    file:write(indent .. "['dontStack'] = { ")
+                    local parts = {}
+                    for _, c in ipairs(value) do
+                        parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
+                    end
+                    file:write(table.concat(parts, ", "))
+                    file:write(" },\n")
+                    file:flush()
                 elseif key == 'bands' and type(value) == "table" then
                     writeBands(value, indent)
                 elseif type(value) == "table" then
@@ -404,6 +419,7 @@ function M.Load(path)
     if not M.config.settings then M.config.settings = {} end
     if not M.config.melee then M.config.melee = {} end
     if not M.config.pull then M.config.pull = {} end
+    if not M.config.bard then M.config.bard = {} end
     if not M.config.heal then M.config.heal = {} end
     if not M.config.buff then M.config.buff = {} end
     if not M.config.debuff then M.config.debuff = {} end
@@ -436,7 +452,9 @@ function M.Load(path)
     applySectionDefaults('pull', {
         radius = 400, zrange = 150, chainpullcnt = 0, chainpullhp = 0, pullability = 'melee', abilityrange = 60,
         maxlevel = 200, minlevel = 0, hunter = false, mana = 60, manaclass = 'clr, dru, shm', leash = 500, usepriority = false,
+        engage_gem = nil, engage_spell = nil,
     })
+    applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
         stickcmd = 'hold uw 7', offtank = false, otoffset = 0, minmana = 0, assistpct = 99,
     })

@@ -37,6 +37,7 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 | **recast** | Optional. After this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. |
 | **delay** | Optional. Delay (ms) before the spell can be used again after cast (per-index/spell). |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
+| **dontStack** | Optional. List of debuff **categories** (from MQ Target TLO). If the target already has any of these categories (e.g. from another character), the bot will not cast this spell on that target, and will interrupt the cast if that category appears on the target while casting. Allowed values: Charmed, Crippled, Feared, Maloed, Mezzed, Rooted, Snared, Tashed. Example: for a bard snare, set `dontStack = { 'Snared' }` so the bot does not overwrite a ranger's or druid's snare. |
 
 ### Debuff bands
 
@@ -113,6 +114,7 @@ When the **MQ2Cast** plugin is loaded, the bot uses `/casting` for debuff spells
 - **Before cast (tanktar):** When casting on the tank target, the bot may set **engageTargetId** to that mob (so melee/pet follow) and send pet attack if **petassist** is on.
 - **Recast:** After **recast** resists on the same spawn, the spell is disabled for that spawn for a duration.
 - **Level:** For some spell types (e.g. Enthrall/mez), the spell’s **MaxLevel** is checked against the mob’s level; over-level mobs are skipped.
+- **dontStack:** If a debuff entry has **dontStack** set, the bot will not cast it when the current target already has that category (e.g. already Snared), and will interrupt the cast if that category appears on the target while casting (e.g. another toon's snare lands). The bot records the other spell's duration so it does not re-attempt the same debuff on that mob every tick.
 
 ---
 

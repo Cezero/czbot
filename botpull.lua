@@ -11,6 +11,7 @@ local charinfo = require("mqcharinfo")
 local myconfig = botconfig.config
 
 local botpull = {}
+local bardtwist = require('lib.bardtwist')
 
 local function clearPullState()
     local rc = state.getRunconfig()
@@ -22,6 +23,9 @@ local function clearPullState()
     rc.pullDeadline = nil
     rc.statusMessage = ''
     state.clearRunState()
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        bardtwist.EnsureTwistForMode('combat')
+    end
 end
 
 function botpull.LoadPullConfig()
@@ -180,6 +184,9 @@ function botpull.StartPull()
     rc.pullDeadline = nil
     state.setRunState('pulling', { priority = bothooks.getPriority('doPull') })
     rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawn.ID())
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        bardtwist.EnsureTwistForMode('pull')
+    end
 end
 
 -- One tick of navigating state.
@@ -216,6 +223,10 @@ local function tickNavigating(rc, spawn)
             rc.pullDeadline = mq.gettime() + 1000
             mq.cmd('/nav stop log=off')
             mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
+            if mq.TLO.Me.Class.ShortName() == 'BRD' then
+                local eg = bardtwist.GetEngageGem()
+                if eg then bardtwist.SetTwistOnceGem(eg) end
+            end
             return
         end
     end

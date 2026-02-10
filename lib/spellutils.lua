@@ -6,8 +6,38 @@ local state = require('lib.state')
 local spellstates = require('lib.spellstates')
 local tankrole = require('lib.tankrole')
 local charinfo = require("mqcharinfo")
+local bardtwist = require('lib.bardtwist')
 local spellutils = {}
 local _deps = {}
+
+-- Allowed category names for debuff dontStack (MQ Target TLO members). Slowed excluded so stronger slow can overwrite weaker.
+local DEBUFF_DONTSTACK_ALLOWED = { Charmed = true, Crippled = true, Feared = true, Maloed = true, Mezzed = true, Rooted = true, Snared = true, Tashed = true }
+
+function spellutils.GetDebuffDontStackAllowlist()
+    return DEBUFF_DONTSTACK_ALLOWED
+end
+
+--- Returns the first category from the list that is present on the current target (Target[tag].ID() > 0), or nil. Only considers tags in the allowlist.
+function spellutils.TargetHasDebuffCategory(categories)
+    if not categories or #categories == 0 then return nil end
+    for _, tag in ipairs(categories) do
+        if DEBUFF_DONTSTACK_ALLOWED[tag] and mq.TLO.Target[tag] and mq.TLO.Target[tag].ID and mq.TLO.Target[tag].ID() and mq.TLO.Target[tag].ID() > 0 then
+            return tag
+        end
+    end
+    return nil
+end
+
+--- Record that our spell should be considered "on spawn" until the other spell's duration, so we don't re-attempt every tick. Call when target is current target. categoryTag = e.g. 'Snared'.
+function spellutils.RecordDontStackDebuffFromTarget(targetSpawnId, ourSpell, categoryTag)
+    if not targetSpawnId or not ourSpell or not categoryTag then return end
+    local spellRef = mq.TLO.Target[categoryTag]
+    if not spellRef then return end
+    local durationSec = tonumber(spellRef.MyDuration and spellRef.MyDuration() or 0) or 0
+    if durationSec <= 0 then return end
+    local expire = mq.gettime() + durationSec * 1000
+    spellstates.DebuffListUpdate(targetSpawnId, ourSpell, expire)
+end
 
 function spellutils.Init(deps)
     if deps then
@@ -317,6 +347,10 @@ end
 --- On leaving a cast: if payload has spellcheckResume, set that hook's _resume state; else clearRunState().
 function spellutils.clearCastingStateOrResume()
     local rc = state.getRunconfig()
+    local hadSub = rc.CurSpell and rc.CurSpell.sub
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and hadSub and (hadSub == 'buff' or hadSub == 'debuff' or hadSub == 'cure') then
+        bardtwist.ResumeTwist()
+    end
     rc.CurSpell = {}
     rc.statusMessage = ''
     local p = state.getRunStatePayload()
@@ -509,6 +543,9 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                     spellIndex =
                                         spellIndex
                                 }
+                                if options.customCastFn and options.customCastFn(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
+                                    return false
+                                end
                                 if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
                                     return false
                                 end
@@ -638,6 +675,16 @@ function spellutils.InterruptCheck()
             end
         end
     end
+    -- dontStack: someone else's debuff of this category landed on target while we're casting; interrupt and record so we don't re-attempt every tick
+    if sub == 'debuff' and mq.TLO.Me.CastTimeLeft() > 0 and entry.dontStack and #entry.dontStack > 0 and mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() then
+        local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+        if tag then
+            printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
+            spellutils.RecordDontStackDebuffFromTarget(target, entry.spell, tag)
+            mq.cmd('/interrupt')
+            spellutils.clearCastingStateOrResume()
+        end
+    end
     if mq.TLO.Me.CastTimeLeft() > 0 and (sub == 'debuff' or sub == 'buff') and spelldur and spelldur > 0 and mq.TLO.Me.Class.ShortName() ~= 'BRD' then
         local buffid = mq.TLO.Target.Buff(spellname).ID() or false
         local buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
@@ -754,9 +801,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     -- pulse mez, wait for land, re-assist MA, attack on (optionally twist DPS song), stay on MA target ~12-15s,
     -- then attack off, target add, re-pulse mez, repeat. Implement in a later plan (state/timers per mez target).
     if (sub == 'debuff' and targethit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
-    if (mq.TLO.Plugin('MQ2Twist').IsLoaded()) then
-        if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then mq.cmd('/squelch /twist stop') end
-    end
+    if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
             if _deps.AdvCombat then _deps.AdvCombat() end
@@ -771,6 +816,20 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
             rc.CurSpell.deadline = mq.gettime() + 1000
             state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
             return true
+        end
+    end
+    -- dontStack: if target already has this debuff category (e.g. another toon's snare), abort and record so we don't re-attempt every tick
+    if sub == 'debuff' and entry.dontStack and #entry.dontStack > 0 then
+        if mq.TLO.Target.ID() ~= EvalID then
+            mq.cmdf('/tar id %s', EvalID)
+            mq.delay(500, function() return mq.TLO.Target.BuffsPopulated() == true end)
+        end
+        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
+            local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+            if tag then
+                spellutils.RecordDontStackDebuffFromTarget(EvalID, entry.spell, tag)
+                return false
+            end
         end
     end
     if entry.announce and type(entry.announce) == 'string' then
