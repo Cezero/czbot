@@ -1,6 +1,6 @@
 # Spell targeting and bands
 
-This page explains **how** spell targeting works for all spell types (heal, buff, debuff, cure) and how band tags interact: evaluation order, count gates like **tarcnt**, and combining tags. Healing and debuffing have the most complex logic and are covered in the most detail; buff and cure are covered fully but in proportion. Section-specific docs ([Healing configuration](healing-configuration.md), [Buffing configuration](buffing-configuration.md), [Debuffing configuration](debuffing-configuration.md), [Curing configuration](curing-configuration.md)) list the actual band tokens and config examples.
+This page explains **how** spell targeting works for all spell types (heal, buff, debuff, cure) and how band tags interact: evaluation order, count gates like **mintar**/**maxtar** (debuff), and combining tags. Healing and debuffing have the most complex logic and are covered in the most detail; buff and cure are covered fully but in proportion. Section-specific docs ([Healing configuration](healing-configuration.md), [Buffing configuration](buffing-configuration.md), [Debuffing configuration](debuffing-configuration.md), [Curing configuration](curing-configuration.md)) list the actual band tokens and config examples.
 
 ## Summary
 
@@ -51,15 +51,15 @@ Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, pc, 
 
 ## Debuff targeting
 
-Debuff spells (including nukes and mez) target **mobs in the camp list**. A camp-size gate (**tarcnt**) and a fixed **evaluation order** determine when and which mob is chosen.
+Debuff spells (including nukes and mez) target **mobs in the camp list**. A camp-size gate (**mintar** / **maxtar** in bands) and a fixed **evaluation order** determine when and which mob is chosen.
 
 ### Mob list
 
 The bot builds a list of valid mobs (within camp leash and filters). This list is the **camp list**: the MA’s (or tank’s) current target plus all adds. Debuffs are only cast on mobs in this list. The number of mobs in the list is **MobCount**.
 
-### tarcnt (debuff — camp-size gate)
+### mintar / maxtar (debuff — camp-size gate)
 
-**tarcnt** is checked at the **start** of debuff evaluation for that spell. If `entry.tarcnt > MobCount`, the spell is **not considered at all** this tick — no target is chosen. So **tarcnt** means: “Only consider this spell when there are at least N mobs in camp.” For example, **tarcnt 2** = at least two mobs (MA target + one add).
+**mintar** and **maxtar** are optional band fields. They are checked at the **start** of debuff evaluation for that spell. **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X. **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X. **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. If the current **MobCount** is outside the spell's effective range, the spell is **not considered at all** this tick — no target is chosen. See [Debuffing configuration](debuffing-configuration.md) for full details and the notanktar-only default.
 
 ### Evaluation order
 
@@ -73,13 +73,13 @@ For each debuff spell, the bot tries the following in order; the **first** valid
 
 ```mermaid
 flowchart LR
-    tarcntCheck[tarcnt check]
+    campCountCheck[mintar/maxtar check]
     charmRecast[charm recast]
     charmTargets[charm targets]
     tanktar[tanktar]
     notanktar[notanktar]
     named[named]
-    tarcntCheck --> charmRecast --> charmTargets --> tanktar --> notanktar --> named
+    campCountCheck --> charmRecast --> charmTargets --> tanktar --> notanktar --> named
 ```
 
 ### Band tags and combining them

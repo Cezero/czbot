@@ -6,7 +6,7 @@ This document explains how to set up **melee combat abilities** (disciplines and
 
 - **Melee combat abilities = debuffs.** There is no separate "melee abilities" section. You add your discipline(s) or ability/ability slot (e.g. kick, bash, backstab) under **`config.debuff.spells`** with **gem** `'disc'` (disciplines) or `'ability'` (e.g. kick, bash), and set **bands** (e.g. **tanktar** for the MA's target).
 - **Both switches required:** **`settings.domelee`** enables stick/attack and engage (see [Tanking configuration](tanking-configuration.md)). **`settings.dodebuff`** enables the debuff loop, which is what actually fires disciplines and abilities. For a melee to auto-attack and use discs/abilities, both must be on.
-- For all debuff options (delay, tarcnt, precondition, etc.), see [Debuffing configuration](debuffing-configuration.md).
+- For all debuff options (delay, mintar/maxtar in bands, precondition, etc.), see [Debuffing configuration](debuffing-configuration.md).
 - See [Spell targeting and bands](spell-targeting-and-bands.md) for how tanktar and notanktar interact and evaluation order.
 
 ---
@@ -21,7 +21,7 @@ This document explains how to set up **melee combat abilities** (disciplines and
    - **enabled** — Optional; default is `true`. When `false`, the spell is not used.
    - **bands** — For abilities on the MA's/tank's target use **tanktar**. Optionally **notanktar** (adds) or **named**. Use **min**/ **max** to restrict by mob HP %.
    - **delay** — Optional. Delay (ms) before the same ability can be used again; useful for cooldown control.
-   - **tarcnt** — Optional. Only consider when total mobs in camp is ≥ tarcnt. See [Debuffing configuration](debuffing-configuration.md).
+   - **mintar** / **maxtar** — Optional; set in **bands**. Camp mob-count gate. See [Debuffing configuration](debuffing-configuration.md).
 
 3. **Optional:** **precondition** (boolean or Lua script to allow/skip the cast), **alias** (for `/cz cast <alias>`), **minmana** (not usually needed for discs/abilities).
 

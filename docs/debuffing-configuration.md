@@ -31,8 +31,7 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 | **announce** | Optional. If true, announce when casting. |
 | **minmana** | Minimum mana (absolute) to cast. |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
-| **targettedAE** | Optional. When `true`, the spell is treated as a **targeted AE** (e.g. AE mez or nuke that hits the target and everything in the spell's AERange): (1) only targets whose distance from the caster is **> AERange + 2** are considered (so the caster is not hit), and (2) **tarcnt** is the minimum number of mobs **within AERange of the chosen target** (not total camp count). If global camp mob count is &lt; tarcnt, the spell is skipped (short-circuit). Recommend setting for AE mez/nuke that would hit the caster if the target is too close. Default is `false`. |
-| **tarcnt** | Optional. When set, the spell is only considered when a mob-count condition is met. **Normal:** total mobs in camp is **≥ tarcnt**. The count includes the MA’s target plus all adds (the full camp list). E.g. **tarcnt 2** = at least 2 mobs in camp. **When targettedAE is true:** tarcnt is the minimum number of mobs **within the spell's AERange of the candidate target**; the spell is not cast on a lone add with no other mobs in AE range. If global camp mob count is &lt; tarcnt, the spell is skipped. When omitted: if the spell's bands include **only notanktar** (adds only), **tarcnt** defaults to **2** so the spell is only considered when there is at least one add (optimization); otherwise no mob-count minimum is applied. |
+| **targettedAE** | Optional. When `true`, the spell is treated as a **targeted AE** (e.g. AE mez or nuke that hits the target and everything in the spell's AERange): (1) only targets whose distance from the caster is **> AERange + 2** are considered (so the caster is not hit), and (2) **mintar** (from bands) is the minimum number of mobs **within AERange of the chosen target** (not total camp count). If the global camp mob count is outside the spell's **mintar**/**maxtar** range, the spell is skipped (short-circuit). Recommend setting for AE mez/nuke that would hit the caster if the target is too close. Default is `false`. |
 | **bands** | Which mobs and at what HP %. See [Debuff bands](#debuff-bands) below. |
 | **charmnames** | Optional. Comma-separated mob **names**. When set, the bot can target those mobs for charm (recast when charm breaks). Before casting charm, the bot sends **pet leave** if your pet is charmed. |
 | **recast** | Optional. After this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. |
@@ -49,7 +48,7 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff u
   - **named** — Only named mobs; when used with tanktar, only the tank target if it is named.
 - **min** / **max:** Mob HP % range (0–100). The mob’s HP must be in this range to be considered.
 
-If a spell has only **notanktar** in its bands and **tarcnt** is not set, the bot defaults **tarcnt** to 2 (see **tarcnt** above).
+- **mintar** / **maxtar:** Optional. Camp mob-count gate (total mobs in camp). **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X. **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X. **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. When **targettedAE** is true, **mintar** is also the minimum number of mobs **within the spell's AERange of the candidate target** (so the spell is not cast on a lone add with no other mobs in AE range). If a spell has only **notanktar** in its bands and neither **mintar** nor **maxtar** is set in any band, the bot defaults **mintar** to 2 so the spell is only considered when there is at least one add (optimization).
 
 **Example: nuke on tank target and slow on adds**
 
@@ -61,9 +60,8 @@ If a spell has only **notanktar** in its bands and **tarcnt** is not set, the bo
       ['spell'] = 'Chaos Flame',
       ['alias'] = 'nuke',
       ['minmana'] = 0,
-      ['tarcnt'] = 10,
       ['bands'] = {
-        { ['targetphase'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100 }
+        { ['targetphase'] = { 'tanktar' }, ['min'] = 5, ['max'] = 100, ['mintar'] = 10 }
       },
       ['charmnames'] = '',
       ['recast'] = 0,
@@ -75,9 +73,8 @@ If a spell has only **notanktar** in its bands and **tarcnt** is not set, the bo
       ['spell'] = 'Turgur\'s Insects',
       ['alias'] = 'slow',
       ['minmana'] = 0,
-      ['tarcnt'] = 5,
       ['bands'] = {
-        { ['targetphase'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100 }
+        { ['targetphase'] = { 'notanktar' }, ['min'] = 20, ['max'] = 100, ['mintar'] = 5 }
       },
       ['charmnames'] = '',
       ['recast'] = 2,

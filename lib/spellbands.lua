@@ -109,6 +109,7 @@ function spellbands.applyBands(section, entry, index)
 
     if section == 'debuff' then
         local mobMin, mobMax = 0, 100
+        local mintar, maxtar = nil, nil
         local tanktar, notanktar, named = false, false, false
         for _, band in ipairs(bands) do
             local targetPhase = band.targetphase
@@ -117,6 +118,8 @@ function spellbands.applyBands(section, entry, index)
                 local mx = band.max
                 if mn ~= nil and (mobMin == nil or mn < mobMin) then mobMin = mn end
                 if mx ~= nil and (mobMax == nil or mx > mobMax) then mobMax = mx end
+                if band.mintar ~= nil and (mintar == nil or band.mintar > mintar) then mintar = band.mintar end
+                if band.maxtar ~= nil and (maxtar == nil or band.maxtar < maxtar) then maxtar = band.maxtar end
                 for _, c in ipairs(targetPhase) do
                     if c == 'tanktar' then tanktar = true
                     elseif c == 'notanktar' then notanktar = true
@@ -127,7 +130,8 @@ function spellbands.applyBands(section, entry, index)
         end
         if mobMin == nil then mobMin = 0 end
         if mobMax == nil then mobMax = 100 end
-        return { mobMin = mobMin, mobMax = mobMax, tanktar = tanktar, notanktar = notanktar, named = named }
+        if not tanktar and notanktar and not named and mintar == nil and maxtar == nil then mintar = 2 end
+        return { mobMin = mobMin, mobMax = mobMax, mintar = mintar, maxtar = maxtar, tanktar = tanktar, notanktar = notanktar, named = named }
     end
 
     return {}

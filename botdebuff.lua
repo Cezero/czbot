@@ -22,17 +22,17 @@ function botdebuff.LoadDebuffConfig()
         defaultEntry = defaultDebuffEntry,
         bandsKey = 'debuff',
         storeIn = DebuffBands,
-        perEntryAfterBands = function(entry, i)
-            if entry.tarcnt ~= nil then return end
-            local db = DebuffBands[i]
-            if db and db.notanktar and not db.tanktar and not db.named then
-                entry.tarcnt = 2
-            end
-        end,
     })
 end
 
 castutils.RegisterSectionLoader('debuff', 'dodebuff', botdebuff.LoadDebuffConfig)
+
+local function campCountOk(mobCount, mintar, maxtar)
+    local effectiveMintar = mintar or (maxtar and 1) or nil
+    if effectiveMintar and mobCount < effectiveMintar then return false end
+    if maxtar and mobCount > maxtar then return false end
+    return true
+end
 
 local function DebuffEvalBuildContext(index)
     local myconfig = botconfig.config
@@ -90,6 +90,8 @@ local function DebuffEvalBuildContext(index)
         mobList = state.getRunconfig().MobList or {},
         mobMin = mobMin,
         mobMax = mobMax,
+        mintar = db and db.mintar,
+        maxtar = db and db.maxtar,
     }
 end
 
@@ -116,7 +118,7 @@ local function DebuffEvalTankTar(index, ctx)
                     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
                         return nil, nil
                     end
-                    if ctx.aeRange and entry.tarcnt and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < entry.tarcnt then
+                    if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < ctx.mintar then
                         return nil, nil
                     end
                     return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
@@ -146,7 +148,7 @@ local function DebuffEvalNotanktar(index, ctx)
                         if not (ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()) then
                             if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
                                 if not (tonumber(ctx.spelldur) > 0 and v.ID() and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
-                                    if not (ctx.aeRange and entry.tarcnt and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, v.ID(), ctx.aeRange) < entry.tarcnt) then
+                                    if not (ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, v.ID(), ctx.aeRange) < ctx.mintar) then
                                         return v.ID(), 'notanktar'
                                     end
                                 end
@@ -181,7 +183,7 @@ local function DebuffEvalNamedTankTar(index, ctx)
                 if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
                     return nil, nil
                 end
-                if ctx.aeRange and entry.tarcnt and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < entry.tarcnt then
+                if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < ctx.mintar then
                     return nil, nil
                 end
                 return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
@@ -194,7 +196,8 @@ end
 local function DebuffEval(index)
     local entry = botconfig.getSpellEntry('debuff', index)
     if not entry then return nil, nil end
-    if entry.tarcnt and entry.tarcnt > state.getRunconfig().MobCount then return nil, nil end
+    local db = DebuffBands[index]
+    if not campCountOk(state.getRunconfig().MobCount, db and db.mintar, db and db.maxtar) then return nil, nil end
     local id, hit = charm.GetRecastRequestForIndex(index)
     if id then
         charm.ClearRecastRequest()
@@ -262,7 +265,8 @@ end
 local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry then return nil, nil end
-    if entry.tarcnt and entry.tarcnt > state.getRunconfig().MobCount then return nil, nil end
+    local db = DebuffBands[spellIndex]
+    if not campCountOk(state.getRunconfig().MobCount, db and db.mintar, db and db.maxtar) then return nil, nil end
     if targethit == 'charmtar' or targethit == 'charm' then
         if context.charmRecasts and context.charmRecasts[spellIndex] and context.charmRecasts[spellIndex].id == targetId then
             return targetId, context.charmRecasts[spellIndex].targethit or 'charmtar'
@@ -307,7 +311,7 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
                         if not (ctx.spellid and vlevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < vlevel) then
                             if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
                                 if not (tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(targetId, ctx.spellid, 6000)) then
-                                    if not (ctx.aeRange and entry.tarcnt and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, targetId, ctx.aeRange) < entry.tarcnt) then
+                                    if not (ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, targetId, ctx.aeRange) < ctx.mintar) then
                                         return targetId, 'notanktar'
                                     end
                                 end

@@ -19,7 +19,7 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
    - **gem** — Spell gem number (1–12) or `'item'`, `'alt'`, `'disc'`.
    - **spell** — Exact spell name (e.g. `"Chaos Flame"`).
    - **enabled** — Optional; default is `true`. When `false`, the spell is not used.
-   - **tarcnt** — Optional. When set, only consider the nuke when total mobs in camp is ≥ tarcnt (count includes the MA’s target plus adds). E.g. **tarcnt 2** = at least two mobs in camp (one add). See [Debuffing configuration](debuffing-configuration.md).
+   - **mintar** / **maxtar** — Optional; set in **bands**. Camp mob-count gate (only consider when mob count is in range). E.g. **mintar 2** = at least two mobs in camp. See [Debuffing configuration](debuffing-configuration.md).
    - **bands** — For nuking the main target use **tanktar**. For multi-target or add nuking add **notanktar**. For named-only nukes add **named**. Use **min**/ **max** to restrict by mob HP % (e.g. nuke only when mob is 5–100% HP).
 
 3. **Optional:** **recast** (resist count before disabling for that spawn), **delay** (ms before same spell can be used again), **alias** (for `/cz cast <alias>`), **minmana**.
