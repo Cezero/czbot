@@ -380,7 +380,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
         end
     end
 
-    if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' then
+    if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' and not rc.CurSpell.viaMQ2Cast then
         if mq.TLO.Me.CastTimeLeft() > 0 and (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') then
             spellutils.InterruptCheck()
         end
