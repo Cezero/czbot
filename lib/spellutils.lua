@@ -625,6 +625,7 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
             if not rc.spellNotInBook then rc.spellNotInBook = {} end
             if not rc.spellNotInBook[Sub] then rc.spellNotInBook[Sub] = {} end
             rc.spellNotInBook[Sub][ID] = true
+            rc.CurSpell = {}
             return false
         else
             return false
@@ -667,6 +668,7 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
                 mq.cmdf('/memorize "%s" %s', spell, gem)
                 rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
                 rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
+                rc.CurSpell = { phase = 'memorizing', sub = Sub, spell = ID, gem = gem }
                 state.setRunState('loading_gem', {
                     sub = Sub,
                     id = ID,
