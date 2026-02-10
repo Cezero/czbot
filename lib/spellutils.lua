@@ -675,23 +675,8 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
         -- is spell loaded?
         if mq.TLO.Me.Gem(spell)() ~= gem then
             if mq.TLO.Me.Book(spell)() then
-                if string.find(mq.TLO.Cast.Status() or '', 'M') then
-                    rc.CurSpell = { phase = 'memorizing', sub = Sub, spell = ID, gem = gem }
-                    rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
-                    if state.getRunState() ~= 'loading_gem' then
-                        rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
-                        state.setRunState('loading_gem', {
-                            sub = Sub,
-                            id = ID,
-                            spell = spell,
-                            gem = gem,
-                            deadline = mq.gettime() + 10000,
-                            priority = runPriority,
-                        })
-                    end
-                    return false
-                end
                 mq.cmdf('/memorize "%s" %s', spell, gem)
+                mq.delay(50)
                 rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
                 rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
                 rc.CurSpell = { phase = 'memorizing', sub = Sub, spell = ID, gem = gem }
