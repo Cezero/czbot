@@ -317,6 +317,7 @@ end
 --- On leaving a cast: if payload has spellcheckResume, set that hook's _resume state; else clearRunState().
 function spellutils.clearCastingStateOrResume()
     local rc = state.getRunconfig()
+    printf('\at[MQ2CAST]\ax clearCastingStateOrResume runState=%s CurSpell.phase=%s CurSpell.sub=%s', tostring(state.getRunState()), (rc.CurSpell and rc.CurSpell.phase) or 'n/a', (rc.CurSpell and rc.CurSpell.sub) or 'n/a')
     rc.CurSpell = {}
     rc.statusMessage = ''
     local p = state.getRunStatePayload()
@@ -476,6 +477,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     end
 
     local runState = state.getRunState()
+    printf('\at[MQ2CAST]\ax phase loop starting sub=%s hookName=%s runState=%s CurSpell.phase=%s CurSpell.sub=%s', tostring(sub), tostring(hookName), tostring(runState), (rc.CurSpell and rc.CurSpell.phase) or 'n/a', (rc.CurSpell and rc.CurSpell.sub) or 'n/a')
     if runState == 'casting' or (rc.CurSpell and rc.CurSpell.phase == 'casting') then
         printf(
         '\at[MQ2CAST]\ax about to run phase loop despite casting runState=%s CurSpell.phase=%s CurSpell.sub=%s CurSpell.spell=%s sub=%s',
@@ -501,6 +503,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
         state.clearRunState()
     end
 
+    local phaseLoopFoundWork = false
     for phaseIdx = startPhaseIdx, #phaseOrder do
         local phase = phaseOrder[phaseIdx]
         local targets = getTargetsFn(phase, context)
@@ -521,6 +524,8 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                 fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn)
                             if spellIndex and EvalID and targethit then
+                                phaseLoopFoundWork = true
+                                printf('\at[MQ2CAST]\ax phase loop sub=%s hookName=%s found work spellIndex=%s EvalID=%s targetId=%s', tostring(sub), tostring(hookName), tostring(spellIndex), tostring(EvalID), tostring(target.id))
                                 if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub then
                                     printf('\at[MQ2CAST]\ax phase loop sub=%s FOUND WORK (will interrupt current cast sub=%s)', tostring(sub), tostring(rc.CurSpell.sub))
                                 end
@@ -547,10 +552,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
             end
         end
     end
-    -- Log when this section ran its phase loop but did not find work, while another section's cast is in progress (confirms we are not incorrectly interrupting).
-    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub then
-        printf('\at[MQ2CAST]\ax phase loop sub=%s no work this tick (current cast sub=%s)', tostring(sub), tostring(rc.CurSpell.sub))
-    end
+    printf('\at[MQ2CAST]\ax phase loop done sub=%s hookName=%s foundWork=%s runState=%s CurSpell.phase=%s CurSpell.sub=%s', tostring(sub), tostring(hookName), tostring(phaseLoopFoundWork), tostring(state.getRunState()), (rc.CurSpell and rc.CurSpell.phase) or 'n/a', (rc.CurSpell and rc.CurSpell.sub) or 'n/a')
     -- Clear _resume state when loop completes without starting a new cast (so we don't stay stuck in doHeal_resume etc.)
     if state.getRunState() == hookName .. '_resume' then
         state.clearRunState()
