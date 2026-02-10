@@ -332,6 +332,9 @@ end
 --- Handles CurSpell re-entry (casting, precast, precast_wait_move). Returns true if handled (caller should return), false to run the phase-first loop.
 function spellutils.handleSpellCheckReentry(sub, options)
     options = options or {}
+    if state.getRunState() == 'loading_gem' then
+        return false
+    end
     local skipInterruptForBRD = options.skipInterruptForBRD ~= false
     local rc = state.getRunconfig()
 
@@ -692,6 +695,7 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
 end
 
 function spellutils.InterruptCheck()
+    if state.getRunState() == 'loading_gem' then return false end
     local rc = state.getRunconfig()
     if not rc.CurSpell.sub then return false end
     local sub = rc.CurSpell.sub
