@@ -36,6 +36,20 @@ end
 
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.dopull then botpull.LoadPullConfig() end end)
 
+-- At startup: when engage_gem or engage_spell is set and spell is resolvable, set abilityrange from spell range - 5.
+botconfig.RegisterConfigLoader(function()
+    local pull = botconfig.config.pull
+    if not pull then return end
+    if not (type(pull.engage_gem) == 'number' and pull.engage_gem >= 1 and pull.engage_gem <= 12) and not (type(pull.engage_spell) == 'string' and pull.engage_spell ~= '') then return end
+    local spellName = bardtwist.GetEngageSpellName()
+    if spellName and spellName ~= '' then
+        local r = mq.TLO.Spell(spellName).MyRange()
+        if r and r > 0 then
+            botconfig.config.pull.abilityrange = math.max(0, r - 5)
+        end
+    end
+end)
+
 function botpull.TagTimeCalc(trip, spawnId, x, y, z)
     if trip == 'pull' and spawnId then
         return (((mq.TLO.Navigation.PathLength('id ' .. spawnId)() + 100) / 100) * 9000) + mq.gettime()
@@ -111,10 +125,22 @@ local function canStartPull(rc)
     return true
 end
 
+-- Effective ability range: when engage_gem or engage_spell is set, use spell MyRange() - 5; else config.
+local function getEffectiveAbilityRange()
+    local spellName = bardtwist.GetEngageSpellName()
+    if spellName and spellName ~= '' then
+        local r = mq.TLO.Spell(spellName).MyRange()
+        if r and r > 0 then return math.max(0, r - 5) end
+    end
+    return myconfig.pull.abilityrange
+end
+
 -- Camp/hunter setup and mapfilter; no mq.delay.
 local function ensureCampAndAnchor(rc)
     mq.cmdf('/squelch /mapfilter SpellRadius %s', myconfig.pull.radius)
-    mq.cmdf('/squelch /mapfilter CastRadius %s', mq.TLO.Spell(myconfig.pull.pullability).MyRange())
+    local castRadius = bardtwist.GetEngageSpellName() and getEffectiveAbilityRange()
+        or mq.TLO.Spell(myconfig.pull.pullability).MyRange()
+    mq.cmdf('/squelch /mapfilter CastRadius %s', castRadius)
     if not myconfig.pull.hunter and not rc.campstatus then botmove.MakeCamp('on') end
     if myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
         mq.cmd('/echo setting HunterMode anchor')
@@ -165,6 +191,27 @@ end
 function botpull.StartPull()
     local rc = state.getRunconfig()
     if not canStartPull(rc) then return end
+
+    local pull = myconfig.pull
+    if pull and type(pull.engage_gem) == 'number' and pull.engage_gem >= 1 and pull.engage_gem <= 12 then
+        local gemSlot = pull.engage_gem
+        local gemSpell = gemSlot and mq.TLO.Me.Gem(gemSlot)()
+        if not gemSpell or gemSpell == '' then
+            printf('\ayCZBot:\ax\arengage_gem %s is set but no song is memmed in that gem; setting DoPull to FALSE.', tostring(gemSlot))
+            myconfig.settings.dopull = false
+            return
+        end
+    end
+
+    local spellName = bardtwist.GetEngageSpellName()
+    if spellName and spellName ~= '' then
+        local r = mq.TLO.Spell(spellName).MyRange()
+        if r and r > 0 then
+            myconfig.pull.abilityrange = math.max(0, r - 5)
+            botconfig.Save(botconfig.getPath())
+        end
+    end
+
     ensureCampAndAnchor(rc)
     local apmoblist = spawnutils.buildPullMobList(rc)
     local spawn = selectPullTarget(apmoblist, rc)
@@ -217,7 +264,7 @@ local function tickNavigating(rc, spawn)
                 return
             end
         end
-        if spawn.Distance() and spawn.Distance() < myconfig.pull.abilityrange and spawn.LineOfSight() then
+        if spawn.Distance() and spawn.Distance() < getEffectiveAbilityRange() and spawn.LineOfSight() then
             rc.pullState = 'aggroing'
             rc.pullPhase = 'aggro_wait_target'
             rc.pullDeadline = mq.gettime() + 1000
@@ -230,7 +277,7 @@ local function tickNavigating(rc, spawn)
             return
         end
     end
-    if not mq.TLO.Navigation.Active() and spawn.Distance() and spawn.Distance() > myconfig.pull.abilityrange then
+    if not mq.TLO.Navigation.Active() and spawn.Distance() and spawn.Distance() > getEffectiveAbilityRange() then
         mq.cmdf('/nav id %s dist= 7 log=off los=on', rc.pullAPTargetID)
     end
 end

@@ -195,4 +195,17 @@ function bardtwist.GetEngageGem()
     return nil
 end
 
+--- Resolve engage spell name from config.pull (engage_spell or spell in engage_gem). Returns spell name or nil.
+function bardtwist.GetEngageSpellName()
+    local pull = botconfig.config.pull
+    if not pull then return nil end
+    if type(pull.engage_spell) == 'string' and pull.engage_spell ~= '' then
+        return pull.engage_spell
+    end
+    if type(pull.engage_gem) == 'number' and pull.engage_gem >= 1 and pull.engage_gem <= 12 then
+        return mq.TLO.Me.Gem(pull.engage_gem)()
+    end
+    return nil
+end
+
 return bardtwist
