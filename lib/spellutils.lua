@@ -168,7 +168,7 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
     end
     mq.cmdf('/tar id %s', spawnId)
     state.getRunconfig().statusMessage = string.format('Waiting for target buffs (id %s)', spawnId)
-    mq.delay(1000, function() return mq.TLO.Target.BuffsPopulated() end)
+    mq.delay(1000, function() return mq.TLO.Target.BuffsPopulated() == true end)
     local sp = mq.TLO.Spawn(spawnId)
     local ok = sp and sp.BuffsPopulated and sp.BuffsPopulated() and mq.TLO.Target.ID() == spawnId
     if not ok then state.getRunconfig().statusMessage = '' end
@@ -583,6 +583,19 @@ function spellutils.RunScript(script, Sub, ID)
     end
 end
 
+--- Check loading_gem completion. Returns 'still_waiting', 'done_ok', or 'done_fail'.
+--- Payload must have spell, gem, deadline. Uses Cast.Status() "M" and Me.Gem(gem)() to decide.
+function spellutils.LoadingGemComplete(payload)
+    if not payload or not payload.spell or not payload.gem then return 'done_fail' end
+    if mq.gettime() >= (payload.deadline or 0) then
+        local g = mq.TLO.Me.Gem(payload.gem)()
+        return (g and string.lower(g) == string.lower(payload.spell)) and 'done_ok' or 'done_fail'
+    end
+    if string.find(mq.TLO.Cast.Status() or '', 'M') then return 'still_waiting' end
+    local g = mq.TLO.Me.Gem(payload.gem)()
+    return (g and string.lower(g) == string.lower(payload.spell)) and 'done_ok' or 'done_fail'
+end
+
 function spellutils.LoadSpell(Sub, ID, runPriority)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return false end
@@ -591,6 +604,26 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
     end
     local spell = entry.spell
     local gem = entry.gem
+    local rc = state.getRunconfig()
+    -- Re-entry: we're in loading_gem for this same spell; check completion.
+    if state.getRunState() == 'loading_gem' then
+        local p = state.getRunStatePayload()
+        if p and p.sub == Sub and p.id == ID then
+            local result = spellutils.LoadingGemComplete(p)
+            if result == 'still_waiting' then return false end
+            rc.statusMessage = ''
+            state.clearRunState()
+            if result == 'done_ok' then return true end
+            printf('\ayCZBot:\ax %s[%s]: Spell %s could not be memorized in gem %s', Sub, ID, spell, p.gem)
+            entry.enabled = false
+            if not rc.spellNotInBook then rc.spellNotInBook = {} end
+            if not rc.spellNotInBook[Sub] then rc.spellNotInBook[Sub] = {} end
+            rc.spellNotInBook[Sub][ID] = true
+            return false
+        else
+            return false
+        end
+    end
     -- if gem ready and spell loaded, return true, else run load logic
     if type(gem) == 'number' and mq.TLO.Me.Gem(spell)() == gem and mq.TLO.Me.SpellReady(spell)() then return true end
     if gem == 'item' then
@@ -613,7 +646,6 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
         if spellutils.ProcessScript(spell, Sub, ID) then return true else return false end
     end
     --check gemInUse (prevents spells fighting over the same gem)
-    local rc = state.getRunconfig()
     if type(gem) == 'number' then
         if rc.gemInUse[gem] then
             if mq.TLO.Me.Gem(gem)() and string.lower(mq.TLO.Me.Gem(gem)()) ~= string.lower(spell) and rc.gemInUse[gem] > mq.gettime() then
@@ -629,12 +661,15 @@ function spellutils.LoadSpell(Sub, ID, runPriority)
                 mq.cmdf('/memorize "%s" %s', spell, gem)
                 rc.gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
                 rc.statusMessage = string.format('Memorizing %s (gem %s)', spell, gem)
-                mq.delay(10000, function()
-                    local g = mq.TLO.Me.Gem(gem)()
-                    return g and string.lower(g) == string.lower(spell)
-                end)
-                rc.statusMessage = ''
-                if mq.TLO.Me.Gem(spell)() ~= gem then return false end
+                state.setRunState('loading_gem', {
+                    sub = Sub,
+                    id = ID,
+                    spell = spell,
+                    gem = gem,
+                    deadline = mq.gettime() + 10000,
+                    priority = runPriority,
+                })
+                return false
             else
                 printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', Sub, ID, spell)
                 entry.enabled = false

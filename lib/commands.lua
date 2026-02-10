@@ -529,54 +529,21 @@ local function cmd_chchain(args)
                 mq.cmdf('/memorize "%s" %s', spell, gem)
                 state.getRunconfig().gemInUse[gem] = (mq.gettime() + mq.TLO.Spell(spell).RecastTime())
                 state.getRunconfig().statusMessage = 'CHChain: memorizing Complete Heal'
-                mq.delay(10000, function()
-                    local g = mq.TLO.Me.Gem(gem)()
-                    return g and string.lower(g) == string.lower(spell)
-                end)
-                state.getRunconfig().statusMessage = ''
+                state.setRunState('loading_gem', {
+                    source = 'chchain_setup',
+                    spell = spell,
+                    gem = gem,
+                    deadline = mq.gettime() + 10000,
+                    priority = bothooks.getPriority('chchainTick'),
+                    setupArgs = { args[3], args[4], args[5] },
+                })
+                return
             else
                 printf('\ayCZBot:\axCZBot CHChain: Spell %s not found in your book, failed to start CHChain', spell)
                 return false
             end
         end
-        chchainlist = args[3]
-        chnextclr = nil
-        clericlisttbl = {}
-        for v in string.gmatch(chchainlist, "([^,]+)") do
-            table.insert(clericlisttbl, v)
-            if chnextclr then
-                chnextclr = v
-                break
-            end
-            if string.lower(v) == string.lower(mq.TLO.Me.CleanName()) then
-                dochchain = true
-                chnextclr = true
-            end
-        end
-        if chnextclr == true then chnextclr = clericlisttbl[1] end
-        if dochchain then
-            chchainpause = args[4]
-            chtanklist = {}
-            if args[5] then
-                for v in string.gmatch(args[5], "([^,]+)") do
-                    local vtrim = v:sub(-1) == "'" and v:sub(1, -2) or v
-                    if mq.TLO.Spawn('=' .. vtrim).Type() == 'PC' then
-                        table.insert(chtanklist, vtrim)
-                        print('adding ' .. vtrim .. ' to tank list') -- doesn't look like debug but probably should be formatted better
-                    end
-                end
-            end
-            chchaintank = chtanklist[1]
-            local chtankstr = table.concat(chtanklist, ",")
-            botconfig.config.settings.dodebuff = false
-            botconfig.config.settings.dobuff = false
-            botconfig.config.settings.domelee = false
-            botconfig.config.settings.doheal = false
-            botconfig.config.settings.docure = false
-            botconfig.config.settings.dopull = false
-            botconfig.config.settings.dopet = false
-            mq.cmdf('/rs CHChain ON (NextClr: %s, Pause: %s, Tank: %s)', chnextclr, chchainpause, chtankstr)
-        end
+        M.chchainSetupContinuation({ args[3], args[4], args[5] })
     end
     if args[2] == 'start' then
         if args[3] == mq.TLO.Me.Name() then chchain.OnGo('start', mq.TLO.Me.Name()) end
@@ -756,6 +723,49 @@ function M.czpause(...)
             MasterPause = false
             mq.cmd('/echo Unpausing CZBot')
         end
+    end
+end
+
+--- Called when loading_gem completes for chchain_setup. setupArgs = { chchainlist, chchainpause, tanklist }.
+function M.chchainSetupContinuation(setupArgs)
+    if not setupArgs or not setupArgs[1] then return end
+    chchainlist = setupArgs[1]
+    chnextclr = nil
+    clericlisttbl = {}
+    for v in string.gmatch(chchainlist, "([^,]+)") do
+        table.insert(clericlisttbl, v)
+        if chnextclr then
+            chnextclr = v
+            break
+        end
+        if string.lower(v) == string.lower(mq.TLO.Me.CleanName()) then
+            dochchain = true
+            chnextclr = true
+        end
+    end
+    if chnextclr == true then chnextclr = clericlisttbl[1] end
+    if dochchain then
+        chchainpause = setupArgs[2]
+        chtanklist = {}
+        if setupArgs[3] then
+            for v in string.gmatch(setupArgs[3], "([^,]+)") do
+                local vtrim = v:sub(-1) == "'" and v:sub(1, -2) or v
+                if mq.TLO.Spawn('=' .. vtrim).Type() == 'PC' then
+                    table.insert(chtanklist, vtrim)
+                    print('adding ' .. vtrim .. ' to tank list')
+                end
+            end
+        end
+        chchaintank = chtanklist[1]
+        local chtankstr = table.concat(chtanklist, ",")
+        botconfig.config.settings.dodebuff = false
+        botconfig.config.settings.dobuff = false
+        botconfig.config.settings.domelee = false
+        botconfig.config.settings.doheal = false
+        botconfig.config.settings.docure = false
+        botconfig.config.settings.dopull = false
+        botconfig.config.settings.dopet = false
+        mq.cmdf('/rs CHChain ON (NextClr: %s, Pause: %s, Tank: %s)', chnextclr, chchainpause, chtankstr)
     end
 end
 

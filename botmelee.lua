@@ -231,7 +231,10 @@ function botmelee.GetPCTarget(pcName)
     if mq.TLO.Me.Assist() then mq.cmd('/squelch /assist off') end
     mq.cmdf('/assist %s', pcName)
     state.getRunconfig().statusMessage = string.format('Waiting for assist target (%s)', pcName)
-    mq.delay(500, function() return mq.TLO.Target.ID() end)
+    mq.delay(500, function()
+        local id = mq.TLO.Target.ID()
+        return id ~= nil and id ~= 0
+    end)
     state.getRunconfig().statusMessage = ''
     for _, v in ipairs(state.getRunconfig().MobList) do
         if mq.TLO.Target.ID() == v.ID() then return mq.TLO.Target.ID() end

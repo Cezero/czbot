@@ -65,6 +65,7 @@ local BUSY_STATES = {
     engage_return_follow = true,
     unstuck = true,
     chchain = true,
+    loading_gem = true,
 }
 M._runconfig = nil
 
