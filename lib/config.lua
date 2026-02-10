@@ -22,9 +22,13 @@
 ---@field spelldb string|nil
 ---@field dopet boolean|nil
 
+---@class ConfigPullSpell
+---@field gem number|string|nil 1-12, 'item', 'alt', 'disc', 'ability', 'script', 'melee', or 'ranged'
+---@field spell string|nil spell name, item name (for ranged bow), or empty for melee
+---@field range number|nil optional; derived from spell/ability when possible
+
 ---@class ConfigPull
----@field pullability string|nil
----@field abilityrange number|nil
+---@field spell ConfigPullSpell|nil single pull spell block
 ---@field radius number|nil
 ---@field zrange number|nil
 ---@field maxlevel number|nil
@@ -36,8 +40,6 @@
 ---@field leash number|nil
 ---@field usepriority boolean|nil
 ---@field hunter boolean|nil
----@field engage_gem number|nil bard puller: gem (1-12) for agro song
----@field engage_spell string|nil bard puller: spell name (resolved to gem from book)
 
 ---@class ConfigMelee
 ---@field assistpct number|nil
@@ -87,7 +89,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'dopet' },
-    pull = { 'pullability', 'abilityrange', 'radius', 'zrange', 'maxlevel', 'minlevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
+    pull = { 'spell', 'radius', 'zrange', 'maxlevel', 'minlevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
@@ -101,6 +103,7 @@ local spellSlotOrder = {
     buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'spellicon', 'precondition' },
     debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'targettedAE', 'bands', 'charmnames', 'recast', 'delay', 'precondition', 'dontStack' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
+    pull = { 'gem', 'spell', 'range' },
 }
 
 local function applySectionDefaults(section, defaults)
@@ -362,6 +365,29 @@ local function writeConfigToFile(config, filename)
                                 file:flush()
                             end
                         end
+                    elseif key == 'pull' then
+                        for _, subkey in ipairs(subOrder[key]) do
+                            local subval = value[subkey]
+                            if subval == nil then
+                                -- omit nil keys
+                            elseif subkey == 'spell' and type(subval) == "table" then
+                                file:write(indent .. "  ['spell'] = {\n")
+                                file:flush()
+                                writesubTable(subval, spellSlotOrder.pull, indent .. "    ")
+                                file:write(indent .. "  },\n")
+                                file:flush()
+                            elseif tonumber(subval) then
+                                file:write(indent .. "  ['" .. subkey .. "'] = ", tonumber(subval), ",\n")
+                            elseif subval == true then
+                                file:write(indent .. "  ['" .. subkey .. "'] = true,\n")
+                            elseif subval == false then
+                                file:write(indent .. "  ['" .. subkey .. "'] = false ,\n")
+                            else
+                                local subvalStr = type(subval) == "string" and '"' .. subval .. '"' or tostring(subval)
+                                file:write(indent .. "  ['" .. subkey .. "'] = " .. subvalStr .. ",\n")
+                            end
+                            file:flush()
+                        end
                     else
                         writesubTable(value, subOrder[key], indent .. "  ")
                     end
@@ -450,10 +476,17 @@ function M.Load(path)
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
     if (M.config.settings.dopet == nil) then M.config.settings.dopet = false end
     applySectionDefaults('pull', {
-        radius = 400, zrange = 150, chainpullcnt = 0, chainpullhp = 0, pullability = 'melee', abilityrange = 60,
+        radius = 400, zrange = 150, chainpullcnt = 0, chainpullhp = 0,
         maxlevel = 200, minlevel = 0, hunter = false, mana = 60, manaclass = 'clr, dru, shm', leash = 500, usepriority = false,
-        engage_gem = nil, engage_spell = nil,
     })
+    if not M.config.pull.spell or type(M.config.pull.spell) ~= 'table' then
+        M.config.pull.spell = { gem = 'melee', spell = '', range = nil }
+    end
+    local ps = M.config.pull.spell
+    if ps then
+        if ps.gem == nil then ps.gem = 'melee' end
+        if ps.spell == nil then ps.spell = '' end
+    end
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
         stickcmd = 'hold uw 7', offtank = false, otoffset = 0, minmana = 0, assistpct = 99,

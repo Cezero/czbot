@@ -177,33 +177,26 @@ function bardtwist.SetTwistOnceGem(gem)
     if gem then bardtwist.SetTwistOnce({ gem }) end
 end
 
---- Resolve engage_gem or engage_spell from config.pull. Returns gem number or nil.
+--- Use config.pull.spell for twist-on-pull. Returns gem number (1-12) or nil when pull spell is a numeric gem.
 function bardtwist.GetEngageGem()
-    ---@type { engage_gem?: number, engage_spell?: string }|nil
     local pull = botconfig.config.pull
-    if not pull then return nil end
-    if type(pull.engage_gem) == 'number' and pull.engage_gem >= 1 and pull.engage_gem <= 12 then
-        return pull.engage_gem
-    end
-    if type(pull.engage_spell) == 'string' and pull.engage_spell ~= '' then
-        local spell = pull.engage_spell
-        for slot = 1, 12 do
-            local mem = mq.TLO.Me.Gem(slot)()
-            if mem and mem == spell then return slot end
-        end
+    if not pull or not pull.spell or type(pull.spell) ~= 'table' then return nil end
+    local gem = pull.spell.gem
+    if type(gem) == 'number' and gem >= 1 and gem <= 12 then
+        return gem
     end
     return nil
 end
 
---- Resolve engage spell name from config.pull (engage_spell or spell in engage_gem). Returns spell name or nil.
+--- Use config.pull.spell for twist-on-pull. Returns spell name or nil.
 function bardtwist.GetEngageSpellName()
     local pull = botconfig.config.pull
-    if not pull then return nil end
-    if type(pull.engage_spell) == 'string' and pull.engage_spell ~= '' then
-        return pull.engage_spell
-    end
-    if type(pull.engage_gem) == 'number' and pull.engage_gem >= 1 and pull.engage_gem <= 12 then
-        return mq.TLO.Me.Gem(pull.engage_gem)()
+    if not pull or not pull.spell or type(pull.spell) ~= 'table' then return nil end
+    local gem = pull.spell.gem
+    local spell = pull.spell.spell
+    if type(gem) == 'number' and gem >= 1 and gem <= 12 then
+        if spell and spell ~= '' then return spell end
+        return mq.TLO.Me.Gem(gem)()
     end
     return nil
 end

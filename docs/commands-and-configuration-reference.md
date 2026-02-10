@@ -161,7 +161,7 @@ return StoredConfig
 
 ### Pull section
 
-See [Pull Configuration and Logic](pull-configuration.md) for the full pull table. Options include: **pullability**, **abilityrange**, **radius**, **zrange**, **minlevel**, **maxlevel**, **chainpullcnt**, **chainpullhp**, **mana**, **manaclass**, **leash**, **usepriority**, **hunter**.
+See [Pull Configuration and Logic](pull-configuration.md) for the full pull table. Options include: **spell** (single block: gem, spell, range), **radius**, **zrange**, **minlevel**, **maxlevel**, **chainpullcnt**, **chainpullhp**, **mana**, **manaclass**, **leash**, **usepriority**, **hunter**.
 
 ### Melee section
 

@@ -36,19 +36,59 @@ end
 
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.dopull then botpull.LoadPullConfig() end end)
 
--- At startup: when engage_gem or engage_spell is set and spell is resolvable, set abilityrange from spell range - 5.
-botconfig.RegisterConfigLoader(function()
-    local pull = botconfig.config.pull
-    if not pull then return end
-    if not (type(pull.engage_gem) == 'number' and pull.engage_gem >= 1 and pull.engage_gem <= 12) and not (type(pull.engage_spell) == 'string' and pull.engage_spell ~= '') then return end
-    local spellName = bardtwist.GetEngageSpellName()
-    if spellName and spellName ~= '' then
-        local r = mq.TLO.Spell(spellName).MyRange()
-        if r and r > 0 then
-            botconfig.config.pull.abilityrange = math.max(0, r - 5)
+--- Returns the single pull spell block from config, or nil if missing/empty (treat as melee).
+function botpull.GetPullSpell()
+    local pull = myconfig.pull
+    if not pull or not pull.spell or type(pull.spell) ~= 'table' then return nil end
+    local ps = pull.spell
+    if not ps or (ps.gem == nil and ps.spell == nil) then return nil end
+    return ps
+end
+
+--- Returns effective pull range in units for the given pull spell entry.
+local function getPullRange(entry)
+    if not entry then return 50 end
+    if entry.range and type(entry.range) == 'number' and entry.range > 0 then return entry.range end
+    local gem = entry.gem
+    local spell = entry.spell
+    if gem == 'melee' then return 10 end
+    if gem == 'ranged' then
+        if spell and spell ~= '' and mq.TLO.FindItem(spell)() then
+            local r = mq.TLO.FindItem(spell).Range()
+            if r and r > 0 then return r end
+        end
+        return entry.range and entry.range > 0 and entry.range or 200
+    end
+    if type(gem) == 'number' and gem >= 1 and gem <= 12 then
+        local name = spell or (mq.TLO.Me.Gem(gem)())
+        if name and name ~= '' then
+            local r = mq.TLO.Spell(name).MyRange()
+            if r and r > 0 then return math.max(0, r - 5) end
         end
     end
-end)
+    if gem == 'item' and spell and mq.TLO.FindItem(spell)() then
+        local r = mq.TLO.FindItem(spell).Spell.MyRange()
+        if r and r > 0 then return r end
+    end
+    if gem == 'alt' and spell and mq.TLO.Me.AltAbility(spell)() then
+        local r = mq.TLO.Me.AltAbility(spell).Spell.MyRange()
+        if r and r > 0 then return r end
+    end
+    if gem == 'ability' then
+        return entry.range and entry.range > 0 and entry.range or 10
+    end
+    if gem == 'disc' then
+        if spell and spell ~= '' then
+            local r = mq.TLO.Spell(spell).MyRange()
+            if r and r > 0 then return r end
+        end
+        return entry.range and entry.range > 0 and entry.range or 50
+    end
+    if gem == 'script' then
+        return entry.range and entry.range > 0 and entry.range or 50
+    end
+    return 50
+end
 
 function botpull.TagTimeCalc(trip, spawnId, x, y, z)
     if trip == 'pull' and spawnId then
@@ -125,21 +165,15 @@ local function canStartPull(rc)
     return true
 end
 
--- Effective ability range: when engage_gem or engage_spell is set, use spell MyRange() - 5; else config.
 local function getEffectiveAbilityRange()
-    local spellName = bardtwist.GetEngageSpellName()
-    if spellName and spellName ~= '' then
-        local r = mq.TLO.Spell(spellName).MyRange()
-        if r and r > 0 then return math.max(0, r - 5) end
-    end
-    return myconfig.pull.abilityrange
+    local entry = botpull.GetPullSpell()
+    return getPullRange(entry)
 end
 
 -- Camp/hunter setup and mapfilter; no mq.delay.
 local function ensureCampAndAnchor(rc)
     mq.cmdf('/squelch /mapfilter SpellRadius %s', myconfig.pull.radius)
-    local castRadius = bardtwist.GetEngageSpellName() and getEffectiveAbilityRange()
-        or mq.TLO.Spell(myconfig.pull.pullability).MyRange()
+    local castRadius = getEffectiveAbilityRange()
     mq.cmdf('/squelch /mapfilter CastRadius %s', castRadius)
     if not myconfig.pull.hunter and not rc.campstatus then botmove.MakeCamp('on') end
     if myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
@@ -192,36 +226,19 @@ function botpull.StartPull()
     local rc = state.getRunconfig()
     if not canStartPull(rc) then return end
 
-    local pull = myconfig.pull
-    if pull and type(pull.engage_gem) == 'number' and pull.engage_gem >= 1 and pull.engage_gem <= 12 then
-        local gemSlot = pull.engage_gem
-        local gemSpell = gemSlot and mq.TLO.Me.Gem(gemSlot)()
-        if not gemSpell or gemSpell == '' then
-            printf('\ayCZBot:\ax\arengage_gem %s is set but no song is memmed in that gem; setting DoPull to FALSE.', tostring(gemSlot))
-            myconfig.settings.dopull = false
-            return
-        end
-    end
-
-    local spellName = bardtwist.GetEngageSpellName()
-    if spellName and spellName ~= '' then
-        local r = mq.TLO.Spell(spellName).MyRange()
-        if r and r > 0 then
-            myconfig.pull.abilityrange = math.max(0, r - 5)
-            botconfig.Save(botconfig.getPath())
-        end
-    end
-
     ensureCampAndAnchor(rc)
     local apmoblist = spawnutils.buildPullMobList(rc)
     local spawn = selectPullTarget(apmoblist, rc)
     if not spawn then return end
 
+    local entry = botpull.GetPullSpell()
+    local isWarp = entry and entry.gem == 'script' and entry.spell and string.lower(tostring(entry.spell)) == 'warp'
+
     local distance = spawn.Distance() and math.floor(spawn.Distance()) or 0
     printf('\ayCZBot:\axAttempting to pull \ar%s \arid %s \auat %s', spawn.Name(), spawn.ID(), distance)
     mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /target clear')
     mq.cmdf('/nav id %s dist= 7 log=off los=on', spawn.ID())
-    if string.lower(myconfig.pull.pullability) == 'warp' then mq.cmdf('/warp id %s', spawn.ID()) end
+    if isWarp then mq.cmdf('/warp id %s', spawn.ID()) end
 
     rc.pullAPTargetID = spawn.ID()
     rc.pullTagTimer = botpull.TagTimeCalc('pull', spawn.ID())
@@ -236,11 +253,16 @@ function botpull.StartPull()
     end
 end
 
+local function isPullWarp()
+    local entry = botpull.GetPullSpell()
+    return entry and entry.gem == 'script' and entry.spell and string.lower(tostring(entry.spell)) == 'warp'
+end
+
 -- One tick of navigating state.
 local function tickNavigating(rc, spawn)
     if rc.pullTagTimer and mq.gettime() >= rc.pullTagTimer then
         printf('\ayCZBot:\ax\arI have timed out trying to pull \ay%s', spawn.Name())
-        if string.lower(myconfig.pull.pullability) == 'warp' then
+        if isPullWarp() then
             mq.cmdf('/warp loc %s %s %s', rc.makecamp.y, rc.makecamp.x, rc.makecamp.z)
         end
         clearPullState()
@@ -309,57 +331,102 @@ local function tickAggroing(rc, spawn)
         rc.pullPhase = nil
         rc.pulledmob = rc.pullAPTargetID
         rc.pullreturntimer = mq.gettime() + 60000
+        if rc.pullRangedStoredItem and rc.pullRangedStoredItem ~= '' then
+            mq.cmdf('/exchange "%s" Ranged', rc.pullRangedStoredItem)
+            rc.pullRangedStoredItem = nil
+        end
         combat.ResetCombatState({ clearTarget = false, clearPet = false })
         botmove.NavToCamp({ dist = 0, echoMsg = '\\ayReturning to camp' })
         return
     end
 
-    local pullab = myconfig.pull.pullability
+    local entry = botpull.GetPullSpell()
+    local gem = entry and entry.gem
+    local spell = entry and entry.spell and tostring(entry.spell) or ''
     if rc.pullPhase then return end
 
-    if mq.TLO.Me.CombatAbilityReady(pullab)() then
-        mq.cmdf('/multiline ; /nav stop log=off ; /disc %s', pullab)
-        if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end
-        return
-    end
-    if mq.TLO.Me.AbilityReady(pullab)() then
-        mq.cmdf('/multiline ; /nav stop log=off ; /attack on ; /doability %s', pullab)
-        if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end
-        return
-    end
-    if mq.TLO.Me.AltAbilityReady(pullab)() then
-        mq.cmd('/nav stop log=off')
-        if mq.TLO.Me.Moving() then
-            rc.pullPhase = 'aggro_wait_stop_moving'
-            rc.pullDeadline = mq.gettime() + 2000
-            return
-        end
-        mq.cmdf('/multiline ; /nav stop log=off ; /alt act %s', mq.TLO.Me.AltAbility(pullab)())
-        rc.pullPhase = 'aggro_wait_cast'
-        rc.pullDeadline = mq.gettime() + 8000
-        return
-    end
-    if mq.TLO.Me.Gem(pullab)() and mq.TLO.Me.SpellReady(pullab)() then
-        mq.cmd('/nav stop log=off')
-        if mq.TLO.Me.Moving() then
-            rc.pullPhase = 'aggro_wait_stop_moving'
-            rc.pullDeadline = mq.gettime() + 2000
-            return
-        end
-        mq.cmdf('/multiline ; /nav stop log=off ; /casting "%s"', pullab or 'melee')
-        rc.pullPhase = 'aggro_wait_cast'
-        rc.pullDeadline = mq.gettime() + 8000
-        return
-    end
-    if string.lower(pullab or '') == 'ranged' then
-        mq.cmdf('/multiline ; /squelch /nav stop log=off ; /face fast ; /squelch attack off ; /ranged on')
-        return
-    end
-    if string.lower(pullab or '') == 'melee' or string.lower(pullab or '') == 'warp' then
+    -- Melee (default or explicit)
+    if not entry or gem == 'melee' then
         mq.cmd('/multiline ; /squelch /nav stop log=off ; /attack on')
         if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', tostring(spawn.ID())) end
         return
     end
+
+    -- Ranged (bow): swap in bow if needed, ranged attack, swap back after (on returning)
+    if gem == 'ranged' and spell ~= '' then
+        local rangeSlotName = mq.TLO.Me.InvSlot('Ranged').Item.Name() and mq.TLO.Me.InvSlot('Ranged').Item.Name() or ''
+        if rangeSlotName ~= spell then
+            if rangeSlotName ~= '' then
+                rc.pullRangedStoredItem = rangeSlotName
+            else
+                rc.pullRangedStoredItem = nil
+            end
+            mq.cmdf('/exchange "%s" Ranged', spell)
+        end
+        mq.cmdf('/multiline ; /squelch /nav stop log=off ; /face fast ; /squelch attack off ; /ranged on')
+        return
+    end
+
+    -- Gem-based cast dispatch (numeric gem = spell slot)
+    if type(gem) == 'number' and gem >= 1 and gem <= 12 then
+        local spellName = (spell and spell ~= '') and spell or mq.TLO.Me.Gem(gem)() or ''
+        if spellName ~= '' and mq.TLO.Me.SpellReady(spellName)() then
+            mq.cmd('/nav stop log=off')
+            if mq.TLO.Me.Moving() then
+                rc.pullPhase = 'aggro_wait_stop_moving'
+                rc.pullDeadline = mq.gettime() + 2000
+                return
+            end
+            mq.cmdf('/multiline ; /nav stop log=off ; /casting "%s" %s', spellName, tostring(gem))
+            rc.pullPhase = 'aggro_wait_cast'
+            rc.pullDeadline = mq.gettime() + 8000
+            if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end
+            return
+        end
+    end
+    if gem == 'disc' and spell ~= '' and mq.TLO.Me.CombatAbilityReady(spell)() then
+        mq.cmdf('/multiline ; /nav stop log=off ; /disc %s', spell)
+        if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end
+        return
+    end
+    if gem == 'ability' and spell ~= '' and mq.TLO.Me.AbilityReady(spell)() then
+        mq.cmdf('/multiline ; /nav stop log=off ; /attack on ; /doability %s', spell)
+        if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end
+        return
+    end
+    if gem == 'alt' and spell ~= '' and mq.TLO.Me.AltAbilityReady(spell)() then
+        mq.cmd('/nav stop log=off')
+        if mq.TLO.Me.Moving() then
+            rc.pullPhase = 'aggro_wait_stop_moving'
+            rc.pullDeadline = mq.gettime() + 2000
+            return
+        end
+        mq.cmdf('/multiline ; /nav stop log=off ; /alt act %s', mq.TLO.Me.AltAbility(spell)())
+        rc.pullPhase = 'aggro_wait_cast'
+        rc.pullDeadline = mq.gettime() + 8000
+        return
+    end
+    if gem == 'item' and spell ~= '' and mq.TLO.Me.ItemReady(spell)() then
+        mq.cmd('/nav stop log=off')
+        if mq.TLO.Me.Moving() then
+            rc.pullPhase = 'aggro_wait_stop_moving'
+            rc.pullDeadline = mq.gettime() + 2000
+            return
+        end
+        mq.cmdf('/multiline ; /nav stop log=off ; /cast item "%s"', spell)
+        rc.pullPhase = 'aggro_wait_cast'
+        rc.pullDeadline = mq.gettime() + 8000
+        return
+    end
+    if gem == 'script' and spell ~= '' then
+        local spellutils = require('lib.spellutils')
+        if spellutils.RunScript then
+            mq.cmd('/nav stop log=off')
+            spellutils.RunScript(spell, 'pull', spawn.ID())
+        end
+        return
+    end
+
     if not spawn.Aggressive() and mq.TLO.Target.ID() == spawn.ID() and (not mq.TLO.Stick.Active() or not spawn.LineOfSight()) then
         mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(spawn.ID()))
     end
@@ -375,7 +442,7 @@ local function tickReturning(rc, spawn)
         clearPullState()
         return
     end
-    if myconfig.pull.pullability == 'warp' then
+    if isPullWarp() then
         mq.cmdf('/warp loc %s %s %s', rc.makecamp.y, rc.makecamp.x, rc.makecamp.z)
         clearPullState()
         return

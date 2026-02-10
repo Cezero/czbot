@@ -116,13 +116,10 @@ Before any single cast (cure, debuff, or item/alt buff), the bot stops twist. Wh
 When the bard is the puller:
 
 - **When pull starts:** The bot sets the **pull** twist (buffs with **pull** in bands, e.g. Selo's).
-- **When in range to aggro:** If **pull.engage_gem** (1–12) or **pull.engage_spell** (spell name) is set, the bot runs `/twist once <engage_gem>`. MQ2Twist sings that song once then reverts to the previous twist (pull twist) for the return run.
+- **When in range to aggro:** If **pull.spell** has a numeric **gem** (1–12), the bot runs `/twist once <gem>`. MQ2Twist sings that song once then reverts to the previous twist (pull twist) for the return run.
 - **When pull state clears:** The bot switches to the **combat** twist.
 
-Configure in **pull**:
-
-- **engage_gem** — Gem number (1–12) for the song to use to get agro when in range. Optional; takes precedence over **engage_spell**.
-- **engage_spell** — Spell name; the bot resolves it to a gem from your spell book. Use one of **engage_gem** or **engage_spell**.
+Configure in **pull.spell** (same block as the pull method): set **gem** to the spell gem (1–12) and **spell** to the agro song name. The bot uses this directly for twist-on-pull; there are no separate engage_gem/engage_spell options.
 
 ---
 
@@ -164,7 +161,7 @@ The "already on target" and resist handling for debuffs treat bards specially (e
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Buffs**         | Use **self**, **cbt**, **idle**, and **pull** in bands as needed. Tank, groupbuff, groupmember, pc, mypet, pet have no effect for bards. Self buffs are sustained by the default twist.                                                            |
 | **Default twist** | Noncombat = all self buffs; combat = cbt buffs + tanktar debuffs; pull = buffs with **pull**. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI.                                                                            |
-| **Pull**          | Add **pull** to buff bands for pull twist (e.g. Selo's). Optional **pull.engage_gem** or **pull.engage_spell** for agro song.                                                                                                                      |
+| **Pull**          | Add **pull** to buff bands for pull twist (e.g. Selo's). Use **pull.spell** with a numeric **gem** (and **spell** name) for the agro song.                                                                                                          |
 | **Debuffs**       | **tanktar** → in combat twist. **notanktar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
 | **Cures**         | No special config; twist stops then resumes after cast.                                                                                                                                                                                            |
 | **Interrupts**    | Automatic; the bot does not interrupt bard casts.                                                                                                                                                                                                  |

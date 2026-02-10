@@ -25,10 +25,9 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 
 | Option | Default | Purpose |
 |--------|--------|---------|
+| **spell** | see below | Single pull spell block: `{ gem, spell, range? }`. How to aggro. Omit or leave empty for melee. |
 | **radius** | 400 | Max horizontal distance from camp (X,Y) for pullable mobs. |
 | **zrange** | 150 | Max vertical (Z) difference from camp; mobs outside this are ignored. |
-| **pullability** | `'melee'` | How to aggro: `melee`, `ranged`, `warp`, or a spell/disc/ability name (e.g. a spell gem name, discipline, or alt ability). |
-| **abilityrange** | 60 | Distance at which the pull ability is used; the bot navigates to within this range before using the pull. |
 | **minlevel** / **maxlevel** | 0 / 200 | Only mobs with level in this range are considered for pulling. |
 | **chainpullcnt** | 0 | Allow chain-pulling when current mob count is ≤ this value. See [When does the bot start a pull?](#when-does-the-bot-start-a-pull). |
 | **chainpullhp** | 0 | When the current engage target’s HP % is ≤ this (and chain conditions are met), the bot may start the next pull. |
@@ -39,6 +38,24 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | **hunter** | `false` | Hunter mode: no makecamp; anchor is set once. The puller can be far from camp. See [Hunter mode vs camp mode](#hunter-mode-vs-camp-mode). |
 
 **Note:** **pullarc** (directional pulling) is not in the config file; it is set at runtime with **`/cz xarc <degrees>`**. See [Runtime control](#runtime-control-commands).
+
+#### Pull spell block (`pull.spell`)
+
+The **`pull.spell`** table configures how the bot gets aggro. It has the same shape as other spell blocks (e.g. heal, debuff): **`gem`**, **`spell`**, and optional **`range`**.
+
+- **gem** — How the pull is performed. Allowed values:
+  - **`'melee'`** — Navigate in and attack (no cast). Default when `pull.spell` is omitted or empty.
+  - **`'ranged'`** — Use a ranged weapon (bow). **`spell`** must be the **item name** of the bow. The bot will swap in that item to the range slot if needed, fire, then swap the previous item back. Requires **MQ2Exchange**; your cursor must be empty when the bot swaps the bow in or out.
+  - **`1`–`12`** — Spell gem slot (cast the spell in that gem).
+  - **`'item'`** — Cast from an item; **`spell`** = item name.
+  - **`'alt'`** — Use an alternate ability; **`spell`** = AA name.
+  - **`'disc'`** — Use a discipline; **`spell`** = disc name.
+  - **`'ability'`** — Use a combat ability; **`spell`** = ability name. If **range** is omitted, the bot uses **10** (melee) as the pull range.
+  - **`'script'`** — Run a script from **`config.script[spell]`**; **`spell`** = script key. Use **`spell = 'warp'`** for built-in warp pull (instant move to target and back).
+- **spell** — Spell name, item name (for **gem** `'item'` or `'ranged'`), AA/disc/ability name, or script key. Ignored for **gem** `'melee'`.
+- **range** — (Optional.) Distance at which the pull is used. If omitted, the bot derives it when possible from the spell or ability (e.g. spell gem → spell's MyRange − 5; **gem** `'ranged'` → item range; **gem** `'ability'` → 10).
+
+**Bard:** When **`pull.spell`** has a numeric **gem** (1–12), the bot uses that same gem and spell for twist-on-pull (e.g. agro song). There are no separate engage_gem/engage_spell options.
 
 ---
 
@@ -61,7 +78,7 @@ In all cases, the internal **pre-conditions** must also pass (see [Pre-condition
 Once a pull has started, the bot moves through these phases:
 
 1. **Navigating** — Paths to the chosen mob. May abort on timeout, low HP, or if the bot leaves camp (e.g. beyond radius + 40).
-2. **Aggroing** — When in range, uses **pullability** (melee, ranged, spell, disc, alt ability, or warp) to get aggro.
+2. **Aggroing** — When in range, uses **pull.spell** (melee, ranged, spell gem, disc, ability, alt, item, or script) to get aggro.
 3. **Returning** — Navigates back to camp with the mob. Leash logic may pause nav if the mob is too far.
 4. **Waiting_combat** — Mob is in camp; normal melee/combat runs until the mob is dead or timers clear the pull state.
 
