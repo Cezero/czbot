@@ -37,7 +37,13 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 | **recast** | Optional. After this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. |
 | **delay** | Optional. Delay (ms) before the spell can be used again after cast (per-index/spell). |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
-| **dontStack** | Optional. List of debuff **categories** (from MQ Target TLO). If the target already has any of these categories (e.g. from another character), the bot will not cast this spell on that target, and will interrupt the cast if that category appears on the target while casting. Allowed values: Charmed, Crippled, Feared, Maloed, Mezzed, Rooted, Snared, Tashed. Example: for a bard snare, set `dontStack = { 'Snared' }` so the bot does not overwrite a ranger's or druid's snare. |
+| **dontStack** | Optional. List of debuff **categories** (from MQ Target TLO). If the target already has any of these categories (e.g. from another character), the bot will not cast this spell on that target, and will interrupt the cast if that category appears on the target while casting. Allowed values (see code block below). Example: for a bard snare, set `dontStack = { 'Snared' }` so the bot does not overwrite a ranger's or druid's snare. |
+
+Allowed **dontStack** values:
+
+```
+Charmed, Crippled, Feared, Maloed, Mezzed, Rooted, Snared, Tashed
+```
 
 ### Debuff bands
 
