@@ -39,6 +39,40 @@ For **BRD**, only **self** is evaluated for buffs; tank, groupbuff, groupmember,
 - **idle** — Buff is in the **noncombat (idle)** twist only.
 - **pull** — Buff is in the **pull** twist (e.g. Selo's). Only self buffs with a numeric gem; include **self** and **pull** in the same band.
 
+### Example buff block (minimal)
+
+Order of entries = order in the twist. Only **self** + numeric **gem** matter for bards.
+
+```lua
+['buff'] = {
+  ['spells'] = {
+    { ['gem'] = 1, ['spell'] = 'Selo\'s Sonata',     ['bands'] = { { ['targetphase'] = { 'self', 'pull' } } } },
+    { ['gem'] = 2, ['spell'] = 'Kelin\'s Lucid Lament', ['bands'] = { { ['targetphase'] = { 'self', 'cbt' } } } },
+    { ['gem'] = 3, ['spell'] = 'Psalm of Veeshan',   ['bands'] = { { ['targetphase'] = { 'self', 'idle' } } } },
+  }
+}
+```
+
+- Gem 1: in **pull** twist (e.g. while pulling) and in **idle** (all self buffs). Not in combat unless you also add **cbt**.
+- Gem 2: in **combat** twist (and idle, because all self are in idle list).
+- Gem 3: **idle** only (e.g. out-of-combat regen); not in combat twist.
+
+### Example debuff block (minimal)
+
+**tanktar** = in combat twist. **notanktar** = twist-once (target add, sing once, re-target MA). Optional **bard.mez_remez_sec** for re-mez before duration ends.
+
+```lua
+['debuff'] = {
+  ['spells'] = {
+    { ['gem'] = 4, ['spell'] = 'Requiem of Time', ['bands'] = { { ['targetphase'] = { 'tanktar' }, ['min'] = 1, ['max'] = 100 } } } },
+    { ['gem'] = 5, ['spell'] = 'Lullaby',         ['bands'] = { { ['targetphase'] = { 'notanktar' }, ['min'] = 90, ['max'] = 100 } } } },
+  }
+}
+```
+
+- Gem 4: **tanktar** — plays in the combat twist on the MA target (e.g. slow).
+- Gem 5: **notanktar** — mez on adds; bot uses twist-once (target add → sing once → re-target MA). Re-apply before mez wears if **config.bard.mez_remez_sec** is set.
+
 ---
 
 ## Song refresh
