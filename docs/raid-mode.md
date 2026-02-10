@@ -48,7 +48,7 @@ You can save the current raid’s group structure under a name and later restore
 
 | Command | Purpose |
 |---------|---------|
-| **/cz raid save \<name\>** | Save the current raid’s group layout under the given name. You must be in a raid. Stored in common config (TBCommon) so it can be reused. |
+| **/cz raid save \<name\>** | Save the current raid’s group layout under the given name. You must be in a raid. Stored in common config (cz_common.lua) so it can be reused. |
 | **/cz raid load \<name\>** | Load a saved raid layout by name: disband the current raid, then re-invite by group (group leaders invite their members, then raid invite). The bot runs a short sequence of invites; other toons must accept group/raid invites. |
 
 Save/load is independent of **doraid**. You can use raid save/load with doraid on or off.

@@ -147,9 +147,12 @@ local function selectPullTarget(apmoblist, rc)
     end
     if not pullindex then return nil end
     local chosen = apmoblist[pullindex]
-    if myconfig.pull.usepriority and rc.PriorityList then
+    if myconfig.pull.usepriority and rc.PriorityList and #rc.PriorityList > 0 then
         for _, v in ipairs(apmoblist) do
-            if string.find(rc.PriorityList, v.CleanName()) then return v end
+            local name = v.CleanName()
+            for _, n in ipairs(rc.PriorityList) do
+                if n == name then return v end
+            end
         end
     end
     return chosen

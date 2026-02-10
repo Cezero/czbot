@@ -55,7 +55,10 @@ end
 function spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
     rc = rc or state.getRunconfig()
     local spawnname = spawn.CleanName() or 'none'
-    if string.find(rc.ExcludeList or '', spawnname) then return false end
+    local list = rc.ExcludeList or {}
+    for _, n in ipairs(list) do
+        if n == spawnname then return false end
+    end
     if spawnutils.FTECheck(spawn.ID(), rc) then return false end
     return true
 end

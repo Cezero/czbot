@@ -10,6 +10,8 @@ local M = {}
 
 local czgui = true
 local isOpen, shouldDraw = true, true
+local excludeAddBuf, priorityAddBuf = '', ''
+local showExcludeAddInput, showPriorityAddInput = false, false
 local YELLOW = ImVec4(1, 1, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
 local TABLE_FLAGS = bit32.bor(ImGuiTableFlags.ScrollY, ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter,
@@ -216,6 +218,77 @@ local function drawStatusTab()
     end
 end
 
+local function tableContains(list, name)
+    if type(list) ~= 'table' then return false end
+    for _, n in ipairs(list) do
+        if n == name then return true end
+    end
+    return false
+end
+
+local function drawMobListSection(listType, runconfigKey, label)
+    local rc = state.getRunconfig()
+    if type(rc[runconfigKey]) ~= 'table' then rc[runconfigKey] = {} end
+    local list = rc[runconfigKey]
+    ImGui.TextColored(YELLOW, '%s', label)
+    if ImGui.BeginTable(label .. ' table', 2, bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter), -1, 0) then
+        ImGui.TableSetupColumn('Name', 0, 0.85)
+        ImGui.TableSetupColumn('', 0, 0.15)
+        ImGui.TableHeadersRow()
+        for i = #list, 1, -1 do
+            local name = list[i]
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            ImGui.Text('%s', name)
+            ImGui.TableNextColumn()
+            if ImGui.SmallButton('Remove##' .. listType .. i) then
+                table.remove(list, i)
+                mobfilter.process(listType, 'save')
+            end
+        end
+        ImGui.EndTable()
+    end
+    local hasTarget = mq.TLO.Target.ID() and mq.TLO.Target.ID() > 0
+    local showAddInput = (listType == 'exclude' and showExcludeAddInput) or (listType == 'priority' and showPriorityAddInput)
+    local addBuf = (listType == 'exclude' and excludeAddBuf) or priorityAddBuf
+    if hasTarget then
+        if ImGui.Button('Add target##' .. listType) then
+            local name = mq.TLO.Target.CleanName()
+            if name and name ~= '' and not tableContains(list, name) then
+                table.insert(list, name)
+                mobfilter.process(listType, 'save')
+            end
+        end
+    else
+        if not showAddInput then
+            if ImGui.Button('Add##' .. listType) then
+                if listType == 'exclude' then showExcludeAddInput = true else showPriorityAddInput = true end
+            end
+        else
+            local flags = ImGuiInputTextFlags.EnterReturnsTrue
+            local changed, newVal = ImGui.InputText('Mob name##' .. listType, addBuf, flags)
+            if listType == 'exclude' then excludeAddBuf = newVal or excludeAddBuf else priorityAddBuf = newVal or priorityAddBuf end
+            ImGui.SameLine()
+            if ImGui.Button('Add##' .. listType .. ' submit') or (changed and newVal and newVal ~= '') then
+                local name = (listType == 'exclude' and excludeAddBuf or priorityAddBuf):match('^%s*(.-)%s*$')
+                if name and name ~= '' and not tableContains(list, name) then
+                    table.insert(list, name)
+                    mobfilter.process(listType, 'save')
+                end
+                if listType == 'exclude' then excludeAddBuf = ''; showExcludeAddInput = false else priorityAddBuf = ''; showPriorityAddInput = false end
+            end
+        end
+    end
+    ImGui.Spacing()
+end
+
+local function drawMobListsTab()
+    ImGui.TextColored(YELLOW, 'Current zone: %s', mq.TLO.Zone.ShortName() or '')
+    ImGui.Spacing()
+    drawMobListSection('exclude', 'ExcludeList', 'Exclude list')
+    drawMobListSection('priority', 'PriorityList', 'Priority list')
+end
+
 local CONFIG_SECTIONS = { { 'settings', 'Settings' }, { 'pull', 'Pull' }, { 'melee', 'Melee' }, { 'heal', 'Heal' }, { 'buff', 'Buff' }, { 'debuff', 'Debuff' }, { 'cure', 'Cure' }, { 'script', 'Script' } }
 
 local function updateImGui()
@@ -237,10 +310,6 @@ local function updateImGui()
             botconfig.RunConfigLoaders()
         end
         ImGui.SameLine()
-        if ImGui.Button('Save Common') then
-            mobfilter.process('exclude', 'save')
-        end
-        ImGui.SameLine()
         if ImGui.Button('Open Config') then
             os.execute('start "" "' .. botconfig.getPath() .. '"')
         end
@@ -259,6 +328,10 @@ local function updateImGui()
         if ImGui.BeginTabBar('CZBot GUI') then
             if ImGui.BeginTabItem('Status') then
                 drawStatusTab()
+                ImGui.EndTabItem()
+            end
+            if ImGui.BeginTabItem('Mob lists') then
+                drawMobListsTab()
                 ImGui.EndTabItem()
             end
             for _, sec in ipairs(CONFIG_SECTIONS) do

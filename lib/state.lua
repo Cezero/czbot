@@ -8,8 +8,8 @@
 ---@field followname string
 ---@field TankName string
 ---@field AssistName string
----@field ExcludeList string
----@field PriorityList string
+---@field ExcludeList table
+---@field PriorityList table
 ---@field MobList table
 ---@field MobCount number
 ---@field engagetracker table
@@ -79,8 +79,8 @@ function M.resetRunconfig()
         followname = '',
         TankName = '',
         AssistName = '',
-        ExcludeList = '',
-        PriorityList = '',
+        ExcludeList = {},
+        PriorityList = {},
         MobList = {},
         MobCount = 0,
         engagetracker = {},

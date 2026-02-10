@@ -40,8 +40,10 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 |---------|-----------|---------|
 | **dopull** | `on` / `off` or toggle | Enable/disable pulling. |
 | **xarc** | `<degrees>` or none | Directional pulling: restrict pulls to an arc in front of the bot (e.g. `90`). No argument turns it off. (This is the runtime “pullarc” setting.) |
-| **exclude** | `<name>` or target, optional `save` | Add a mob to the exclude list (pull and target selection skip it). `save` persists the list. |
-| **priority** | `<name>` or target, optional `save` | Add a mob to the priority list; when pull.usepriority is true, prefer these mobs. `save` persists. |
+| **exclude** | `<name>` or target | Add a mob to the exclude list (pull and target selection skip it). Changes are saved automatically to the common config (cz_common.lua). |
+| **exclude remove** | `<name>` or target | Remove a mob from the exclude list. |
+| **priority** | `<name>` or target | Add a mob to the priority list; when pull.usepriority is true, prefer these mobs. Changes are saved automatically to the common config (cz_common.lua). |
+| **priority remove** | `<name>` or target | Remove a mob from the priority list. |
 
 ### Combat and roles
 
@@ -201,5 +203,5 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 ## Where to configure
 
 - **Config file:** Edit **`cz_<CharName>.lua`** in your MQ config directory. Reload by re-running the bot or using **import** / **setvar**.
-- **Runtime only (not in config file):** **ExcludeList**, **PriorityList** (pull exclude/priority), and **pullarc** (directional pull) are set at runtime via **/cz exclude**, **/cz priority**, and **/cz xarc**. Use **exclude save** or **priority save** to persist exclude/priority lists if supported.
+- **Runtime only (not in config file):** **ExcludeList**, **PriorityList** (pull exclude/priority), and **pullarc** (directional pull) are set at runtime via **/cz exclude**, **/cz priority** (add/remove), and **/cz xarc**. Exclude and priority lists are stored per zone in the common config file **cz_common.lua** and are saved automatically when you add or remove entries.
 - **Both:** Most options can be set in the config file or at runtime via **/cz setvar** (e.g. **setvar settings.petassist true**), which writes back to the config file.

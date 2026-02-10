@@ -32,7 +32,8 @@ local function loadZone(listType)
     if not opts then return end
     local comkeytable = botconfig.getCommon()
     local zone = mq.TLO.Zone.ShortName()
-    state.getRunconfig()[opts.runconfigKey] = (comkeytable[opts.commonKey] and comkeytable[opts.commonKey][zone]) or ''
+    local val = (comkeytable[opts.commonKey] and comkeytable[opts.commonKey][zone]) or {}
+    state.getRunconfig()[opts.runconfigKey] = val
     if opts.onZoneLoad then opts.onZoneLoad() end
 end
 

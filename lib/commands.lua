@@ -160,20 +160,44 @@ local function cmd_stop(args)
     printf('\ayCZBot:\ax\arDisabling makecamp and follow')
 end
 
+local function tableContains(list, name)
+    if type(list) ~= 'table' then return false end
+    for _, n in ipairs(list) do
+        if n == name then return true end
+    end
+    return false
+end
+
+local function removeFromList(list, name)
+    for i = #list, 1, -1 do
+        if list[i] == name then
+            table.remove(list, i)
+            return true
+        end
+    end
+    return false
+end
+
 local function cmd_exclude(args)
-    local excludemob = args[2]
-    if not args[2] then excludemob = mq.TLO.Target.CleanName() end
-    if excludemob and not string.find(state.getRunconfig().ExcludeList, excludemob) and args[2] ~= 'save' then
+    local rc = state.getRunconfig()
+    if not rc.ExcludeList then rc.ExcludeList = {} end
+    if args[2] == 'remove' then
+        local name = args[3] or mq.TLO.Target.CleanName()
+        if name and removeFromList(rc.ExcludeList, name) then
+            printf('\ayCZBot:\axRemoved %s from exclude list', name)
+            if APTarget and APTarget.ID() then APTarget = nil end
+            mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
+            mobfilter.process('exclude', 'save')
+        end
+        return
+    end
+    local excludemob = args[2] or mq.TLO.Target.CleanName()
+    if excludemob and not tableContains(rc.ExcludeList, excludemob) then
         printf('\ayCZBot:\axExcluding %s from CZBot', excludemob)
-        state.getRunconfig().ExcludeList = state.getRunconfig().ExcludeList .. excludemob .. '|'
+        table.insert(rc.ExcludeList, excludemob)
         if APTarget and APTarget.ID() then APTarget = nil end
         mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
-    end
-    if args[3] == 'save' or args[2] == 'save' then
-        printf('\ayCZBot:\axSaving exclude list')
         mobfilter.process('exclude', 'save')
-    else
-        mobfilter.process('exclude')
     end
 end
 
@@ -182,17 +206,21 @@ local function cmd_xarc(args)
 end
 
 local function cmd_priority(args)
-    local prioritymob = args[2]
-    if not args[2] then prioritymob = mq.TLO.Target.CleanName() end
-    if prioritymob and not string.find(state.getRunconfig().PriorityList, prioritymob) and args[2] ~= 'save' then
-        printf('\ayCZBot:\axPrioritizing %s in CZBot', prioritymob)
-        state.getRunconfig().PriorityList = state.getRunconfig().PriorityList .. prioritymob .. '|'
+    local rc = state.getRunconfig()
+    if not rc.PriorityList then rc.PriorityList = {} end
+    if args[2] == 'remove' then
+        local name = args[3] or mq.TLO.Target.CleanName()
+        if name and removeFromList(rc.PriorityList, name) then
+            printf('\ayCZBot:\axRemoved %s from priority list', name)
+            mobfilter.process('priority', 'save')
+        end
+        return
     end
-    if args[3] == 'save' or args[2] == 'save' then
-        printf('\ayCZBot:\axSaving priority list')
+    local prioritymob = args[2] or mq.TLO.Target.CleanName()
+    if prioritymob and not tableContains(rc.PriorityList, prioritymob) then
+        printf('\ayCZBot:\axPrioritizing %s in CZBot', prioritymob)
+        table.insert(rc.PriorityList, prioritymob)
         mobfilter.process('priority', 'save')
-    else
-        mobfilter.process('priority')
     end
 end
 

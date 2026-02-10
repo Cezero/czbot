@@ -141,22 +141,22 @@ function M.getCommon()
     return M._common
 end
 
+local COMMON_FILENAME = 'cz_common.lua'
+
 function M.loadCommon()
-    local commonData, errr = loadfile(mq.configDir .. '/' .. 'TBCommon.lua')
-    if errr then
-        M._common = {}
-        mq.pickle('TBCommon.lua', M._common)
-    elseif commonData then
+    local commonData, errr = loadfile(mq.configDir .. '/' .. COMMON_FILENAME)
+    if not errr and commonData then
         M._common = commonData()
         if not M._common then M._common = {} end
-    else
-        M._common = {}
+        return M._common
     end
+    M._common = {}
+    mq.pickle(COMMON_FILENAME, M._common)
     return M._common
 end
 
 function M.saveCommon()
-    if M._common then mq.pickle('TBCommon.lua', M._common) end
+    if M._common then mq.pickle(COMMON_FILENAME, M._common) end
 end
 
 function M.getKeyOrder()
@@ -451,7 +451,7 @@ function M.WriteToFile(config, path)
     return writeConfigToFile(config, path)
 end
 
--- Full config load: main config, subsystem configs, script order, TBCommon. Immune data is owned by lib/immune.lua.
+-- Full config load: main config, subsystem configs, script order, cz_common. Immune data is owned by lib/immune.lua.
 function M.LoadConfig()
     local path = M.getPath()
     M.Load(path)
