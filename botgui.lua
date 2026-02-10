@@ -8,7 +8,7 @@ local state = require('lib.state')
 
 local M = {}
 
-local tbgui = false
+local czgui = true
 local isOpen, shouldDraw = true, true
 local YELLOW = ImVec4(1, 1, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
@@ -220,7 +220,7 @@ local CONFIG_SECTIONS = { { 'settings', 'Settings' }, { 'pull', 'Pull' }, { 'mel
 
 local function updateImGui()
     if not isOpen then return end
-    if not tbgui then return end
+    if not czgui then return end
     local window_settings = {
         x = 200,
         y = 200,
@@ -232,10 +232,6 @@ local function updateImGui()
     ImGui.SetNextWindowSize(ImVec2(window_settings.w, window_settings.h), ImGuiCond.FirstUseEver)
     isOpen, shouldDraw = ImGui.Begin(botconfig.getPath(), isOpen)
     if shouldDraw then
-        if ImGui.Button('End CZBot') then
-            state.getRunconfig().terminate = true
-        end
-        ImGui.SameLine()
         if ImGui.Button('Save Config') then
             botconfig.Save(botconfig.getPath())
             botconfig.RunConfigLoaders()
@@ -248,6 +244,17 @@ local function updateImGui()
         if ImGui.Button('Open Config') then
             os.execute('start "" "' .. botconfig.getPath() .. '"')
         end
+        ImGui.SameLine()
+        local dopull = botconfig.config.settings.dopull == true
+        if ImGui.Button(dopull and 'Pull: On' or 'Pull: Off') then
+            botconfig.config.settings.dopull = not dopull
+        end
+        ImGui.SameLine()
+        ImGui.PushStyleColor(ImGui.Col.Button, RED)
+        if ImGui.Button('End CZBot') then
+            state.getRunconfig().terminate = true
+        end
+        ImGui.PopStyleColor(1)
         ImGui.Spacing()
         if ImGui.BeginTabBar('CZBot GUI') then
             if ImGui.BeginTabItem('Status') then
@@ -279,7 +286,7 @@ end
 
 local function UIEnable()
     isOpen = true
-    tbgui = true
+    czgui = true
 end
 
 function M.getUpdateFn()
