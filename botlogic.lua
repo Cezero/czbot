@@ -98,8 +98,6 @@ local function CharState(...)
     if mq.TLO.Me.State() == 'FEIGN' then
         mq.cmd('/stand')
     end
-    printf('[MQ2TWIST] botlogic: CharState main loop, calling StopTwist')
-    if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
     if not state.getRunconfig().engageTargetId or mq.TLO.Target.ID() ~= state.getRunconfig().engageTargetId then
         if mq.TLO.Me.Combat() then
             mq.cmd('/attack off')
