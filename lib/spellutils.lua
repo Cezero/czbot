@@ -139,6 +139,23 @@ function spellutils.PeerHasPetBuff(peerInfo, spellid)
     return false
 end
 
+-- Returns true if the spawn already has this heal spell (buff or shortbuff). Used when entry.isHoT is true
+-- to avoid recasting HoTs. Covers self and peer PCs; non-peers are treated as not having the spell (no targeting).
+function spellutils.TargetHasHealSpell(entry, spawnId)
+    if not entry or not entry.spell or not spawnId or spawnId <= 0 then return false end
+    local myid = mq.TLO.Me.ID()
+    if spawnId == myid or spawnId == 1 then
+        return mq.TLO.Me.Buff(entry.spell)() or mq.TLO.Me.ShortBuff(entry.spell)()
+    end
+    local name = mq.TLO.Spawn(spawnId).Name()
+    local peer = charinfo.GetInfo(name)
+    if peer then
+        local spellid = mq.TLO.Spell(entry.spell).ID()
+        return spellutils.PeerHasBuff(peer, spellid)
+    end
+    return false
+end
+
 -- Ensure we have buff data for this spawn (for non-peer buff/cure checks). Buffs only populate after
 -- targeting the spawn for a few ms. If not already targeted with BuffsPopulated, /tar and block up to 1s.
 -- Returns true when we can read buffs (targeted and BuffsPopulated). Optional args (spellIndex, etc.) kept for API compatibility.

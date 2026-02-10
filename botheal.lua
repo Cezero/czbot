@@ -154,8 +154,18 @@ local function HPEvalGrp(index, ctx)
         if not grpspawn then return false end
         local grpmempcthp = grpspawn.PctHPs()
         local grpmemdist = grpspawn.Distance()
-        return grpmember.Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal)
-            and grpmemdist and grpmemdist <= aeRange and grpspawn.Type() ~= 'Corpse'
+        if not (grpmember.Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal)
+            and grpmemdist and grpmemdist <= aeRange and grpspawn.Type() ~= 'Corpse') then
+            return false
+        end
+        if ctx.entry.isHoT then
+            if grpid == mq.TLO.Me.ID() then
+                if mq.TLO.Me.Buff(ctx.entry.spell)() or mq.TLO.Me.ShortBuff(ctx.entry.spell)() then return false end
+            elseif peer then
+                if spellutils.PeerHasBuff(peer, mq.TLO.Spell(ctx.entry.spell).ID()) then return false end
+            end
+        end
+        return true
     end
     return castutils.evalGroupAECount(ctx.entry, 'groupheal', index, AHThreshold, 'groupheal', needHeal, { aeRange = aeRange, includeMemberZero = true })
 end
@@ -303,13 +313,22 @@ local function healBandHasPhase(spellIndex, phase)
     return AHThreshold[spellIndex][phase] and true or false
 end
 
+local function rejectIfAlreadyHoT(entry, id, hit)
+    if not id then return nil, nil end
+    if entry.isHoT and spellutils.TargetHasHealSpell(entry, id) then return nil, nil end
+    return id, hit
+end
+
 local function healTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local ctx = HPEvalContext(spellIndex)
     if not ctx then return nil, nil end
-    if targethit == 'self' then return HPEvalSelf(spellIndex, ctx) end
+    if targethit == 'self' then
+        local id, hit = HPEvalSelf(spellIndex, ctx)
+        return rejectIfAlreadyHoT(ctx.entry, id, hit)
+    end
     if targethit == 'tank' then
         local id, hit = HPEvalTank(spellIndex, ctx)
-        if id == targetId then return id, hit end
+        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
         return nil, nil
     end
     if targethit == 'groupheal' then return HPEvalGrp(spellIndex, ctx) end
@@ -320,17 +339,17 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context)
     end
     if targethit == 'mypet' then
         local id, hit = HPEvalMyPet(spellIndex, ctx)
-        if id == targetId then return id, hit end
+        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
         return nil, nil
     end
     if targethit == 'pet' then
         local id, hit = HPEvalPets(spellIndex, ctx)
-        if id == targetId then return id, hit end
+        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
         return nil, nil
     end
     if targethit == 'xtgt' then
         local id, hit = HPEvalXtgt(spellIndex, ctx)
-        if id == targetId then return id, hit end
+        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
         return nil, nil
     end
     if AHThreshold[spellIndex] then
@@ -345,13 +364,13 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context)
         if sp and sp.ID() == targetId and mq.TLO.Spawn(targetId).Type() == 'PC' then
             local dist = sp.Distance()
             if th.groupmember and castutils.hpEvalSpawn(targetId, th.groupmember) and ctx.spellrange and dist and dist <= ctx.spellrange and classOk(targethit) then
-                return targetId, targethit
+                return rejectIfAlreadyHoT(ctx.entry, targetId, targethit)
             end
             if th.pc and context.botcount then
                 local peer = charinfo.GetInfo(mq.TLO.Spawn(targetId).CleanName())
                 local bothp = peer and peer.PctHPs or nil
                 if bothp and hpInBand(bothp, th.pc) and dist and ctx.spellrange and dist <= ctx.spellrange and classOk(targethit) then
-                    return targetId, targethit
+                    return rejectIfAlreadyHoT(ctx.entry, targetId, targethit)
                 end
             end
         end
