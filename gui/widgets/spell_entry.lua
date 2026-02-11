@@ -88,6 +88,9 @@ local function validatorForGemType(gemType)
     return nil
 end
 
+-- Gem types that do not use the spell/item/ability field (display "unused", not editable).
+local UNUSED_SPELL_TYPES = { melee = true }
+
 local _modalState = {}
 
 --- Draw two rows in the current two-column table: Type/Gem, Spell/Item/Ability.
@@ -120,20 +123,30 @@ function M.draw(id, spell, primaryOptions, opts)
     ImGui.TableNextColumn()
     ImGui.Text('%s', labelSpell)
     ImGui.TableNextColumn()
-    local displayName = spell.spell or ''
-    if displayName == '' then displayName = '(none)' end
+    local gemType = type(spell.gem) == 'number' and 'gem' or spell.gem
+    local isUnused = UNUSED_SPELL_TYPES[gemType] == true
+    local displayName
+    if isUnused then
+        displayName = 'unused'
+    elseif not spell.spell or spell.spell:match('^%s*$') then
+        displayName = 'unset'
+    else
+        displayName = spell.spell
+    end
     local modalId = id .. '_name'
+    ImGui.SetNextItemWidth(-1)
     ---@diagnostic disable-next-line: undefined-global
     if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(-1, 0)) then
-        state.open = true
-        state.buffer = spell.spell or ''
-        state.error = nil
-        modals.openValidatedEditModal(modalId)
+        if not isUnused then
+            state.open = true
+            state.buffer = spell.spell or ''
+            state.error = nil
+            modals.openValidatedEditModal(modalId)
+        end
     end
     if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Click to edit')
+        ImGui.SetTooltip(isUnused and 'Not used for this type' or 'Click to edit')
     end
-    local gemType = type(spell.gem) == 'number' and 'gem' or spell.gem
     local validator = validatorForGemType(gemType) or function() return true end
     modals.validatedEditModal(modalId, state,
         validator,
