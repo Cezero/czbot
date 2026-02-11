@@ -13,12 +13,19 @@ local GEM_SUB_OPTIONS = {}
 for i = 1, 12 do GEM_SUB_OPTIONS[i] = tostring(i) end
 
 --- Map config gem value to (primary, sub). Config gem is number 1-12 or string.
+--- Accepts string "1"-"12" from config so selection of lower gem numbers persists after load.
 local function gemToPrimarySub(gem)
     if type(gem) == 'number' and gem >= 1 and gem <= 12 then
         return 'gem', gem
     end
-    local s = (type(gem) == 'string') and gem or 'melee'
-    return s, 1
+    if type(gem) == 'string' then
+        local n = tonumber(gem)
+        if n and n >= 1 and n <= 12 then
+            return 'gem', n
+        end
+        return gem, 1
+    end
+    return 'melee', 1
 end
 
 --- Map (primary, sub) to config gem value.

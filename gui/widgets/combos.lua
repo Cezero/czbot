@@ -67,11 +67,13 @@ function M.nestedCombo(id, primaryOptions, gemKey, subOptions, currentPrimary, c
         local subIdx = currentSub
         if subIdx < 1 or subIdx > #subOptions then subIdx = 1 end
         local subPreview = subOptions[subIdx] or ''
+        -- Button needs room for digit(s) + chevron; popup can stay narrow
+        local buttonMinWidth = 36
         if subComboWidth and subComboWidth > 0 then
-            ImGui.SetNextItemWidth(subComboWidth)
+            ImGui.SetNextItemWidth(math.max(buttonMinWidth, subComboWidth))
         end
         if ImGui.BeginCombo('##sub_' .. id, subPreview, 0) then
-            -- Size popup to fit all items so lower-numbered options remain clickable (no scroll hiding 1-5)
+            -- Keep popup narrow; button width is set above
             local popupW = (subComboWidth and subComboWidth > 0) and subComboWidth or 24
             local lineH = ImGui.GetTextLineHeightWithSpacing()
             ImGui.SetNextWindowSize(popupW, #subOptions * lineH + 4, ImGuiCond.Appearing)
