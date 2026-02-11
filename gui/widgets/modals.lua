@@ -27,7 +27,7 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
         local buf, changed = ImGui.InputText('##value' .. modalId, state.buffer or '', EnterReturnsTrue)
         if changed then state.buffer = buf end
         ImGui.Spacing()
-        if ImGui.Button('Save##' .. modalId) then
+        if ImGui.Button('Save##ValidatedEditModal_Save_' .. id) then
             state.error = nil
             local ok, errMsg
             if validateFn then
@@ -46,7 +46,7 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
             end
         end
         ImGui.SameLine()
-        if ImGui.Button('Cancel##' .. modalId) then
+        if ImGui.Button('Cancel##ValidatedEditModal_Cancel_' .. id) then
             onCancel()
             state.open = false
             state.buffer = ''
