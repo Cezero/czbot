@@ -111,7 +111,9 @@ function M.draw(id, spell, primaryOptions, opts)
     ImGui.Text('%s', labelGem)
     ImGui.TableNextColumn()
     local primary, sub = gemToPrimarySub(spell.gem)
-    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub)
+    -- Narrow width for gem number (1-12) so it stays a bit wider than one character
+    local gemComboWidth = 24
+    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, gemComboWidth)
     if gemChanged then
         spell.gem = primarySubToGem(newPrimary, newSub)
         if newPrimary == 'gem' then

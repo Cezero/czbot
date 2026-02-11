@@ -40,8 +40,9 @@ end
 ---@param subOptions string[] e.g. {"1","2",...,"12"}
 ---@param currentPrimary string|number current primary value (e.g. "melee", "gem")
 ---@param currentSub number 1-based sub index when primary is gem (e.g. 5 for gem 5)
+---@param subComboWidth number|nil optional width in pixels for the sub-combo (e.g. narrow gem selector)
 ---@return string|number newPrimary, number newSub, boolean changed
-function M.nestedCombo(id, primaryOptions, gemKey, subOptions, currentPrimary, currentSub)
+function M.nestedCombo(id, primaryOptions, gemKey, subOptions, currentPrimary, currentSub, subComboWidth)
     local primaryIdx = 1
     for i, opt in ipairs(primaryOptions) do
         if opt.value == currentPrimary then primaryIdx = i break end
@@ -66,10 +67,18 @@ function M.nestedCombo(id, primaryOptions, gemKey, subOptions, currentPrimary, c
         local subIdx = currentSub
         if subIdx < 1 or subIdx > #subOptions then subIdx = 1 end
         local subPreview = subOptions[subIdx] or ''
+        if subComboWidth and subComboWidth > 0 then
+            ImGui.SetNextItemWidth(subComboWidth)
+        end
         if ImGui.BeginCombo('##sub_' .. id, subPreview, 0) then
+            -- Size popup to fit all items so lower-numbered options remain clickable (no scroll hiding 1-5)
+            local popupW = (subComboWidth and subComboWidth > 0) and subComboWidth or 24
+            local lineH = ImGui.GetTextLineHeightWithSpacing()
+            ImGui.SetNextWindowSize(popupW, #subOptions * lineH + 4, ImGuiCond.Appearing)
             for i, opt in ipairs(subOptions) do
                 local selected = (i == subIdx)
-                if ImGui.Selectable(opt, selected) then
+                local selectableId = opt .. '##sub_' .. id .. '_' .. i
+                if ImGui.Selectable(selectableId, selected) then
                     newSub = i
                     changed = true
                 end
