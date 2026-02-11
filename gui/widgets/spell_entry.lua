@@ -146,9 +146,11 @@ function M.draw(id, spell, primaryOptions, opts)
     else
         displayName = spell.spell
     end
-    ImGui.SetNextItemWidth(-1)
+    local avail = ImGui.GetContentRegionAvailVec()
+    local w = (avail and avail.x and avail.x > 0) and avail.x or 200
+    ImGui.SetNextItemWidth(w)
     ---@diagnostic disable-next-line: undefined-global
-    if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(-1, 0)) then
+    if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(w, 0)) then
         if not isUnused then
             state.open = true
             state.buffer = spell.spell or ''
