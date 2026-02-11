@@ -77,11 +77,15 @@ function M.nestedCombo(id, primaryOptions, gemKey, subOptions, currentPrimary, c
             local popupW = (subComboWidth and subComboWidth > 0) and subComboWidth or 24
             local lineH = ImGui.GetTextLineHeightWithSpacing()
             ImGui.SetNextWindowSize(popupW, #subOptions * lineH + 4, ImGuiCond.Appearing)
-            for i, opt in ipairs(subOptions) do
-                local selected = (i == subIdx)
-                local selectableId = opt .. '##sub_' .. id .. '_' .. i
+            -- Draw options in reverse order (12 down to 1) so that lower gem numbers are at the
+            -- bottom of the list; clicking items at the top of the popup can be consumed by combo
+            -- close in some ImGui setups, so putting 1 at the bottom makes "select gem 1" reliable.
+            for idx = #subOptions, 1, -1 do
+                local opt = subOptions[idx]
+                local selected = (idx == subIdx)
+                local selectableId = opt .. '##sub_' .. id .. '_' .. idx
                 if ImGui.Selectable(selectableId, selected) then
-                    newSub = i
+                    newSub = idx
                     changed = true
                 end
                 if selected then ImGui.SetItemDefaultFocus() end
