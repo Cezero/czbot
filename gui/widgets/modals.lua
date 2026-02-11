@@ -1,7 +1,7 @@
 -- Reusable validated edit modal: text entry, optional validateFn, Save/Cancel, in-dialog error.
--- Uses BeginPopupModal (rgmercs-style); Save/Cancel call CloseCurrentPopup() directly.
+-- Phase 2: CloseCurrentPopup() and onSave/onCancel are deferred to the next frame (avoids crash
+-- when closing from deep nesting). state.pendingClose ('save'|'cancel') is set on button click.
 -- validateFn(value) returns success (boolean), optional errorMessage (string).
--- Enter = Save (validate; if fail show error and keep open). Cancel = close and onCancel().
 
 local ImGui = require('ImGui')
 
@@ -12,7 +12,7 @@ local EnterReturnsTrue = ImGuiInputTextFlags.EnterReturnsTrue or 0
 local POPUP_FLAGS = bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoResize)
 
 ---@param id string unique id for this popup (e.g. "pull_spell_name")
----@param state table { open: boolean, buffer: string, error: string|nil } caller-owned state
+---@param state table { open: boolean, buffer: string, error: string|nil, pendingClose: 'save'|'cancel'|nil } caller-owned state
 ---@param validateFn fun(value: string): boolean, string? (success, errorMessage)
 ---@param onSave fun(value: string) called when Save/Enter and validation passes
 ---@param onCancel fun() called when Cancel
@@ -26,6 +26,22 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
     local show = ImGui.BeginPopupModal(popupId, nil, POPUP_FLAGS)
     if not show then
         return nil
+    end
+    -- Deferred close: run at start of block (no button has ActiveId) to avoid crash
+    if state.pendingClose then
+        local wasSave = (state.pendingClose == 'save')
+        ImGui.CloseCurrentPopup()
+        if wasSave then
+            onSave(state.buffer or '')
+        else
+            onCancel()
+        end
+        state.open = false
+        state.buffer = ''
+        state.error = nil
+        state.pendingClose = nil
+        ImGui.EndPopup()
+        return wasSave
     end
     if state.error and state.error ~= '' then
         ImGui.TextColored(1.0, 0.3, 0.3, 1.0, state.error)
@@ -44,22 +60,14 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
             ok = true
         end
         if ok then
-            onSave(state.buffer or '')
-            state.open = false
-            state.buffer = ''
-            ImGui.CloseCurrentPopup()
-            return true
+            state.pendingClose = 'save'
         else
             state.error = errMsg or 'Invalid'
         end
     end
     ImGui.SameLine()
     if ImGui.Button('Cancel##ValidatedEditModal_Cancel_' .. id) then
-        onCancel()
-        state.open = false
-        state.buffer = ''
-        ImGui.CloseCurrentPopup()
-        return false
+        state.pendingClose = 'cancel'
     end
     ImGui.EndPopup()
     return nil
