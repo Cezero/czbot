@@ -4,8 +4,8 @@
 
 local mq = require('mq')
 local ImGui = require('ImGui')
-local modals = require('gui.widgets.modals')
 local combos = require('gui.widgets.combos')
+local modals = require('gui.widgets.modals')
 
 local M = {}
 
@@ -125,6 +125,19 @@ function M.draw(id, spell, primaryOptions, opts)
     ImGui.TableNextColumn()
     local gemType = type(spell.gem) == 'number' and 'gem' or spell.gem
     local isUnused = UNUSED_SPELL_TYPES[gemType] == true
+    local validator = validatorForGemType(gemType) or function() return true end
+    local function onSave(value)
+        spell.spell = (value or ''):match('^%s*(.-)%s*$')
+        state.open = false
+        state.buffer = ''
+        if onChanged then onChanged() end
+    end
+    local function onCancel()
+        state.open = false
+        state.buffer = ''
+        state.error = nil
+    end
+
     local displayName
     if isUnused then
         displayName = 'unused'
@@ -133,7 +146,6 @@ function M.draw(id, spell, primaryOptions, opts)
     else
         displayName = spell.spell
     end
-    local modalId = id .. '_name'
     ImGui.SetNextItemWidth(-1)
     ---@diagnostic disable-next-line: undefined-global
     if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(-1, 0)) then
@@ -141,20 +153,16 @@ function M.draw(id, spell, primaryOptions, opts)
             state.open = true
             state.buffer = spell.spell or ''
             state.error = nil
-            modals.openValidatedEditModal(modalId)
+            modals.openValidatedEditModal(id)
         end
     end
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip(isUnused and 'Not used for this type' or 'Click to edit')
     end
-    local validator = validatorForGemType(gemType) or function() return true end
-    modals.validatedEditModal(modalId, state,
-        validator,
-        function(val)
-            spell.spell = val
-            if onChanged then onChanged() end
-        end,
-        function() end)
+
+    if state.open and not isUnused then
+        modals.validatedEditModal(id, state, validator, onSave, onCancel)
+    end
 end
 
 M.PRIMARY_OPTIONS_PULL = {
