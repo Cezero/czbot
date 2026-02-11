@@ -43,10 +43,14 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
         ImGui.EndPopup()
         return wasSave
     end
+    -- Reserve space for error message so window does not resize when validation fails
+    local lineHeight = ImGui.GetTextLineHeight()
     if state.error and state.error ~= '' then
         ImGui.TextColored(1.0, 0.3, 0.3, 1.0, state.error)
-        ImGui.Spacing()
+    else
+        ImGui.Dummy(0, lineHeight)
     end
+    ImGui.Spacing()
     ImGui.SetNextItemWidth(280)
     local buf, changed = ImGui.InputText('##value' .. popupId, state.buffer or '', EnterReturnsTrue)
     if changed then state.buffer = buf end

@@ -28,15 +28,14 @@ local function primarySubToGem(primary, sub)
 end
 
 --- Validators return success, errorMessage.
+--- Me.Book(name) returns slot number if spell is in book (no BookSize in MQ Lua).
 local function validateSpellInBook(name)
     if not name or name:match('^%s*$') then return false, 'Enter a spell name' end
     name = name:match('^%s*(.-)%s*$')
-    for i = 1, (mq.TLO.Me.BookSize() or 0) do
-        local spell = mq.TLO.Me.Book(i)
-        if spell and spell.Name() and spell.Name():lower() == name:lower() then
-            return true
-        end
-    end
+    local book = mq.TLO.Me and mq.TLO.Me.Book and mq.TLO.Me.Book(name)
+    if not book then return false, 'Spell not in your spell book' end
+    local ok, slot = pcall(function() return book() end)
+    if ok and slot and slot > 0 then return true end
     return false, 'Spell not in your spell book'
 end
 
@@ -115,6 +114,19 @@ function M.draw(id, spell, primaryOptions, opts)
     local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub)
     if gemChanged then
         spell.gem = primarySubToGem(newPrimary, newSub)
+        if newPrimary == 'gem' then
+            local name = mq.TLO.Me and mq.TLO.Me.Gem and mq.TLO.Me.Gem(newSub)
+            if name then
+                local ok, spellName = pcall(function() return name() end)
+                if ok and spellName and spellName ~= '' then
+                    spell.spell = spellName
+                else
+                    spell.spell = spell.spell or ''
+                end
+            else
+                spell.spell = spell.spell or ''
+            end
+        end
         if onChanged then onChanged() end
     end
 
@@ -146,8 +158,9 @@ function M.draw(id, spell, primaryOptions, opts)
     else
         displayName = spell.spell
     end
-    local avail = ImGui.GetContentRegionAvailVec()
-    local w = (avail and avail.x and avail.x > 0) and avail.x or 200
+    -- Use current table column width so we match Type/Gem and Range controls (GetContentRegionAvail can be 0 in table cells)
+    local w = ImGui.GetColumnWidth(-1)
+    if not w or w <= 0 then w = 200 end
     ImGui.SetNextItemWidth(w)
     ---@diagnostic disable-next-line: undefined-global
     if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(w, 0)) then
