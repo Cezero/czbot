@@ -2,9 +2,8 @@ local mq = require('mq')
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local mobfilter = require('lib.mobfilter')
-local botmelee = require('botmelee')
-local botpull = require('botpull')
 local state = require('lib.state')
+local pull_tab = require('gui.components.pull_tab')
 
 local M = {}
 
@@ -157,7 +156,6 @@ local function drawTableTree(t, a, order)
     end
 end
 
--- Build a short human-readable status line from run state and runconfig.
 local function getStatusLine()
     local rc = state.getRunconfig()
     if rc.statusMessage and rc.statusMessage ~= '' then return rc.statusMessage end
@@ -180,8 +178,6 @@ local function getStatusLine()
     return 'Idle'
 end
 
--- Build key/value pairs for Status tab (read-only).
--- statusMessage (shown in getStatusLine) covers current cast and activity; no Payload or Current cast rows.
 local function getStatusRows()
     local rc = state.getRunconfig()
     local runState = state.getRunState()
@@ -266,8 +262,10 @@ local function drawMobListSection(listType, runconfigKey, label)
             end
         else
             local flags = ImGuiInputTextFlags.EnterReturnsTrue
-            local changed, newVal = ImGui.InputText('Mob name##' .. listType, addBuf, flags)
-            if listType == 'exclude' then excludeAddBuf = newVal or excludeAddBuf else priorityAddBuf = newVal or priorityAddBuf end
+            local newVal, changed = ImGui.InputText('Mob name##' .. listType, addBuf, flags)
+            if changed then
+                if listType == 'exclude' then excludeAddBuf = newVal else priorityAddBuf = newVal end
+            end
             ImGui.SameLine()
             if ImGui.Button('Add##' .. listType .. ' submit') or (changed and newVal and newVal ~= '') then
                 local name = (listType == 'exclude' and excludeAddBuf or priorityAddBuf):match('^%s*(.-)%s*$')
@@ -294,15 +292,8 @@ local CONFIG_SECTIONS = { { 'settings', 'Settings' }, { 'pull', 'Pull' }, { 'mel
 local function updateImGui()
     if not isOpen then return end
     if not czgui then return end
-    local window_settings = {
-        x = 200,
-        y = 200,
-        w = 600,
-        h = 800,
-        collapsed = false
-    }
-    ImGui.SetNextWindowPos(ImVec2(window_settings.x, window_settings.y), ImGuiCond.FirstUseEver)
-    ImGui.SetNextWindowSize(ImVec2(window_settings.w, window_settings.h), ImGuiCond.FirstUseEver)
+    ImGui.SetNextWindowPos(ImVec2(200, 200), ImGuiCond.FirstUseEver)
+    ImGui.SetNextWindowSize(ImVec2(600, 800), ImGuiCond.FirstUseEver)
     isOpen, shouldDraw = ImGui.Begin(botconfig.getPath(), isOpen)
     if shouldDraw then
         if ImGui.Button('Save Config') then
@@ -337,15 +328,19 @@ local function updateImGui()
             for _, sec in ipairs(CONFIG_SECTIONS) do
                 local key, label = sec[1], sec[2]
                 if ImGui.BeginTabItem(label) then
-                    local tbl = botconfig.config[key]
-                    if tbl then
-                        if key == 'script' then
-                            drawTableTree(tbl, label, nil)
-                        elseif key == 'heal' or key == 'buff' or key == 'debuff' or key == 'cure' then
-                            drawTableTree({ [key] = tbl }, label, { key })
-                        else
-                            local order = botconfig.getSubOrder() and botconfig.getSubOrder()[key]
-                            drawTableTree(tbl, label, order)
+                    if key == 'pull' then
+                        pull_tab.draw()
+                    else
+                        local tbl = botconfig.config[key]
+                        if tbl then
+                            if key == 'script' then
+                                drawTableTree(tbl, label, nil)
+                            elseif key == 'heal' or key == 'buff' or key == 'debuff' or key == 'cure' then
+                                drawTableTree({ [key] = tbl }, label, { key })
+                            else
+                                local order = botconfig.getSubOrder() and botconfig.getSubOrder()[key]
+                                drawTableTree(tbl, label, order)
+                            end
                         end
                     end
                     ImGui.EndTabItem()

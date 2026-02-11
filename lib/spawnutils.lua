@@ -123,9 +123,21 @@ local function filterSpawnForPull(spawn, rc)
     local pull = myconfig.pull
     if not pull then return false end
     if spawn.Type() ~= 'NPC' then return false end
-    local minlevel = pull.minlevel or 0
-    local maxlevel = pull.maxlevel or 255
-    if spawn.Level() < minlevel or spawn.Level() > maxlevel then return false end
+    -- Level/con filtering: usePullLevels => min/max level; else con range + maxLevelDiff
+    if pull.usePullLevels then
+        local minl = pull.pullMinLevel or 0
+        local maxl = pull.pullMaxLevel or 255
+        if spawn.Level() < minl or spawn.Level() > maxl then return false end
+    else
+        local conName = spawn.ConColor()
+        local conLevel = conName and botconfig.ConColorsNameToId[conName:upper()] or 0
+        if conLevel < 1 then conLevel = 1 end
+        local minCon = pull.pullMinCon or 1
+        local maxCon = pull.pullMaxCon or 7
+        if conLevel < minCon or conLevel > maxCon then return false end
+        local maxLvl = mq.TLO.Me.Level() + (pull.maxLevelDiff or 6)
+        if spawn.Level() > maxLvl then return false end
+    end
     local radiusSq = pull.radiusSq
     local zrange = pull.zrange or 200
     local cx = (rc.makecamp and rc.makecamp.x) or mq.TLO.Me.X()

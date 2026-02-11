@@ -37,8 +37,12 @@
 ---@field engageRadius number|nil max distance (from puller or camp) to consider pull target "in range" to engage; default 200
 ---@field engageRadiusSq number|nil precomputed engageRadius^2 for distance-squared comparisons
 ---@field zrange number|nil
----@field maxlevel number|nil
----@field minlevel number|nil
+---@field pullMinCon number|nil minimum con color index (1-7) for valid pull target
+---@field pullMaxCon number|nil maximum con color index (1-7) for valid pull target
+---@field maxLevelDiff number|nil max levels above player when using con (e.g. "levels into red")
+---@field usePullLevels boolean|nil if true use pullMinLevel/pullMaxLevel instead of con
+---@field pullMinLevel number|nil minimum mob level when usePullLevels true
+---@field pullMaxLevel number|nil maximum mob level when usePullLevels true
 ---@field chainpullhp number|nil
 ---@field chainpullcnt number|nil
 ---@field mana number|nil
@@ -92,11 +96,16 @@ M.config = {}
 M._configLoaders = {}
 M._common = nil
 
+-- Consider (con) color names and name-to-index map for pull filtering and UI. Indices 1-7.
+M.ConColors = { "Grey", "Green", "Light Blue", "Blue", "White", "Yellow", "Red" }
+M.ConColorsNameToId = {}
+for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
+
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'dopet' },
-    pull = { 'spell', 'radius', 'engageRadius', 'zrange', 'maxlevel', 'minlevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
+    pull = { 'spell', 'radius', 'engageRadius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
@@ -498,10 +507,14 @@ function M.Load(path)
         radius = 400,
         engageRadius = 200,
         zrange = 150,
+        pullMinCon = 2,
+        pullMaxCon = 5,
+        maxLevelDiff = 6,
+        usePullLevels = false,
+        pullMinLevel = 1,
+        pullMaxLevel = 125,
         chainpullcnt = 0,
         chainpullhp = 0,
-        maxlevel = 200,
-        minlevel = 0,
         hunter = false,
         mana = 60,
         manaclass = 'clr, dru, shm',

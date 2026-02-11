@@ -29,7 +29,11 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | **radius**                  | 400               | Max horizontal distance from camp (X,Y) for pullable mobs.                                                                                |
 | **engageRadius**            | 200               | Max distance (from puller or camp) at which the pull target is considered “in range” to engage (target, cast, etc.). Used for “close enough” and for validating a group member’s target distance from camp. |
 | **zrange**                  | 150               | Max vertical (Z) difference from camp; mobs outside this are ignored.                                                                     |
-| **minlevel** / **maxlevel** | 0 / 200           | Only mobs with level in this range are considered for pulling.                                                                            |
+| **pullMinCon**              | 2 (Green)         | Minimum consider (con) color index (1–7: Grey, Green, Light Blue, Blue, White, Yellow, Red) for a valid pull target. Used when **usePullLevels** is `false`. |
+| **pullMaxCon**              | 5 (White)         | Maximum consider color index for a valid pull target.                                                                                     |
+| **maxLevelDiff**            | 6                 | When using con colors: maximum level gap above the puller (e.g. “levels into red”). Mobs above `Me.Level() + maxLevelDiff` are rejected even if their con is in range. |
+| **usePullLevels**           | `false`           | If `true`, use **pullMinLevel** / **pullMaxLevel** instead of con colors.                                                                  |
+| **pullMinLevel** / **pullMaxLevel** | 1 / 125   | When **usePullLevels** is `true`, only mobs with level in this range are considered for pulling.                                           |
 | **chainpullcnt**            | 0                 | Allow chain-pulling when current mob count is ≤ this value. See [When does the bot start a pull?](#when-does-the-bot-start-a-pull).       |
 | **chainpullhp**             | 0                 | When the current engage target’s HP % is ≤ this (and chain conditions are met), the bot may start the next pull.                          |
 | **mana**                    | 60                | Minimum mana % required for designated healer classes before a new pull is allowed.                                                       |
@@ -66,8 +70,12 @@ pull = {
     radius = 400,
     engageRadius = 200,
     zrange = 150,
-    minlevel = 0,
-    maxlevel = 200,
+    pullMinCon = 2,
+    pullMaxCon = 5,
+    maxLevelDiff = 6,
+    usePullLevels = false,
+    pullMinLevel = 1,
+    pullMaxLevel = 125,
     chainpullcnt = 0,
     chainpullhp = 0,
     mana = 60,
@@ -171,7 +179,7 @@ The bot builds a list of candidate mobs that:
 
 - Are NPCs.
 - Are within **radius** (2D) and **zrange** (Z) of camp.
-- Are within **minlevel** and **maxlevel**.
+- Pass the level/con filter: if **usePullLevels** is `true`, mob level must be between **pullMinLevel** and **pullMaxLevel**; otherwise the mob’s consider (con) color must be between **pullMinCon** and **pullMaxCon**, and the mob’s level must be at most **Me.Level() + maxLevelDiff** (so “levels into red” is capped).
 - Have a valid navigation path (MQ2Nav).
 - Are not in the runtime **ExcludeList**.
 - Are not on the FTE (first-to-engage) list.
