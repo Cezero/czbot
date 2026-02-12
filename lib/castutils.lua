@@ -1,6 +1,7 @@
 local mq = require('mq') ---@cast mq mq
 local botconfig = require('lib.config')
 local spellbands = require('lib.spellbands')
+local spellutils = require('lib.spellutils')
 local state = require('lib.state')
 local utils = require('lib.utils')
 local charinfo = require('mqcharinfo')
