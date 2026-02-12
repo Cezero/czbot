@@ -147,27 +147,28 @@ function M.draw()
 
     -- Mana class (checkboxes) then Mana % on same line
     local manaclassOptions = { 'CLR', 'DRU', 'SHM' }
-    local mcStr = pull.manaclass or 'clr, dru, shm'
-    local function manaclassSet()
-        local t = {}
-        for part in string.gmatch(mcStr:lower(), '%S+') do t[part] = true end
-        return t
-    end
-    local mcSet = manaclassSet()
+    local mcList = (type(pull.manaclass) == 'table') and pull.manaclass or {}
     ImGui.Text('Healers: ')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Classes checked for mana %% before allowing a pull.') end
     ImGui.SameLine()
     for _, label in ipairs(manaclassOptions) do
-        local key = label:lower()
-        local checked = mcSet[key] == true
-        local ch, newVal = ImGui.Checkbox('##pull_manaclass_' .. key, checked)
+        local checked = false
+        for _, c in ipairs(mcList) do
+            if (c or '') == label then checked = true; break end
+        end
+        local ch, newVal = ImGui.Checkbox('##pull_manaclass_' .. label:lower(), checked)
         if ch then
-            mcSet[key] = newVal or nil
-            local parts = {}
+            local newTable = {}
             for _, o in ipairs(manaclassOptions) do
-                if mcSet[o:lower()] then parts[#parts + 1] = o:lower() end
+                if o == label then
+                    if newVal then newTable[#newTable + 1] = o end
+                else
+                    for _, c in ipairs(mcList) do
+                        if (c or '') == o then newTable[#newTable + 1] = o; break end
+                    end
+                end
             end
-            pull.manaclass = table.concat(parts, ', ')
+            pull.manaclass = newTable
             runConfigLoaders()
         end
         ImGui.SameLine()

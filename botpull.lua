@@ -205,8 +205,14 @@ local function canStartPull(rc)
         for iter = 1, mq.TLO.Group() do
             local grpname = mq.TLO.Group.Member(iter)
             if grpname.Type() and string.lower(grpname.Type()) == 'corpse' then return false end
-            if myconfig.pull.mana and grpname.Class.ShortName() and string.find(myconfig.pull.manaclass, string.lower(grpname.Class.ShortName())) then
-                if grpname.PctMana() and myconfig.pull.mana > grpname.PctMana() then return false end
+            if myconfig.pull.mana and grpname.Class.ShortName() and type(myconfig.pull.manaclass) == 'table' then
+                local grpClass = string.upper(grpname.Class.ShortName() or '')
+                for _, entry in ipairs(myconfig.pull.manaclass) do
+                    if string.upper(tostring(entry)) == grpClass then
+                        if grpname.PctMana() and myconfig.pull.mana > grpname.PctMana() then return false end
+                        break
+                    end
+                end
             end
         end
     end

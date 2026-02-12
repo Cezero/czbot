@@ -36,7 +36,7 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | **chainpullcnt**            | 0                 | Allow chain-pulling when current mob count is ≤ this value. See [When does the bot start a pull?](#when-does-the-bot-start-a-pull).       |
 | **chainpullhp**             | 0                 | When the current engage target’s HP % is ≤ this (and chain conditions are met), the bot may start the next pull.                          |
 | **mana**                    | 60                | Minimum mana % required for designated healer classes before a new pull is allowed.                                                       |
-| **manaclass**               | `'clr, dru, shm'` | Comma-separated class short names (e.g. clr, dru, shm) that are checked for **mana** before allowing a pull.                              |
+| **manaclass**               | `{ 'CLR', 'DRU', 'SHM' }` | List of uppercase class short names (CLR, DRU, SHM) that are checked for **mana** before allowing a pull.                              |
 | **leash**                   | 500               | While returning to camp with a mob, navigation is paused if the mob is farther than this distance (avoids over-chasing).                  |
 | **usepriority**             | `false`           | If `true`, prefer mobs that match the runtime **Priority** list over path distance when choosing a pull target.                           |
 | **hunter**                  | `false`           | Hunter mode: no makecamp; anchor is set once. The puller can be far from camp. See [Hunter mode vs camp mode](#hunter-mode-vs-camp-mode). |
@@ -77,7 +77,7 @@ pull = {
     chainpullcnt = 0,
     chainpullhp = 0,
     mana = 60,
-    manaclass = 'clr, dru, shm',
+    manaclass = { 'CLR', 'DRU', 'SHM' },
     leash = 500,
     usepriority = false,
     hunter = false,

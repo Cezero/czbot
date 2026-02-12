@@ -44,7 +44,7 @@
 ---@field chainpullhp number|nil
 ---@field chainpullcnt number|nil
 ---@field mana number|nil
----@field manaclass string|nil
+---@field manaclass string[]|nil array of uppercase class short names (CLR, DRU, SHM)
 ---@field leash number|nil
 ---@field leashSq number|nil precomputed leash^2 for distance-squared comparisons
 ---@field addAbortRadius number|nil radius (units) for add-abort check while navigating; NPCs within this with LoS trigger abort (default 50)
@@ -401,6 +401,13 @@ local function writeConfigToFile(config, filename)
                                 writesubTable(subval, spellSlotOrder.pull, indent .. "    ")
                                 file:write(indent .. "  },\n")
                                 file:flush()
+                            elseif subkey == 'manaclass' and type(subval) == 'table' then
+                                local parts = {}
+                                for _, c in ipairs(subval) do
+                                    parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
+                                end
+                                file:write(indent .. "  " .. formatKey('manaclass') .. " = { " .. table.concat(parts, ", ") .. " },\n")
+                                file:flush()
                             elseif tonumber(subval) then
                                 file:write(indent .. "  " .. formatKey(subkey) .. " = ", tonumber(subval), ",\n")
                             elseif subval == true then
@@ -515,7 +522,7 @@ function M.Load(path)
         chainpullhp = 0,
         hunter = false,
         mana = 60,
-        manaclass = 'clr, dru, shm',
+        manaclass = { 'CLR', 'DRU', 'SHM' },
         leash = 500,
         addAbortRadius = 50,
         usepriority = false,
@@ -527,6 +534,9 @@ function M.Load(path)
     if ps then
         if ps.gem == nil then ps.gem = 'melee' end
         if ps.spell == nil then ps.spell = '' end
+    end
+    if type(M.config.pull.manaclass) ~= 'table' then
+        M.config.pull.manaclass = { 'CLR', 'DRU', 'SHM' }
     end
     M.config.pull.radiusSq = (M.config.pull.radius or 0) * (M.config.pull.radius or 0)
     local r40 = (M.config.pull.radius or 0) + 40
