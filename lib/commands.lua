@@ -2,7 +2,7 @@
 -- Uses globals and modules from the CZBot environment (state.getRunconfig(), botconfig, etc.).
 
 local M = {}
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local botconfig = require('lib.config')
 local botgui = require('gui.components.botgui')
 local spellutils = require('lib.spellutils')

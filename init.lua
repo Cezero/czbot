@@ -1,4 +1,4 @@
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 
 -- Require MQCharinfo before loading bot (so we can end macro if unavailable).
 local ok, _ = pcall(require, 'mqcharinfo')

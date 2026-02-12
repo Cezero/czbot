@@ -1,7 +1,7 @@
 -- Centralized add/spawn detection, counting, and filtering.
 -- AddSpawnCheck hook, buildCampMobList, buildPullMobList, and shared helpers.
 
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local utils = require('lib.utils')

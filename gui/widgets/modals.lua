@@ -3,7 +3,7 @@
 -- when closing from deep nesting). state.pendingClose ('save'|'cancel') is set on button click.
 -- validateFn(value) returns success (boolean), optional errorMessage (string).
 
-local ImGui = require('ImGui')
+local ImGui = require('ImGui') ---@cast ImGui ImGui
 
 local M = {}
 

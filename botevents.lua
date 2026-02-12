@@ -1,4 +1,4 @@
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local botconfig = require('lib.config')
 local charm = require('lib.charm')
 local immune = require('lib.immune')

@@ -1,7 +1,7 @@
 -- Blocking "wait for /tar id to populate" via mq.delay(duration, condition).
 -- Call TargetAndWait(id, timeoutMs): issues /tar, delays until Target.ID() == id or timeout, returns success.
 
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local state = require('lib.state')
 
 local targeting = {}

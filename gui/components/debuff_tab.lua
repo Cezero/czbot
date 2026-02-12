@@ -1,6 +1,6 @@
 -- Debuff tab: dedicated panel for debuff config (On/Off toggle + one spell_entry per debuff).
 
-local ImGui = require('ImGui')
+local ImGui = require('ImGui') ---@cast ImGui ImGui
 local botconfig = require('lib.config')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')

@@ -7,8 +7,8 @@
 --   targetphaseOptions / validtargetsOptions: each entry { key, label, tooltip }.
 -- Widths are hardcoded; caller does not control layout. All widget IDs use opts.id as prefix.
 
-local mq = require('mq')
-local ImGui = require('ImGui')
+local mq = require('mq') ---@cast mq mq
+local ImGui = require('ImGui') ---@cast ImGui ImGui
 local combos = require('gui.widgets.combos')
 local inputs = require('gui.widgets.inputs')
 local modals = require('gui.widgets.modals')

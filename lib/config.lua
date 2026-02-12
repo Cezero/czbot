@@ -87,7 +87,7 @@
 ---@field cure ConfigCure|nil
 ---@field script table|nil
 
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local state = require('lib.state')
 local M = {}
 ---@type Config

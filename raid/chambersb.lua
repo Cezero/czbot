@@ -1,5 +1,5 @@
 -- Zone 305: Foresight trial (GoD)
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 
 local M = {}
 

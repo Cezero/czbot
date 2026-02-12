@@ -1,6 +1,6 @@
 -- CHChain (Complete Heal chain) logic. State in state.getRunconfig(): doChchain, chchainCurtank, chchainPause, chchainTank, chchainTanklist, chnextClr.
 
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')

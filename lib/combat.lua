@@ -1,7 +1,7 @@
 -- Combat state reset: stick off, attack off, optional pet back, optional target clear.
 -- Used by botmelee, botmove, and botpull to avoid duplicated logic.
 
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 
 local combat = {}
 

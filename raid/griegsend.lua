@@ -1,5 +1,5 @@
 -- Zone 163: Grieg Veneficus (Luclin)
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local utils = require('lib.utils')
 
 local M = {}

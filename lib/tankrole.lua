@@ -4,7 +4,7 @@
 -- "automatic" uses Group/Raid window roles: Group.MainTank, Group.MainAssist, Group.Puller.
 -- Raid has MainAssist only; MainTank and Puller always come from Group.
 
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local state = require('lib.state')
 local charinfo = require("mqcharinfo")
 

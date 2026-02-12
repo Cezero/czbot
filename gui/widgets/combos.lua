@@ -1,6 +1,6 @@
 -- Nested/cascading select: primary combo + conditional sub-combo (e.g. gem type -> gem slot 1-12).
 
-local ImGui = require('ImGui')
+local ImGui = require('ImGui') ---@cast ImGui ImGui
 
 local M = {}
 

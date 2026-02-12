@@ -1,5 +1,5 @@
 -- Zone 162: Vyzh`dra the Cursed (Luclin)
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 local utils = require('lib.utils')
 
 local M = {}

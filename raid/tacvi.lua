@@ -1,5 +1,5 @@
 -- Zone 298: Tacvi (if needed)
-local mq = require('mq')
+local mq = require('mq') ---@cast mq mq
 
 local M = {}
 
