@@ -131,9 +131,10 @@ end
 
 function botpull.EngageCheck()
     local tarSpawn = mq.TLO.Target
-    if not tarSpawn.ID() or tarSpawn.ID() == 0 then return false end
+
     local target = tarSpawn.CleanName()
     local targetid = tarSpawn.ID()
+    if not targetid or targetid == 0 then return false end
     if not mq.TLO.Me.TargetOfTarget.ID() or mq.TLO.Me.TargetOfTarget.ID() == 0 then return false end
     local totSpawn = mq.TLO.Me.TargetOfTarget
     local totID = totSpawn.ID()
