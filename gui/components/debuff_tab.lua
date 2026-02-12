@@ -64,30 +64,43 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
     local newDelay, delayCh = inputs.boundedInt(idPrefix .. '_delay', delay, 0, 60000, 100, '##' .. idPrefix .. '_delay')
     if delayCh then entry.delay = newDelay; if onChanged then onChanged() end end
 
-    -- Second line: Don't stack checkboxes
-    ImGui.Text("Don't stack:")
-    if ImGui.IsItemHovered() then ImGui.SetTooltip("If target already has any of these categories (e.g. Snared), don't cast this spell and interrupt if it appears while casting.") end
-    ImGui.SameLine()
+    -- Don't stack: 5-column table (label in row 1 col 1, 4 options per row)
     local function hasKey(t, k) for _, v in ipairs(t) do if v == k then return true end end return false end
     local list = entry.dontStack or {}
-    for vi, opt in ipairs(DONTSTACK_OPTIONS) do
-        local key, label, tooltip = opt.key, opt.label, opt.tooltip
-        local checked = hasKey(list, key)
-        local cNew, cPressed = ImGui.Checkbox((label or key) .. '##' .. idPrefix .. '_dontstack_' .. key, checked)
-        if tooltip and ImGui.IsItemHovered() then ImGui.SetTooltip('%s', tooltip) end
-        if cPressed then
-            if entry.dontStack == nil then entry.dontStack = {} end
-            if cNew then
-                entry.dontStack[#entry.dontStack + 1] = key
-            else
-                for i = #entry.dontStack, 1, -1 do
-                    if entry.dontStack[i] == key then table.remove(entry.dontStack, i) break end
-                end
-                if #entry.dontStack == 0 then entry.dontStack = nil end
+    if ImGui.BeginTable(idPrefix .. '_dontstack_table', 5, ImGuiTableFlags.None, -1, 0) then
+        local numRows = math.ceil(#DONTSTACK_OPTIONS / 4)
+        for r = 1, numRows do
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            if r == 1 then
+                ImGui.Text("Don't stack:")
+                if ImGui.IsItemHovered() then ImGui.SetTooltip("If target already has any of these categories (e.g. Snared), don't cast this spell and interrupt if it appears while casting.") end
             end
-            if onChanged then onChanged() end
+            for c = 1, 4 do
+                ImGui.TableNextColumn()
+                local vi = (r - 1) * 4 + c
+                if vi <= #DONTSTACK_OPTIONS then
+                    local opt = DONTSTACK_OPTIONS[vi]
+                    local key, label, tooltip = opt.key, opt.label, opt.tooltip
+                    local checked = hasKey(list, key)
+                    local cNew, cPressed = ImGui.Checkbox((label or key) .. '##' .. idPrefix .. '_dontstack_' .. key, checked)
+                    if tooltip and ImGui.IsItemHovered() then ImGui.SetTooltip('%s', tooltip) end
+                    if cPressed then
+                        if entry.dontStack == nil then entry.dontStack = {} end
+                        if cNew then
+                            entry.dontStack[#entry.dontStack + 1] = key
+                        else
+                            for i = #entry.dontStack, 1, -1 do
+                                if entry.dontStack[i] == key then table.remove(entry.dontStack, i) break end
+                            end
+                            if #entry.dontStack == 0 then entry.dontStack = nil end
+                        end
+                        if onChanged then onChanged() end
+                    end
+                end
+            end
         end
-        if vi < #DONTSTACK_OPTIONS and (vi % 4) ~= 0 then ImGui.SameLine() end
+        ImGui.EndTable()
     end
 end
 

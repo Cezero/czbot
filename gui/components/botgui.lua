@@ -173,7 +173,8 @@ local function getStatusLine()
     if runState == 'zone_changing' then return 'Zone changing' end
     if runState == 'chchain' then return 'CH chain' end
     if runState == 'load_raid' then return 'Loading raid' end
-    if runState == 'buffs_populate_wait' or runState == 'buffs_resume' or runState == 'cures_resume' or runState:match('_resume') then return 'Buffs/Cures' end
+    if runState == 'buffs_populate_wait' or runState == 'buffs_resume' or runState == 'cures_resume' or runState:match('_resume') then return
+    'Buffs/Cures' end
     if rc.campstatus then return 'Idle at camp' end
     if rc.followid and rc.followid > 0 then return 'Following' end
     return 'Idle'
@@ -222,7 +223,7 @@ local function updateImGui()
     if not czgui then return end
     ImGui.SetNextWindowPos(ImVec2(200, 200), ImGuiCond.FirstUseEver)
     ImGui.SetNextWindowSize(ImVec2(600, 800), ImGuiCond.FirstUseEver)
-    isOpen, shouldDraw = ImGui.Begin('CZBot ' .. VERSION, isOpen)
+    isOpen, shouldDraw = ImGui.Begin('CZBot ' .. VERSION .. '###CZBotMain', isOpen)
     if shouldDraw then
         if ImGui.Button('Save Config') then
             botconfig.Save(botconfig.getPath())
