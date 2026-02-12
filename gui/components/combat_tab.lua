@@ -103,9 +103,7 @@ function M.draw()
     local tMaxX, tMaxY = ImGui.GetItemRectMax()
     local midY = (tMinY + tMaxY) / 2
     local pad = 4
-    local winX = select(1, ImGui.GetWindowPos())
-    local contentMaxX = select(1, ImGui.GetContentRegionMax())
-    local rightX = winX + contentMaxX
+    local rightX = leftX + availX
     local drawList = ImGui.GetWindowDrawList()
     -- Use Border (visible) and thickness 2; Separator can be too faint / 1px hard to see on HiDPI
     local col = ImGui.GetColorU32(ImGuiCol.Border)
