@@ -286,7 +286,7 @@ function M.draw(spell, opts)
         end
         ImGui.SameLine()
         ImGui.Text('Min mana')
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('Minimum mana % (or endurance) required to cast.') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Minimum mana %% (or endurance) required to cast.') end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local mn = spell.minmana or 0
@@ -374,6 +374,7 @@ function M.draw(spell, opts)
 
                 if showBandMinMax then
                     ImGui.Text('HP %:')
+                    if ImGui.IsItemHovered() then ImGui.SetTooltip('Target HP %% range for this band (only use when target HP is within min-max).') end
                     ImGui.SameLine()
                     ImGui.Text('Min')
                     ImGui.SameLine()
@@ -393,6 +394,7 @@ function M.draw(spell, opts)
                 end
                 if showBandMinTarMaxtar then
                     ImGui.Text('# Targets:')
+                    if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp mob-count gate: only use when mob count is within min-max (0 = no limit).') end
                     ImGui.SameLine()
                     ImGui.Text('Min')
                     ImGui.SameLine()
@@ -400,15 +402,15 @@ function M.draw(spell, opts)
                     local bmintar = band.mintar
                     if bmintar == nil then bmintar = 0 end
                     local newMinT, minTCh = inputs.boundedInt(id .. '_band' .. bi .. '_mintar', bmintar, 0, 50, 1, '##' .. id .. '_band' .. bi .. '_mintar')
-                    if minTCh then band.mintar = newMinT; if onChanged then onChanged() end end
+                    if minTCh then band.mintar = (newMinT == 0) and nil or newMinT; if onChanged then onChanged() end end
                     ImGui.SameLine()
                     ImGui.Text('Max')
                     ImGui.SameLine()
                     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
                     local bmaxtar = band.maxtar
-                    if bmaxtar == nil then bmaxtar = 50 end
+                    if bmaxtar == nil then bmaxtar = 0 end
                     local newMaxT, maxTCh = inputs.boundedInt(id .. '_band' .. bi .. '_maxtar', bmaxtar, 0, 50, 1, '##' .. id .. '_band' .. bi .. '_maxtar')
-                    if maxTCh then band.maxtar = newMaxT; if onChanged then onChanged() end end
+                    if maxTCh then band.maxtar = (newMaxT == 0) and nil or newMaxT; if onChanged then onChanged() end end
                 end
 
                 if bi < #spell.bands then ImGui.Separator() end
@@ -434,10 +436,10 @@ function M.draw(spell, opts)
             end
         end
         -- Precondition line
-        ImGui.Text('Preconditions:')
+        ImGui.Text('Precondition:')
         if ImGui.IsItemHovered() then ImGui.SetTooltip('When to allow casting: true or a Lua expression (e.g. condition on EvalID).') end
         ImGui.SameLine()
-        ImGui.SetNextItemWidth(300)
+        ImGui.SetNextItemWidth(340)
         local preBuf, preChanged = ImGui.InputText('##' .. id .. '_precondition', state.preconditionBuf or '', 512)
         if preChanged then
             state.preconditionBuf = preBuf

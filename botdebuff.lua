@@ -413,6 +413,7 @@ function botdebuff.DebuffCheck(runPriority)
         if tanktar and tanktar > 0 then mq.cmdf('/tar id %s', tanktar) end
         return false
     end
+    if not rc.MobCount or rc.MobCount <= 0 then return false end
     local mobcountstart = rc.MobCount
     local botmelee = require('botmelee')
     if rc.MobList and rc.MobList[1] then
