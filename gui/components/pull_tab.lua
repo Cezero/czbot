@@ -5,7 +5,6 @@ local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local combos = require('gui.widgets.combos')
 local inputs = require('gui.widgets.inputs')
-local layout = require('gui.widgets.layout')
 local spell_entry = require('gui.widgets.spell_entry')
 
 local M = {}
@@ -80,12 +79,14 @@ function M.draw()
     ImGui.Spacing()
     ImGui.SetNextItemWidth(rangeInputWidth)
     local tfNew, tfCh = combos.combo('pull_target_filter', targetFilterIdx, targetFilterOptions, nil, nil)
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Target filter: Con colors or level range for valid pull targets.') end
     if tfCh then
         pull.usePullLevels = (tfNew == 2)
         runConfigLoaders()
     end
     ImGui.SameLine()
     ImGui.Text(targetFilterIdx == 1 and 'Min Con' or 'Min Level')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip(targetFilterIdx == 1 and 'Minimum consider color for pull targets (e.g. Green).' or 'Minimum level when using level-based pulling.') end
     ImGui.SameLine()
     if targetFilterIdx == 1 then
         local minC = pull.pullMinCon or 2
@@ -95,6 +96,7 @@ function M.draw()
         if minCCh then pull.pullMinCon = minCNew; runConfigLoaders() end
         ImGui.SameLine()
         ImGui.Text('Max Con')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Maximum consider color for pull targets (e.g. White).') end
         ImGui.SameLine()
         local maxC = pull.pullMaxCon or 5
         if maxC < 1 or maxC > 7 then maxC = 5 end
@@ -116,6 +118,7 @@ function M.draw()
         if pminCh then pull.pullMinLevel = pminNew; runConfigLoaders() end
         ImGui.SameLine()
         ImGui.Text('Max Level')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Maximum level when using level-based pulling.') end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(rangeInputWidth)
         local pmax = pull.pullMaxLevel or 125
@@ -124,63 +127,85 @@ function M.draw()
     end
 
     ImGui.Spacing()
-    if layout.beginTwoColumn('pull_other_table', 200, 0) then
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Chain pull HP %')
-        ImGui.TableNextColumn()
-        ImGui.SetNextItemWidth(rangeInputWidth)
-        local cph = pull.chainpullhp or 0
-        local cphNew, cphCh = inputs.boundedInt('pull_chainpullhp', cph, 0, 100, 5, '##pull_chainpullhp')
-        if cphCh then pull.chainpullhp = cphNew; runConfigLoaders() end
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Chain pull count')
-        ImGui.TableNextColumn()
-        ImGui.SetNextItemWidth(rangeInputWidth)
-        local cpc = pull.chainpullcnt or 0
-        local cpcNew, cpcCh = inputs.boundedInt('pull_chainpullcnt', cpc, 0, 20, 1, '##pull_chainpullcnt')
-        if cpcCh then pull.chainpullcnt = cpcNew; runConfigLoaders() end
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Mana %')
-        ImGui.TableNextColumn()
-        ImGui.SetNextItemWidth(rangeInputWidth)
-        local mana = pull.mana or 60
-        local manaNew, manaCh = inputs.boundedInt('pull_mana', mana, 0, 100, 5, '##pull_mana')
-        if manaCh then pull.mana = manaNew; runConfigLoaders() end
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Mana class')
-        ImGui.TableNextColumn()
-        local mc = pull.manaclass or 'clr, dru, shm'
-        ImGui.SetNextItemWidth(-1)
-        local newText, changed = ImGui.InputText('##pull_manaclass', mc, 0)
-        if changed and newText then pull.manaclass = newText; runConfigLoaders() end
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Leash')
-        ImGui.TableNextColumn()
-        ImGui.SetNextItemWidth(rangeInputWidth)
-        local leash = pull.leash or 500
-        local leashNew, leashCh = inputs.boundedInt('pull_leash', leash, 0, 2000, 50, '##pull_leash')
-        if leashCh then pull.leash = leashNew; recomputePullSquared(pull); runConfigLoaders() end
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Use priority list')
-        ImGui.TableNextColumn()
-        local up = pull.usepriority == true
-        local upCh, upNew = ImGui.Checkbox('##pull_usepriority', up)
-        if upCh then pull.usepriority = upNew; runConfigLoaders() end
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Hunter mode')
-        ImGui.TableNextColumn()
-        local hunt = pull.hunter == true
-        local huntCh, huntNew = ImGui.Checkbox('##pull_hunter', hunt)
-        if huntCh then pull.hunter = huntNew; runConfigLoaders() end
-        layout.endTwoColumn()
+    -- Chain pull: HP % and Count on same line
+    ImGui.Text('Chain pull HP %')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('When current target HP %% is at or below this (and chain count allows), start next pull.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(rangeInputWidth)
+    local cph = pull.chainpullhp or 0
+    local cphNew, cphCh = inputs.boundedInt('pull_chainpullhp', cph, 0, 100, 5, '##pull_chainpullhp')
+    if cphCh then pull.chainpullhp = cphNew; runConfigLoaders() end
+    ImGui.SameLine()
+    ImGui.Text('Count')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Allow chain-pulling when mob count is at or below this value.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(rangeInputWidth)
+    local cpc = pull.chainpullcnt or 0
+    local cpcNew, cpcCh = inputs.boundedInt('pull_chainpullcnt', cpc, 0, 20, 1, '##pull_chainpullcnt')
+    if cpcCh then pull.chainpullcnt = cpcNew; runConfigLoaders() end
+
+    -- Mana class (checkboxes) then Mana % on same line
+    local manaclassOptions = { 'CLR', 'DRU', 'SHM', 'ENC', 'WIZ', 'NEC', 'MAG' }
+    local mcStr = pull.manaclass or 'clr, dru, shm'
+    local function manaclassSet()
+        local t = {}
+        for part in string.gmatch(mcStr:lower(), '%S+') do t[part] = true end
+        return t
     end
+    local mcSet = manaclassSet()
+    ImGui.Text('Mana class')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Classes checked for mana %% before allowing a pull.') end
+    ImGui.SameLine()
+    for _, label in ipairs(manaclassOptions) do
+        local key = label:lower()
+        local checked = mcSet[key] == true
+        local ch, newVal = ImGui.Checkbox('##pull_manaclass_' .. key, checked)
+        if ch then
+            mcSet[key] = newVal or nil
+            local parts = {}
+            for _, o in ipairs(manaclassOptions) do
+                if mcSet[o:lower()] then parts[#parts + 1] = o:lower() end
+            end
+            pull.manaclass = table.concat(parts, ', ')
+            runConfigLoaders()
+        end
+        ImGui.SameLine()
+        ImGui.Text(label)
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Include ' .. label .. ' in mana check.') end
+        ImGui.SameLine()
+    end
+    ImGui.Text('Mana %')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Minimum mana %% required for designated healer classes before a new pull.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(rangeInputWidth)
+    local mana = pull.mana or 60
+    local manaNew, manaCh = inputs.boundedInt('pull_mana', mana, 0, 100, 5, '##pull_mana')
+    if manaCh then pull.mana = manaNew; runConfigLoaders() end
+
+    ImGui.Spacing()
+    ImGui.Text('Leash')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('While returning to camp with a mob, nav pauses if the mob is farther than this distance.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(rangeInputWidth)
+    local leash = pull.leash or 500
+    local leashNew, leashCh = inputs.boundedInt('pull_leash', leash, 0, 2000, 50, '##pull_leash')
+    if leashCh then pull.leash = leashNew; recomputePullSquared(pull); runConfigLoaders() end
+
+    ImGui.SameLine()
+    ImGui.Text('Use priority list')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Prefer mobs that match the Priority list over path distance when choosing a pull target.') end
+    ImGui.SameLine()
+    local up = pull.usepriority == true
+    local upCh, upNew = ImGui.Checkbox('##pull_usepriority', up)
+    if upCh then pull.usepriority = upNew; runConfigLoaders() end
+
+    ImGui.SameLine()
+    ImGui.Text('Hunter mode')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('No makecamp; anchor set once. Puller can be far from camp without triggering return-to-camp.') end
+    ImGui.SameLine()
+    local hunt = pull.hunter == true
+    local huntCh, huntNew = ImGui.Checkbox('##pull_hunter', hunt)
+    if huntCh then pull.hunter = huntNew; runConfigLoaders() end
 end
 
 return M
