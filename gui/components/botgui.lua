@@ -4,6 +4,7 @@ local botconfig = require('lib.config')
 local mobfilter = require('lib.mobfilter')
 local state = require('lib.state')
 local pull_tab = require('gui.components.pull_tab')
+local debuff_tab = require('gui.components.debuff_tab')
 
 local M = {}
 
@@ -330,12 +331,14 @@ local function updateImGui()
                 if ImGui.BeginTabItem(label) then
                     if key == 'pull' then
                         pull_tab.draw()
+                    elseif key == 'debuff' then
+                        debuff_tab.draw()
                     else
                         local tbl = botconfig.config[key]
                         if tbl then
                             if key == 'script' then
                                 drawTableTree(tbl, label, nil)
-                            elseif key == 'heal' or key == 'buff' or key == 'debuff' or key == 'cure' then
+                            elseif key == 'heal' or key == 'buff' or key == 'cure' then
                                 drawTableTree({ [key] = tbl }, label, { key })
                             else
                                 local order = botconfig.getSubOrder() and botconfig.getSubOrder()[key]
