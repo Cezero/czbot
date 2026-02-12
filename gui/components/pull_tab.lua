@@ -80,6 +80,7 @@ function M.draw()
     ImGui.SetNextItemWidth(rangeInputWidth)
     local tfNew, tfCh = combos.combo('pull_target_filter', targetFilterIdx, targetFilterOptions, nil, nil)
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Target filter: Con colors or level range for valid pull targets.') end
+    ImGui.Spacing()
     if tfCh then
         pull.usePullLevels = (tfNew == 2)
         runConfigLoaders()
@@ -182,7 +183,7 @@ function M.draw()
     if manaCh then pull.mana = manaNew; runConfigLoaders() end
 
     ImGui.Spacing()
-    ImGui.Text('Leash')
+    ImGui.Text('Outrun Distance')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('While returning to camp with a mob, nav pauses if the mob is farther than this distance.') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(rangeInputWidth)
@@ -190,14 +191,13 @@ function M.draw()
     local leashNew, leashCh = inputs.boundedInt('pull_leash', leash, 0, 2000, 50, '##pull_leash')
     if leashCh then pull.leash = leashNew; recomputePullSquared(pull); runConfigLoaders() end
 
-    ImGui.SameLine()
+    ImGui.Spacing()
     ImGui.Text('Use priority list')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Prefer mobs that match the Priority list over path distance when choosing a pull target.') end
     ImGui.SameLine()
     local up = pull.usepriority == true
     local upCh, upNew = ImGui.Checkbox('##pull_usepriority', up)
     if upCh then pull.usepriority = upNew; runConfigLoaders() end
-
     ImGui.SameLine()
     ImGui.Text('Hunter mode')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('No makecamp; anchor set once. Puller can be far from camp without triggering return-to-camp.') end
