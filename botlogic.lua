@@ -44,8 +44,10 @@ local function CharState(...)
             state.clearRunState()
         end
     elseif state.getRunconfig().campstatus and state.getRunconfig().makecamp.x and state.getRunconfig().makecamp.y then
-        local campSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x, state.getRunconfig().makecamp.y)
-        if campSq and botconfig.config.settings.acleashSq and campSq > botconfig.config.settings.acleashSq then botmove.MakeCamp('return') end
+        local campSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x,
+            state.getRunconfig().makecamp.y)
+        if campSq and botconfig.config.settings.acleashSq and campSq > botconfig.config.settings.acleashSq then botmove
+                .MakeCamp('return') end
     end
     -- Stand when follow is on and target is beyond follow distance (so follow logic can run)
     do
@@ -53,7 +55,8 @@ local function CharState(...)
         if rc.followid and rc.followid > 0 and mq.TLO.Me.Sitting() then
             local followSpawn = mq.TLO.Spawn(rc.followid)
             local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), followSpawn.X(), followSpawn.Y())
-            if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then mq.cmd('/stand') end
+            if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then
+                mq.cmd('/stand') end
         end
     end
     if botconfig.config.settings.dosit and state.getRunState() ~= 'casting' and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
@@ -183,9 +186,7 @@ end
 function botlogic.StartUp(...)
     print('CZBot is starting! (' .. VERSION .. ')')
     math.randomseed(os.time() * 1000 + os.clock() * 1000)
-    local meSpawn = mq.TLO.Me()
-    if not meSpawn then return end
-    if meSpawn.Hovering() or string.find(meSpawn.Name(), 'corpse') then
+    if mq.TLO.Me.Hovering() or string.find(mq.TLO.Me.Name() or '', 'corpse') then
         printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
         state.getRunconfig().terminate = true
         return
