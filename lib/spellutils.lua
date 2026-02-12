@@ -566,28 +566,25 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     return false
 end
 
--- precondition check
+-- precondition check: precondition is string or nil. Literal 'true'/'false' skip Lua eval.
 function spellutils.PreCondCheck(Sub, ID, spawnID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return false end
     if entry.precondition == nil then return true end
-    local precond = entry.precondition
+    if type(entry.precondition) ~= 'string' then EvalID = nil; return true end
+    local precond = entry.precondition:match('^%s*(.-)%s*$') or entry.precondition
+    if precond == 'true' then EvalID = nil; return true end
+    if precond == 'false' then EvalID = nil; return false end
     EvalID = spawnID
-    if type(entry.precondition) == 'string' then
-        local loadprecond, loadError = load('local mq = require("mq") ' .. precond)
-        if loadprecond then
-            local env = { EvalID = EvalID }
-            setmetatable(env, { __index = _G })
-            local output = loadprecond()
-            EvalID = nil
-            return output
-        else
-            print('problem loading precond') -- TODO add more context to make this a meaningful error message
-        end
-    elseif type(entry.precondition) == 'boolean' then
-        if entry.precondition then
-            EvalID = nil; return true
-        end
+    local loadprecond, loadError = load('local mq = require("mq") ' .. precond)
+    if loadprecond then
+        local env = { EvalID = EvalID }
+        setmetatable(env, { __index = _G })
+        local output = loadprecond()
+        EvalID = nil
+        return output
+    else
+        print('problem loading precond') -- TODO add more context to make this a meaningful error message
     end
     EvalID = nil
     return true

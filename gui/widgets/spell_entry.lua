@@ -148,7 +148,11 @@ function M.draw(spell, opts)
         end
         if state.preconditionBuf == nil then
             local p = spell.precondition
-            state.preconditionBuf = (type(p) == 'string' and p or (p == true and 'true' or 'false'))
+            -- Precondition is string or nil; display any string as-is, nil as ''
+            state.preconditionBuf = (type(p) == 'string' and p or '')
+        elseif type(spell.precondition) == 'string' and state.preconditionBuf ~= spell.precondition then
+            -- Sync buffer from spell so any stored string is always displayed (e.g. after config load)
+            state.preconditionBuf = spell.precondition
         end
     end
 
@@ -438,8 +442,7 @@ function M.draw(spell, opts)
         local preBuf, preChanged = ImGui.InputText('##' .. id .. '_precondition', state.preconditionBuf or '', 512)
         if preChanged then
             state.preconditionBuf = preBuf
-            if preBuf == 'true' then spell.precondition = true
-            elseif preBuf == 'false' then spell.precondition = false
+            if preBuf == '' or (preBuf and preBuf:match('^%s*$')) then spell.precondition = nil
             else spell.precondition = preBuf end
             if onChanged then onChanged() end
         end

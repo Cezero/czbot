@@ -131,10 +131,10 @@ end
 
 -- Canonical default spell entry per section. getDefaultSpellEntry returns a copy so callers do not mutate.
 local defaultSpellEntries = {
-    heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, isHoT = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, precondition = true },
-    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = true },
-    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, targettedAE = false, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true, dontStack = nil },
-    cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = true },
+    heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, isHoT = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, precondition = nil },
+    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
+    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, targettedAE = false, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = nil, dontStack = nil },
+    cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
 
 function M.getDefaultSpellEntry(section)
@@ -324,6 +324,12 @@ local function writeConfigToFile(config, filename)
                     file:flush()
                 elseif key == 'bands' and type(value) == "table" then
                     writeBands(value, indent)
+                elseif key == 'precondition' then
+                    if value ~= nil and not (type(value) == 'string' and value:match('^%s*$')) then
+                        local preStr = type(value) == 'string' and value or tostring(value)
+                        file:write(indent .. formatKey('precondition') .. " = " .. '"' .. preStr:gsub('\\', '\\\\'):gsub('"', '\\"') .. '",\n')
+                        file:flush()
+                    end
                 elseif type(value) == "table" then
                     print("detected a corrupted value for:", key, " = ", value)
                     print("setting ", key, " to nil, please check your config")
@@ -492,6 +498,16 @@ function M.Load(path)
     if not M.config.cure then M.config.cure = {} end
     for _, section in ipairs({ 'heal', 'buff', 'debuff', 'cure' }) do
         if not M.config[section].spells then M.config[section].spells = {} end
+    end
+    -- Normalize precondition to string or nil (no boolean) in all spell entries
+    for _, section in ipairs({ 'heal', 'buff', 'debuff', 'cure' }) do
+        for _, entry in ipairs(M.config[section].spells or {}) do
+            if type(entry.precondition) == 'boolean' then
+                entry.precondition = entry.precondition and nil or 'false'
+            elseif type(entry.precondition) == 'string' and (entry.precondition == '' or entry.precondition:match('^%s*$')) then
+                entry.precondition = nil
+            end
+        end
     end
     if (M.config.settings.domelee == nil) then M.config.settings.domelee = false end
     if (M.config.settings.doheal == nil) then M.config.settings.doheal = false end
