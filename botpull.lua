@@ -336,14 +336,15 @@ local function tickNavigating(rc, spawn)
     end
     -- Add-abort: nearby NPC (not pull target, not grey, Aggressive) with LoS
     local addRadius = myconfig.pull.addAbortRadius or 50
-    local ncount = mq.TLO.SpawnCount('npc radius ' .. addRadius)()
+    local addFilter = 'npc radius ' .. addRadius
+    local ncount = mq.TLO.SpawnCount(addFilter)()
     if ncount and ncount > 0 then
         for i = 1, ncount do
-            local s = mq.TLO.NearestSpawn(i, 'npc radius ' .. addRadius)
-            if s and s.ID() and s.ID() ~= rc.pullAPTargetID and s.Aggressive() then
-                local conName = s.ConColor()
+            local sid = mq.TLO.NearestSpawn(i, addFilter).ID()
+            if sid and sid ~= rc.pullAPTargetID and mq.TLO.NearestSpawn(i, addFilter).Aggressive() then
+                local conName = mq.TLO.NearestSpawn(i, addFilter).ConColor()
                 local conId = conName and botconfig.ConColorsNameToId[conName:upper()] or 0
-                if conId ~= 1 and s.LineOfSight() then -- not Grey, has LoS
+                if conId ~= 1 and mq.TLO.NearestSpawn(i, addFilter).LineOfSight() then -- not Grey, has LoS
                     abortPullAndReturnToCamp('Add aggro, returning to camp.')
                     return
                 end
