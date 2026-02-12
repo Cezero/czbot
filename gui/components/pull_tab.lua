@@ -30,23 +30,16 @@ function M.draw()
     local spell = pull.spell
     if not spell then spell = { gem = 'melee', spell = '', range = nil } end
 
-    -- ----- Pull spell (3 rows: Type/Gem, Spell/Item/Ability, Range; table height = content only) -----
-    if layout.beginTwoColumn('pull_spell_table', 200, 0) then
-        ImGui.TableSetupColumn('Label', 0, 0.35)
-        ImGui.TableSetupColumn('Value', 0, 0.65)
-        spell_entry.draw('pull_spell', spell, spell_entry.PRIMARY_OPTIONS_PULL, { onChanged = runConfigLoaders })
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Range')
-        ImGui.TableNextColumn()
-        ImGui.SetNextItemWidth(-1)
-        local r = spell.range or 0
-        local newR, rChanged = inputs.boundedInt('pull_range', r, 0, 500, 5, '##pull_range')
-        if rChanged then
-            spell.range = newR
-            runConfigLoaders()
-        end
-        layout.endTwoColumn()
+    -- ----- Pull spell: Type + Spell/Item on one line; Range on the next -----
+    spell_entry.draw('pull_spell', spell, spell_entry.PRIMARY_OPTIONS_PULL, { onChanged = runConfigLoaders, singleRow = true })
+    ImGui.Text('Range')
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(48)
+    local r = spell.range or 0
+    local newR, rChanged = inputs.boundedInt('pull_range', r, 0, 500, 5, '##pull_range')
+    if rChanged then
+        spell.range = newR
+        runConfigLoaders()
     end
 
     ImGui.Spacing()

@@ -97,30 +97,51 @@ end
 -- Gem types that do not use the spell/item/ability field (display "unused", not editable).
 local UNUSED_SPELL_TYPES = { melee = true }
 
+--- Short label for the spell/item/ability column based on gem type (for single-row layout).
+local function fieldLabelForGemType(gemType)
+    if gemType == 'gem' then return 'Spell' end
+    if gemType == 'ranged' or gemType == 'item' then return 'Item' end
+    if gemType == 'ability' then return 'Ability' end
+    if gemType == 'alt' then return 'Alt' end
+    if gemType == 'disc' then return 'Disc' end
+    if gemType == 'script' then return 'Script' end
+    return 'Spell'
+end
+
 local _modalState = {}
 
---- Draw two rows in the current two-column table: Type/Gem, Spell/Item/Ability.
---- opts: labelGem, labelSpell, onChanged (all optional). Future: displayBands, displayTargetPhase, etc.
+--- Draw Type + Spell/Item/Ability. When opts.singleRow true, uses SameLine() for one row (no table). Otherwise uses table (TableNextRow/TableNextColumn).
+--- opts: labelGem, labelSpell, onChanged, singleRow, typeComboWidth, spellSelectableWidth (all optional).
 function M.draw(id, spell, primaryOptions, opts)
     opts = opts or {}
-    local labelGem = opts.labelGem or 'Type / Gem'
-    local labelSpell = opts.labelSpell or 'Spell / Item / Ability'
+    local singleRow = opts.singleRow == true
+    local labelGem = singleRow and 'Type' or (opts.labelGem or 'Type / Gem')
     local onChanged = opts.onChanged
+    local typeComboWidth = opts.typeComboWidth or 100
+    local spellSelectableWidth = opts.spellSelectableWidth or 140
 
     if not _modalState[id] then
         _modalState[id] = { open = false, buffer = '', error = nil }
     end
     local state = _modalState[id]
 
-    -- Row 1: Type / Gem
-    ImGui.TableNextRow()
-    ImGui.TableNextColumn()
-    ImGui.Text('%s', labelGem)
-    ImGui.TableNextColumn()
+    local gemType = type(spell.gem) == 'number' and 'gem' or spell.gem
+    local labelSpell = singleRow and fieldLabelForGemType(gemType) or (opts.labelSpell or 'Spell / Item / Ability')
+
+    if not singleRow then
+        ImGui.TableNextRow()
+    end
+    if singleRow then
+        ImGui.Text('%s', labelGem)
+        ImGui.SameLine()
+    else
+        ImGui.TableNextColumn()
+        ImGui.Text('%s', labelGem)
+        ImGui.TableNextColumn()
+    end
     local primary, sub = gemToPrimarySub(spell.gem)
-    -- -1 = same width as other value column widgets (Type/Gem, Spell, Range)
-    ImGui.SetNextItemWidth(-1)
-    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, -1)
+    ImGui.SetNextItemWidth(singleRow and typeComboWidth or -1)
+    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, singleRow and typeComboWidth or -1)
     if gemChanged then
         spell.gem = primarySubToGem(newPrimary, newSub)
         if newPrimary == 'gem' then
@@ -139,12 +160,16 @@ function M.draw(id, spell, primaryOptions, opts)
         if onChanged then onChanged() end
     end
 
-    -- Row 2: Spell / Item / Ability
-    ImGui.TableNextRow()
-    ImGui.TableNextColumn()
-    ImGui.Text('%s', labelSpell)
-    ImGui.TableNextColumn()
-    local gemType = type(spell.gem) == 'number' and 'gem' or spell.gem
+    if singleRow then
+        ImGui.SameLine()
+        ImGui.Text('%s', fieldLabelForGemType(type(spell.gem) == 'number' and 'gem' or spell.gem))
+        ImGui.SameLine()
+    else
+        ImGui.TableNextRow()
+        ImGui.TableNextColumn()
+        ImGui.Text('%s', labelSpell)
+        ImGui.TableNextColumn()
+    end
     local isUnused = UNUSED_SPELL_TYPES[gemType] == true
     local validator = validatorForGemType(gemType) or function() return true end
     local function onSave(value)
@@ -167,10 +192,11 @@ function M.draw(id, spell, primaryOptions, opts)
     else
         displayName = spell.spell
     end
-    -- Same width as Type/Gem and Range (fill value column)
-    ImGui.SetNextItemWidth(-1)
+    local w = singleRow and spellSelectableWidth or (ImGui.GetColumnWidth(-1) or 200)
+    if not singleRow and (not w or w <= 0) then w = 200 end
+    ImGui.SetNextItemWidth(w)
     ---@diagnostic disable-next-line: undefined-global
-    if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(-1, 0)) then
+    if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(w, 0)) then
         if not isUnused then
             state.open = true
             state.buffer = spell.spell or ''
