@@ -29,7 +29,7 @@ function M.draw()
     if not spell then spell = { gem = 'melee', spell = '', range = nil } end
 
     -- ----- Pull spell: Type + Spell/Item on one line; Range right-aligned on same line. Range input wide enough for 3 digits + buttons -----
-    spell_entry.draw('pull_spell', spell, spell_entry.PRIMARY_OPTIONS_PULL, { onChanged = runConfigLoaders, singleRow = true })
+    spell_entry.draw('pull_spell', spell, spell_entry.PRIMARY_OPTIONS_PULL, { onChanged = runConfigLoaders, label = 'Using: ' })
     local rangeInputWidth = 80
     local rangeLabelW = select(1, ImGui.CalcTextSize('Range'))
     local rangeLabelWidth = (rangeLabelW or 0) + 4

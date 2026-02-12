@@ -1,6 +1,6 @@
 -- Generic spell/ability entry widget: gem type + spell name with type-based validation.
 -- Used for pull now; will grow to support bands, targetphase, validtargets via opts (e.g. displayBands).
--- Caller must have started a two-column table; this widget draws two rows (Type/Gem, Spell/Item/Ability).
+-- Always draws one row: label, type combo, then (when not melee) spell-type label and spell/item/ability selectable.
 
 local mq = require('mq')
 local ImGui = require('ImGui')
@@ -110,12 +110,11 @@ end
 
 local _modalState = {}
 
---- Draw Type + Spell/Item/Ability. When opts.singleRow true, uses SameLine() for one row (no table). Otherwise uses table (TableNextRow/TableNextColumn).
---- opts: labelGem, labelSpell, onChanged, singleRow, typeComboWidth, spellSelectableWidth (all optional).
+--- Draw one row: label, type combo, then (when not melee) spell-type label and spell/item/ability selectable.
+--- opts: label, onChanged, typeComboWidth, spellSelectableWidth (all optional). label defaults to 'Type'.
 function M.draw(id, spell, primaryOptions, opts)
     opts = opts or {}
-    local singleRow = opts.singleRow == true
-    local labelGem = singleRow and 'Type' or (opts.labelGem or 'Type / Gem')
+    local labelText = opts.label or 'Type'
     local onChanged = opts.onChanged
     local typeComboWidth = opts.typeComboWidth or 100
     local spellSelectableWidth = opts.spellSelectableWidth or 140
@@ -126,22 +125,12 @@ function M.draw(id, spell, primaryOptions, opts)
     local state = _modalState[id]
 
     local gemType = type(spell.gem) == 'number' and 'gem' or spell.gem
-    local labelSpell = singleRow and fieldLabelForGemType(gemType) or (opts.labelSpell or 'Spell / Item / Ability')
 
-    if not singleRow then
-        ImGui.TableNextRow()
-    end
-    if singleRow then
-        ImGui.Text('%s', labelGem)
-        ImGui.SameLine()
-    else
-        ImGui.TableNextColumn()
-        ImGui.Text('%s', labelGem)
-        ImGui.TableNextColumn()
-    end
+    ImGui.Text('%s', labelText)
+    ImGui.SameLine()
     local primary, sub = gemToPrimarySub(spell.gem)
-    ImGui.SetNextItemWidth(singleRow and typeComboWidth or -1)
-    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, singleRow and typeComboWidth or -1)
+    ImGui.SetNextItemWidth(typeComboWidth)
+    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, typeComboWidth)
     if gemChanged then
         spell.gem = primarySubToGem(newPrimary, newSub)
         if newPrimary == 'gem' then
@@ -160,17 +149,12 @@ function M.draw(id, spell, primaryOptions, opts)
         if onChanged then onChanged() end
     end
 
-    if singleRow and gemType ~= 'melee' then
+    if gemType ~= 'melee' then
         ImGui.SameLine()
         ImGui.Text('%s', fieldLabelForGemType(type(spell.gem) == 'number' and 'gem' or spell.gem))
         ImGui.SameLine()
-    elseif not singleRow then
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('%s', labelSpell)
-        ImGui.TableNextColumn()
     end
-    if not singleRow or gemType ~= 'melee' then
+    if gemType ~= 'melee' then
         local isUnused = UNUSED_SPELL_TYPES[gemType] == true
         local validator = validatorForGemType(gemType) or function() return true end
         local function onSave(value)
@@ -193,11 +177,9 @@ function M.draw(id, spell, primaryOptions, opts)
         else
             displayName = spell.spell
         end
-        local w = singleRow and spellSelectableWidth or (ImGui.GetColumnWidth(-1) or 200)
-        if not singleRow and (not w or w <= 0) then w = 200 end
-        ImGui.SetNextItemWidth(w)
+        ImGui.SetNextItemWidth(spellSelectableWidth)
         ---@diagnostic disable-next-line: undefined-global
-        if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(w, 0)) then
+        if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(spellSelectableWidth, 0)) then
             if not isUnused then
                 state.open = true
                 state.buffer = spell.spell or ''
