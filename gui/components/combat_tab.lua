@@ -90,12 +90,26 @@ function M.draw()
         if mmCh then melee.minmana = mmNew; runConfigLoaders() end
     end
 
-    -- Section divider: Pull
+    -- Section divider: Pulling (centered with lines each side)
     ImGui.Spacing()
-    ImGui.Text('Pull')
+    local leftX, lineY = ImGui.GetCursorScreenPos()
+    local availX = select(1, ImGui.GetContentRegionAvail())
+    local textW, textH = ImGui.CalcTextSize('Pulling')
+    local startX = ImGui.GetCursorPosX()
+    ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
+    ImGui.Text('Pulling')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Pull method and range settings.') end
-    ImGui.SameLine()
-    ImGui.Separator()
+    local tMinX, tMinY = ImGui.GetItemRectMin()
+    local tMaxX, tMaxY = ImGui.GetItemRectMax()
+    local midY = (tMinY + tMaxY) / 2
+    local pad = 4
+    local winX = select(1, ImGui.GetWindowPos())
+    local contentMaxX = select(1, ImGui.GetContentRegionMax())
+    local rightX = winX + contentMaxX
+    local drawList = ImGui.GetWindowDrawList()
+    local col = ImGui.GetColorU32(ImGuiCol.Separator)
+    drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col)
+    drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col)
 
     local pull = botconfig.config.pull
     if not pull then return end
@@ -104,7 +118,7 @@ function M.draw()
 
     spell_entry.draw(pull.spell, {
         id = 'pull_spell',
-        label = 'Using: ',
+        label = 'Method: ',
         primaryOptions = PRIMARY_OPTIONS_PULL,
         onChanged = runConfigLoaders,
         displayCommonFields = false,
@@ -138,6 +152,7 @@ function M.draw()
     local conColors = botconfig.ConColors or {}
     ImGui.Spacing()
     ImGui.Text('Target Filter: ')
+    ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local tfNew, tfCh = combos.combo('pull_target_filter', targetFilterIdx, targetFilterOptions, nil, nil)
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Target filter: Con colors or level range for valid pull targets.') end
