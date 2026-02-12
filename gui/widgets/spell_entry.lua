@@ -160,56 +160,58 @@ function M.draw(id, spell, primaryOptions, opts)
         if onChanged then onChanged() end
     end
 
-    if singleRow then
+    if singleRow and gemType ~= 'melee' then
         ImGui.SameLine()
         ImGui.Text('%s', fieldLabelForGemType(type(spell.gem) == 'number' and 'gem' or spell.gem))
         ImGui.SameLine()
-    else
+    elseif not singleRow then
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
         ImGui.Text('%s', labelSpell)
         ImGui.TableNextColumn()
     end
-    local isUnused = UNUSED_SPELL_TYPES[gemType] == true
-    local validator = validatorForGemType(gemType) or function() return true end
-    local function onSave(value)
-        spell.spell = (value or ''):match('^%s*(.-)%s*$')
-        state.open = false
-        state.buffer = ''
-        if onChanged then onChanged() end
-    end
-    local function onCancel()
-        state.open = false
-        state.buffer = ''
-        state.error = nil
-    end
-
-    local displayName
-    if isUnused then
-        displayName = 'unused'
-    elseif not spell.spell or spell.spell:match('^%s*$') then
-        displayName = 'unset'
-    else
-        displayName = spell.spell
-    end
-    local w = singleRow and spellSelectableWidth or (ImGui.GetColumnWidth(-1) or 200)
-    if not singleRow and (not w or w <= 0) then w = 200 end
-    ImGui.SetNextItemWidth(w)
-    ---@diagnostic disable-next-line: undefined-global
-    if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(w, 0)) then
-        if not isUnused then
-            state.open = true
-            state.buffer = spell.spell or ''
-            state.error = nil
-            modals.openValidatedEditModal(id)
+    if not singleRow or gemType ~= 'melee' then
+        local isUnused = UNUSED_SPELL_TYPES[gemType] == true
+        local validator = validatorForGemType(gemType) or function() return true end
+        local function onSave(value)
+            spell.spell = (value or ''):match('^%s*(.-)%s*$')
+            state.open = false
+            state.buffer = ''
+            if onChanged then onChanged() end
         end
-    end
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip(isUnused and 'Not used for this type' or 'Click to edit')
-    end
+        local function onCancel()
+            state.open = false
+            state.buffer = ''
+            state.error = nil
+        end
 
-    if state.open and not isUnused then
-        modals.validatedEditModal(id, state, validator, onSave, onCancel)
+        local displayName
+        if isUnused then
+            displayName = 'unused'
+        elseif not spell.spell or spell.spell:match('^%s*$') then
+            displayName = 'unset'
+        else
+            displayName = spell.spell
+        end
+        local w = singleRow and spellSelectableWidth or (ImGui.GetColumnWidth(-1) or 200)
+        if not singleRow and (not w or w <= 0) then w = 200 end
+        ImGui.SetNextItemWidth(w)
+        ---@diagnostic disable-next-line: undefined-global
+        if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(w, 0)) then
+            if not isUnused then
+                state.open = true
+                state.buffer = spell.spell or ''
+                state.error = nil
+                modals.openValidatedEditModal(id)
+            end
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(isUnused and 'Not used for this type' or 'Click to edit')
+        end
+
+        if state.open and not isUnused then
+            modals.validatedEditModal(id, state, validator, onSave, onCancel)
+        end
     end
 end
 

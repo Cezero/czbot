@@ -30,11 +30,21 @@ function M.draw()
     local spell = pull.spell
     if not spell then spell = { gem = 'melee', spell = '', range = nil } end
 
-    -- ----- Pull spell: Type + Spell/Item on one line; Range on the next -----
+    -- ----- Pull spell: Type + Spell/Item on one line; Range right-aligned on same line. Range input wide enough for number + buttons -----
     spell_entry.draw('pull_spell', spell, spell_entry.PRIMARY_OPTIONS_PULL, { onChanged = runConfigLoaders, singleRow = true })
+    local rangeInputWidth = 72
+    local rangeLabelW = select(1, ImGui.CalcTextSize('Range'))
+    local rangeLabelWidth = (rangeLabelW or 0) + 4
+    local rangeTotalWidth = rangeLabelWidth + rangeInputWidth
+    local avail = ImGui.GetContentRegionAvail()
+    if avail and avail > rangeTotalWidth then
+        ImGui.SameLine(ImGui.GetCursorPosX() + avail - rangeTotalWidth)
+    else
+        ImGui.SameLine()
+    end
     ImGui.Text('Range')
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(48)
+    ImGui.SetNextItemWidth(rangeInputWidth)
     local r = spell.range or 0
     local newR, rChanged = inputs.boundedInt('pull_range', r, 0, 500, 5, '##pull_range')
     if rChanged then
@@ -45,7 +55,7 @@ function M.draw()
     ImGui.Spacing()
     ImGui.Separator()
     ImGui.Text('Distance')
-    if layout.beginTwoColumn('pull_dist_table', 200) then
+    if layout.beginTwoColumn('pull_dist_table', 200, 0) then
         for _, row in ipairs({
             { key = 'radius', label = 'Radius', min = 1, max = 10000, default = 400 },
             { key = 'engageRadius', label = 'Engage radius', min = 1, max = 500, default = 200 },
@@ -75,7 +85,7 @@ function M.draw()
     ImGui.Spacing()
     ImGui.Separator()
     ImGui.Text('Targets (con / level)')
-    if layout.beginTwoColumn('pull_targets_table', 200) then
+    if layout.beginTwoColumn('pull_targets_table', 200, 0) then
         local conColors = botconfig.ConColors or {}
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
@@ -129,7 +139,7 @@ function M.draw()
     ImGui.Spacing()
     ImGui.Separator()
     ImGui.Text('Other')
-    if layout.beginTwoColumn('pull_other_table', 200) then
+    if layout.beginTwoColumn('pull_other_table', 200, 0) then
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
         ImGui.Text('Chain pull HP %')
