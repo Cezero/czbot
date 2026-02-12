@@ -77,6 +77,7 @@ function M.draw()
     }
     local conColors = botconfig.ConColors or {}
     ImGui.Spacing()
+    ImGui.Text('Target Filter: ')
     ImGui.SetNextItemWidth(rangeInputWidth)
     local tfNew, tfCh = combos.combo('pull_target_filter', targetFilterIdx, targetFilterOptions, nil, nil)
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Target filter: Con colors or level range for valid pull targets.') end
@@ -153,7 +154,7 @@ function M.draw()
         return t
     end
     local mcSet = manaclassSet()
-    ImGui.Text('Mana class: ')
+    ImGui.Text('Healers: ')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Classes checked for mana %% before allowing a pull.') end
     ImGui.SameLine()
     for _, label in ipairs(manaclassOptions) do
