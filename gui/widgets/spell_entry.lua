@@ -1,7 +1,10 @@
 -- Generic spell/ability entry widget: gem type + spell name with type-based validation.
--- Used for pull now; will grow to support bands, targetphase, validtargets via opts (e.g. displayBands).
--- Always draws one row: label, type combo, then (when not melee) spell-type label and spell/item/ability selectable.
--- opts.showRange (optional): when true, draws a Range field on the same row (right-aligned).
+-- Signature: M.draw(spell, opts)
+--   spell: spell entry table to read/write (e.g. config.pull.spell or config.heal.spells[i]).
+--   opts: required id (string), primaryOptions (table); optional label, onChanged, displayCommonFields (default true),
+--         showRange (default false), customSection, targetphaseOptions, validtargetsOptions,
+--         showBandMinMax, showBandMintarMaxtar. customSection(entry, idPrefix, onChanged) renders category-only fields.
+-- Widths are hardcoded; caller does not control layout. All widget IDs use opts.id as prefix.
 
 local mq = require('mq')
 local ImGui = require('ImGui')
@@ -112,15 +115,23 @@ end
 
 local _modalState = {}
 
---- Draw one row: label, type combo, then (when not melee) spell-type label and spell/item/ability selectable.
---- opts: label, onChanged, typeComboWidth, spellSelectableWidth, showRange (all optional). label defaults to 'Type'. showRange enables Range field on same row.
-function M.draw(id, spell, primaryOptions, opts)
+local TYPE_COMBO_WIDTH = 100
+local SPELL_SELECTABLE_WIDTH = 140
+local NUMERIC_INPUT_WIDTH = 80
+
+--- Draw spell entry: label, type combo, spell/item/ability selectable; optionally range, common fields, customSection.
+--- @param spell table spell entry to read/write
+--- @param opts table required: id (string), primaryOptions (table). optional: label, onChanged, displayCommonFields (default true), showRange (default false), customSection(entry, idPrefix, onChanged), targetphaseOptions, validtargetsOptions, showBandMinMax, showBandMintarMaxtar.
+function M.draw(spell, opts)
     opts = opts or {}
+    local id = opts.id
+    local primaryOptions = opts.primaryOptions
+    if not id or not primaryOptions then return end
     local labelText = opts.label or 'Type'
     local onChanged = opts.onChanged
-    local typeComboWidth = opts.typeComboWidth or 100
-    local spellSelectableWidth = opts.spellSelectableWidth or 140
-    local numericInputWidth = 80
+    local displayCommonFields = opts.displayCommonFields
+    if displayCommonFields == nil then displayCommonFields = true end
+    local showRange = opts.showRange or false
 
     if not _modalState[id] then
         _modalState[id] = { open = false, buffer = '', error = nil }
@@ -132,8 +143,8 @@ function M.draw(id, spell, primaryOptions, opts)
     ImGui.Text('%s', labelText)
     ImGui.SameLine()
     local primary, sub = gemToPrimarySub(spell.gem)
-    ImGui.SetNextItemWidth(typeComboWidth)
-    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, typeComboWidth)
+    ImGui.SetNextItemWidth(TYPE_COMBO_WIDTH)
+    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, TYPE_COMBO_WIDTH)
     if gemChanged then
         spell.gem = primarySubToGem(newPrimary, newSub)
         if newPrimary == 'gem' then
@@ -180,9 +191,9 @@ function M.draw(id, spell, primaryOptions, opts)
         else
             displayName = spell.spell
         end
-        ImGui.SetNextItemWidth(spellSelectableWidth)
+        ImGui.SetNextItemWidth(SPELL_SELECTABLE_WIDTH)
         ---@diagnostic disable-next-line: undefined-global
-        if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(spellSelectableWidth, 0)) then
+        if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(SPELL_SELECTABLE_WIDTH, 0)) then
             if not isUnused then
                 state.open = true
                 state.buffer = spell.spell or ''
@@ -199,10 +210,10 @@ function M.draw(id, spell, primaryOptions, opts)
         end
     end
 
-    if opts.showRange then
+    if showRange then
         local rangeLabelW = select(1, ImGui.CalcTextSize('Range'))
         local rangeLabelWidth = (rangeLabelW or 0) + 4
-        local rangeTotalWidth = rangeLabelWidth + numericInputWidth
+        local rangeTotalWidth = rangeLabelWidth + NUMERIC_INPUT_WIDTH
         local avail = ImGui.GetContentRegionAvail()
         if avail and avail > rangeTotalWidth then
             ImGui.SameLine(ImGui.GetCursorPosX() + avail - rangeTotalWidth)
@@ -212,13 +223,17 @@ function M.draw(id, spell, primaryOptions, opts)
         ImGui.Text('Range')
         if ImGui.IsItemHovered() then ImGui.SetTooltip('Max range to use when casting the pull spell (0 = use spell default).') end
         ImGui.SameLine()
-        ImGui.SetNextItemWidth(numericInputWidth)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local r = spell.range or 0
         local newR, rChanged = inputs.boundedInt(id .. '_range', r, 0, 500, 5, '##' .. id .. '_range')
         if rChanged then
             spell.range = newR
             if onChanged then onChanged() end
         end
+    end
+
+    if displayCommonFields and opts.customSection then
+        opts.customSection(spell, id .. '_custom', onChanged)
     end
 end
 

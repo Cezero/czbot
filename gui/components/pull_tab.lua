@@ -28,7 +28,14 @@ function M.draw()
     local spell = pull.spell
     if not spell then spell = { gem = 'melee', spell = '', range = nil } end
 
-    spell_entry.draw('pull_spell', spell, spell_entry.PRIMARY_OPTIONS_PULL, { onChanged = runConfigLoaders, label = 'Using: ', showRange = true })
+    spell_entry.draw(pull.spell, {
+        id = 'pull_spell',
+        label = 'Using: ',
+        primaryOptions = spell_entry.PRIMARY_OPTIONS_PULL,
+        onChanged = runConfigLoaders,
+        displayCommonFields = false,
+        showRange = true,
+    })
 
     local numericInputWidth = 80
 
