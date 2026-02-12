@@ -107,9 +107,11 @@ function M.draw()
     local contentMaxX = select(1, ImGui.GetContentRegionMax())
     local rightX = winX + contentMaxX
     local drawList = ImGui.GetWindowDrawList()
-    local col = ImGui.GetColorU32(ImGuiCol.Separator)
-    drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col)
-    drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col)
+    -- Use Border (visible) and thickness 2; Separator can be too faint / 1px hard to see on HiDPI
+    local col = ImGui.GetColorU32(ImGuiCol.Border)
+    local thickness = 2.0
+    drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
+    drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
 
     local pull = botconfig.config.pull
     if not pull then return end
