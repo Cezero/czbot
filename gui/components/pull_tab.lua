@@ -145,27 +145,29 @@ function M.draw()
     local cpcNew, cpcCh = inputs.boundedInt('pull_chainpullcnt', cpc, 0, 20, 1, '##pull_chainpullcnt')
     if cpcCh then pull.chainpullcnt = cpcNew; runConfigLoaders() end
 
-    -- Mana class (checkboxes) then Mana % on same line
+    -- Mana class (checkboxes) then Mana % on same line. ImGui.Checkbox returns (value, pressed).
     local manaclassOptions = { 'CLR', 'DRU', 'SHM' }
     local mcList = (type(pull.manaclass) == 'table') and pull.manaclass or {}
+    local function inManaclass(name)
+        local u = string.upper(tostring(name or ''))
+        for _, c in ipairs(mcList) do
+            if string.upper(tostring(c or '')) == u then return true end
+        end
+        return false
+    end
     ImGui.Text('Healers: ')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Classes checked for mana %% before allowing a pull.') end
     ImGui.SameLine()
     for _, label in ipairs(manaclassOptions) do
-        local checked = false
-        for _, c in ipairs(mcList) do
-            if (c or '') == label then checked = true; break end
-        end
-        local ch, newVal = ImGui.Checkbox('##pull_manaclass_' .. label:lower(), checked)
-        if ch then
+        local checked = inManaclass(label)
+        local value, pressed = ImGui.Checkbox('##pull_manaclass_' .. label:lower(), checked)
+        if pressed then
             local newTable = {}
             for _, o in ipairs(manaclassOptions) do
                 if o == label then
-                    if newVal then newTable[#newTable + 1] = o end
+                    if value then newTable[#newTable + 1] = o end
                 else
-                    for _, c in ipairs(mcList) do
-                        if (c or '') == o then newTable[#newTable + 1] = o; break end
-                    end
+                    if inManaclass(o) then newTable[#newTable + 1] = o end
                 end
             end
             pull.manaclass = newTable
