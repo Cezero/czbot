@@ -6,6 +6,21 @@ local spell_entry = require('gui.widgets.spell_entry')
 
 local M = {}
 
+local PRIMARY_OPTIONS_DEBUFF = {
+    { value = 'gem',     label = 'Gem' },
+    { value = 'item',    label = 'Item' },
+    { value = 'ability', label = 'Ability' },
+    { value = 'alt',     label = 'Alt' },
+    { value = 'disc',    label = 'Disc' },
+    { value = 'script',  label = 'Script' },
+}
+
+local TARGETPHASE_OPTIONS_DEBUFF = {
+    { key = 'tanktar',   label = "Tank's Target",  tooltip = "Use when tank has a target (e.g. debuff tank's target)." },
+    { key = 'notanktar', label = "Not Tank's Target", tooltip = 'Use on mobs not targeted by the tank (e.g. mez adds).' },
+    { key = 'named',     label = 'Named',          tooltip = 'Use on named mobs only.' },
+}
+
 local GREEN = ImVec4(0, 0.8, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
 
@@ -42,9 +57,13 @@ function M.draw()
         spell_entry.draw(entry, {
             id = 'debuff_' .. i,
             label = 'Debuff ' .. i,
-            primaryOptions = spell_entry.PRIMARY_OPTIONS_PULL,
+            primaryOptions = PRIMARY_OPTIONS_DEBUFF,
             onChanged = runConfigLoaders,
-            displayCommonFields = false,
+            displayCommonFields = true,
+            targetphaseOptions = TARGETPHASE_OPTIONS_DEBUFF,
+            validtargetsOptions = {},
+            showBandMinMax = true,
+            showBandMinTarMaxtar = true,
         })
         ImGui.Separator()
     end

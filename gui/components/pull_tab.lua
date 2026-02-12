@@ -9,6 +9,17 @@ local spell_entry = require('gui.widgets.spell_entry')
 
 local M = {}
 
+local PRIMARY_OPTIONS_PULL = {
+    { value = 'melee',   label = 'Melee' },
+    { value = 'ranged',  label = 'Ranged' },
+    { value = 'gem',     label = 'Gem' },
+    { value = 'ability', label = 'Ability' },
+    { value = 'item',    label = 'Item' },
+    { value = 'alt',     label = 'Alt' },
+    { value = 'disc',    label = 'Disc' },
+    { value = 'script',  label = 'Script' },
+}
+
 local function runConfigLoaders()
     botconfig.RunConfigLoaders()
 end
@@ -31,7 +42,7 @@ function M.draw()
     spell_entry.draw(pull.spell, {
         id = 'pull_spell',
         label = 'Using: ',
-        primaryOptions = spell_entry.PRIMARY_OPTIONS_PULL,
+        primaryOptions = PRIMARY_OPTIONS_PULL,
         onChanged = runConfigLoaders,
         displayCommonFields = false,
         showRange = true,

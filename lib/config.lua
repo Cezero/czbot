@@ -311,8 +311,8 @@ local function writeConfigToFile(config, filename)
             local valueStr = nil
             for _, key in ipairs(order2) do
                 value = t[key]
-                if value == nil then
-                    -- omit nil keys to keep config sparse
+                if value == nil or (key == 'announce' and value == false) then
+                    -- omit nil keys and announce when false to keep config sparse
                 elseif key == 'dontStack' and type(value) == "table" and #value > 0 then
                     file:write(indent .. formatKey('dontStack') .. " = { ")
                     local parts = {}

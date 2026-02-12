@@ -835,7 +835,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
             end
         end
     end
-    if entry.announce and type(entry.announce) == 'string' then
+    if entry.announce then
         printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end
     -- Stand before cast when sitting (not on mount); MQ2Cast does not do this.
