@@ -10,9 +10,6 @@ local spell_entry = require('gui.widgets.spell_entry')
 
 local M = {}
 
--- Throttle for Pulling divider debug print (every N frames)
-local pullingDebugFrame = 0
-
 local NUMERIC_INPUT_WIDTH = 80
 
 local PRIMARY_OPTIONS_PULL = {
@@ -108,14 +105,8 @@ function M.draw()
     local pad = 4
     local rightX = leftX + availX
     local drawList = ImGui.GetWindowDrawList()
-    -- Debug: throttled printf and bright red to verify line coords/visibility
-    pullingDebugFrame = pullingDebugFrame + 1
-    if pullingDebugFrame % 60 == 0 then
-        printf('\ayCZBot Pulling divider: leftX=%.0f lineY=%.0f availX=%.0f rightX=%.0f tMin=(%.0f,%.0f) tMax=(%.0f,%.0f) midY=%.0f drawList=%s',
-            leftX, lineY, availX, rightX, tMinX, tMinY, tMaxX, tMaxY, midY,
-            drawList and 'ok' or 'nil')
-    end
-    local col = ImGui.GetColorU32(1.0, 0.0, 0.0, 1.0)  -- bright red (debug)
+    -- Light blue #3369ad (51, 105, 173)
+    local col = ImGui.GetColorU32(51/255, 105/255, 173/255, 1.0)
     local thickness = 2.0
     drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
     drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
