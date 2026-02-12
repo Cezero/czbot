@@ -1,10 +1,12 @@
 -- Generic spell/ability entry widget: gem type + spell name with type-based validation.
 -- Used for pull now; will grow to support bands, targetphase, validtargets via opts (e.g. displayBands).
 -- Always draws one row: label, type combo, then (when not melee) spell-type label and spell/item/ability selectable.
+-- opts.showRange (optional): when true, draws a Range field on the same row (right-aligned).
 
 local mq = require('mq')
 local ImGui = require('ImGui')
 local combos = require('gui.widgets.combos')
+local inputs = require('gui.widgets.inputs')
 local modals = require('gui.widgets.modals')
 
 local M = {}
@@ -111,13 +113,14 @@ end
 local _modalState = {}
 
 --- Draw one row: label, type combo, then (when not melee) spell-type label and spell/item/ability selectable.
---- opts: label, onChanged, typeComboWidth, spellSelectableWidth (all optional). label defaults to 'Type'.
+--- opts: label, onChanged, typeComboWidth, spellSelectableWidth, showRange (all optional). label defaults to 'Type'. showRange enables Range field on same row.
 function M.draw(id, spell, primaryOptions, opts)
     opts = opts or {}
     local labelText = opts.label or 'Type'
     local onChanged = opts.onChanged
     local typeComboWidth = opts.typeComboWidth or 100
     local spellSelectableWidth = opts.spellSelectableWidth or 140
+    local numericInputWidth = 80
 
     if not _modalState[id] then
         _modalState[id] = { open = false, buffer = '', error = nil }
@@ -193,6 +196,28 @@ function M.draw(id, spell, primaryOptions, opts)
 
         if state.open and not isUnused then
             modals.validatedEditModal(id, state, validator, onSave, onCancel)
+        end
+    end
+
+    if opts.showRange then
+        local rangeLabelW = select(1, ImGui.CalcTextSize('Range'))
+        local rangeLabelWidth = (rangeLabelW or 0) + 4
+        local rangeTotalWidth = rangeLabelWidth + numericInputWidth
+        local avail = ImGui.GetContentRegionAvail()
+        if avail and avail > rangeTotalWidth then
+            ImGui.SameLine(ImGui.GetCursorPosX() + avail - rangeTotalWidth)
+        else
+            ImGui.SameLine()
+        end
+        ImGui.Text('Range')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Max range to use when casting the pull spell (0 = use spell default).') end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(numericInputWidth)
+        local r = spell.range or 0
+        local newR, rChanged = inputs.boundedInt(id .. '_range', r, 0, 500, 5, '##' .. id .. '_range')
+        if rChanged then
+            spell.range = newR
+            if onChanged then onChanged() end
         end
     end
 end
