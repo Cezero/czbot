@@ -393,7 +393,7 @@ function M.draw(spell, opts)
                     if maxCh then band.max = newMax; if onChanged then onChanged() end end
                 end
                 if showBandMinTarMaxtar then
-                    ImGui.Text('# Targets:')
+                    ImGui.Text('Mob count:')
                     if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp mob-count gate: only use when mob count is within min-max (0 = no limit).') end
                     ImGui.SameLine()
                     ImGui.Text('Min')
@@ -439,7 +439,7 @@ function M.draw(spell, opts)
         ImGui.Text('Precondition:')
         if ImGui.IsItemHovered() then ImGui.SetTooltip('When to allow casting: true or a Lua expression (e.g. condition on EvalID).') end
         ImGui.SameLine()
-        ImGui.SetNextItemWidth(340)
+        ImGui.SetNextItemWidth(360)
         local preBuf, preChanged = ImGui.InputText('##' .. id .. '_precondition', state.preconditionBuf or '', 512)
         if preChanged then
             state.preconditionBuf = preBuf

@@ -10,6 +10,7 @@
 ---@field AssistName string
 ---@field ExcludeList table
 ---@field PriorityList table
+---@field CharmList table
 ---@field MobList table
 ---@field MobCount number
 ---@field engagetracker table
@@ -87,6 +88,7 @@ function M.resetRunconfig()
         AssistName = '',
         ExcludeList = {},
         PriorityList = {},
+        CharmList = {},
         MobList = {},
         MobCount = 0,
         engagetracker = {},

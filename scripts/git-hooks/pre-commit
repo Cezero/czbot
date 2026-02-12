@@ -1,0 +1,20 @@
+#!/bin/sh
+# Read version.lua, increment minor version (vMAJOR.MINOR), write back and stage.
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+VFILE="$ROOT/version.lua"
+major=1
+minor=0
+if [ -f "$VFILE" ]; then
+  parsed=$(sed -n 's/.*return "v\([0-9]*\)\.\([0-9]*\)[^"]*".*/\1 \2/p' "$VFILE")
+  if [ -n "$parsed" ]; then
+    major="${parsed%% *}"
+    minor="${parsed#* }"
+  fi
+fi
+minor=$((minor + 1))
+printf 'return "v%s.%s"\n' "$major" "$minor" > "$VFILE"
+git add version.lua
+exit 0

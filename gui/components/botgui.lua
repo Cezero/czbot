@@ -10,8 +10,8 @@ local M = {}
 
 local czgui = true
 local isOpen, shouldDraw = true, true
-local excludeAddBuf, priorityAddBuf = '', ''
-local showExcludeAddInput, showPriorityAddInput = false, false
+local excludeAddBuf, priorityAddBuf, charmAddBuf = '', '', ''
+local showExcludeAddInput, showPriorityAddInput, showCharmAddInput = false, false, false
 local YELLOW = ImVec4(1, 1, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
 local TABLE_FLAGS = bit32.bor(ImGuiTableFlags.ScrollY, ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter,
@@ -246,8 +246,8 @@ local function drawMobListSection(listType, runconfigKey, label)
         ImGui.EndTable()
     end
     local hasTarget = mq.TLO.Target.ID() and mq.TLO.Target.ID() > 0
-    local showAddInput = (listType == 'exclude' and showExcludeAddInput) or (listType == 'priority' and showPriorityAddInput)
-    local addBuf = (listType == 'exclude' and excludeAddBuf) or priorityAddBuf
+    local showAddInput = (listType == 'exclude' and showExcludeAddInput) or (listType == 'priority' and showPriorityAddInput) or (listType == 'charm' and showCharmAddInput)
+    local addBuf = (listType == 'exclude' and excludeAddBuf) or (listType == 'priority' and priorityAddBuf) or charmAddBuf
     if hasTarget then
         if ImGui.Button('Add target##' .. listType) then
             local name = mq.TLO.Target.CleanName()
@@ -259,22 +259,28 @@ local function drawMobListSection(listType, runconfigKey, label)
     else
         if not showAddInput then
             if ImGui.Button('Add##' .. listType) then
-                if listType == 'exclude' then showExcludeAddInput = true else showPriorityAddInput = true end
+                if listType == 'exclude' then showExcludeAddInput = true
+                elseif listType == 'priority' then showPriorityAddInput = true
+                else showCharmAddInput = true end
             end
         else
             local flags = ImGuiInputTextFlags.EnterReturnsTrue
             local newVal, changed = ImGui.InputText('Mob name##' .. listType, addBuf, flags)
             if changed then
-                if listType == 'exclude' then excludeAddBuf = newVal else priorityAddBuf = newVal end
+                if listType == 'exclude' then excludeAddBuf = newVal
+                elseif listType == 'priority' then priorityAddBuf = newVal
+                else charmAddBuf = newVal end
             end
             ImGui.SameLine()
             if ImGui.Button('Add##' .. listType .. ' submit') or (changed and newVal and newVal ~= '') then
-                local name = (listType == 'exclude' and excludeAddBuf or priorityAddBuf):match('^%s*(.-)%s*$')
+                local name = ((listType == 'exclude' and excludeAddBuf) or (listType == 'priority' and priorityAddBuf) or charmAddBuf):match('^%s*(.-)%s*$')
                 if name and name ~= '' and not tableContains(list, name) then
                     table.insert(list, name)
                     mobfilter.process(listType, 'save')
                 end
-                if listType == 'exclude' then excludeAddBuf = ''; showExcludeAddInput = false else priorityAddBuf = ''; showPriorityAddInput = false end
+                if listType == 'exclude' then excludeAddBuf = ''; showExcludeAddInput = false
+                elseif listType == 'priority' then priorityAddBuf = ''; showPriorityAddInput = false
+                else charmAddBuf = ''; showCharmAddInput = false end
             end
         end
     end
@@ -286,6 +292,7 @@ local function drawMobListsTab()
     ImGui.Spacing()
     drawMobListSection('exclude', 'ExcludeList', 'Exclude list')
     drawMobListSection('priority', 'PriorityList', 'Priority list')
+    drawMobListSection('charm', 'CharmList', 'Charm list')
 end
 
 local CONFIG_SECTIONS = { { 'settings', 'Settings' }, { 'pull', 'Pull' }, { 'melee', 'Melee' }, { 'heal', 'Heal' }, { 'buff', 'Buff' }, { 'debuff', 'Debuff' }, { 'cure', 'Cure' }, { 'script', 'Script' } }

@@ -11,6 +11,9 @@ local bardtwist = require('lib.bardtwist')
 local botevents = require('botevents')
 local utils = require('lib.utils')
 
+local ok, VERSION = pcall(require, 'version')
+if not ok then VERSION = "dev" end
+
 local bothooks = require('lib.bothooks')
 local botlogic = {}
 local myconfig = botconfig.config
@@ -178,7 +181,7 @@ local function _registerBuiltinHooks()
 end
 
 function botlogic.StartUp(...)
-    print('CZBot is starting! (v1.00)') -- not debug, keep but change version to pull from a variable
+    print('CZBot is starting! (' .. VERSION .. ')')
     math.randomseed(os.time() * 1000 + os.clock() * 1000)
     if mq.TLO.Me.Hovering() or string.find(mq.TLO.Me.Name(), 'corpse') then
         printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
@@ -210,6 +213,7 @@ function botlogic.StartUp(...)
     if args[2] == 'follow' and args[1] then commands.Follow(args[1]) end
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
+    mobfilter.process('charm', 'zone')
     local comkeytable = botconfig.getCommon()
     if not comkeytable.raidlist then comkeytable.raidlist = {} end
     --make sure char isnt doing anything already (stop nav, clear cursor, ect)

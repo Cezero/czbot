@@ -66,7 +66,7 @@ The bot builds a list of valid mobs (within camp leash and filters). This list i
 For each debuff spell, the bot tries the following in order; the **first** valid target wins:
 
 1. **Charm recast** — If charm broke and a recast was requested for this spell.
-2. **Charm targets** — If **charmnames** is set, mobs in that list (for charm).
+2. **Charm targets** — Mobs in the per-zone **Charm list** (Mob Lists tab or `/cz charm`); charm spells are auto-detected (spell has Charm effect).
 3. **tanktar** — The MA’s current target. Only tried if the spell’s bands include **tanktar**.
 4. **notanktar** — Any other mob in the camp list (adds). Only tried if bands include **notanktar**.
 5. **named** — Named mob that is the tank target. Only tried if bands include **named**.
@@ -149,8 +149,8 @@ Bands use **targetphase** and **validtargets** (no min/max). **targetphase** tok
 
 - [Healing configuration](healing-configuration.md) — Heal bands, rez, interrupt, XT targets.
 - [Buffing configuration](buffing-configuration.md) — Buff bands, spellicon, combat vs idle.
-- [Debuffing configuration](debuffing-configuration.md) — Debuff bands, charmnames, recast, delay.
+- [Debuffing configuration](debuffing-configuration.md) — Debuff bands, Charm list (per-zone), recast, delay.
 - [Curing configuration](curing-configuration.md) — Cure bands, curetype, priority phase.
 - [Nuking configuration](nuking-configuration.md) — Nukes as debuffs (tanktar, notanktar).
-- [Mezzing configuration](mezzing-configuration.md) — Mez as debuffs (notanktar, charmnames).
+- [Mezzing configuration](mezzing-configuration.md) — Mez as debuffs (notanktar, Charm list).
 - [Out-of-group peers](out-of-group-peers.md) — How peers outside your group are treated for heals, buffs, cures.

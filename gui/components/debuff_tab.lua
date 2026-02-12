@@ -3,8 +3,25 @@
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spell_entry = require('gui.widgets.spell_entry')
+local inputs = require('gui.widgets.inputs')
 
 local M = {}
+
+local NUMERIC_INPUT_WIDTH = 80
+
+-- Build ordered options for dontStack checkboxes from config allowlist (key, label, tooltip).
+local function buildDontStackOptions()
+    local allowed = botconfig.DEBUFF_DONTSTACK_ALLOWED
+    local keys = {}
+    for k in pairs(allowed) do keys[#keys + 1] = k end
+    table.sort(keys)
+    local opts = {}
+    for _, key in ipairs(keys) do
+        opts[#opts + 1] = { key = key, label = key, tooltip = "Do not overwrite existing " .. key .. "." }
+    end
+    return opts
+end
+local DONTSTACK_OPTIONS = buildDontStackOptions()
 
 local PRIMARY_OPTIONS_DEBUFF = {
     { value = 'gem',     label = 'Gem' },
@@ -28,18 +45,64 @@ local function runConfigLoaders()
     botconfig.RunConfigLoaders()
 end
 
+--- Custom section for debuff entries: recast, delay, dontStack (passed to spell_entry as customSection).
+local function debuffCustomSection(entry, idPrefix, onChanged)
+    -- First line: Recast and Delay (SameLine)
+    ImGui.Text('Recast')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('After this many resists on the same spawn, the bot disables this spell for that spawn for a duration. 0 = no limit.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local recast = entry.recast or 0
+    local newRecast, recastCh = inputs.boundedInt(idPrefix .. '_recast', recast, 0, 999, 1, '##' .. idPrefix .. '_recast')
+    if recastCh then entry.recast = newRecast; if onChanged then onChanged() end end
+    ImGui.SameLine()
+    ImGui.Text('Delay')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Delay (ms) before this spell can be used again after cast.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(2 * NUMERIC_INPUT_WIDTH)
+    local delay = entry.delay or 0
+    local newDelay, delayCh = inputs.boundedInt(idPrefix .. '_delay', delay, 0, 60000, 100, '##' .. idPrefix .. '_delay')
+    if delayCh then entry.delay = newDelay; if onChanged then onChanged() end end
+
+    -- Second line: Don't stack checkboxes
+    ImGui.Text("Don't stack:")
+    if ImGui.IsItemHovered() then ImGui.SetTooltip("If target already has any of these categories (e.g. Snared), the bot will not cast this spell and will interrupt if it appears while casting.") end
+    ImGui.SameLine()
+    local function hasKey(t, k) for _, v in ipairs(t) do if v == k then return true end end return false end
+    local list = entry.dontStack or {}
+    for vi, opt in ipairs(DONTSTACK_OPTIONS) do
+        local key, label, tooltip = opt.key, opt.label, opt.tooltip
+        local checked = hasKey(list, key)
+        local cNew, cPressed = ImGui.Checkbox((label or key) .. '##' .. idPrefix .. '_dontstack_' .. key, checked)
+        if tooltip and ImGui.IsItemHovered() then ImGui.SetTooltip('%s', tooltip) end
+        if cPressed then
+            if entry.dontStack == nil then entry.dontStack = {} end
+            if cNew then
+                entry.dontStack[#entry.dontStack + 1] = key
+            else
+                for i = #entry.dontStack, 1, -1 do
+                    if entry.dontStack[i] == key then table.remove(entry.dontStack, i) break end
+                end
+                if #entry.dontStack == 0 then entry.dontStack = nil end
+            end
+            if onChanged then onChanged() end
+        end
+        if vi < #DONTSTACK_OPTIONS then ImGui.SameLine() end
+    end
+end
+
 --- Draw the full Debuff tab content.
 function M.draw()
     local doDebuff = botconfig.config.settings.dodebuff == true
     local label = doDebuff and 'Debuff: On' or 'Debuff: Off'
     local color = doDebuff and GREEN or RED
 
-    -- Right-align the toggle button on the first line
+    -- Center the toggle button on the first line
     local textW = select(1, ImGui.CalcTextSize(label))
     local avail = ImGui.GetContentRegionAvail()
     local buttonWidth = textW + 24
     if avail and avail > 0 and buttonWidth > 0 then
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - buttonWidth)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - buttonWidth) / 2)
     end
     ImGui.PushStyleColor(ImGuiCol.Button, color)
     if ImGui.Button(label) then
@@ -60,6 +123,7 @@ function M.draw()
             primaryOptions = PRIMARY_OPTIONS_DEBUFF,
             onChanged = runConfigLoaders,
             displayCommonFields = true,
+            customSection = debuffCustomSection,
             targetphaseOptions = TARGETPHASE_OPTIONS_DEBUFF,
             validtargetsOptions = {},
             showBandMinMax = true,

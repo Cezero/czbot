@@ -5,7 +5,7 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
 ## Overview
 
 - **Mezzing = debuffs.** There is no separate “mez” section. You add your mez spell(s) under **`config.debuff.spells`** and set **bands** to **notanktar** (adds) so the bot mezzes mobs other than the tank’s target. Optionally use **tanktar** or **named** for specific cases.
-- **Charm** (mez that makes the mob your pet) uses the same debuff entries with **charmnames** set; when charm breaks, the bot can recast. See [Debuffing configuration](debuffing-configuration.md).
+- **Charm** (mez that makes the mob your pet) uses the same debuff entries; charm spells are auto-detected. Add your charm spell as a debuff and manage allowed mob names in the **Charm list** for the current zone (Mob Lists tab or `/cz charm`). When charm breaks, the bot can recast. See [Debuffing configuration](debuffing-configuration.md).
 - **Level:** The bot checks the spell’s **MaxLevel** against the mob’s level for Enthrall-type spells; mobs above that level are skipped.
 - For all debuff options (recast, delay, immune check, etc.), see [Debuffing configuration](debuffing-configuration.md).
 
@@ -22,7 +22,7 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
    - **mintar** / **maxtar** — Optional; set in **bands**. Camp mob-count gate (only consider when mob count is in range). E.g. **mintar 2** = mez when there are at least two mobs in camp (one add). When omitted, notanktar-only bands default **mintar** to 2. See [Debuffing configuration](debuffing-configuration.md).
    - **bands** — For mezzing **adds**, use **notanktar** in **targetphase** (debuff uses **targetphase** only, not validtargets; use **targetphase** for tanktar, notanktar, named). Optionally add **named** to allow mezzing named mobs that are not the tank target. Use **min**/ **max** to restrict by mob HP % (e.g. mez only when mob is 20–100% HP so you don't mez nearly-dead adds). See [Spell targeting and bands](spell-targeting-and-bands.md) for targeting and band details.
 
-3. **Optional:** **targettedAE** — For **AE mez** (e.g. Mezmerization) that would hit the caster if the target is too close: set to `true` so the bot only casts on targets farther than the spell's AERange + 2, and **mintar** (in bands) is the minimum number of adds within AE range of the chosen target (avoids wasting the AE on a lone add). See [Debuffing configuration](debuffing-configuration.md). **recast**, **delay**, **charmnames** (for charm mez: comma-separated mob names; bot will **pet leave** before casting and can recast when charm breaks), **alias**, **minmana**, **precondition** (default true when missing; when set, boolean or Lua script to allow/skip the cast).
+3. **Optional:** **Targeted AE** spells (e.g. AE mez like Mezmerization) are **auto-detected**. For those spells the bot only casts on targets farther than the spell's AERange + 2, and **mintar** (in bands) is the minimum number of adds within AE range of the chosen target. See [Debuffing configuration](debuffing-configuration.md). **recast**, **delay**, **alias**, **minmana**, **precondition** (default true when missing; when set, boolean or Lua script to allow/skip the cast).
 
 **Example: mez adds only**
 
@@ -39,7 +39,6 @@ debuff = {
       bands = {
         { targetphase = { 'notanktar' }, min = 20, max = 100 }
       },
-      charmnames = '',
       recast = 2,
       delay = 0
     }
@@ -47,16 +46,9 @@ debuff = {
 }
 ```
 
-**Example: charm mez with recast**
+**Example: charm mez**
 
-Set **charmnames** to mob names the bot is allowed to charm. The bot will **pet leave** before casting and can request a recast when charm breaks:
-
-```lua
-charmnames = 'a mob name,another mob',
-bands = {
-  { targetphase = { 'notanktar' }, min = 30, max = 100 }
-}
-```
+Add your charm spell as a debuff entry (charm spells are auto-detected). Manage allowed mob names in the **Charm list** for the current zone (Mob Lists tab or `/cz charm`). The bot will **pet leave** before casting and can request a recast when charm breaks. Set bands as needed (e.g. notanktar, min 30, max 100).
 
 ---
 

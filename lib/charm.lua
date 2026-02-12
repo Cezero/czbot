@@ -4,6 +4,7 @@
 local mq = require('mq')
 local state = require('lib.state')
 local spellstates = require('lib.spellstates')
+local spellutils = require('lib.spellutils')
 local utils = require('lib.utils')
 
 local charm = {}
@@ -16,8 +17,9 @@ local _recastRequest = nil
 
 function charm.EvalTarget(index, ctx)
     local entry = ctx.entry
-    local charmstr = (entry.charmnames and entry.charmnames ~= '') and entry.charmnames or nil
-    if not charmstr then return nil, nil end
+    if not spellutils.IsCharmSpell(entry) then return nil, nil end
+    local list = state.getRunconfig().CharmList or {}
+    if #list == 0 then return nil, nil end
     local gem = entry.gem
     _charmspellid = mq.TLO.Spell(entry.spell).ID() or
         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.ID())
@@ -30,7 +32,6 @@ function charm.EvalTarget(index, ctx)
     if mq.TLO.Me.Pet.ID() and mq.TLO.Me.Pet.ID() > 0 and rc.charmid and mq.TLO.Me.Pet.ID() == rc.charmid then
         return nil, nil
     end
-    local charmsettings = utils.splitString(charmstr, ",")
     for _, v in ipairs(ctx.mobList) do
         local tarstacks = mq.TLO.Spell(entry.spell).StacksSpawn(v.ID())() or
             (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(v.ID()))
@@ -45,23 +46,30 @@ function charm.EvalTarget(index, ctx)
                 -- skip: mob above band
             elseif v.ID() then
                 local expire = spellstates.GetDebuffExpire(v.ID(), ctx.spellid)
+                local cleanName = v.CleanName()
+                local mobnameLower = cleanName and string.lower(cleanName)
                 if expire and expire < (mq.gettime() + 6000) then
-                    for _, charmname in ipairs(charmsettings) do
-                        if charmname == v.CleanName() then return v.ID(), 'charmtar' end
+                    for _, charmname in ipairs(list) do
+                        local n = type(charmname) == 'string' and charmname:match('^%s*(.-)%s*$') or ''
+                        if n ~= '' and (cleanName == n or (mobnameLower and string.lower(n) == mobnameLower)) then return v.ID(), 'charmtar' end
                     end
                 elseif expire and expire >= (mq.gettime() + 6000) then
-                    for _, charmname in ipairs(charmsettings) do
-                        local mobname = v.CleanName() and string.lower(v.CleanName())
-                        if charmname == mobname then return v.ID(), 'charmtar' end
+                    for _, charmname in ipairs(list) do
+                        local n = type(charmname) == 'string' and charmname:match('^%s*(.-)%s*$') or ''
+                        if n ~= '' and (cleanName == n or (mobnameLower and string.lower(n) == mobnameLower)) then return v.ID(), 'charmtar' end
                     end
                 else
-                    for _, charmname in ipairs(charmsettings) do
-                        if charmname == v.CleanName() then return v.ID(), 'charmtar' end
+                    for _, charmname in ipairs(list) do
+                        local n = type(charmname) == 'string' and charmname:match('^%s*(.-)%s*$') or ''
+                        if n ~= '' and (cleanName == n or (mobnameLower and string.lower(n) == mobnameLower)) then return v.ID(), 'charmtar' end
                     end
                 end
             else
-                for _, charmname in ipairs(charmsettings) do
-                    if charmname == v.CleanName() then return v.ID(), 'charmtar' end
+                local cleanName = v.CleanName()
+                local mobnameLower = cleanName and string.lower(cleanName)
+                for _, charmname in ipairs(list) do
+                    local n = type(charmname) == 'string' and charmname:match('^%s*(.-)%s*$') or ''
+                    if n ~= '' and (cleanName == n or (mobnameLower and string.lower(n) == mobnameLower)) then return v.ID(), 'charmtar' end
                 end
             end
         end

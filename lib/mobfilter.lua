@@ -16,6 +16,11 @@ local LIST_CONFIG = {
         runconfigKey = 'PriorityList',
         onZoneLoad = nil,
     },
+    charm = {
+        commonKey = 'charmlist',
+        runconfigKey = 'CharmList',
+        onZoneLoad = nil,
+    },
 }
 
 local function saveList(listType)

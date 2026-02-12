@@ -224,6 +224,25 @@ local function cmd_priority(args)
     end
 end
 
+local function cmd_charm(args)
+    local rc = state.getRunconfig()
+    if not rc.CharmList then rc.CharmList = {} end
+    if args[2] == 'remove' then
+        local name = args[3] or mq.TLO.Target.CleanName()
+        if name and removeFromList(rc.CharmList, name) then
+            printf('\ayCZBot:\axRemoved %s from charm list', name)
+            mobfilter.process('charm', 'save')
+        end
+        return
+    end
+    local charmmob = args[2] or mq.TLO.Target.CleanName()
+    if charmmob and not tableContains(rc.CharmList, charmmob) then
+        printf('\ayCZBot:\axAdding %s to charm list', charmmob)
+        table.insert(rc.CharmList, charmmob)
+        mobfilter.process('charm', 'save')
+    end
+end
+
 local function cmd_abort(args)
     if not args[2] then
         if mq.TLO.Me.CastTimeLeft() > 0 and state.getRunconfig().CurSpell.sub and state.getRunconfig().CurSpell.sub == 'ad' then
@@ -663,6 +682,7 @@ local handlers = {
     exclude = cmd_exclude,
     xarc = cmd_xarc,
     priority = cmd_priority,
+    charm = cmd_charm,
     abort = cmd_abort,
     leash = cmd_leash,
     attack = cmd_attack,

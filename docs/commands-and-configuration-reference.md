@@ -44,6 +44,8 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **exclude remove**  | `<name>` or target     | Remove a mob from the exclude list.                                                                                                                     |
 | **priority**        | `<name>` or target     | Add a mob to the priority list; when pull.usepriority is true, prefer these mobs. Changes are saved automatically to the common config (cz_common.lua). |
 | **priority remove** | `<name>` or target     | Remove a mob from the priority list.                                                                                                                    |
+| **charm**           | `<name>` or target     | Add a mob to the charm list for the current zone (allowed charm targets). Saved to common config (cz_common.lua).                                        |
+| **charm remove**    | `<name>` or target     | Remove a mob from the charm list.                                                                                                                        |
 
 ### Combat and roles
 
@@ -179,7 +181,7 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 
 - **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **enabled**, **tarcnt** (optional; group heals only), **bands**, **precondition** (optional; default true; boolean or Lua script when set). See [Healing configuration](healing-configuration.md).
 - **buff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands**, **spellicon**, **precondition** (optional; default true; boolean or Lua script when set). See [Buffing configuration](buffing-configuration.md). Bards: see [Bard configuration](bard-configuration.md).
-- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands** (band options include **mintar**/**maxtar** for camp mob-count gate), **charmnames**, **recast**, **delay**, **precondition** (optional; default true; boolean or Lua script when set). See [Debuffing configuration](debuffing-configuration.md) and [Spell targeting and bands](spell-targeting-and-bands.md).
+- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands** (band options include **mintar**/**maxtar** for camp mob-count gate), **recast**, **delay**, **precondition** (optional; default true; boolean or Lua script when set). Charm and targeted AE spells are auto-detected from spell data. Charm targets use the per-zone **Charm list** (Mob Lists tab or **/cz charm**). See [Debuffing configuration](debuffing-configuration.md) and [Spell targeting and bands](spell-targeting-and-bands.md).
 - **cure:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **curetype**, **enabled**, **bands** (add **priority** to band **targetphase** to run in the priority cure pass; no top-level setting), **precondition** (optional; default true; boolean or Lua script when set). See [Curing configuration](curing-configuration.md).
 
 **Example: one heal spell entry**
@@ -203,5 +205,5 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 ## Where to configure
 
 - **Config file:** Edit **`cz_<CharName>.lua`** in your MQ config directory. Reload by re-running the bot or using **import** / **setvar**.
-- **Runtime only (not in config file):** **ExcludeList**, **PriorityList** (pull exclude/priority), and **pullarc** (directional pull) are set at runtime via **/cz exclude**, **/cz priority** (add/remove), and **/cz xarc**. Exclude and priority lists are stored per zone in the common config file **cz_common.lua** and are saved automatically when you add or remove entries.
+- **Runtime only (not in config file):** **ExcludeList**, **PriorityList**, **CharmList** (pull exclude/priority and charm targets), and **pullarc** (directional pull) are set at runtime via **/cz exclude**, **/cz priority**, **/cz charm** (add/remove), and **/cz xarc**. These lists are stored per zone in the common config file **cz_common.lua** and are saved automatically when you add or remove entries.
 - **Both:** Most options can be set in the config file or at runtime via **/cz setvar** (e.g. **setvar settings.petassist true**), which writes back to the config file.

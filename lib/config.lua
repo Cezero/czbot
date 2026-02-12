@@ -92,6 +92,9 @@ local state = require('lib.state')
 local M = {}
 ---@type Config
 M.config = {}
+
+-- Allowed category names for debuff dontStack (MQ Target TLO members). Slowed excluded so stronger slow can overwrite weaker.
+M.DEBUFF_DONTSTACK_ALLOWED = { Charmed = true, Crippled = true, Feared = true, Maloed = true, Mezzed = true, Rooted = true, Snared = true, Tashed = true }
 M._configLoaders = {}
 M._common = nil
 
@@ -116,7 +119,7 @@ local subOrder = {
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'isHoT', 'tarcnt', 'bands', 'precondition' },
     buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'spellicon', 'precondition' },
-    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'targettedAE', 'bands', 'charmnames', 'recast', 'delay', 'precondition', 'dontStack' },
+    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'bands', 'recast', 'delay', 'precondition', 'dontStack' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
 }
@@ -133,7 +136,7 @@ end
 local defaultSpellEntries = {
     heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, isHoT = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, precondition = nil },
     buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
-    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, targettedAE = false, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = nil, dontStack = nil },
+    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil },
     cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
 
@@ -314,14 +317,18 @@ local function writeConfigToFile(config, filename)
                 if value == nil or (key == 'announce' and value == false) then
                     -- omit nil keys and announce when false to keep config sparse
                 elseif key == 'dontStack' and type(value) == "table" and #value > 0 then
-                    file:write(indent .. formatKey('dontStack') .. " = { ")
+                    local allowed = M.DEBUFF_DONTSTACK_ALLOWED
                     local parts = {}
                     for _, c in ipairs(value) do
-                        parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
+                        local tag = tostring(c)
+                        if allowed[tag] then parts[#parts + 1] = "'" .. tag:gsub("'", "\\'") .. "'" end
                     end
-                    file:write(table.concat(parts, ", "))
-                    file:write(" },\n")
-                    file:flush()
+                    if #parts > 0 then
+                        file:write(indent .. formatKey('dontStack') .. " = { ")
+                        file:write(table.concat(parts, ", "))
+                        file:write(" },\n")
+                        file:flush()
+                    end
                 elseif key == 'bands' and type(value) == "table" then
                     writeBands(value, indent)
                 elseif key == 'precondition' then

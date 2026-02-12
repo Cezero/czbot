@@ -37,7 +37,6 @@ debuff = {
       bands = {
         { validtargets = { 'tanktar' }, min = 5, max = 100 }
       },
-      charmnames = '',
       recast = 0,
       delay = 0
     }

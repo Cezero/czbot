@@ -11,18 +11,15 @@ local utils = require('lib.utils')
 local spellutils = {}
 local _deps = {}
 
--- Allowed category names for debuff dontStack (MQ Target TLO members). Slowed excluded so stronger slow can overwrite weaker.
-local DEBUFF_DONTSTACK_ALLOWED = { Charmed = true, Crippled = true, Feared = true, Maloed = true, Mezzed = true, Rooted = true, Snared = true, Tashed = true }
-
 function spellutils.GetDebuffDontStackAllowlist()
-    return DEBUFF_DONTSTACK_ALLOWED
+    return botconfig.DEBUFF_DONTSTACK_ALLOWED
 end
 
 --- Returns the first category from the list that is present on the current target (Target[tag].ID() > 0), or nil. Only considers tags in the allowlist.
 function spellutils.TargetHasDebuffCategory(categories)
     if not categories or #categories == 0 then return nil end
     for _, tag in ipairs(categories) do
-        if DEBUFF_DONTSTACK_ALLOWED[tag] and mq.TLO.Target[tag] and mq.TLO.Target[tag].ID and mq.TLO.Target[tag].ID() and mq.TLO.Target[tag].ID() > 0 then
+        if botconfig.DEBUFF_DONTSTACK_ALLOWED[tag] and mq.TLO.Target[tag] and mq.TLO.Target[tag].ID and mq.TLO.Target[tag].ID() and mq.TLO.Target[tag].ID() > 0 then
             return tag
         end
     end
@@ -284,6 +281,42 @@ function spellutils.GetSpellInfo(entry)
     local spellid = mq.TLO.Spell(spell).ID() or
         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.ID())
     return spell, range, tartype, spellid
+end
+
+-- SPA 22 = Charm (MacroQuest spelleffects.h). Returns true if the spell for entry has the Charm effect.
+function spellutils.IsCharmSpell(entry)
+    if not entry or not entry.spell then return false end
+    local spellTLO
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return false end
+        spellTLO = mq.TLO.FindItem(entry.spell).Spell
+    else
+        spellTLO = mq.TLO.Spell(entry.spell)
+    end
+    if not spellTLO then return false end
+    local ok, hasCharm = pcall(function() return spellTLO.HasSPA and spellTLO:HasSPA(22) end)
+    if ok and hasCharm then return true end
+    ok, hasCharm = pcall(function() return spellTLO.HasSPA(22) end)
+    if ok and hasCharm then return true end
+    local cat = spellTLO.Category and spellTLO:Category() or spellTLO.Category()
+    local sub = spellTLO.Subcategory and spellTLO:Subcategory() or spellTLO.Subcategory()
+    if cat and type(cat) == 'string' and cat:lower():find('charm') then return true end
+    if sub and type(sub) == 'string' and sub:lower():find('charm') then return true end
+    return false
+end
+
+-- Returns true if the spell is targeted AE (radius around target) with AERange > 0.
+function spellutils.IsTargetedAESpell(entry)
+    if not entry or not entry.spell then return false end
+    local spell, _, tartype = spellutils.GetSpellInfo(entry)
+    if not spell or tartype ~= 'Targeted AE' then return false end
+    local aerange = 0
+    if entry.gem == 'item' then
+        if mq.TLO.FindItem(entry.spell)() then aerange = mq.TLO.FindItem(entry.spell).Spell.AERange() or 0 end
+    else
+        aerange = mq.TLO.Spell(spell).AERange() or 0
+    end
+    return aerange > 0
 end
 
 -- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.

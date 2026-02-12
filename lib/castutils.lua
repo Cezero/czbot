@@ -9,7 +9,7 @@ local myconfig = botconfig.config
 
 local castutils = {}
 
--- Count mobs in mobList within aeRange 3D distance of spawnId. Used for targettedAE tarcnt (mobs in AE of candidate).
+-- Count mobs in mobList within aeRange 3D distance of spawnId. Used for targeted AE tarcnt (mobs in AE of candidate).
 -- aeRange is spell-derived (passed per call from debuff/heal/buff context); we square once here per invocation.
 function castutils.CountMobsWithinAERangeOfSpawn(mobList, spawnId, aeRange)
     if not mobList or not spawnId or not aeRange or aeRange <= 0 then return 0 end

@@ -26,6 +26,7 @@ local function DelayOnZone()
     if APTarget then APTarget = nil end
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
+    mobfilter.process('charm', 'zone')
     spellstates.CleanMobList()
     MountCastFailed = false
 end

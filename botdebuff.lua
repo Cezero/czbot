@@ -75,7 +75,7 @@ local function DebuffEvalBuildContext(index)
     local myrangeSq = myrange and (myrange * myrange) or nil
     local aeRange, minCastDist = nil, nil
     local minCastDistSq = nil
-    if entry.targettedAE then
+    if spellutils.IsTargetedAESpell(entry) then
         local ar = mq.TLO.Spell(spell).AERange() or (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.AERange())
         if ar and ar > 0 then
             aeRange = ar
@@ -249,10 +249,13 @@ local function debuffGetTargetsForPhase(phase, context)
         end
         local count = context.debuffCount or botconfig.getSpellCount('debuff')
         for i = 1, count do
-            local dctx = DebuffEvalBuildContext(i)
-            if dctx then
-                local id, hit = charm.EvalTarget(i, dctx)
-                if id then out[#out + 1] = { id = id, targethit = hit or 'charmtar' } end
+            local entry = botconfig.getSpellEntry('debuff', i)
+            if entry and spellutils.IsCharmSpell(entry) then
+                local dctx = DebuffEvalBuildContext(i)
+                if dctx then
+                    local id, hit = charm.EvalTarget(i, dctx)
+                    if id then out[#out + 1] = { id = id, targethit = hit or 'charmtar' } end
+                end
             end
         end
         return out
@@ -489,14 +492,17 @@ function botdebuff.DebuffCheck(runPriority)
                 if ctx.charmRecasts[i] then out[#out + 1] = i end
             end
             for i = 1, count do
-                local dctx = DebuffEvalBuildContext(i)
-                if dctx and charm.EvalTarget(i, dctx) then
-                    local found = false
-                    for _, si in ipairs(out) do if si == i then
-                            found = true
-                            break
-                        end end
-                    if not found then out[#out + 1] = i end
+                local entry = botconfig.getSpellEntry('debuff', i)
+                if entry and spellutils.IsCharmSpell(entry) then
+                    local dctx = DebuffEvalBuildContext(i)
+                    if dctx and charm.EvalTarget(i, dctx) then
+                        local found = false
+                        for _, si in ipairs(out) do if si == i then
+                                found = true
+                                break
+                            end end
+                        if not found then out[#out + 1] = i end
+                    end
                 end
             end
             return out

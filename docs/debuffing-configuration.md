@@ -6,7 +6,7 @@ This document explains how to configure the bot’s **debuffing** behavior: whic
 
 - **Master switch:** Debuffing runs only when **`settings.dodebuff`** is `true`. Default is `false`.
 - **Mob list:** The bot builds a list of valid mobs (within **acleash** and **zradius** of camp, filtered by **TargetFilter**). Debuffs are only cast on mobs in this list.
-- **Evaluation order:** The bot evaluates **phases** in order: charm (if **charmnames** is set) → **tanktar** (MA/tank’s current target) → **notanktar** (other mobs / adds) → **named** (named mobs that are the tank target). For each phase it considers each mob target and checks **all** debuff spells that have that phase in their bands before moving on. For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
+- **Evaluation order:** The bot evaluates **phases** in order: charm (if the zone has a **Charm list** and a charm spell is configured) → **tanktar** (MA/tank’s current target) → **notanktar** (other mobs / adds) → **named** (named mobs that are the tank target). For each phase it considers each mob target and checks **all** debuff spells that have that phase in their bands before moving on. For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
 - **Melee combat abilities** (disciplines, kick/bash-style abilities) use this same debuff system with **gem** `'disc'` or `'ability'`; see [Melee combat abilities](melee-combat-abilities.md).
 
 ---
@@ -31,9 +31,7 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 | **announce** | Optional. If true, announce when casting. |
 | **minmana** | Minimum mana (absolute) to cast. |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
-| **targettedAE** | Optional. When `true`, the spell is treated as a **targeted AE** (e.g. AE mez or nuke that hits the target and everything in the spell's AERange): (1) only targets whose distance from the caster is **> AERange + 2** are considered (so the caster is not hit), and (2) **mintar** (from bands) is the minimum number of mobs **within AERange of the chosen target** (not total camp count). If the global camp mob count is outside the spell's **mintar**/**maxtar** range, the spell is skipped (short-circuit). Recommend setting for AE mez/nuke that would hit the caster if the target is too close. Default is `false`. |
 | **bands** | Which mobs and at what HP %. See [Debuff bands](#debuff-bands) below. |
-| **charmnames** | Optional. Comma-separated mob **names**. When set, the bot can target those mobs for charm (recast when charm breaks). Before casting charm, the bot sends **pet leave** if your pet is charmed. |
 | **recast** | Optional. After this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. |
 | **delay** | Optional. Delay (ms) before the spell can be used again after cast (per-index/spell). |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
@@ -55,7 +53,7 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff u
   - **named** — Only named mobs; when used with tanktar, only the tank target if it is named.
 - **min** / **max:** Mob HP % range (0–100). The mob’s HP must be in this range to be considered.
 
-- **mintar** / **maxtar:** Optional. Camp mob-count gate (total mobs in camp). **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X. **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X. **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. When **targettedAE** is true, **mintar** is also the minimum number of mobs **within the spell's AERange of the candidate target** (so the spell is not cast on a lone add with no other mobs in AE range). If a spell has only **notanktar** in its bands and neither **mintar** nor **maxtar** is set in any band, the bot defaults **mintar** to 2 so the spell is only considered when there is at least one add (optimization).
+- **mintar** / **maxtar:** Optional. Camp mob-count gate (total mobs in camp). **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X. **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X. **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. For **targeted AE** spells (auto-detected when spell TargetType is "Targeted AE" and AERange > 0), **mintar** is also the minimum number of mobs **within the spell's AERange of the candidate target** (so the spell is not cast on a lone add with no other mobs in AE range). If a spell has only **notanktar** in its bands and neither **mintar** nor **maxtar** is set in any band, the bot defaults **mintar** to 2 so the spell is only considered when there is at least one add (optimization).
 
 **Example: nuke on tank target and slow on adds**
 
@@ -70,7 +68,6 @@ debuff = {
       bands = {
         { targetphase = { 'tanktar' }, min = 5, max = 100, mintar = 10 }
       },
-      charmnames = '',
       recast = 0,
       delay = 0,
       precondition = true
@@ -83,7 +80,6 @@ debuff = {
       bands = {
         { targetphase = { 'notanktar' }, min = 20, max = 100, mintar = 5 }
       },
-      charmnames = '',
       recast = 2,
       delay = 0,
       precondition = true
@@ -96,7 +92,7 @@ debuff = {
 
 ## Charm (special case)
 
-When **charmnames** is set to a comma-separated list of mob names, the debuff logic can target those mobs for charm. When charm breaks, the bot can request a recast on that spawn. Before casting charm, the bot issues **pet leave** so your current pet is released. Charm is a debuff entry like any other; the only difference is the use of **charmnames** and the pet-leave/recast behavior. See also [Pets configuration](pets-configuration.md) for charm in context.
+**Charm spells are auto-detected** (spell has the Charm effect, SPA 22). Add your charm spell as a debuff entry. The list of mob names the bot is allowed to charm is a **per-zone list** in the common config: use the **Mob Lists** tab in the UI (Charm list) or **`/cz charm <name>`** / **`/cz charm remove <name>`** to add or remove mobs. When charm breaks, the bot can request a recast on that spawn. Before casting charm, the bot issues **pet leave** so your current pet is released. See also [Pets configuration](pets-configuration.md) for charm in context.
 
 ---
 
@@ -127,5 +123,5 @@ When the **MQ2Cast** plugin is loaded, the bot uses `/casting` for debuff spells
 ## See also
 
 - [Nuking configuration](nuking-configuration.md) — Configure nukes as debuffs (typically **tanktar**, optionally **notanktar**).
-- [Mezzing configuration](mezzing-configuration.md) — Configure mez as debuffs (typically **notanktar**; **charmnames** for charm mez).
+- [Mezzing configuration](mezzing-configuration.md) — Configure mez as debuffs (typically **notanktar**; Charm list for charm mez).
 - [Melee combat abilities](melee-combat-abilities.md) — Configure disciplines and /doability-style abilities as debuffs (typically **tanktar**).

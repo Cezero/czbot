@@ -38,7 +38,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | [Healing configuration](healing-configuration.md)     | Heal spells, bands (who and at what HP), rez, interrupt, XT targets, commands.                            |
 | [Buffing configuration](buffing-configuration.md)     | Buff spells, bands (self, tank, validtargets, mypet, pet, petspell), spellicon, combat vs idle.                  |
-| [Debuffing configuration](debuffing-configuration.md) | Debuff spells, bands (tanktar, notanktar, named), charmnames, recast, delay; links to nuking and mezzing. |
+| [Debuffing configuration](debuffing-configuration.md) | Debuff spells, bands (tanktar, notanktar, named), Charm list (per-zone), recast, delay; links to nuking and mezzing. |
 | [Spell targeting and bands](spell-targeting-and-bands.md) | Targeting logic and band tags for all spell types (heal, buff, debuff, cure); evaluation order, tarcnt, tanktar/notanktar. |
 | [Curing configuration](curing-configuration.md)       | Cure spells, curetype (all / poison / disease / curse / corruption), priority phase, bands.                 |
 | [Bard configuration](bard-configuration.md)            | Class-specific behavior for bards: buff targeting (self only), movement while casting, interrupts, melee re-engage, twist, and mez limitation. |
@@ -51,7 +51,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | Document                                          | Description                                                                            |
 | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [Nuking configuration](nuking-configuration.md)   | How to set up nuking: configure nukes as debuffs (tanktar, notanktar).                 |
-| [Mezzing configuration](mezzing-configuration.md) | How to set up mezzing: configure mez as debuffs (notanktar, charmnames), level limits. |
+| [Mezzing configuration](mezzing-configuration.md) | How to set up mezzing: configure mez as debuffs (notanktar, Charm list), level limits. |
 | [Melee combat abilities](melee-combat-abilities.md) | How to set up melee combat abilities: configure disciplines and /doability as debuffs (gem disc/ability); domelee + dodebuff. |
 
 
