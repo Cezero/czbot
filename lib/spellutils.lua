@@ -814,8 +814,8 @@ function spellutils.InterruptCheck()
     if not criteria then return false end
     if spelldur then spelldur = spelldur * 1000 end
     if not target or not spell or not criteria or not sub then return false end
-    local targetSpawn = mq.TLO.Target()
-    if not targetSpawn then return false end
+    if not mq.TLO.Target.ID() or mq.TLO.Target.ID() == 0 then return false end
+    local targetSpawn = mq.TLO.Target
 
     spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
     if criteria ~= 'corpse' and targetSpawn.Type() == 'Corpse' then

@@ -130,11 +130,12 @@ function botpull.FTECheck(spawnid)
 end
 
 function botpull.EngageCheck()
-    local tarSpawn = mq.TLO.Target()
+    local tarSpawn = mq.TLO.Target
+    if not tarSpawn.ID() or tarSpawn.ID() == 0 then return false end
     local target = tarSpawn.CleanName()
     local targetid = tarSpawn.ID()
-    local totSpawn = mq.TLO.Me.TargetOfTarget()
-    if not totSpawn then return false end
+    if not mq.TLO.Me.TargetOfTarget.ID() or mq.TLO.Me.TargetOfTarget.ID() == 0 then return false end
+    local totSpawn = mq.TLO.Me.TargetOfTarget
     local totID = totSpawn.ID()
     local totType = totSpawn.Type()
     local info = totSpawn and charinfo.GetInfo(totID)
@@ -210,8 +211,8 @@ local function canStartPull(rc)
     end
     if mq.TLO.Group() then
         for iter = 1, mq.TLO.Group() do
-            local grpSpawn = mq.TLO.Group.Member(iter).Spawn()
-            if not grpSpawn then return false end
+            local grpSpawn = mq.TLO.Group.Member(iter).Spawn
+            if not grpSpawn.ID() or grpSpawn.ID() == 0 then return false end
             local grpType = grpSpawn.Type()
             if grpType and string.lower(grpType) == 'corpse' then return false end
             if myconfig.pull.mana and grpSpawn.Class.ShortName() and type(myconfig.pull.manaclass) == 'table' then

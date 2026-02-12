@@ -87,7 +87,8 @@ function castutils.evalGroupAECount(entry, targethit, index, bandTable, phaseKey
             local grpid = grpmember.ID()
             if grpid and grpid > 0 then
                 if aeRangeSq then
-                    local grpdistSq = grpspawn and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), grpspawn.X(), grpspawn.Y()) or nil
+                    local grpdistSq = grpspawn and
+                    utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), grpspawn.X(), grpspawn.Y()) or nil
                     if mq.TLO.Spawn(grpid).Type() ~= 'PC' or not grpdistSq or grpdistSq > aeRangeSq then
                         -- skip
                     else
