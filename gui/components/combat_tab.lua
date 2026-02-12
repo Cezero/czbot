@@ -1,5 +1,6 @@
 -- Combat tab: melee settings (assist, offtank, stick, minmana) at top, then pull config.
 -- Uses gui/widgets for modals, combos, inputs, layout, spell_entry.
+-- ImGui Lua API (return values, e.g. Checkbox → value, pressed) is defined in typings/imgui.d.lua.
 
 local mq = require('mq')
 local ImGui = require('ImGui')
@@ -53,8 +54,8 @@ function M.draw()
     if ImGui.IsItemHovered() then ImGui.SetTooltip('This bot is an offtank.') end
     ImGui.SameLine()
     local otChecked = melee.offtank == true
-    local otCh, otNew = ImGui.Checkbox('##combat_offtank', otChecked)
-    if otCh then melee.offtank = otNew; runConfigLoaders() end
+    local value, pressed = ImGui.Checkbox('##combat_offtank', otChecked)
+    if pressed then melee.offtank = value; runConfigLoaders() end
     if melee.offtank then
         ImGui.SameLine()
         ImGui.Text('Offset')
@@ -107,7 +108,7 @@ function M.draw()
     local drawList = ImGui.GetWindowDrawList()
     -- Light blue #3369ad (51, 105, 173)
     local col = ImGui.GetColorU32(51/255, 105/255, 173/255, 1.0)
-    local thickness = 2.0
+    local thickness = 1.0
     drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
     drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
 
@@ -275,15 +276,15 @@ function M.draw()
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Prefer mobs that match the Priority list over path distance when choosing a pull target.') end
     ImGui.SameLine()
     local up = pull.usepriority == true
-    local upCh, upNew = ImGui.Checkbox('##pull_usepriority', up)
-    if upCh then pull.usepriority = upNew; runConfigLoaders() end
+    local value, pressed = ImGui.Checkbox('##pull_usepriority', up)
+    if pressed then pull.usepriority = value; runConfigLoaders() end
     ImGui.SameLine()
     ImGui.Text('Hunter mode')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('No makecamp; anchor set once. Puller can be far from camp without triggering return-to-camp.') end
     ImGui.SameLine()
     local hunt = pull.hunter == true
-    local huntCh, huntNew = ImGui.Checkbox('##pull_hunter', hunt)
-    if huntCh then pull.hunter = huntNew; runConfigLoaders() end
+    local value, pressed = ImGui.Checkbox('##pull_hunter', hunt)
+    if pressed then pull.hunter = value; runConfigLoaders() end
 end
 
 return M

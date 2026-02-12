@@ -1,9 +1,1 @@
-{
-  "diagnostics.globals": [
-    "printf",
-    "debug",
-    "actors",
-    "mq"
-  ],
-  "Lua.runtime.version": "Lua 5.1"
-}
+{"diagnostics.globals":["bit32"],"Lua.runtime.version":"Lua 5.1"}

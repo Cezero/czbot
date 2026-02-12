@@ -1,0 +1,125 @@
+--- MacroQuest Lua API (mq table).
+--- Source: lua_MQBindings.cpp, lua_EQBindings.cpp, lua_MQMacroData.cpp
+
+--- TLO result type: indexable and callable; returns string|number|boolean|nil or MQData.
+--- Lua only ever passes number|string (or no args); MQ binds the object internally. No MQData in param types.
+---@class MQData
+--- No-arg accessors (Me.CleanName(), Me.ID(), etc.)
+---@field CleanName fun(): string|nil
+---@field ID fun(): number|nil
+---@field Name fun(): string|nil
+---@field X fun(): number|nil
+---@field Y fun(): number|nil
+---@field Z fun(): number|nil
+---@field PctMana fun(): number|nil
+---@field PctHPs fun(): number|nil
+---@field PctEndurance fun(): number|nil
+---@field Sitting fun(): number|boolean|nil
+---@field Combat fun(): number|boolean|nil
+---@field State fun(): string|number|nil
+---@field Hovering fun(): number|boolean|nil
+---@field Moving fun(): number|boolean|nil
+---@field Ducking fun(): number|boolean|nil
+---@field CastTimeLeft fun(): number|nil
+---@field AutoFire fun(): number|boolean|nil
+---@field FreeInventory fun(): number|nil
+---@field MaxMana fun(): number|nil
+---@field Open fun(): number|boolean|nil
+--- Indexed callables: Lua passes number or string only (Me.Gem(n), Me.Spell(name), etc.)
+---@field Gem fun(gem_index: number): MQData|string|number|boolean|nil
+---@field Ability fun(ability_index: number): MQData|string|number|boolean|nil
+---@field Spell fun(spell_name_or_id: string|number): MQData|string|number|boolean|nil
+---@field AltAbility fun(name: string): MQData|string|number|boolean|nil
+---@field Discipline fun(name: string): MQData|string|number|boolean|nil
+---@field FindBuff fun(name: string): MQData|string|number|boolean|nil
+---@field FindItem fun(name: string): MQData|string|number|boolean|nil
+---@field [string] fun(index?: number|string): MQData|string|number|boolean|nil
+
+--- Top-level object table: Me, Target, Zone, Cursor, Spawn(id), Window(name), etc.
+---@class MQTLO
+---@field Me MQData
+---@field Target MQData
+---@field Zone MQData
+---@field Cursor MQData
+---@field Spawn fun(id: number): MQData
+---@field Window fun(name: string): MQData
+---@field [string] MQData
+
+---@class MQImGui
+---@field init fun(name: string, callback: function): nil
+---@field destroy fun(name: string): nil
+---@field exists fun(name: string): boolean
+
+--- Callable: executes MQ command (e.g. mq.cmd('/stand')).
+---@class MQCmd
+---@field __call fun(self: MQCmd, command: string): nil
+
+--- MQ null / MQTypeVar placeholder.
+---@class MQNull
+---@field __call fun(self: MQNull): nil
+
+--- Constructor for TLO from string (e.g. mq.data("Me.CleanName")).
+---@class MQDataConstructor
+---@field __call fun(self: MQDataConstructor, str: string): MQData
+
+---@class mq
+--- Constants
+---@field configDir string
+---@field luaDir string
+---@field moduleDir string
+---@field MAX_AUG_SOCKETS number
+--- Sub-tables / objects
+---@field TLO MQTLO
+---@field imgui MQImGui
+---@field cmd MQCmd
+---@field null MQNull
+---@field data MQDataConstructor
+--- gettype is overloaded (MQTypeVar or MQTopLevelObject)
+---@field gettype fun(var: MQData|MQNull): string
+--- Utility
+---@field join fun(delim?: string, ...: any): string
+---@field gettime fun(): number
+---@field parse fun(text: string): string
+---@field pickle fun(file_path: string, data: table): nil
+---@field unpickle fun(file_path: string): table|any
+---@field NumericLimits_Float fun(): number, number
+--- Thread
+---@field delay fun(ms_or_condition: number|function|any, condition?: function|any): nil
+---@field exit fun(): nil
+--- Events
+---@field doevents fun(...: string): nil
+---@field flushevents fun(): nil
+---@field event fun(name: string, expression: string, fn: function, options?: table): boolean
+---@field unevent fun(name: string): nil
+---@field bind fun(name: string, fn: function): nil
+---@field unbind fun(name: string): nil
+--- Commands
+---@field cmdf fun(fmt: string, ...: any): nil
+--- Texture
+---@field CreateTexture fun(name: string): userdata
+---@field FindTextureAnimation fun(name: string): userdata|nil
+--- Cursor / links (EQ)
+---@field AttachSpellToCursor fun(SpellID: number): nil
+---@field RemoveCursorAttachment fun(): nil
+---@field ExtractLinks fun(str: string): table
+---@field ExecuteTextLink fun(link: string): nil
+---@field FormatAchievementLink fun(achievement_tlo: MQData, player_name: string): string
+---@field FormatDialogLink fun(keyword: string, text?: string): string
+---@field FormatItemLink fun(item_tlo: MQData): string
+---@field FormatSpellLink fun(spell_tlo: MQData, name_override?: string): string
+---@field ParseDialogLink fun(str: string): table|nil
+---@field ParseItemLink fun(str: string): table|nil
+---@field ParseSpellLink fun(str: string): table|nil
+---@field StripTextLinks fun(str: string): string
+--- Spawns / ground items (tables of spawn/ground item handles keyed by index)
+---@field getAllSpawns fun(): table
+---@field getFilteredSpawns fun(predicate?: function): table
+---@field getAllGroundItems fun(): table
+---@field getFilteredGroundItems fun(predicate: function): table
+--- TLO / data types
+---@field GetDataTypeNames fun(): table
+---@field AddTopLevelObject fun(name: string, func: function): boolean
+---@field RemoveTopLevelObject fun(name: string): boolean
+
+---@type mq
+mq = mq or {}
