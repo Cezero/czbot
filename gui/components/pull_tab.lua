@@ -84,7 +84,6 @@ function M.draw()
         pull.usePullLevels = (tfNew == 2)
         runConfigLoaders()
     end
-    ImGui.SameLine()
     ImGui.Text(targetFilterIdx == 1 and 'Min Con' or 'Min Level')
     if ImGui.IsItemHovered() then ImGui.SetTooltip(targetFilterIdx == 1 and 'Minimum consider color for pull targets (e.g. Green).' or 'Minimum level when using level-based pulling.') end
     ImGui.SameLine()
@@ -145,7 +144,7 @@ function M.draw()
     if cpcCh then pull.chainpullcnt = cpcNew; runConfigLoaders() end
 
     -- Mana class (checkboxes) then Mana % on same line
-    local manaclassOptions = { 'CLR', 'DRU', 'SHM', 'ENC', 'WIZ', 'NEC', 'MAG' }
+    local manaclassOptions = { 'CLR', 'DRU', 'SHM' }
     local mcStr = pull.manaclass or 'clr, dru, shm'
     local function manaclassSet()
         local t = {}
@@ -153,7 +152,7 @@ function M.draw()
         return t
     end
     local mcSet = manaclassSet()
-    ImGui.Text('Mana class')
+    ImGui.Text('Mana class: ')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Classes checked for mana %% before allowing a pull.') end
     ImGui.SameLine()
     for _, label in ipairs(manaclassOptions) do
