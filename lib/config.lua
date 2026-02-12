@@ -131,10 +131,10 @@ end
 
 -- Canonical default spell entry per section. getDefaultSpellEntry returns a copy so callers do not mutate.
 local defaultSpellEntries = {
-    heal = { gem = 0, spell = 0, minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, isHoT = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, precondition = true },
-    buff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = true },
-    debuff = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, enabled = true, targettedAE = false, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true, dontStack = nil },
-    cure = { gem = 0, spell = 0, minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = true },
+    heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, isHoT = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, precondition = true },
+    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = true },
+    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, targettedAE = false, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, charmnames = '', recast = 0, delay = 0, precondition = true, dontStack = nil },
+    cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = true },
 }
 
 function M.getDefaultSpellEntry(section)
@@ -412,7 +412,8 @@ local function writeConfigToFile(config, filename)
                                 for _, c in ipairs(subval) do
                                     parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
                                 end
-                                file:write(indent .. "  " .. formatKey('manaclass') .. " = { " .. table.concat(parts, ", ") .. " },\n")
+                                file:write(indent ..
+                                "  " .. formatKey('manaclass') .. " = { " .. table.concat(parts, ", ") .. " },\n")
                                 file:flush()
                             elseif tonumber(subval) then
                                 file:write(indent .. "  " .. formatKey(subkey) .. " = ", tonumber(subval), ",\n")
@@ -508,7 +509,8 @@ function M.Load(path)
     if (M.config.settings.acleash == nil) then M.config.settings.acleash = 75 end
     if (M.config.settings.followdistance == nil) then M.config.settings.followdistance = 35 end
     M.config.settings.acleashSq = (M.config.settings.acleash or 0) * (M.config.settings.acleash or 0)
-    M.config.settings.followdistanceSq = (M.config.settings.followdistance or 0) * (M.config.settings.followdistance or 0)
+    M.config.settings.followdistanceSq = (M.config.settings.followdistance or 0) *
+    (M.config.settings.followdistance or 0)
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "manual" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = '0' end

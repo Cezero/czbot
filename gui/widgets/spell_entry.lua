@@ -144,7 +144,8 @@ function M.draw(spell, opts)
     ImGui.SameLine()
     local primary, sub = gemToPrimarySub(spell.gem)
     ImGui.SetNextItemWidth(TYPE_COMBO_WIDTH)
-    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, TYPE_COMBO_WIDTH)
+    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS,
+        primary, sub, TYPE_COMBO_WIDTH)
     if gemChanged then
         spell.gem = primarySubToGem(newPrimary, newSub)
         if newPrimary == 'gem' then
@@ -221,7 +222,8 @@ function M.draw(spell, opts)
             ImGui.SameLine()
         end
         ImGui.Text('Range')
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('Max range to use when casting the pull spell (0 = use spell default).') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'Max range to use when casting the pull spell (0 = use spell default).') end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local r = spell.range or 0
@@ -238,14 +240,14 @@ function M.draw(spell, opts)
 end
 
 M.PRIMARY_OPTIONS_PULL = {
-    { value = 'melee', label = 'Melee' },
-    { value = 'ranged', label = 'Ranged' },
-    { value = 'gem', label = 'Gem' },
+    { value = 'melee',   label = 'Melee' },
+    { value = 'ranged',  label = 'Ranged' },
+    { value = 'gem',     label = 'Gem' },
     { value = 'ability', label = 'Ability' },
-    { value = 'item', label = 'Item' },
-    { value = 'alt', label = 'Alt' },
-    { value = 'disc', label = 'Disc' },
-    { value = 'script', label = 'Script' },
+    { value = 'item',    label = 'Item' },
+    { value = 'alt',     label = 'Alt' },
+    { value = 'disc',    label = 'Disc' },
+    { value = 'script',  label = 'Script' },
 }
 
 return M

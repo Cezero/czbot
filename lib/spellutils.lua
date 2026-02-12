@@ -86,7 +86,7 @@ function spellutils.SpellCheck(Sub, ID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if gem ~= "item" and entry and type(entry.alias) == 'string' and spellsdb and spellsdb.resolve_entry then
         local level = tonumber(mq.TLO.Me.Level()) or 1
-        if (not entry.spell or entry.spell == 0 or entry.spell == '0' or entry._resolved_level ~= level) then
+        if (not entry.spell or entry.spell == '' or entry._resolved_level ~= level) then
             spellsdb.resolve_entry(Sub, ID, false)
         end
     end
@@ -907,7 +907,7 @@ function spellutils.RefreshSpells()
                 if spellsdb and spellsdb.resolve_entry then spellsdb.resolve_entry(section, i, true) end
                 local known = false
                 if entry.gem == 'disc' then
-                    known = entry.spell and entry.spell ~= 0 and entry.spell ~= '' and
+                    known = entry.spell and entry.spell ~= '' and
                         mq.TLO.Me.CombatAbility(entry.spell)() ~= nil
                 else
                     known = entry.spell and mq.TLO.Me.Book(entry.spell)()
