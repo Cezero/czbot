@@ -157,13 +157,13 @@ function botevents.Event_GMDetected()
 end
 
 function botevents.Event_MountFailed()
-    if botconfig.config.domount then MountCastFailed = true end
+    if botconfig.config.settings.domount then MountCastFailed = true end
 end
 
 function botevents.Event_MobProb(line, arg1, arg2)
     if state.getRunconfig().mobprobtimer <= mq.gettime() then return true end
     if state.getRunconfig().engageTargetId then
-        if mq.TLO.Navigation.PathLength('id ' .. state.getRunconfig().engageTargetId)() <= myconfig.settings.acleash then
+        if mq.TLO.Navigation.PathLength('id ' .. state.getRunconfig().engageTargetId)() <= botconfig.config.settings.acleash then
             mq.cmdf(
                 '/nav id %s dist=0 log=off', state.getRunconfig().engageTargetId)
         end

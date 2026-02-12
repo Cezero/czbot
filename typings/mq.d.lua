@@ -86,6 +86,9 @@
 ---@field CategoryID fun(self: MQData): number|nil
 ---@field Subcategory fun(): string|nil
 ---@field Subcategory fun(self: MQData): string|nil
+--- Spell: true if spell has the given SPA effect (e.g. 22 = Charm). Source: MQ2SpellType.cpp HasSPA.
+---@field HasSPA fun(spa_id: number): boolean|nil
+---@field HasSPA fun(self: MQData, spa_id: number): boolean|nil
 ---@field MaxLevel fun(): number|nil
 ---@field MaxLevel fun(self: MQData): number|nil
 ---@field StacksTarget fun(): string|boolean|nil
@@ -114,7 +117,7 @@
 ---@field SkillCap fun(index: number|string): MQData|string|number|boolean|nil
 ---@field Book fun(index: number|string): MQData|string|number|boolean|nil
 ---@field Gem fun(gem_index: number): MQData|string|number|boolean|nil
----@field SpellReady fun(gem_index?: number): MQData|string|number|boolean|nil
+---@field SpellReady fun(gem_index_or_spell_name?: number|string): MQData|string|number|boolean|nil
 ---@field Ability fun(index: number|string): MQData|string|number|boolean|nil
 ---@field AbilityReady fun(index: number|string): MQData|string|number|boolean|nil
 ---@field AbilityTimer fun(index: number|string): MQData|string|number|boolean|nil
@@ -147,12 +150,19 @@
 ---@field __call fun(self: MQData): string|number|boolean|nil
 ---@field __call fun(self: MQData, index: string|number): MQData
 
+--- MQ2Cast TLO: Status and Result are string|nil only.
+---@class MQCast
+---@field Status fun(): string|nil
+---@field Result fun(): string|nil
+---@field Stored MQData
+
 --- Top-level object table: Me, Target, Zone, Cursor, Spawn(id), Window(name), etc.
 ---@class MQTLO
 ---@field Me MQData
 ---@field Target MQData
 ---@field Zone MQData
 ---@field Cursor MQData
+---@field Cast MQCast
 ---@field Spawn fun(id: number|string|MQData): MQData
 ---@field Window fun(name: string): MQData
 ---@field InvSlot fun(slot: number|string): MQData

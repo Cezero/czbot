@@ -50,6 +50,7 @@
 ---@field pullPhase string|nil
 ---@field pullDeadline number|nil
 ---@field stucktimer number|nil
+---@field unstuckWiggleIndex number|nil current step (1–9) in unstuck wiggle sequence; nil when not wiggling or after sequence
 ---@field mobprobtimer number
 ---@field spellNotInBook table|nil
 ---@field statusMessage string User-facing activity line for GUI
@@ -139,6 +140,7 @@ function M.resetRunconfig()
         pullPhase = nil,
         pullDeadline = nil,
         stucktimer = 0,
+        unstuckWiggleIndex = nil,
         mobprobtimer = 0,
         spellNotInBook = {},
         statusMessage = '',

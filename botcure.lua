@@ -187,7 +187,7 @@ local function cureGetTargetsForPhase(phase, context)
     if phase == 'priority' then
         local count = botconfig.getSpellCount('cure')
         if count <= 0 then return {} end
-        local priorityIndices = spellutils.getSpellIndicesForPhase(count, 'priority', cureBandHasPhase)
+        local priorityIndices = spellutils.getSpellIndicesForPhase(count, 'priority', CureClass)
         if not priorityIndices or #priorityIndices == 0 then return {} end
         local needTypes = {}
         for _, i in ipairs(priorityIndices) do
@@ -213,10 +213,6 @@ local function cureGetTargetsForPhase(phase, context)
     if phase == 'groupmember' then return castutils.getTargetsGroupMember(context, { botsFirst = true, excludeBotsFromGroup = true }) end
     if phase == 'pc' then return castutils.getTargetsPc(context) end
     return {}
-end
-
-local function cureBandHasPhase(spellIndex, phase)
-    return castutils.bandHasPhaseSimple(CureClass, spellIndex, phase)
 end
 
 local function cureTargetNeedsSpell(spellIndex, targetId, targethit, context)
@@ -267,7 +263,7 @@ function botcure.CureCheck(runPriority, phaseOrder, hookName)
         end,
     }
     local function getSpellIndices(phase)
-        return spellutils.getSpellIndicesForPhase(count, phase, cureBandHasPhase)
+        return spellutils.getSpellIndicesForPhase(count, phase, CureClass)
     end
     return spellutils.RunPhaseFirstSpellCheck('cure', hookName, phaseOrder, cureGetTargetsForPhase, getSpellIndices,
         cureTargetNeedsSpell, ctx, options)
@@ -280,7 +276,7 @@ function botcure.getHookFn(name)
             if not myconfig.settings.docure or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
             local count = botconfig.getSpellCount('cure')
             if count <= 0 then return end
-            local priorityIndices = spellutils.getSpellIndicesForPhase(count, 'priority', cureBandHasPhase)
+            local priorityIndices = spellutils.getSpellIndicesForPhase(count, 'priority', CureClass)
             if not priorityIndices or #priorityIndices == 0 then return end
             if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Cure Check' end
             botcure.CureCheck(bothooks.getPriority(hookName), CURE_PHASE_ORDER_PRIORITY, 'priorityCure')

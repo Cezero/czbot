@@ -60,9 +60,8 @@ local function HPEvalContext(index)
     local tanknbid = tank and string.find(botstr, tank)
     local spell, spellrange = spellutils.GetSpellInfo(entry)
     if not spell then return nil end
-    if gem == 'item' and mq.TLO.FindItem(entry.spell)() then
-        spellrange = mq.TLO.FindItem(entry.spell).Spell.MyRange()
-    end
+    local spellEntity = spellutils.GetSpellEntity(entry)
+    if spellEntity then spellrange = spellEntity.MyRange() end
     local spellrangeSq = spellrange and (spellrange * spellrange) or nil
     return {
         entry = entry,
@@ -142,17 +141,17 @@ end
 
 local function HPEvalSelf(index, ctx)
     local pct = mq.TLO.Me.PctHPs()
-    local id = mq.TLO.Spell(ctx.entry.spell).TargetType() == 'Self' and 1 or mq.TLO.Me.ID()
+    local spellEntity = spellutils.GetSpellEntity(ctx.entry)
+    local id = (spellEntity and spellEntity.TargetType() == 'Self') and 1 or mq.TLO.Me.ID()
     return hpEvalReturn(index, 'self', pct, id, 'self', nil)
 end
 
 local function HPEvalGrp(index, ctx)
-    local aeRange = mq.TLO.Spell(ctx.entry.spell).AERange()
-    if ctx.gem == 'item' and mq.TLO.FindItem(ctx.entry.spell)() then
-        aeRange = mq.TLO.FindItem(ctx.entry.spell).Spell.AERange()
-    end
+    local spellEntity = spellutils.GetSpellEntity(ctx.entry)
+    local aeRange = spellEntity and spellEntity.AERange()
     if not aeRange or aeRange <= 0 then return nil, nil end
     local aeRangeSq = aeRange * aeRange
+    local spellIdForBuff = spellEntity and spellEntity.ID()
     local function needHeal(grpmember, grpid, grpname, peer)
         local grpspawn = grpmember.Spawn
         if not grpspawn then return false end
@@ -163,8 +162,8 @@ local function HPEvalGrp(index, ctx)
         if ctx.entry.isHoT then
             if grpid == mq.TLO.Me.ID() then
                 if mq.TLO.Me.FindBuff(ctx.entry.spell)() then return false end
-            elseif peer then
-                if spellutils.PeerHasBuff(peer, mq.TLO.Spell(ctx.entry.spell).ID()) then return false end
+            elseif peer and spellIdForBuff then
+                if spellutils.PeerHasBuff(peer, spellIdForBuff) then return false end
             end
         end
         return true

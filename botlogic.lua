@@ -183,7 +183,9 @@ end
 function botlogic.StartUp(...)
     print('CZBot is starting! (' .. VERSION .. ')')
     math.randomseed(os.time() * 1000 + os.clock() * 1000)
-    if mq.TLO.Me.Hovering() or string.find(mq.TLO.Me.Name(), 'corpse') then
+    local meSpawn = mq.TLO.Me()
+    if not meSpawn then return end
+    if meSpawn.Hovering() or string.find(meSpawn.Name(), 'corpse') then
         printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
         state.getRunconfig().terminate = true
         return
@@ -202,7 +204,7 @@ function botlogic.StartUp(...)
     local runconfig = state.getRunconfig()
     local args = { ... }
     botconfig.LoadConfig()
-    runconfig.zonename = mq.TLO.Zone.ShortName()
+    runconfig.zonename = mq.TLO.Zone.ShortName() or ''
     if args[1] then
         runconfig.TankName = (args[1] == 'automatic') and 'automatic' or (args[1]:sub(1, 1):upper() .. args[1]:sub(2))
     else

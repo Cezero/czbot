@@ -69,17 +69,19 @@ end
 
 function hookregistry.runRunWhenPausedHooks()
     if _sortedRunWhenPaused == nil then _rebuildSorted() end
-    for _, h in ipairs(_sortedRunWhenPaused) do
+    local list = _sortedRunWhenPaused or {}
+    for _, h in ipairs(list) do
         h.fn(h.name)
     end
 end
 
 function hookregistry.runNormalHooks()
     if _sortedNormal == nil then _rebuildSorted() end
+    local list = _sortedNormal or {}
     local state = require('lib.state')
     local runState = state.getRunState()
     if runState == 'dead' then
-        for _, h in ipairs(_sortedNormal) do
+        for _, h in ipairs(list) do
             if h.runWhenDead then
                 h.fn(h.name)
             end
@@ -93,7 +95,7 @@ function hookregistry.runNormalHooks()
             maxPriority = payload.priority
         end
     end
-    for _, h in ipairs(_sortedNormal) do
+    for _, h in ipairs(list) do
         if maxPriority == nil or h.priority <= maxPriority then
             h.fn(h.name)
         end

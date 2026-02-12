@@ -7,6 +7,7 @@ local spellstates = require('lib.spellstates')
 local tankrole = require('lib.tankrole')
 local charinfo = require("mqcharinfo")
 local bardtwist = require('lib.bardtwist')
+local castutils = require('lib.castutils')
 local utils = require('lib.utils')
 local spellutils = {}
 local _deps = {}
@@ -88,6 +89,7 @@ function spellutils.SpellCheck(Sub, ID)
         end
     end
     if entry and entry.spell then spell = entry.spell end
+    if not spell then return false end
     minmana = (entry and entry.minmana ~= nil) and entry.minmana or 0
     if entry and entry.gem then gem = entry.gem end
     if mq.TLO.Window('SpellBookWnd').Open() then mq.cmd('/book') end
@@ -98,18 +100,20 @@ function spellutils.SpellCheck(Sub, ID)
         printf('\ayCZBot:\axMissing reagent for %s, disabling spell for 5 minutes', spell)
         return false
     end
-    local spellmana = mq.TLO.Spell(spell).Mana()
-    local spellend = mq.TLO.Spell(spell).EnduranceCost()
+    local spellEntity = mq.TLO.Spell(spell)
+    if not spellEntity then return false end
+    local spellmana = spellEntity.Mana()
+    local spellend = spellEntity.EnduranceCost()
     if not ((tonumber(gem) and gem <= 13 and gem > 0) or gem == 'alt' or gem == 'item' or gem == 'script' or gem == 'disc' or gem == 'ability') then return false end
     if (tonumber(gem) or gem == 'alt') and spellmana then
-        if (mq.TLO.Spell(spell).Mana() and mq.TLO.Spell(spell).Mana() > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < mq.TLO.Spell(spell).Mana()) or (mq.TLO.Me.PctMana() < minmana)) then return false end
+        if (spellmana > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < spellmana) or (mq.TLO.Me.PctMana() < minmana)) then return false end
     end
     if gem == 'alt' then
         if not mq.TLO.Me.AltAbilityReady(spell) then return false end
     end
     if gem == 'disc' and spellend then
         if not mq.TLO.Me.CombatAbilityReady(spell) then return false end
-        if (mq.TLO.Spell(spell).EnduranceCost() and ((mq.TLO.Me.CurrentEndurance() - (mq.TLO.Me.EnduranceRegen() * 2)) < mq.TLO.Spell(spell).EnduranceCost()) or (mq.TLO.Me.PctMana() < minmana)) then return false end
+        if (spellend and ((mq.TLO.Me.CurrentEndurance() - (mq.TLO.Me.EnduranceRegen() * 2)) < spellend) or (mq.TLO.Me.PctMana() < minmana)) then return false end
     end
     return true
 end
@@ -283,6 +287,39 @@ function spellutils.GetSpellInfo(entry)
     return spell, range, tartype, spellid
 end
 
+-- Return spell ID for entry, handling gem == 'item' via FindItem.Spell.ID().
+function spellutils.GetSpellId(entry)
+    if not entry or not entry.spell then return nil end
+    local id = mq.TLO.Spell(entry.spell).ID()
+    if id then return id end
+    if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then
+        return mq.TLO.FindItem(entry.spell).Spell.ID()
+    end
+    return nil
+end
+
+-- Return the spell TLO for the entry (Spell or FindItem.Spell for items). Nil if neither applies.
+function spellutils.GetSpellEntity(entry)
+    if not entry or not entry.spell then return nil end
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return nil end
+        return mq.TLO.FindItem(entry.spell).Spell
+    end
+    return mq.TLO.Spell(entry.spell)
+end
+
+-- Return duration in seconds for the entry's spell (handles item). Returns 0 if none or invalid.
+function spellutils.GetSpellDurationSec(entry)
+    local e = spellutils.GetSpellEntity(entry)
+    return tonumber(e and e.MyDuration()) or 0
+end
+
+-- Return whether the spell stacks on the given spawn (handles item). Nil/false if no stack or no entity.
+function spellutils.SpellStacksSpawn(entry, spawnId)
+    local e = spellutils.GetSpellEntity(entry)
+    return e and e.StacksSpawn(spawnId)()
+end
+
 -- SPA 22 = Charm (MacroQuest spelleffects.h). Returns true if the spell for entry has the Charm effect.
 function spellutils.IsCharmSpell(entry)
     if not entry or not entry.spell then return false end
@@ -322,7 +359,10 @@ end
 -- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.
 function spellutils.GetTankInfo(includeTarget)
     local mainTankName = state.getRunconfig().TankName
-    if mainTankName == 'automatic' then mainTankName = tankrole.GetMainTankName() end
+    if mainTankName == 'automatic' then
+        local mtn = tankrole.GetMainTankName()
+        if mtn then mainTankName = mtn end
+    end
     if not mainTankName or mainTankName == '' then return nil, nil, nil, nil end
     local tankid = mq.TLO.Spawn('pc =' .. mainTankName).ID()
     if not includeTarget then return mainTankName, tankid, nil, nil end
@@ -422,8 +462,8 @@ function spellutils.handleSpellCheckReentry(sub, options)
         local castResult = mq.TLO.Cast.Result() or ''
         local complete = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
         if complete then
-            rc.CurSpell.resisted = (mq.TLO.Cast.Result() == 'CAST_RESIST')
-            if mq.TLO.Cast.Result() == 'CAST_IMMUNE' and rc.CurSpell.target then
+            rc.CurSpell.resisted = (castResult == 'CAST_RESIST')
+            if castResult == 'CAST_IMMUNE' and rc.CurSpell.target then
                 immune.processList(rc.CurSpell.target)
             end
             spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
@@ -485,12 +525,16 @@ function spellutils.handleSpellCheckReentry(sub, options)
     return false
 end
 
---- Returns list of spell indices (1..count) for which bandHasPhaseFn(i, phase) is true.
-function spellutils.getSpellIndicesForPhase(count, phase, bandHasPhaseFn)
-    if not bandHasPhaseFn or type(bandHasPhaseFn) ~= 'function' then return {} end
+--- Returns list of spell indices (1..count) for which the band has the phase.
+--- bandHasPhaseFnOrTable: function(spellIndex, phase) or band table (uses castutils.bandHasPhaseSimple).
+function spellutils.getSpellIndicesForPhase(count, phase, bandHasPhaseFnOrTable)
+    if not bandHasPhaseFnOrTable then return {} end
     local out = {}
+    local check = type(bandHasPhaseFnOrTable) == 'function'
+        and bandHasPhaseFnOrTable
+        or function(i, p) return castutils.bandHasPhaseSimple(bandHasPhaseFnOrTable, i, p) end
     for i = 1, count do
-        if bandHasPhaseFn(i, phase) then
+        if check(i, phase) then
             out[#out + 1] = i
         end
     end
@@ -623,38 +667,129 @@ function spellutils.PreCondCheck(Sub, ID, spawnID)
     return true
 end
 
+-- Internal: load script from config.script[script]; if run then execute. Returns (success, output or nil).
+local function loadAndOptionalRun(script, run)
+    if not botconfig.config.script or type(botconfig.config.script[script]) ~= 'string' then
+        return false, nil
+    end
+    local chunk, loadError = load('local mq = require("mq") ' .. botconfig.config.script[script])
+    if not chunk then
+        print('problem loading precond') -- TODO add more context to make this a meaningful error message
+        return false, nil
+    end
+    if not run then
+        return true, nil
+    end
+    local output = chunk()
+    return true, output
+end
+
 --checks if a precondition is valid
 function spellutils.ProcessScript(script, Sub, ID)
+    if type(botconfig.config[script]) == 'boolean' then
+        if botconfig.config[script] then return true end
+    end
     if botconfig.config.script and type(botconfig.config.script[script]) == 'string' then
-        local loadprecond, loadError = load('local mq = require("mq") ' .. botconfig.config.script[script])
-        if loadprecond then
-            return true
-        else
-            print('problem loading precond') -- TODO add more context to make this a meaningful error message
+        local ok = loadAndOptionalRun(script, false)
+        if not ok then
             local entry = botconfig.getSpellEntry(Sub, ID)
             if entry then entry.enabled = false end
             return false
         end
-    elseif type(botconfig.config[script]) == 'boolean' then
-        if botconfig.config[script] then return true end
+        return true
     end
 end
 
 --runs script
 function spellutils.RunScript(script, Sub, ID)
+    if type(botconfig.config[script]) == 'boolean' then
+        if botconfig.config[script] then return true end
+    end
     if botconfig.config.script and type(botconfig.config.script[script]) == 'string' then
-        local loadprecond, loadError = load('local mq = require("mq") ' .. botconfig.config.script[script])
-        if loadprecond then
-            local output = loadprecond()
-            return output
-        else
-            print('problem loading precond') -- TODO add more context to make this a meaningful error message
+        local ok, output = loadAndOptionalRun(script, true)
+        if not ok then
             local entry = botconfig.getSpellEntry(Sub, ID)
             if entry then entry.enabled = false end
             return false
         end
-    elseif type(botconfig.config[script]) == 'boolean' then
-        if botconfig.config[script] then return true end
+        return output
+    end
+end
+
+function spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then return end
+    if not targetSpawn.ID() or string.lower(spelltartype) == 'self' then return end
+    local lostOrCorpse = (targetSpawn.ID() == 0) or (string.find(targetSpawn.Name() or '', 'corpse') and criteria ~= 'corpse')
+    if not lostOrCorpse then return end
+    mq.cmd('/squelch /multiline; /stick off ; /target clear')
+    if mq.TLO.Me.CastTimeLeft() > 0 and rc.CurSpell.target ~= 1 and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
+        mq.cmd('/echo I lost my target, interrupting')
+        if rc.CurSpell.viaMQ2Cast then mq.cmd('/interrupt') else mq.cmd('/stopcast') end
+        if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
+    end
+    if state.getRunconfig().domelee and _deps.AdvCombat then _deps.AdvCombat() end
+end
+
+function spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
+    if sub ~= 'heal' or criteria == 'corpse' then return end
+    local th = AHThreshold and spell and AHThreshold[spell] and AHThreshold[spell][criteria]
+    if not th or not targetSpawn.PctHPs() or targetSpawn.ID() ~= target then return end
+    local maxVal = type(th) == 'table' and th.max or th
+    if (maxVal + (math.abs(maxVal - 100) * botconfig.config.heal.interruptlevel)) <= targetSpawn.PctHPs() then
+        mq.cmdf('/multiline ; /interrupt ; /echo Interrupting Spell %s, target is above the threshold', entry.spell)
+        mq.cmd('/interrupt')
+        spellutils.clearCastingStateOrResume()
+    end
+end
+
+function spellutils.InterruptCheckDontStack(entry, target, spellname)
+    if not (entry.dontStack and #entry.dontStack > 0) then return end
+    if mq.TLO.Me.CastTimeLeft() <= 0 or mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
+    local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+    if not tag then return end
+    printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
+    spellutils.RecordDontStackDebuffFromTarget(target, entry.spell, tag)
+    mq.cmd('/interrupt')
+    spellutils.clearCastingStateOrResume()
+end
+
+function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spellname, spellid, spelldurMs, target, targetname)
+    if mq.TLO.Me.CastTimeLeft() <= 0 or (sub ~= 'debuff' and sub ~= 'buff') or not spelldurMs or spelldurMs <= 0 or mq.TLO.Me.Class.ShortName() == 'BRD' then return end
+    if mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
+    local buffid = mq.TLO.Target.Buff(spellname).ID() or false
+    local buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
+    local buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
+    if buffid and buffstaleness < 2000 and buffdur > (spelldurMs * 0.10) then
+        if sub == 'buff' then
+            if mq.TLO.Spell(spellid).StacksTarget() then
+                mq.cmdf('/multiline ; /echo Interrupt %s, buff does not stack on target: %s ; /interrupt', spellname, spellname, targetname)
+            end
+            mq.cmdf('/multiline ; /echo Interrupt %s, buff already present ; /interrupt', spellname, spellname)
+            mq.cmd('/interrupt')
+            if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
+            rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
+            spellutils.clearCastingStateOrResume()
+        elseif sub == 'debuff' and mq.TLO.Spell(spellid).CategoryID() ~= 20 then
+            mq.cmdf('/multiline ; /echo Interrupt %s on MobID %s, debuff already present ; /interrupt', spellname, target)
+            local expire = mq.TLO.Target.Buff(spellname).Duration() + mq.gettime()
+            spellstates.DebuffListUpdate(target, spellid, expire)
+            mq.cmd('/interrupt')
+            spellutils.clearCastingStateOrResume()
+        end
+    end
+    if mq.TLO.Spell(spellid).StacksTarget() == 'FALSE' then
+        if sub == 'buff' then
+            printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, spellname, targetname)
+            mq.cmd('/interrupt')
+            if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
+            rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
+            spellutils.clearCastingStateOrResume()
+        elseif sub == 'debuff' then
+            printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target, targetname)
+            spellstates.DebuffListUpdate(target, spellname, mq.TLO.Target.Buff(spellname).Duration() + mq.gettime())
+            mq.cmd('/interrupt')
+            spellutils.clearCastingStateOrResume()
+        end
     end
 end
 
@@ -670,231 +805,116 @@ function spellutils.InterruptCheck()
     if not spellname then return false end
     local criteria = rc.CurSpell.targethit
     local target = rc.CurSpell.target
-    local spelltartype = mq.TLO.Spell(spellname).TargetType()
+    local spelltartype = mq.TLO.Spell(spellname).TargetType() or ''
     local targetname = mq.TLO.Spawn(target).CleanName()
-    local spellid = mq.TLO.Spell(entry.spell).ID() or
-        (entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.ID())
+    local spellid = spellutils.GetSpellId(entry)
+    if not spellid then return false end
     local spelldur = mq.TLO.Spell(spellname).MyDuration.TotalSeconds() or
         (entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.MyDuration())
     if not criteria then return false end
     if spelldur then spelldur = spelldur * 1000 end
     if not target or not spell or not criteria or not sub then return false end
-    if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
-        if mq.TLO.Target.ID() and string.lower(spelltartype) ~= "self" and (mq.TLO.Target.ID() == 0 or string.find(mq.TLO.Target.Name(), 'corpse') and criteria ~= 'corpse') then
-            mq.cmd('/squelch /multiline; /stick off ; /target clear')
-            if mq.TLO.Me.CastTimeLeft() > 0 and target ~= 1 and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
-                mq.cmd('/echo I lost my target, interrupting')
-                if rc.CurSpell.viaMQ2Cast then mq.cmd('/interrupt') else mq.cmd('/stopcast') end
-                if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
-            end
-            if state.getRunconfig().domelee and _deps.AdvCombat then _deps.AdvCombat() end
-        end
+    local targetSpawn = mq.TLO.Target()
+    if not targetSpawn then return false end
+
+    spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
+    if criteria ~= 'corpse' and targetSpawn.Type() == 'Corpse' then
+        mq.cmd('/multiline ; /interrupt ; /squelch /target clear ; /echo My target is dead, interrupting')
     end
-    if criteria ~= 'corpse' then
-        if mq.TLO.Target.Type() == 'Corpse' and criteria ~= 'corpse' then
-            mq.cmd(
-                '/multiline ; /interrupt ; /squelch /target clear ; /echo My target is dead, interrupting')
-        end
+    spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
+    if sub == 'debuff' then
+        spellutils.InterruptCheckDontStack(entry, target, spellname)
     end
-    if sub == 'heal' and criteria ~= 'corpse' then
-        local th = AHThreshold and spell and AHThreshold[spell] and AHThreshold[spell][criteria]
-        if th and mq.TLO.Target.PctHPs() and mq.TLO.Target.ID() == target then
-            local maxVal = type(th) == 'table' and th.max or th
-            if (maxVal + (math.abs(maxVal - 100) * botconfig.config.heal.interruptlevel)) <= mq.TLO.Target.PctHPs() then
-                mq.cmdf('/multiline ; /interrupt ; /echo Interrupting Spell %s, target is above the threshold',
-                    entry.spell)
-                mq.cmd('/interrupt')
-                spellutils.clearCastingStateOrResume()
-            end
+    spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spellname, spellid, spelldur, target, targetname)
+end
+
+-- CastSpell helpers (used by CastSpell only or by re-entry flow).
+
+function spellutils.CheckGemReadiness(sub, index, entry)
+    local rc = state.getRunconfig()
+    local spell = entry.spell
+    local gem = entry.gem
+    if type(gem) == 'number' then
+        if not mq.TLO.Me.Book(spell)() then
+            printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', sub, index, spell)
+            entry.enabled = false
+            if not rc.spellNotInBook then rc.spellNotInBook = {} end
+            if not rc.spellNotInBook[sub] then rc.spellNotInBook[sub] = {} end
+            rc.spellNotInBook[sub][index] = true
+            return false
         end
+    elseif gem == 'item' then
+        if not mq.TLO.Me.ItemReady(spell)() then return false end
+    elseif gem == 'disc' then
+        if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
+    elseif gem == 'ability' then
+        if not mq.TLO.Me.AbilityReady(spell)() then return false end
+    elseif gem == 'alt' then
+        if not mq.TLO.Me.AltAbilityReady(spell)() then return false end
+    elseif gem == 'script' then
+        if not spellutils.ProcessScript(spell, sub, index) then return false end
     end
-    -- dontStack: someone else's debuff of this category landed on target while we're casting; interrupt and record so we don't re-attempt every tick
-    if sub == 'debuff' and mq.TLO.Me.CastTimeLeft() > 0 and entry.dontStack and #entry.dontStack > 0 and mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() then
-        local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
-        if tag then
-            printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
-            spellutils.RecordDontStackDebuffFromTarget(target, entry.spell, tag)
-            mq.cmd('/interrupt')
-            spellutils.clearCastingStateOrResume()
-        end
-    end
-    if mq.TLO.Me.CastTimeLeft() > 0 and (sub == 'debuff' or sub == 'buff') and spelldur and spelldur > 0 and mq.TLO.Me.Class.ShortName() ~= 'BRD' then
-        local buffid = mq.TLO.Target.Buff(spellname).ID() or false
-        local buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
-        local buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
-        if mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() and buffid and buffstaleness < 2000 and buffdur > (spelldur * .10) then
-            if sub == 'buff' then
-                if mq.TLO.Spell(spellid).StacksTarget() then
-                    mq.cmdf('/multiline ; /echo Interrupt %s, buff does not stack on target: %s ; /interrupt', spellname,
-                        spellname, targetname)
-                end
-                mq.cmdf('/multiline ; /echo Interrupt %s, buff already present ; /interrupt', spellname, spellname)
-                mq.cmd('/interrupt')
-                if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
-                rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
-                spellutils.clearCastingStateOrResume()
-            elseif sub == 'debuff' and mq.TLO.Spell(spellid).CategoryID() ~= 20 then
-                mq.cmdf('/multiline ; /echo Interrupt %s on MobID %s, debuff already present ; /interrupt', spellname,
-                    target)
-                local spelldur = mq.TLO.Target.Buff(spellname).Duration() + mq.gettime()
-                spellstates.DebuffListUpdate(target, spellid, spelldur)
-                mq.cmd('/interrupt')
-                spellutils.clearCastingStateOrResume()
-            end
-        end
-        if mq.TLO.Target.ID() == target and mq.TLO.Target.BuffsPopulated() and mq.TLO.Spell(spellid).StacksTarget() == 'FALSE' then
-            if sub == 'buff' then
-                printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, spellname, targetname)
-                mq.cmd('/interrupt')
-                if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
-                rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
-                spellutils.clearCastingStateOrResume()
-            elseif sub == 'debuff' then
-                printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target,
-                    targetname)
-                spellstates.DebuffListUpdate(target, spellname,
-                    mq.TLO.Target.Buff(spellname).Duration() + mq.gettime())
-                mq.cmd('/interrupt')
-                spellutils.clearCastingStateOrResume()
-            end
-        end
+    return true
+end
+
+function spellutils.SetCastStatusMessage(sub, targetname, spellname)
+    local rc = state.getRunconfig()
+    if sub == 'heal' then
+        rc.statusMessage = string.format('Healing %s with %s', targetname, spellname)
+    elseif sub == 'buff' then
+        rc.statusMessage = string.format('Buffing %s with %s', targetname, spellname)
+    elseif sub == 'debuff' or sub == 'ad' then
+        rc.statusMessage = string.format('Nuking %s with %s', targetname, spellname)
+    elseif sub == 'cure' then
+        rc.statusMessage = string.format('Curing %s with %s', targetname, spellname)
+    else
+        rc.statusMessage = string.format('Casting %s on %s', spellname, targetname)
     end
 end
 
-function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellcheckResume)
-    local rc = state.getRunconfig()
-    local entry = botconfig.getSpellEntry(sub, index)
-    if not entry then return false end
-    local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
-    if not resuming then
-        if not spellutils.SpellCheck(sub, index) then return false end
-        local spell = entry.spell
-        local gem = entry.gem
-        if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then return false end
-        if type(gem) == 'number' then
-            if not mq.TLO.Me.Book(spell)() then
-                printf('\ayCZBot:\ax %s[%s]: Spell %s not found in your book', sub, index, spell)
-                entry.enabled = false
-                if not rc.spellNotInBook then rc.spellNotInBook = {} end
-                if not rc.spellNotInBook[sub] then rc.spellNotInBook[sub] = {} end
-                rc.spellNotInBook[sub][index] = true
-                return false
-            end
-        elseif gem == 'item' then
-            if not mq.TLO.Me.ItemReady(spell)() then return false end
-        elseif gem == 'disc' then
-            if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
-        elseif gem == 'ability' then
-            if not mq.TLO.Me.AbilityReady(spell)() then return false end
-        elseif gem == 'alt' then
-            if not mq.TLO.Me.AltAbilityReady(spell)() then return false end
-        elseif gem == 'script' then
-            if not spellutils.ProcessScript(spell, sub, index) then return false end
-        end
-        rc.CurSpell = {
-            sub = sub,
-            spell = index,
-            target = EvalID,
-            targethit = targethit,
-            resisted = false,
-            spellcheckResume = spellcheckResume,
-        }
-        if targethit == 'charmtar' then rc.charmid = EvalID end
-    else
-        if spellcheckResume then rc.CurSpell.spellcheckResume = spellcheckResume end
-    end
+function spellutils.ShouldWaitForMovement(entry)
+    if not entry or not entry.spell then return false end
     local spell = string.lower(entry.spell or '')
-    local gem = entry.gem
-    local targetname = mq.TLO.Spawn(EvalID).CleanName()
-    local spellname = entry.spell or spell
-    if not resuming then
-        if sub == 'heal' then
-            rc.statusMessage = string.format('Healing %s with %s', targetname, spellname)
-        elseif sub == 'buff' then
-            rc.statusMessage = string.format('Buffing %s with %s', targetname, spellname)
-        elseif sub == 'debuff' or sub == 'ad' then
-            rc.statusMessage = string.format('Nuking %s with %s', targetname, spellname)
-        elseif sub == 'cure' then
-            rc.statusMessage = string.format('Curing %s with %s', targetname, spellname)
-        else
-            rc.statusMessage = string.format('Casting %s on %s', spellname, targetname)
-        end
-    end
+    local castTime = mq.TLO.Spell(spell).MyCastTime()
+    if not castTime or castTime <= 0 then return false end
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then return false end
+    return mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()
+end
 
-    if not resuming and (mq.TLO.Spell(spell).MyCastTime() and mq.TLO.Spell(spell).MyCastTime() > 0 and (mq.TLO.Me.Moving() or mq.TLO.Navigation.Active() or mq.TLO.Stick.Active()) and mq.TLO.Me.Class.ShortName() ~= 'BRD') then
-        mq.cmd('/multiline ; /nav stop log=off ; /stick off')
-        rc.CurSpell.phase = 'precast_wait_move'
-        rc.CurSpell.deadline = mq.gettime() + 3000
-        state.setRunState('casting',
-            { deadline = mq.gettime() + 3000, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
-        return true
+function spellutils.RequireTargetThenDontStackDebuff(entry, EvalID)
+    if not (entry and entry.dontStack and #entry.dontStack > 0) then return false end
+    if mq.TLO.Target.ID() ~= EvalID then
+        mq.cmdf('/tar id %s', EvalID)
+        mq.delay(500, function() return mq.TLO.Target.BuffsPopulated() == true end)
     end
-    -- TODO: Revisit bard mez + melee cycle. Current behavior: attack off when mezzing notanktar, and bard never
-    -- re-engages melee while mez is "active", so bard just stands there singing mez. Desired: attack off, target add,
-    -- pulse mez, wait for land, re-assist MA, attack on (optionally twist DPS song), stay on MA target ~12-15s,
-    -- then attack off, target add, re-pulse mez, repeat. Implement in a later plan (state/timers per mez target).
-    if (sub == 'debuff' and targethit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
-    if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
-    if mq.TLO.Me.Class.ShortName() == 'BRD' then
-        if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
-            if _deps.AdvCombat then _deps.AdvCombat() end
-        end
-        if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
-    end
-    local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
-    if not useMQ2Cast and (EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then
-        if mq.TLO.Target.ID() ~= EvalID then
-            mq.cmdf('/tar id %s', EvalID)
-            rc.CurSpell.phase = 'precast'
-            rc.CurSpell.deadline = mq.gettime() + 1000
-            state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+    if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
+        local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
+        if tag then
+            spellutils.RecordDontStackDebuffFromTarget(EvalID, entry.spell, tag)
             return true
         end
     end
-    -- dontStack: if target already has this debuff category (e.g. another toon's snare), abort and record so we don't re-attempt every tick
-    if sub == 'debuff' and entry.dontStack and #entry.dontStack > 0 then
-        if mq.TLO.Target.ID() ~= EvalID then
-            mq.cmdf('/tar id %s', EvalID)
-            mq.delay(500, function() return mq.TLO.Target.BuffsPopulated() == true end)
-        end
-        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
-            local tag = spellutils.TargetHasDebuffCategory(entry.dontStack)
-            if tag then
-                spellutils.RecordDontStackDebuffFromTarget(EvalID, entry.spell, tag)
-                return false
-            end
-        end
+    return false
+end
+
+function spellutils.BuildMQ2CastCommand(entry, EvalID, targethit, sub)
+    local gem = entry.gem
+    local spellname = entry.spell
+    local castArg = (type(gem) == 'number') and tostring(gem) or gem
+    local cmd = string.format('/casting "%s" %s', spellname, castArg)
+    if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
+        cmd = cmd .. string.format(' -targetid|%s', EvalID)
     end
-    if entry.announce then
-        printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
+    if sub == 'debuff' then
+        cmd = cmd .. ' -maxtries|2'
     end
-    -- Stand before cast when sitting (not on mount); MQ2Cast does not do this.
-    -- Do not stand when we're already in phase 'casting' (re-entry would interrupt mem/cast).
-    if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and (not rc.CurSpell or rc.CurSpell.phase ~= 'casting') then
-        mq.cmd('/stand')
-    end
-    if useMQ2Cast then
-        local castSpellId = mq.TLO.Spell(entry.spell).ID()
-        if entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() then
-            castSpellId = mq.TLO.FindItem(entry.spell).Spell.ID()
-        end
-        local castArg = (type(gem) == 'number') and tostring(gem) or gem
-        local cmd = string.format('/casting "%s" %s', spellname, castArg)
-        if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
-            cmd = cmd .. string.format(' -targetid|%s', EvalID)
-        end
-        if sub == 'debuff' then
-            cmd = cmd .. ' -maxtries|2'
-        end
-        rc.CurSpell.viaMQ2Cast = true
-        rc.CurSpell.spellid = castSpellId
-        mq.cmd(cmd)
-        rc.CurSpell.phase = 'casting'
-        state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
-        return true
-    end
+    return cmd
+end
+
+function spellutils.ExecuteNativeCast(gem, spell, entry, sub, index, EvalID, targethit)
+    local isSelfOrGroup = (EvalID == 1 and (targethit == 'self' or targethit == 'groupheal' or targethit == 'groupbuff' or targethit == 'groupcure'))
     if type(gem) == 'number' or gem == 'item' or gem == 'alt' or gem == 'script' then
-        if EvalID == 1 and (targethit == 'self' or targethit == 'groupheal' or targethit == 'groupbuff' or targethit == 'groupcure') then
+        if isSelfOrGroup then
             if type(gem) == 'number' then
                 mq.cmdf('/cast "%s"', spell)
             elseif gem == 'item' then
@@ -921,6 +941,83 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmdf('/squelch /face fast')
         mq.cmdf('/doability %s', spell)
     end
+end
+
+function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellcheckResume)
+    local rc = state.getRunconfig()
+    local entry = botconfig.getSpellEntry(sub, index)
+    if not entry then return false end
+    local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
+    if not resuming then
+        if not spellutils.SpellCheck(sub, index) then return false end
+        if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then return false end
+        if not spellutils.CheckGemReadiness(sub, index, entry) then return false end
+        rc.CurSpell = {
+            sub = sub,
+            spell = index,
+            target = EvalID,
+            targethit = targethit,
+            resisted = false,
+            spellcheckResume = spellcheckResume,
+        }
+        if targethit == 'charmtar' then rc.charmid = EvalID end
+    else
+        if spellcheckResume then rc.CurSpell.spellcheckResume = spellcheckResume end
+    end
+    local spell = string.lower(entry.spell or '')
+    local gem = entry.gem
+    local targetname = mq.TLO.Spawn(EvalID).CleanName()
+    local spellname = entry.spell or spell
+    if not resuming then
+        spellutils.SetCastStatusMessage(sub, targetname, spellname)
+    end
+
+    if not resuming and spellutils.ShouldWaitForMovement(entry) then
+        mq.cmd('/multiline ; /nav stop log=off ; /stick off')
+        rc.CurSpell.phase = 'precast_wait_move'
+        rc.CurSpell.deadline = mq.gettime() + 3000
+        state.setRunState('casting',
+            { deadline = mq.gettime() + 3000, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        return true
+    end
+    if (sub == 'debuff' and targethit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
+    if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
+            if _deps.AdvCombat then _deps.AdvCombat() end
+        end
+        if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
+    end
+    local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
+    if not useMQ2Cast and (EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then
+        if mq.TLO.Target.ID() ~= EvalID then
+            mq.cmdf('/tar id %s', EvalID)
+            rc.CurSpell.phase = 'precast'
+            rc.CurSpell.deadline = mq.gettime() + 1000
+            state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+            return true
+        end
+    end
+    if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
+        return false
+    end
+    if entry.announce then
+        printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
+    end
+    if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and (not rc.CurSpell or rc.CurSpell.phase ~= 'casting') then
+        mq.cmd('/stand')
+    end
+    if useMQ2Cast then
+        local castSpellId = spellutils.GetSpellId(entry)
+        local cmd = spellutils.BuildMQ2CastCommand(entry, EvalID, targethit, sub)
+        rc.CurSpell.viaMQ2Cast = true
+        rc.CurSpell.spellid = castSpellId
+        mq.cmd(cmd)
+        rc.CurSpell.phase = 'casting'
+        state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        return true
+    end
+    spellutils.ExecuteNativeCast(gem, spell, entry, sub, index, EvalID, targethit)
     rc.CurSpell.phase = 'casting'
     state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
     return true

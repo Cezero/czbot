@@ -14,15 +14,16 @@ function follow.StartFollow(name)
         mq.cmd('/echo No Mesh for this zone, cannot use CZFollow+!!')
         return false
     end
-    if not name or not mq.TLO.Spawn('=' .. name).ID() then
-        return
-    end
+    local spawn = name and mq.TLO.Spawn('=' .. name)
+    if not spawn then return end
     local rc = state.getRunconfig()
     if rc.campstatus then botmove.MakeCamp('off') end
-    rc.followid = mq.TLO.Spawn('=' .. name).ID()
+    local followId = spawn.ID()
+    if not followId then return end
+    rc.followid = followId
     rc.followname = name
     rc.stucktimer = mq.gettime() + 60000
-    printf('\ayCZBot:\ax\auFollowing\ax ON %s', mq.TLO.Spawn(rc.followid).CleanName())
+    printf('\ayCZBot:\ax\auFollowing\ax ON %s', spawn.CleanName())
 end
 
 local function event_FollowChat(line, speaker)

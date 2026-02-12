@@ -15,44 +15,6 @@ local bardtwist = require('lib.bardtwist')
 
 local PULLEDMOB_NO_CLOSER_MS = 10000
 
-local function clearPullState()
-    local rc = state.getRunconfig()
-    rc.pullState = nil
-    rc.pullAPTargetID = nil
-    rc.pullTagTimer = nil
-    rc.pullReturnTimer = nil
-    rc.pullPhase = nil
-    rc.pullDeadline = nil
-    rc.statusMessage = ''
-    rc.pulledmobLastDistSq = nil
-    rc.pulledmobLastCloserTime = nil
-    rc.pullNavStartHP = nil
-    state.clearRunState()
-    if mq.TLO.Me.Class.ShortName() == 'BRD' then
-        bardtwist.EnsureTwistForMode('combat')
-    end
-end
-
-function botpull.LoadPullConfig()
-    local rc = state.getRunconfig()
-    rc.pulledmob = nil
-    rc.pullreturntimer = nil
-    rc.pulledmobLastDistSq = nil
-    rc.pulledmobLastCloserTime = nil
-    if not rc.pullarc then rc.pullarc = nil end
-end
-
-botconfig.RegisterConfigLoader(function() if botconfig.config.settings.dopull then botpull.LoadPullConfig() end end)
-
---- Returns the single pull spell block from config, or nil if missing/empty (treat as melee).
-function botpull.GetPullSpell()
-    local pull = myconfig.pull
-    if not pull or not pull.spell or type(pull.spell) ~= 'table' then return nil end
-    local ps = pull.spell
-    if not ps or (ps.gem == nil and ps.spell == nil) then return nil end
-    return ps
-end
-
 --- Returns effective pull range in units for the given pull spell entry.
 local function getPullRange(entry)
     if not entry then return 50 end
@@ -96,6 +58,49 @@ local function getPullRange(entry)
         return entry.range and entry.range > 0 and entry.range or 50
     end
     return 50
+end
+
+local function getEffectiveAbilityRange()
+    local entry = botpull.GetPullSpell()
+    return getPullRange(entry)
+end
+
+local function clearPullState()
+    local rc = state.getRunconfig()
+    rc.pullState = nil
+    rc.pullAPTargetID = nil
+    rc.pullTagTimer = nil
+    rc.pullReturnTimer = nil
+    rc.pullPhase = nil
+    rc.pullDeadline = nil
+    rc.statusMessage = ''
+    rc.pulledmobLastDistSq = nil
+    rc.pulledmobLastCloserTime = nil
+    rc.pullNavStartHP = nil
+    state.clearRunState()
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        bardtwist.EnsureTwistForMode('combat')
+    end
+end
+
+function botpull.LoadPullConfig()
+    local rc = state.getRunconfig()
+    rc.pulledmob = nil
+    rc.pullreturntimer = nil
+    rc.pulledmobLastDistSq = nil
+    rc.pulledmobLastCloserTime = nil
+    if not rc.pullarc then rc.pullarc = nil end
+end
+
+botconfig.RegisterConfigLoader(function() if botconfig.config.settings.dopull then botpull.LoadPullConfig() end end)
+
+--- Returns the single pull spell block from config, or nil if missing/empty (treat as melee).
+function botpull.GetPullSpell()
+    local pull = myconfig.pull
+    if not pull or not pull.spell or type(pull.spell) ~= 'table' then return nil end
+    local ps = pull.spell
+    if not ps or (ps.gem == nil and ps.spell == nil) then return nil end
+    return ps
 end
 
 function botpull.TagTimeCalc(trip, spawnId, x, y, z)
@@ -223,10 +228,7 @@ local function canStartPull(rc)
     return true
 end
 
-local function getEffectiveAbilityRange()
-    local entry = botpull.GetPullSpell()
-    return getPullRange(entry)
-end
+
 
 -- Camp/hunter setup and mapfilter; no mq.delay.
 local function ensureCampAndAnchor(rc)
