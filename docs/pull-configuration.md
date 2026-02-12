@@ -27,7 +27,6 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | --------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | **spell**                   | see below         | Single pull spell block: `{ gem, spell, range? }`. How to aggro. Omit or leave empty for melee.                                           |
 | **radius**                  | 400               | Max horizontal distance from camp (X,Y) for pullable mobs.                                                                                |
-| **engageRadius**            | 200               | Max distance (from puller or camp) at which the pull target is considered “in range” to engage (target, cast, etc.). Used for “close enough” and for validating a group member’s target distance from camp. |
 | **zrange**                  | 150               | Max vertical (Z) difference from camp; mobs outside this are ignored.                                                                     |
 | **pullMinCon**              | 2 (Green)         | Minimum consider (con) color index (1–7: Grey, Green, Light Blue, Blue, White, Yellow, Red) for a valid pull target. Used when **usePullLevels** is `false`. |
 | **pullMaxCon**              | 5 (White)         | Maximum consider color index for a valid pull target.                                                                                     |
@@ -68,7 +67,6 @@ The **`pull.spell`** table configures how the bot gets aggro. It has the same sh
 pull = {
     spell = { gem = 'melee', spell = '', range = nil },  -- melee pull (default)
     radius = 400,
-    engageRadius = 200,
     zrange = 150,
     pullMinCon = 2,
     pullMaxCon = 5,

@@ -19,7 +19,6 @@ local function recomputePullSquared(pull)
     pull.radiusSq = (pull.radius or 0) * (pull.radius or 0)
     local r40 = (pull.radius or 0) + 40
     pull.radiusPlus40Sq = r40 * r40
-    pull.engageRadiusSq = (pull.engageRadius or 0) * (pull.engageRadius or 0)
     pull.leashSq = (pull.leash or 0) * (pull.leash or 0)
 end
 
@@ -30,9 +29,9 @@ function M.draw()
     local spell = pull.spell
     if not spell then spell = { gem = 'melee', spell = '', range = nil } end
 
-    -- ----- Pull spell: Type + Spell/Item on one line; Range right-aligned on same line. Range input wide enough for number + buttons -----
+    -- ----- Pull spell: Type + Spell/Item on one line; Range right-aligned on same line. Range input wide enough for 3 digits + buttons -----
     spell_entry.draw('pull_spell', spell, spell_entry.PRIMARY_OPTIONS_PULL, { onChanged = runConfigLoaders, singleRow = true })
-    local rangeInputWidth = 72
+    local rangeInputWidth = 80
     local rangeLabelW = select(1, ImGui.CalcTextSize('Range'))
     local rangeLabelWidth = (rangeLabelW or 0) + 4
     local rangeTotalWidth = rangeLabelWidth + rangeInputWidth
@@ -43,6 +42,7 @@ function M.draw()
         ImGui.SameLine()
     end
     ImGui.Text('Range')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Max range to use when casting the pull spell (0 = use spell default).') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(rangeInputWidth)
     local r = spell.range or 0
@@ -55,22 +55,21 @@ function M.draw()
     ImGui.Spacing()
     ImGui.Separator()
     ImGui.Text('Distance')
-    if layout.beginTwoColumn('pull_dist_table', 200, 0) then
-        for _, row in ipairs({
-            { key = 'radius', label = 'Radius', min = 1, max = 10000, default = 400 },
-            { key = 'engageRadius', label = 'Engage radius', min = 1, max = 500, default = 200 },
-            { key = 'zrange', label = 'Z range', min = 1, max = 500, default = 150 },
-        }) do
-            ImGui.TableNextRow()
-            ImGui.TableNextColumn()
-            ImGui.Text('%s', row.label)
-            ImGui.TableNextColumn()
-            local v = pull[row.key] or row.default
-            local nv, ch = inputs.boundedInt('pull_' .. row.key, v, row.min, row.max, 10, '##' .. row.key)
-            if ch then pull[row.key] = nv; recomputePullSquared(pull); runConfigLoaders() end
-        end
-        layout.endTwoColumn()
-    end
+    ImGui.Text('Radius')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Max horizontal distance from camp (X,Y) for pullable mobs.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(rangeInputWidth)
+    local radiusVal = pull.radius or 400
+    local radiusNew, radiusCh = inputs.boundedInt('pull_radius', radiusVal, 1, 10000, 10, '##pull_radius')
+    if radiusCh then pull.radius = radiusNew; recomputePullSquared(pull); runConfigLoaders() end
+    ImGui.SameLine()
+    ImGui.Text('Z range')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Max vertical (Z) difference from camp; mobs outside this are ignored.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(rangeInputWidth)
+    local zVal = pull.zrange or 150
+    local zNew, zCh = inputs.boundedInt('pull_zrange', zVal, 1, 500, 10, '##pull_zrange')
+    if zCh then pull.zrange = zNew; runConfigLoaders() end
 
     -- Con color names and RGB for colored combo display (Grey, Green, Light Blue, Blue, White, Yellow, Red)
     local conColorRgb = {
@@ -85,24 +84,21 @@ function M.draw()
     ImGui.Spacing()
     ImGui.Separator()
     ImGui.Text('Targets (con / level)')
+    local conColors = botconfig.ConColors or {}
+    ImGui.Text('Min Con')
+    ImGui.SameLine()
+    local minC = pull.pullMinCon or 2
+    if minC < 1 or minC > 7 then minC = 2 end
+    local minCNew, minCCh = combos.combo('pull_mincon', minC, conColors, '##pull_mincon', conColorRgb)
+    if minCCh then pull.pullMinCon = minCNew; runConfigLoaders() end
+    ImGui.SameLine()
+    ImGui.Text('Max Con')
+    ImGui.SameLine()
+    local maxC = pull.pullMaxCon or 5
+    if maxC < 1 or maxC > 7 then maxC = 5 end
+    local maxCNew, maxCCh = combos.combo('pull_maxcon', maxC, conColors, '##pull_maxcon', conColorRgb)
+    if maxCCh then pull.pullMaxCon = maxCNew; runConfigLoaders() end
     if layout.beginTwoColumn('pull_targets_table', 200, 0) then
-        local conColors = botconfig.ConColors or {}
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Pull Min Con')
-        ImGui.TableNextColumn()
-        local minC = pull.pullMinCon or 2
-        if minC < 1 or minC > 7 then minC = 2 end
-        local minCNew, minCCh = combos.combo('pull_mincon', minC, conColors, '##pull_mincon', conColorRgb)
-        if minCCh then pull.pullMinCon = minCNew; runConfigLoaders() end
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Pull Max Con')
-        ImGui.TableNextColumn()
-        local maxC = pull.pullMaxCon or 5
-        if maxC < 1 or maxC > 7 then maxC = 5 end
-        local maxCNew, maxCCh = combos.combo('pull_maxcon', maxC, conColors, '##pull_maxcon', conColorRgb)
-        if maxCCh then pull.pullMaxCon = maxCNew; runConfigLoaders() end
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
         ImGui.Text('Max Red Con Level Diff')
@@ -120,14 +116,14 @@ function M.draw()
         if pull.usePullLevels then
             ImGui.TableNextRow()
             ImGui.TableNextColumn()
-            ImGui.Text('Pull Min Level')
+            ImGui.Text('Min Level')
             ImGui.TableNextColumn()
             local pmin = pull.pullMinLevel or 1
             local pminNew, pminCh = inputs.boundedInt('pull_minlevel', pmin, 1, 125, 1, '##pull_minlevel')
             if pminCh then pull.pullMinLevel = pminNew; runConfigLoaders() end
             ImGui.TableNextRow()
             ImGui.TableNextColumn()
-            ImGui.Text('Pull Max Level')
+            ImGui.Text('Max Level')
             ImGui.TableNextColumn()
             local pmax = pull.pullMaxLevel or 125
             local pmaxNew, pmaxCh = inputs.boundedInt('pull_maxlevel', pmax, 1, 125, 1, '##pull_maxlevel')

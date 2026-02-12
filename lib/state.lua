@@ -19,6 +19,9 @@
 ---@field domelee boolean|nil
 ---@field pulledmob number|nil
 ---@field pullreturntimer number|nil
+---@field pulledmobLastDistSq number|nil cached distance-squared from puller to pulled mob when last saw it closer
+---@field pulledmobLastCloserTime number|nil mq.gettime() when we last observed pulled mob get closer (10s timeout)
+---@field pullNavStartHP number|nil PctHPs when we started navigating (for add-abort on damage)
 ---@field pullarc number|nil
 ---@field FTEList table
 ---@field FTECount number
@@ -93,6 +96,9 @@ function M.resetRunconfig()
         domelee = nil,
         pulledmob = nil,
         pullreturntimer = nil,
+        pulledmobLastDistSq = nil,
+        pulledmobLastCloserTime = nil,
+        pullNavStartHP = nil,
         pullarc = nil,
         FTEList = {},
         FTECount = 0,

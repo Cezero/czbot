@@ -34,8 +34,6 @@
 ---@field radius number|nil
 ---@field radiusSq number|nil precomputed radius^2 for distance-squared comparisons
 ---@field radiusPlus40Sq number|nil precomputed (radius+40)^2 for nav-abort distance-squared comparison
----@field engageRadius number|nil max distance (from puller or camp) to consider pull target "in range" to engage; default 200
----@field engageRadiusSq number|nil precomputed engageRadius^2 for distance-squared comparisons
 ---@field zrange number|nil
 ---@field pullMinCon number|nil minimum con color index (1-7) for valid pull target
 ---@field pullMaxCon number|nil maximum con color index (1-7) for valid pull target
@@ -49,6 +47,7 @@
 ---@field manaclass string|nil
 ---@field leash number|nil
 ---@field leashSq number|nil precomputed leash^2 for distance-squared comparisons
+---@field addAbortRadius number|nil radius (units) for add-abort check while navigating; NPCs within this with LoS trigger abort (default 50)
 ---@field usepriority boolean|nil
 ---@field hunter boolean|nil
 
@@ -105,7 +104,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'dopet' },
-    pull = { 'spell', 'radius', 'engageRadius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'usepriority', 'hunter' },
+    pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
@@ -505,7 +504,6 @@ function M.Load(path)
     if (M.config.settings.dopet == nil) then M.config.settings.dopet = false end
     applySectionDefaults('pull', {
         radius = 400,
-        engageRadius = 200,
         zrange = 150,
         pullMinCon = 2,
         pullMaxCon = 5,
@@ -519,6 +517,7 @@ function M.Load(path)
         mana = 60,
         manaclass = 'clr, dru, shm',
         leash = 500,
+        addAbortRadius = 50,
         usepriority = false,
     })
     if not M.config.pull.spell or type(M.config.pull.spell) ~= 'table' then
@@ -532,7 +531,6 @@ function M.Load(path)
     M.config.pull.radiusSq = (M.config.pull.radius or 0) * (M.config.pull.radius or 0)
     local r40 = (M.config.pull.radius or 0) + 40
     M.config.pull.radiusPlus40Sq = r40 * r40
-    M.config.pull.engageRadiusSq = (M.config.pull.engageRadius or 0) * (M.config.pull.engageRadius or 0)
     M.config.pull.leashSq = (M.config.pull.leash or 0) * (M.config.pull.leash or 0)
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {

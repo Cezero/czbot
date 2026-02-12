@@ -13,6 +13,8 @@ local myconfig = botconfig.config
 local botpull = {}
 local bardtwist = require('lib.bardtwist')
 
+local PULLEDMOB_NO_CLOSER_MS = 10000
+
 local function clearPullState()
     local rc = state.getRunconfig()
     rc.pullState = nil
@@ -22,6 +24,9 @@ local function clearPullState()
     rc.pullPhase = nil
     rc.pullDeadline = nil
     rc.statusMessage = ''
+    rc.pulledmobLastDistSq = nil
+    rc.pulledmobLastCloserTime = nil
+    rc.pullNavStartHP = nil
     state.clearRunState()
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         bardtwist.EnsureTwistForMode('combat')
@@ -29,9 +34,12 @@ local function clearPullState()
 end
 
 function botpull.LoadPullConfig()
-    state.getRunconfig().pulledmob = nil
-    state.getRunconfig().pullreturntimer = nil
-    if not state.getRunconfig().pullarc then state.getRunconfig().pullarc = nil end
+    local rc = state.getRunconfig()
+    rc.pulledmob = nil
+    rc.pullreturntimer = nil
+    rc.pulledmobLastDistSq = nil
+    rc.pulledmobLastCloserTime = nil
+    if not rc.pullarc then rc.pullarc = nil end
 end
 
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.dopull then botpull.LoadPullConfig() end end)
@@ -128,7 +136,9 @@ function botpull.EngageCheck()
     if bot then
         local tspawn = mq.TLO.Spawn(targetid)
         local targetDistSq = utils.getDistanceSquared3D(tspawn.X(), tspawn.Y(), tspawn.Z(), rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
-        if targetDistSq and myconfig.pull.engageRadiusSq and targetDistSq > myconfig.pull.engageRadiusSq and not myconfig.pull.hunter then return false end
+        local range = getEffectiveAbilityRange()
+        local rangeSq = range and (range * range) or nil
+        if targetDistSq and rangeSq and targetDistSq > rangeSq and not myconfig.pull.hunter then return false end
     end
     if tartarid and tartarid > 0 and tartarid ~= mq.TLO.Me.ID() and (mq.TLO.Spawn(tartarid).Type() ~= 'NPC') and tartartype ~= 'Corpse' then
         printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arengaged\ax by someone else! Returning to camp!', target)
@@ -143,10 +153,44 @@ end
 local function canStartPull(rc)
     if rc.pulledmob then
         local pmob = mq.TLO.Spawn(rc.pulledmob)
-        local pulledDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), pmob.X(), pmob.Y(), pmob.Z())
-        if pulledDistSq and myconfig.settings.acleashSq and pulledDistSq >= myconfig.settings.acleashSq then
-            if rc.pullreturntimer and rc.pullreturntimer >= mq.gettime() then return false end
+        if not pmob or not pmob.ID() or pmob.Type() == 'Corpse' then
             rc.pulledmob = nil
+            rc.pulledmobLastDistSq = nil
+            rc.pulledmobLastCloserTime = nil
+        else
+            local pulledDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), pmob.X(), pmob.Y(), pmob.Z())
+            if not pulledDistSq or not myconfig.settings.acleashSq then
+                -- no distance or no acleash, clear and continue
+                rc.pulledmob = nil
+                rc.pulledmobLastDistSq = nil
+                rc.pulledmobLastCloserTime = nil
+            elseif pulledDistSq < myconfig.settings.acleashSq then
+                -- inside acleash: mob at camp, clear and allow pull (hook decides if StartPull or doMelee)
+                rc.pulledmob = nil
+                rc.pulledmobLastDistSq = nil
+                rc.pulledmobLastCloserTime = nil
+            else
+                -- outside acleash: only clear if mob hasn't gotten closer for 10s
+                local lastDistSq = rc.pulledmobLastDistSq or math.huge
+                if pulledDistSq < lastDistSq then
+                    rc.pulledmobLastDistSq = pulledDistSq
+                    rc.pulledmobLastCloserTime = mq.gettime()
+                    return false
+                end
+                if rc.pulledmobLastDistSq == nil then
+                    rc.pulledmobLastDistSq = pulledDistSq
+                    rc.pulledmobLastCloserTime = mq.gettime()
+                    return false
+                end
+                local now = mq.gettime()
+                if (now - (rc.pulledmobLastCloserTime or 0)) > PULLEDMOB_NO_CLOSER_MS then
+                    rc.pulledmob = nil
+                    rc.pulledmobLastDistSq = nil
+                    rc.pulledmobLastCloserTime = nil
+                else
+                    return false
+                end
+            end
         end
     end
     if MasterPause then return false end
@@ -250,6 +294,7 @@ function botpull.StartPull()
     rc.pullState = 'navigating'
     rc.pullPhase = nil
     rc.pullDeadline = nil
+    rc.pullNavStartHP = mq.TLO.Me.PctHPs()
     state.setRunState('pulling', { priority = bothooks.getPriority('doPull') })
     rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawn.ID())
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
@@ -262,8 +307,37 @@ local function isPullWarp()
     return entry and entry.gem == 'script' and entry.spell and string.lower(tostring(entry.spell)) == 'warp'
 end
 
+local function abortPullAndReturnToCamp(reason)
+    mq.cmd('/multiline ; /squelch /target clear ; /nav stop log=off')
+    botmove.NavToCamp({ dist = 0, echoMsg = '\\ayAdd aggro, returning to camp' })
+    clearPullState()
+    if reason then printf('\ayCZBot:\ax %s', reason) end
+end
+
 -- One tick of navigating state.
 local function tickNavigating(rc, spawn)
+    -- Add-abort: HP dropped (we took damage)
+    if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP then
+        abortPullAndReturnToCamp('Add aggro / took damage, returning to camp.')
+        return
+    end
+    -- Add-abort: nearby NPC (not pull target, not grey, Aggressive) with LoS
+    local addRadius = myconfig.pull.addAbortRadius or 50
+    local ncount = mq.TLO.SpawnCount('npc radius ' .. addRadius)()
+    if ncount and ncount > 0 then
+        for i = 1, ncount do
+            local s = mq.TLO.NearestSpawn(i, 'npc radius ' .. addRadius)
+            if s and s.ID() and s.ID() ~= rc.pullAPTargetID and s.Aggressive() then
+                local conName = s.ConColor()
+                local conId = conName and botconfig.ConColorsNameToId[conName:upper()] or 0
+                if conId ~= 1 and s.LineOfSight() then -- not Grey, has LoS
+                    abortPullAndReturnToCamp('Add aggro, returning to camp.')
+                    return
+                end
+            end
+        end
+    end
+
     if rc.pullTagTimer and mq.gettime() >= rc.pullTagTimer then
         printf('\ayCZBot:\ax\arI have timed out trying to pull \ay%s', spawn.Name())
         if isPullWarp() then
@@ -284,13 +358,13 @@ local function tickNavigating(rc, spawn)
         end
     end
     local spawnDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
-    local rangeSq = (getEffectiveAbilityRange() or 0) * (getEffectiveAbilityRange() or 0)
-    local engageRadiusSq = myconfig.pull.engageRadiusSq
-    if (spawnDistSq and engageRadiusSq and spawnDistSq <= engageRadiusSq and spawn.LineOfSight()) or (mq.TLO.Target.ID() == rc.pullAPTargetID) then
+    local range = getEffectiveAbilityRange() or 0
+    local rangeSq = range * range
+    if (spawnDistSq and rangeSq and spawnDistSq <= rangeSq and spawn.LineOfSight()) or (mq.TLO.Target.ID() == rc.pullAPTargetID) then
         if mq.TLO.Target.ID() ~= rc.pullAPTargetID then
             mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
         end
-        if mq.TLO.Me.TargetOfTarget.ID() and mq.TLO.Target.ID() and mq.TLO.Target.Type() == 'NPC' and spawnDistSq and engageRadiusSq and spawnDistSq <= engageRadiusSq then
+        if mq.TLO.Me.TargetOfTarget.ID() and mq.TLO.Target.ID() and mq.TLO.Target.Type() == 'NPC' and spawnDistSq and spawnDistSq <= rangeSq then
             if botpull.EngageCheck() then
                 clearPullState()
                 return
@@ -341,6 +415,8 @@ local function tickAggroing(rc, spawn)
         rc.pullPhase = nil
         rc.pulledmob = rc.pullAPTargetID
         rc.pullreturntimer = mq.gettime() + 60000
+        rc.pulledmobLastDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), spawn.X(), spawn.Y(), spawn.Z())
+        rc.pulledmobLastCloserTime = mq.gettime()
         if rc.pullRangedStoredItem and rc.pullRangedStoredItem ~= '' then
             mq.cmdf('/exchange "%s" Ranged', rc.pullRangedStoredItem)
             rc.pullRangedStoredItem = nil
