@@ -1,5 +1,4 @@
--- CHChain (Complete Heal chain) logic. Uses globals set by commands.cmd_chchain:
--- dochchain, chchaincurtank, chchainpause, chchaintank, chtanklist, chnextclr
+-- CHChain (Complete Heal chain) logic. State in state.getRunconfig(): doChchain, chchainCurtank, chchainPause, chchainTank, chchainTanklist, chnextClr.
 
 local mq = require('mq')
 local state = require('lib.state')
@@ -29,11 +28,11 @@ end
 
 local function event_CHChainTank(line, arg1, argN)
     local cleanname = arg1 and arg1:match("%S+")
-    if arg1 and dochchain then command_dispatcher.Dispatch('chchain', 'tank', cleanname) end
+    if arg1 and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'tank', cleanname) end
 end
 
 local function event_CHChainPause(line, arg1, argN)
-    if arg1 and dochchain then command_dispatcher.Dispatch('chchain', 'pause', arg1) end
+    if arg1 and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'pause', arg1) end
 end
 
 function chchain.registerEvents()
@@ -46,42 +45,45 @@ function chchain.registerEvents()
 end
 
 function chchain.OnGo(line, arg1)
-    if string.lower(arg1) ~= string.lower(mq.TLO.Me.Name()) then return false end
-    if not dochchain then return false end
-    chchaincurtank = 1
-    local chtimer = (chchainpause * 100) + mq.gettime()
-    local tankid = mq.TLO.Spawn('=' .. chchaintank).ID()
+    local rc = state.getRunconfig()
+    local myName = mq.TLO.Me.Name()
+    if not myName or string.lower(arg1) ~= string.lower(myName) then return false end
+    if not rc.doChchain then return false end
+    rc.chchainCurtank = 1
+    local chtimer = (rc.chchainPause * 100) + mq.gettime()
+    local tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
     if not tankid or tankid == 0 or mq.TLO.Spawn(tankid).Type() == 'Corpse' then
-        chchaincurtank = chchaincurtank + 1
-        if chtanklist[chchaincurtank] and mq.TLO.Spawn('=' .. chtanklist[chchaincurtank]).Type() == 'PC' and mq.TLO.Spawn('=' .. chtanklist[chchaincurtank]).ID() then
-            mq.cmdf('/rs Tank DIED or ZONED, moving to tank %s, %s', chchaincurtank, chtanklist[chchaincurtank])
-            chchaintank = chtanklist[chchaincurtank]
-            tankid = mq.TLO.Spawn('=' .. chchaintank).ID()
+        rc.chchainCurtank = rc.chchainCurtank + 1
+        if rc.chchainTanklist[rc.chchainCurtank] and mq.TLO.Spawn('=' .. rc.chchainTanklist[rc.chchainCurtank]).Type() == 'PC' and mq.TLO.Spawn('=' .. rc.chchainTanklist[rc.chchainCurtank]).ID() then
+            mq.cmdf('/rs Tank DIED or ZONED, moving to tank %s, %s', rc.chchainCurtank, rc.chchainTanklist[rc.chchainCurtank])
+            rc.chchainTank = rc.chchainTanklist[rc.chchainCurtank]
+            tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
         else
-            mq.cmdf('/rs Tank %s is not in zone or dead, skipping', chchaincurtank)
+            mq.cmdf('/rs Tank %s is not in zone or dead, skipping', rc.chchainCurtank)
             -- Defer /rs <<Go>> until chchainpause expires; chchainTick will do it.
-            state.setRunState('chchain', { deadline = mq.gettime() + (chchainpause or 0) * 100, chnextclr = chnextclr, priority = bothooks.getPriority('chchainTick') })
+            state.setRunState('chchain', { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
             return
         end
     end
-    if chchaintank and mq.TLO.Target.ID() ~= tankid then
+    if not tankid or tankid == 0 then return end
+    if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
         targeting.TargetAndWait(tankid, 500)
     end
-    if chchaintank and mq.TLO.Target.ID() ~= tankid then
+    if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
         return
     end
     if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < 400 then
         mq.cmdf('/rs SKIP ME (out of mana)')
-        state.setRunState('chchain', { deadline = mq.gettime() + (chchainpause or 0) * 100, chnextclr = chnextclr, priority = bothooks.getPriority('chchainTick') })
+        state.setRunState('chchain', { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
         return
     end
     if not spellutils.DistanceCheck('complete heal', 0, tankid) then
         mq.cmdf(
-            '/rs Tank %s is out of range of complete heal!', chchaintank)
+            '/rs Tank %s is out of range of complete heal!', rc.chchainTank)
     end
-    mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', chchaintank, chchainpause,
+    mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', rc.chchainTank, rc.chchainPause,
         mq.TLO.Me.PctMana())
-    state.setRunState('chchain', { deadline = chtimer, chnextclr = chnextclr, priority = bothooks.getPriority('chchainTick') })
+    state.setRunState('chchain', { deadline = chtimer, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
 end
 
 function chchain.getHookFn(name)

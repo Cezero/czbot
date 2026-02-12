@@ -136,15 +136,13 @@ local function BuffEvalPets(index, entry, spellid, rangeSq, bots, botcount)
         if bots[i] then
             local peer = charinfo.GetInfo(bots[i])
             if peer then
-                local botpet = mq.TLO.Spawn('pc =' .. bots[i]).Pet.ID()
-                local petspawn = botpet and mq.TLO.Spawn(botpet)
+                local petspawn = mq.TLO.Spawn('pc =' .. bots[i]).Pet()
                 local petdistSq = petspawn and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), petspawn.X(), petspawn.Y())
                 local petbuff = spellutils.PeerHasPetBuff(peer, spellid)
-                local botid = mq.TLO.Spawn('pc =' .. bots[i]).ID()
-                local spawnid = mq.TLO.Spawn(botid).ID()
+                local spawnid = mq.TLO.Spawn('pc =' .. bots[i]).ID()
                 local petstacks = peer:StacksPet(spellid)
-                if spawnid and spawnid > 0 and botpet and botpet > 0 and petstacks and IconCheck(index, spawnid) and not petbuff and rangeSq and petdistSq and petdistSq <= rangeSq then
-                    return botpet, 'pet'
+                if spawnid and spawnid > 0 and petspawn and petspawn.ID() > 0 and petstacks and IconCheck(index, spawnid) and not petbuff and rangeSq and petdistSq and petdistSq <= rangeSq then
+                    return petspawn, 'pet'
                 end
             end
         end

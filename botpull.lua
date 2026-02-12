@@ -125,12 +125,14 @@ function botpull.FTECheck(spawnid)
 end
 
 function botpull.EngageCheck()
-    local target = mq.TLO.Target.CleanName()
-    local targetid = mq.TLO.Target.ID()
-    local tartar = mq.TLO.Me.TargetOfTarget()
-    local tartarid = mq.TLO.Me.TargetOfTarget.ID()
-    local tartartype = mq.TLO.Spawn(tartarid).Type()
-    local info = tartar and charinfo.GetInfo(tartar)
+    local tarSpawn = mq.TLO.Target()
+    local target = tarSpawn.CleanName()
+    local targetid = tarSpawn.ID()
+    local totSpawn = mq.TLO.Me.TargetOfTarget()
+    if not totSpawn then return false end
+    local totID = totSpawn.ID()
+    local totType = totSpawn.Type()
+    local info = totSpawn and charinfo.GetInfo(totID)
     local bot = info and info.ID
     local rc = state.getRunconfig()
     if bot then
@@ -140,7 +142,7 @@ function botpull.EngageCheck()
         local rangeSq = range and (range * range) or nil
         if targetDistSq and rangeSq and targetDistSq > rangeSq and not myconfig.pull.hunter then return false end
     end
-    if tartarid and tartarid > 0 and tartarid ~= mq.TLO.Me.ID() and (mq.TLO.Spawn(tartarid).Type() ~= 'NPC') and tartartype ~= 'Corpse' then
+    if totID and totID > 0 and totID ~= mq.TLO.Me.ID() and (totType ~= 'NPC') and totType ~= 'Corpse' then
         printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arengaged\ax by someone else! Returning to camp!', target)
         rc.engagetracker[targetid] = (mq.gettime() + 60000)
         mq.cmd('/multiline ; /squelch /target clear ; /nav stop log=off')
@@ -203,13 +205,15 @@ local function canStartPull(rc)
     end
     if mq.TLO.Group() then
         for iter = 1, mq.TLO.Group() do
-            local grpname = mq.TLO.Group.Member(iter)
-            if grpname.Type() and string.lower(grpname.Type()) == 'corpse' then return false end
-            if myconfig.pull.mana and grpname.Class.ShortName() and type(myconfig.pull.manaclass) == 'table' then
-                local grpClass = string.upper(grpname.Class.ShortName() or '')
+            local grpSpawn = mq.TLO.Group.Member(iter).Spawn()
+            if not grpSpawn then return false end
+            local grpType = grpSpawn.Type()
+            if grpType and string.lower(grpType) == 'corpse' then return false end
+            if myconfig.pull.mana and grpSpawn.Class.ShortName() and type(myconfig.pull.manaclass) == 'table' then
+                local grpClass = string.upper(grpSpawn.Class.ShortName() or '')
                 for _, entry in ipairs(myconfig.pull.manaclass) do
                     if string.upper(tostring(entry)) == grpClass then
-                        if grpname.PctMana() and myconfig.pull.mana > grpname.PctMana() then return false end
+                        if grpSpawn.PctMana() and myconfig.pull.mana > grpSpawn.PctMana() then return false end
                         break
                     end
                 end

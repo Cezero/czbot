@@ -244,25 +244,32 @@ local function cmd_charm(args)
 end
 
 local function cmd_abort(args)
+    local rc = state.getRunconfig()
     if not args[2] then
-        if mq.TLO.Me.CastTimeLeft() > 0 and state.getRunconfig().CurSpell.sub and state.getRunconfig().CurSpell.sub == 'ad' then
+        if mq.TLO.Me.CastTimeLeft() > 0 and rc.CurSpell.sub and rc.CurSpell.sub == 'ad' then
             mq.cmd('/stopcast')
         end
         if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
         if mq.TLO.Target.ID() then mq.cmd('/squelch /target clear') end
-        if state.getRunconfig().engageTargetId then state.getRunconfig().engageTargetId = nil end
+        if rc.engageTargetId then rc.engageTargetId = nil end
         if botconfig.config.settings.domelee then
             botconfig.config.settings.domelee = false
-            meleeabort = true
+            rc.meleeAbort = true
         end
         if botconfig.config.settings.dodebuff then
             botconfig.config.settings.dodebuff = false
-            debuffabort = true
+            rc.debuffAbort = true
         end
         printf('\ayCZBot:\ax\arAbort+ called!\ax - DoDebuffs & DoMelee FALSE and leashing to camp')
     elseif args[2] == 'off' then
-        if not botconfig.config.settings.domelee and meleeabort then botconfig.config.settings.domelee = true end
-        if not botconfig.config.settings.dodebuff and debuffabort then botconfig.config.settings.dodebuff = true end
+        if not botconfig.config.settings.domelee and rc.meleeAbort then
+            botconfig.config.settings.domelee = true
+            rc.meleeAbort = false
+        end
+        if not botconfig.config.settings.dodebuff and rc.debuffAbort then
+            botconfig.config.settings.dodebuff = true
+            rc.debuffAbort = false
+        end
         mq.cmd('\arAbort\ax OFF, enabling dps sections again')
     end
 end
@@ -324,7 +331,7 @@ end
 
 local function cmd_targetfilter(args)
     botconfig.config.settings.TargetFilter = tonumber(args[2])
-    printf('\ayCZBot:\axSetting TargetFilter to %s', botconfig.config.settings.TargetFilter)
+    printf('\ayCZBot:\axSetting TargetFilter to %d', botconfig.config.settings.TargetFilter)
 end
 
 local function cmd_offtank(args)
@@ -350,7 +357,10 @@ end
 -- Cast by alias (section: heal, buff, debuff, cure)
 local function cmd_cast(args)
     if not args[2] then return end
-    local target = args[3] and mq.TLO.Spawn(args[3]).ID() or mq.TLO.Target.ID()
+    local tgtSpawn = args[3] and mq.TLO.Spawn(args[3]) or mq.TLO.Target()
+    if not tgtSpawn then return end
+    local tgtID = tgtSpawn.ID()
+    local tgtName = tgtSpawn.CleanName()
     local function do_spell_section(cfgkey, loadfn, settingkey)
         local cnt = botconfig.getSpellCount(cfgkey)
         if not cnt or cnt <= 0 then return end
@@ -359,12 +369,12 @@ local function cmd_cast(args)
             if not entry then return end
             for value in tostring(entry.alias or ''):gmatch("[^|]+") do
                 if value == args[2] and (args[3] ~= 'on' and args[3] ~= 'off') then
-                    printf('\ayCZBot:\ax\agCasting\ax %s on %s', entry.spell, mq.TLO.Spawn(target).CleanName())
+                    printf('\ayCZBot:\ax\agCasting\ax %s on %s', entry.spell, tgtName)
                     if cfgkey == 'debuff' and mq.TLO.Me.CastTimeLeft() > 0 then
                         spellutils.InterruptCheck()
                         return
                     end
-                    if not spellutils.CastSpell(i, target, 'castcommand', cfgkey) then
+                    if not spellutils.CastSpell(i, tgtID, 'castcommand', cfgkey) then
                         printf('\ayCZBot:\ax\arCast command spell %s not ready!', entry.spell)
                     end
                 elseif args[3] and value == args[2] then
@@ -453,7 +463,7 @@ local function cmd_setvar(args)
             end
         end
     end
-    if dochchain then
+    if state.getRunconfig().doChchain then
         botconfig.config.settings.dodebuff = false
         botconfig.config.settings.dobuff = false
         botconfig.config.settings.domelee = false
@@ -529,8 +539,9 @@ end
 
 -- CHChain: stop, setup, start, tank, pause
 local function cmd_chchain(args)
-    if args[2] == 'stop' and dochchain then
-        dochchain = false
+    local rc = state.getRunconfig()
+    if args[2] == 'stop' and rc.doChchain then
+        rc.doChchain = false
         printf('\ayCZBot:\ax\arDisabling\ax CHChain')
         mq.cmd('/rs CHCHain OFF')
         if state.getRunconfig().PreCH['dodebuff'] then
@@ -564,11 +575,13 @@ local function cmd_chchain(args)
     end
     if args[2] == 'setup' then
         local spell = 'complete heal'
-        if not dochchain then state.getRunconfig().PreCH = utils.DeepCopy(botconfig.config.settings) end
+        if not rc.doChchain then state.getRunconfig().PreCH = utils.DeepCopy(botconfig.config.settings) end
         local tmpchchainlist = args[3]
         local aminlist = false
+        local meName = mq.TLO.Me.Name()
+        if not meName then return false end
         for v in string.gmatch(tmpchchainlist, "([^,]+)") do
-            if string.lower(v) == string.lower(mq.TLO.Me.CleanName()) then aminlist = true end
+            if string.lower(v) == string.lower(meName) then aminlist = true end
         end
         if not aminlist then return false end
         if not mq.TLO.Me.Book(spell)() then
@@ -582,14 +595,14 @@ local function cmd_chchain(args)
     end
     if args[2] == 'tank' then
         if mq.TLO.Spawn('=' .. args[3]) then
-            chchaintank = args[3]
-            chtanklist = {}
+            rc.chchainTank = args[3]
+            rc.chchainTanklist = {}
         end
-        mq.cmdf('/rs CHChain tank: %s', chchaintank)
+        mq.cmdf('/rs CHChain tank: %s', rc.chchainTank)
     end
     if args[2] == 'pause' then
-        if args[3] then chchainpause = args[3] end
-        mq.cmdf('/rs CHChain pause: %s', chchainpause)
+        if args[3] then rc.chchainPause = args[3] end
+        mq.cmdf('/rs CHChain pause: %s', rc.chchainPause)
     end
 end
 
@@ -762,35 +775,38 @@ end
 --- Called to finish CHChain setup. setupArgs = { chchainlist, chchainpause, tanklist }.
 function M.chchainSetupContinuation(setupArgs)
     if not setupArgs or not setupArgs[1] then return end
-    chchainlist = setupArgs[1]
-    chnextclr = nil
-    clericlisttbl = {}
-    for v in string.gmatch(chchainlist, "([^,]+)") do
+    local rc = state.getRunconfig()
+    rc.chchainList = setupArgs[1]
+    rc.chnextClr = nil
+    local clericlisttbl = {}
+    local meName = mq.TLO.Me.Name()
+    if not meName then return false end
+    for v in string.gmatch(rc.chchainList, "([^,]+)") do
         table.insert(clericlisttbl, v)
-        if chnextclr then
-            chnextclr = v
+        if rc.chnextClr then
+            rc.chnextClr = v
             break
         end
-        if string.lower(v) == string.lower(mq.TLO.Me.CleanName()) then
-            dochchain = true
-            chnextclr = true
+        if string.lower(v) == string.lower(meName) then
+            rc.doChchain = true
+            rc.chnextClr = true
         end
     end
-    if chnextclr == true then chnextclr = clericlisttbl[1] end
-    if dochchain then
-        chchainpause = setupArgs[2]
-        chtanklist = {}
+    if rc.chnextClr == true then rc.chnextClr = clericlisttbl[1] end
+    if rc.doChchain then
+        rc.chchainPause = setupArgs[2]
+        rc.chchainTanklist = {}
         if setupArgs[3] then
             for v in string.gmatch(setupArgs[3], "([^,]+)") do
                 local vtrim = v:sub(-1) == "'" and v:sub(1, -2) or v
                 if mq.TLO.Spawn('=' .. vtrim).Type() == 'PC' then
-                    table.insert(chtanklist, vtrim)
+                    table.insert(rc.chchainTanklist, vtrim)
                     print('adding ' .. vtrim .. ' to tank list')
                 end
             end
         end
-        chchaintank = chtanklist[1]
-        local chtankstr = table.concat(chtanklist, ",")
+        rc.chchainTank = rc.chchainTanklist[1]
+        local chtankstr = table.concat(rc.chchainTanklist, ",")
         botconfig.config.settings.dodebuff = false
         botconfig.config.settings.dobuff = false
         botconfig.config.settings.domelee = false
@@ -798,7 +814,7 @@ function M.chchainSetupContinuation(setupArgs)
         botconfig.config.settings.docure = false
         botconfig.config.settings.dopull = false
         botconfig.config.settings.dopet = false
-        mq.cmdf('/rs CHChain ON (NextClr: %s, Pause: %s, Tank: %s)', chnextclr, chchainpause, chtankstr)
+        mq.cmdf('/rs CHChain ON (NextClr: %s, Pause: %s, Tank: %s)', rc.chnextClr, rc.chchainPause, chtankstr)
     end
 end
 

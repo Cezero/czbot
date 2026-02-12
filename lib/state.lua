@@ -56,6 +56,17 @@
 ---@field bardNotanktarWait table|nil BRD notanktar twist-once: { spellIndex, EvalID, entry } while waiting for cast to finish
 ---@field notanktarDebuffTimers table|nil BRD: spawn ID -> mq.gettime() when to re-apply notanktar debuff (e.g. mez)
 ---@field OutOfSpace boolean|nil true when inventory was full (cursor item); cleared when space available again
+--- CHChain state (set by commands.cmd_chchain / chchainSetupContinuation; read by lib.chchain).
+---@field doChchain boolean
+---@field chchainCurtank number
+---@field chchainPause number
+---@field chchainTank string
+---@field chchainTanklist table
+---@field chnextClr string|boolean|nil
+---@field chchainList string|nil
+--- Abort flags: true when abort turned off domelee/dodebuff so "abort off" can restore them.
+---@field meleeAbort boolean
+---@field debuffAbort boolean
 
 local M = {}
 
@@ -134,6 +145,15 @@ function M.resetRunconfig()
         bardNotanktarWait = nil,
         notanktarDebuffTimers = nil,
         OutOfSpace = false,
+        doChchain = false,
+        chchainCurtank = 1,
+        chchainPause = 0,
+        chchainTank = '',
+        chchainTanklist = {},
+        chnextClr = nil,
+        chchainList = nil,
+        meleeAbort = false,
+        debuffAbort = false,
     }
     return M._runconfig
 end

@@ -14,7 +14,7 @@
 ---@field sitendur number|nil
 ---@field TankName string|nil
 ---@field AssistName string|nil
----@field TargetFilter string|nil
+---@field TargetFilter number|nil
 ---@field petassist boolean|nil
 ---@field acleash number|nil
 ---@field acleashSq number|nil precomputed acleash^2 for distance-squared comparisons
@@ -536,7 +536,8 @@ function M.Load(path)
     (M.config.settings.followdistance or 0)
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "manual" end
-    if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = '0' end
+    if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
+    if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings.TargetFilter) or 0 end
     if (M.config.settings.petassist == nil) then M.config.settings.petassist = false end
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
     if (M.config.settings.dopet == nil) then M.config.settings.dopet = false end

@@ -88,8 +88,7 @@ local function filterSpawnForCamp(spawn, rc)
     end
     if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
-    local tf = myconfig.settings.TargetFilter
-    local tfNum = (type(tf) == 'number' and tf) or tonumber(tf and tostring(tf)) or 0
+    local tfNum = myconfig.settings.TargetFilter or 0
     return filterSpawnTargetFilter(spawn, tfNum)
 end
 

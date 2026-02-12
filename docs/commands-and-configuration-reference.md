@@ -118,7 +118,7 @@ StoredConfig = {
     sitendur = 90,
     TankName = "manual",
     AssistName = nil,
-    TargetFilter = '0',
+    TargetFilter = 0,
     petassist = false,
     acleash = 75,
     followdistance = 35,
@@ -154,7 +154,7 @@ return StoredConfig
 | **sitendur**       | 90            | Sit when endurance % at or below this.                                                                                  |
 | **TankName**       | `"manual"`    | Main Tank name or `"automatic"` / `"manual"`.                                                                           |
 | **AssistName**     | (unset)       | Main Assist name or `"automatic"` / `"manual"`.                                                                         |
-| **TargetFilter**   | `'0'`         | Mob list filter (0/1/2).                                                                                                |
+| **TargetFilter**   | `0`           | Mob list filter (0/1/2).                                                                                                |
 | **petassist**      | `false`       | Send pet on engage target.                                                                                              |
 | **acleash**        | 75            | Camp leash distance.                                                                                                    |
 | **followdistance** | 35            | Follow distance: beyond this distance the bot stands and runs follow; within it, sit is allowed when mana &lt; sitmana. |

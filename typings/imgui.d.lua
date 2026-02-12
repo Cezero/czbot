@@ -46,6 +46,33 @@
 
 ---@class ImDrawList
 ---@field Flags number
+---@field PushClipRect fun(p_min: ImVec2, p_max: ImVec2): nil
+---@field PushClipRectFullScreen fun(): nil
+---@field PopClipRect fun(): nil
+---@field PushTexture fun(texture_id: userdata): nil
+---@field PopTexture fun(): nil
+---@field GetClipRectMin fun(): ImVec2
+---@field GetClipRectMax fun(): ImVec2
+--- drawList:AddLine(p1, p2, col, thickness) — : passes self as first arg, so 5 params.
+---@field AddLine fun(self: ImDrawList, p1: ImVec2, p2: ImVec2, col: number, thickness?: number): nil
+---@field AddRect fun(p_min: ImVec2, p_max: ImVec2, col: number, rounding?: number, flags?: number): nil
+---@field AddRectFilled fun(p_min: ImVec2, p_max: ImVec2, col: number, rounding?: number): nil
+---@field AddRectFilledMultiColor fun(p_min: ImVec2, p_max: ImVec2, col_upr_left: number, col_upr_right: number, col_bot_right: number, col_bot_left: number): nil
+---@field AddQuad fun(p1: ImVec2, p2: ImVec2, p3: ImVec2, p4: ImVec2, col: number, thickness?: number): nil
+---@field AddQuadFilled fun(p1: ImVec2, p2: ImVec2, p3: ImVec2, p4: ImVec2, col: number): nil
+---@field AddTriangle fun(p1: ImVec2, p2: ImVec2, p3: ImVec2, col: number, thickness?: number): nil
+---@field AddTriangleFilled fun(p1: ImVec2, p2: ImVec2, p3: ImVec2, col: number): nil
+---@field AddCircle fun(center: ImVec2, radius: number, col: number, num_segments?: number): nil
+---@field AddCircleFilled fun(center: ImVec2, radius: number, col: number, num_segments?: number): nil
+---@field AddNgon fun(center: ImVec2, radius: number, col: number, num_segments: number, thickness?: number): nil
+---@field AddNgonFilled fun(center: ImVec2, radius: number, col: number, num_segments: number): nil
+---@field AddText fun(pos: ImVec2, col: number, text: string): nil
+---@field AddText fun(font: ImFont, font_size: number, pos: ImVec2, col: number, text: string): nil
+---@field AddBezierCubic fun(p1: ImVec2, p2: ImVec2, p3: ImVec2, p4: ImVec2, col: number, thickness: number): nil
+---@field AddBezierQuadratic fun(p1: ImVec2, p2: ImVec2, p3: ImVec2, col: number, thickness: number): nil
+---@field ChannelsSplit fun(channel_count: number): nil
+---@field ChannelsSetCurrent fun(channel_index: number): nil
+---@field ChannelsMerge fun(): nil
 
 ---@class ImGuiTableSortSpecs
 ---@field SpecsCount number

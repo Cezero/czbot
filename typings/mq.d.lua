@@ -2,38 +2,150 @@
 --- Source: lua_MQBindings.cpp, lua_EQBindings.cpp, lua_MQMacroData.cpp
 
 --- TLO result type: indexable and callable; returns string|number|boolean|nil or MQData.
---- Lua only ever passes number|string (or no args); MQ binds the object internally. No MQData in param types.
+--- Lua only ever passes number|string (or no args); MQ binds the object internally.
+--- No-arg accessors: both fun() and fun(self: MQData) so linter accepts Me.MaxMana() (0 args) or method-style.
 ---@class MQData
---- No-arg accessors (Me.CleanName(), Me.ID(), etc.)
 ---@field CleanName fun(): string|nil
+---@field CleanName fun(self: MQData): string|nil
 ---@field ID fun(): number|nil
+---@field ID fun(self: MQData): number|nil
 ---@field Name fun(): string|nil
+---@field Name fun(self: MQData): string|nil
+---@field ShortName fun(): string|nil
+---@field ShortName fun(self: MQData): string|nil
 ---@field X fun(): number|nil
+---@field X fun(self: MQData): number|nil
 ---@field Y fun(): number|nil
+---@field Y fun(self: MQData): number|nil
 ---@field Z fun(): number|nil
+---@field Z fun(self: MQData): number|nil
 ---@field PctMana fun(): number|nil
+---@field PctMana fun(self: MQData): number|nil
 ---@field PctHPs fun(): number|nil
+---@field PctHPs fun(self: MQData): number|nil
 ---@field PctEndurance fun(): number|nil
+---@field PctEndurance fun(self: MQData): number|nil
 ---@field Sitting fun(): number|boolean|nil
+---@field Sitting fun(self: MQData): number|boolean|nil
 ---@field Combat fun(): number|boolean|nil
+---@field Combat fun(self: MQData): number|boolean|nil
 ---@field State fun(): string|number|nil
+---@field State fun(self: MQData): string|number|nil
+--- Spawn type descriptor (e.g. 'NPC', 'PC', 'Corpse'). Source: MQ2SpawnType.cpp SpawnMembers::Type -> pStringType
+---@field Type fun(): string|nil
+---@field Type fun(self: MQData): string|nil
 ---@field Hovering fun(): number|boolean|nil
+---@field Hovering fun(self: MQData): number|boolean|nil
 ---@field Moving fun(): number|boolean|nil
+---@field Moving fun(self: MQData): number|boolean|nil
 ---@field Ducking fun(): number|boolean|nil
+---@field Ducking fun(self: MQData): number|boolean|nil
 ---@field CastTimeLeft fun(): number|nil
+---@field CastTimeLeft fun(self: MQData): number|nil
 ---@field AutoFire fun(): number|boolean|nil
+---@field AutoFire fun(self: MQData): number|boolean|nil
 ---@field FreeInventory fun(): number|nil
+---@field FreeInventory fun(self: MQData): number|nil
 ---@field MaxMana fun(): number|nil
+---@field MaxMana fun(self: MQData): number|nil
 ---@field Open fun(): number|boolean|nil
---- Indexed callables: Lua passes number or string only (Me.Gem(n), Me.Spell(name), etc.)
+---@field Open fun(self: MQData): number|boolean|nil
+--- Buff/Spell members (0 args). Source: MQ2BuffType.cpp Duration; MQ2SpellType.cpp MyCastTime, Stacks, TargetType; MQ2CharacterType FreeBuffSlots
+---@field Duration fun(): number|nil
+---@field Duration fun(self: MQData): number|nil
+---@field MyCastTime fun(): number|nil
+---@field MyCastTime fun(self: MQData): number|nil
+---@field Stacks fun(): number|boolean|nil
+---@field Stacks fun(self: MQData): number|boolean|nil
+---@field TargetType fun(): string|nil
+---@field TargetType fun(self: MQData): string|nil
+---@field FreeBuffSlots fun(): number|nil
+---@field FreeBuffSlots fun(self: MQData): number|nil
+--- Spell/Item/Spawn members (0 args). Source: MQ2SpellType, MQ2ItemType, MQ2CharacterType, MQ2SpawnType
+---@field AERange fun(): number|nil
+---@field AERange fun(self: MQData): number|nil
+---@field MyRange fun(): number|nil
+---@field MyRange fun(self: MQData): number|nil
+---@field Mana fun(): number|nil
+---@field Mana fun(self: MQData): number|nil
+---@field EnduranceCost fun(): number|nil
+---@field EnduranceCost fun(self: MQData): number|nil
+---@field CurrentMana fun(): number|nil
+---@field CurrentMana fun(self: MQData): number|nil
+---@field ManaRegen fun(): number|nil
+---@field ManaRegen fun(self: MQData): number|nil
+---@field CurrentEndurance fun(): number|nil
+---@field CurrentEndurance fun(self: MQData): number|nil
+---@field EnduranceRegen fun(): number|nil
+---@field EnduranceRegen fun(self: MQData): number|nil
+---@field MyDuration fun(): MQData|number|nil
+---@field MyDuration fun(self: MQData): MQData|number|nil
+---@field Category fun(): string|nil
+---@field Category fun(self: MQData): string|nil
+---@field CategoryID fun(): number|nil
+---@field CategoryID fun(self: MQData): number|nil
+---@field Subcategory fun(): string|nil
+---@field Subcategory fun(self: MQData): string|nil
+---@field MaxLevel fun(): number|nil
+---@field MaxLevel fun(self: MQData): number|nil
+---@field StacksTarget fun(): string|boolean|nil
+---@field StacksTarget fun(self: MQData): string|boolean|nil
+---@field BuffsPopulated fun(): boolean|nil
+---@field BuffsPopulated fun(self: MQData): boolean|nil
+---@field HP fun(): number|nil
+---@field HP fun(self: MQData): number|nil
+---@field AC fun(): number|nil
+---@field AC fun(self: MQData): number|nil
+---@field TotalSeconds fun(): number|nil
+---@field TotalSeconds fun(self: MQData): number|nil
+--- Item sub-TLO (e.g. FindItem(name).Spell)
+---@field Spell MQData
+--- Item/GroupMember: ItemLink(style?), Index() = 0 args. Source: MQ2ItemType.cpp ItemLink; MQ2GroupMemberType Index
+---@field ItemLink fun(style?: string): string|nil
+---@field ItemLink fun(self: MQData, style?: string): string|nil
+---@field Index fun(): number|nil
+---@field Index fun(self: MQData): number|nil
+--- Indexed callables: require slot/index/name (number|string). Source: MQ2CharacterType.cpp
+---@field Inventory fun(slot: number|string): MQData
+---@field Bank fun(slot: number): MQData
+---@field SharedBank fun(slot: number): MQData
+---@field Skill fun(index: number|string): MQData|string|number|boolean|nil
+---@field SkillBase fun(index: number|string): MQData|string|number|boolean|nil
+---@field SkillCap fun(index: number|string): MQData|string|number|boolean|nil
+---@field Book fun(index: number|string): MQData|string|number|boolean|nil
 ---@field Gem fun(gem_index: number): MQData|string|number|boolean|nil
----@field Ability fun(ability_index: number): MQData|string|number|boolean|nil
+---@field SpellReady fun(gem_index?: number): MQData|string|number|boolean|nil
+---@field Ability fun(index: number|string): MQData|string|number|boolean|nil
+---@field AbilityReady fun(index: number|string): MQData|string|number|boolean|nil
+---@field AbilityTimer fun(index: number|string): MQData|string|number|boolean|nil
+---@field AbilityTimerTotal fun(index: number|string): MQData|string|number|boolean|nil
+---@field PetBuff fun(index: number|string): MQData|string|number|boolean|nil
+--- Spell(index) on Me; TLO.Spell(name) via __call. Both return MQData.
 ---@field Spell fun(spell_name_or_id: string|number): MQData|string|number|boolean|nil
 ---@field AltAbility fun(name: string): MQData|string|number|boolean|nil
 ---@field Discipline fun(name: string): MQData|string|number|boolean|nil
+---@field Buff fun(index: number|string): MQData
+---@field Song fun(index: number|string): MQData
 ---@field FindBuff fun(name: string): MQData|string|number|boolean|nil
 ---@field FindItem fun(name: string): MQData|string|number|boolean|nil
----@field [string] fun(index?: number|string): MQData|string|number|boolean|nil
+---@field StacksSpawn fun(spawn_id: number|string): MQData
+--- Group/Raid: Member(index) = by index number or name string; Members() = count, no args. Source: MQ2GroupType.cpp, MQ2RaidType.cpp
+---@field Member fun(index: number|string): MQData|string|number|boolean|nil
+---@field Members fun(): number|nil
+---@field Members fun(self: MQData): number|nil
+--- Sub-TLOs (return MQData so .Class.ShortName() etc. type correctly). GroupMember.Spawn = spawn MQData.
+---@field Class MQData
+---@field Pet MQData
+---@field Spawn MQData
+---@field Group MQData
+---@field Raid MQData
+--- Fallback for any TLO member not explicitly listed above. Also: Spawn/Target cached-buff members (Slowed, Mezzed, Snared, etc.) return MQData (spell-like; MyDuration etc.).
+---@field [string] MQData
+---@field [string] fun(): MQData|string|number|boolean|nil
+---@field [string] fun(index: number|string): MQData|string|number|boolean|nil
+--- Call with () returns string/number (ToString); call with (index) for TLOs like Spell(name). Source: lua_MQMacroData CallEmpty/Call
+---@field __call fun(self: MQData): string|number|boolean|nil
+---@field __call fun(self: MQData, index: string|number): MQData
 
 --- Top-level object table: Me, Target, Zone, Cursor, Spawn(id), Window(name), etc.
 ---@class MQTLO
@@ -41,8 +153,12 @@
 ---@field Target MQData
 ---@field Zone MQData
 ---@field Cursor MQData
----@field Spawn fun(id: number): MQData
+---@field Spawn fun(id: number|string|MQData): MQData
 ---@field Window fun(name: string): MQData
+---@field InvSlot fun(slot: number|string): MQData
+---@field Spell fun(spell_name_or_id: string|number): MQData
+---@field Navigation MQData
+---@field Stick MQData
 ---@field [string] MQData
 
 ---@class MQImGui

@@ -18,9 +18,8 @@ local CorpseID = nil
 local function refreshFollowId()
     local rc = state.getRunconfig()
     if not mq.TLO.Spawn('id ' .. rc.followid).ID() or mq.TLO.Spawn('id ' .. rc.followid).Type() == 'Corpse' then
-        if mq.TLO.Spawn('=' .. rc.followname).ID() then
-            rc.followid = mq.TLO.Spawn('=' .. rc.followname).ID()
-        end
+        local id = mq.TLO.Spawn('=' .. rc.followname).ID()
+        if id then rc.followid = id end
     end
 end
 

@@ -16,7 +16,8 @@ local function DelayOnZone()
     if state.getRunState() == 'dead' then
         state.clearRunState()
     end
-    state.getRunconfig().zonename = mq.TLO.Zone.ShortName()
+    local zonename = mq.TLO.Zone.ShortName()
+    if zonename then state.getRunconfig().zonename = zonename end
     if state.getRunconfig().campstatus == true then
         state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
     end
@@ -58,6 +59,7 @@ function botevents.Event_CastImm(line)
     local sub = state.getRunconfig().CurSpell.sub
     local spell = state.getRunconfig().CurSpell.spell
     local spellid = mq.TLO.Spell(botconfig.config[sub .. spell].spell).ID()
+    if not spellid then return end
     if string.find(line, "(with this spell)") then return false end
     if mq.TLO.Cast.Stored.ID() == spellid then
         if mq.TLO.Spell(spellid).TargetType() ~= "Targeted AE" and mq.TLO.Spell(spellid).TargetType() ~= "PB AE" then
