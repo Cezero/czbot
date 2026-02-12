@@ -2,7 +2,7 @@ local mq = require('mq')
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local state = require('lib.state')
-local pull_tab = require('gui.components.pull_tab')
+local combat_tab = require('gui.components.combat_tab')
 local debuff_tab = require('gui.components.debuff_tab')
 local moblist_tab = require('gui.components.moblist_tab')
 local ok, VERSION = pcall(require, 'version')
@@ -216,7 +216,7 @@ local function drawStatusTab()
     end
 end
 
-local CONFIG_SECTIONS = { { 'settings', 'Settings' }, { 'pull', 'Pull' }, { 'melee', 'Melee' }, { 'heal', 'Heal' }, { 'buff', 'Buff' }, { 'debuff', 'Debuff' }, { 'cure', 'Cure' }, { 'script', 'Script' } }
+local CONFIG_SECTIONS = { { 'settings', 'Settings' }, { 'combat', 'Combat' }, { 'heal', 'Heal' }, { 'buff', 'Buff' }, { 'debuff', 'Debuff' }, { 'cure', 'Cure' }, { 'script', 'Script' }, { 'moblist', 'Mob lists' } }
 
 local function updateImGui()
     if not isOpen then return end
@@ -250,17 +250,15 @@ local function updateImGui()
                 drawStatusTab()
                 ImGui.EndTabItem()
             end
-            if ImGui.BeginTabItem('Mob lists') then
-                moblist_tab.draw()
-                ImGui.EndTabItem()
-            end
             for _, sec in ipairs(CONFIG_SECTIONS) do
                 local key, label = sec[1], sec[2]
                 if ImGui.BeginTabItem(label) then
-                    if key == 'pull' then
-                        pull_tab.draw()
+                    if key == 'combat' then
+                        combat_tab.draw()
                     elseif key == 'debuff' then
                         debuff_tab.draw()
+                    elseif key == 'moblist' then
+                        moblist_tab.draw()
                     else
                         local tbl = botconfig.config[key]
                         if tbl then

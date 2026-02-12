@@ -1,6 +1,7 @@
--- Pull tab: dedicated panel for pull config (con color, spell, distance, etc.).
+-- Combat tab: melee settings (assist, offtank, stick, minmana) at top, then pull config.
 -- Uses gui/widgets for modals, combos, inputs, layout, spell_entry.
 
+local mq = require('mq')
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local combos = require('gui.widgets.combos')
@@ -8,6 +9,8 @@ local inputs = require('gui.widgets.inputs')
 local spell_entry = require('gui.widgets.spell_entry')
 
 local M = {}
+
+local NUMERIC_INPUT_WIDTH = 80
 
 local PRIMARY_OPTIONS_PULL = {
     { value = 'melee',   label = 'Melee' },
@@ -32,8 +35,68 @@ local function recomputePullSquared(pull)
     pull.leashSq = (pull.leash or 0) * (pull.leash or 0)
 end
 
---- Draw the full Pull tab content.
+--- Draw the full Combat tab content (melee block, then Pull section).
 function M.draw()
+    if not botconfig.config.melee then botconfig.config.melee = {} end
+    local melee = botconfig.config.melee
+
+    -- Line 1: Assist At, Off Tank, optional Offset
+    ImGui.Text('Assist At')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('MA target HP %% at or below which to sync.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local apVal = melee.assistpct or 99
+    local apNew, apCh = inputs.boundedInt('combat_assistpct', apVal, 0, 100, 1, '##combat_assistpct')
+    if apCh then melee.assistpct = apNew; runConfigLoaders() end
+    ImGui.SameLine()
+    ImGui.Text('Off Tank')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('This bot is an offtank.') end
+    ImGui.SameLine()
+    local otChecked = melee.offtank == true
+    local otCh, otNew = ImGui.Checkbox('##combat_offtank', otChecked)
+    if otCh then melee.offtank = otNew; runConfigLoaders() end
+    if melee.offtank then
+        ImGui.SameLine()
+        ImGui.Text('Offset')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Which add to pick when MT and MA on same mob.') end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local otoVal = melee.otoffset or 0
+        local otoNew, otoCh = inputs.boundedInt('combat_otoffset', otoVal, 0, 20, 1, '##combat_otoffset')
+        if otoCh then melee.otoffset = otoNew; runConfigLoaders() end
+    end
+
+    -- Line 2: Stick Settings
+    ImGui.Spacing()
+    ImGui.Text('Stick Settings')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Stick command when engaging.') end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(300)
+    local stickBuf = melee.stickcmd or ''
+    local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
+    local flags = (ImGuiInputTextFlags.EnterReturnsTrue) or 0
+    local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, flags)
+    if stickCh and stickNew ~= nil then melee.stickcmd = stickNew; runConfigLoaders() end
+
+    -- Line 3: Min Mana (if class has mana pool)
+    if mq.TLO.Me.MaxMana() and mq.TLO.Me.MaxMana() > 0 then
+        ImGui.Spacing()
+        ImGui.Text('Min Mana')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Min mana %% to engage.') end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local mmVal = melee.minmana or 0
+        local mmNew, mmCh = inputs.boundedInt('combat_minmana', mmVal, 0, 100, 5, '##combat_minmana')
+        if mmCh then melee.minmana = mmNew; runConfigLoaders() end
+    end
+
+    -- Section divider: Pull
+    ImGui.Spacing()
+    ImGui.Text('Pull')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Pull method and range settings.') end
+    ImGui.SameLine()
+    ImGui.Separator()
+
     local pull = botconfig.config.pull
     if not pull then return end
     local spell = pull.spell
@@ -48,13 +111,11 @@ function M.draw()
         showRange = true,
     })
 
-    local numericInputWidth = 80
-
     ImGui.Spacing()
     ImGui.Text('Pull Radius')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Max horizontal distance from camp (X,Y) for pullable mobs.') end
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(numericInputWidth)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local radiusVal = pull.radius or 400
     local radiusNew, radiusCh = inputs.boundedInt('pull_radius', radiusVal, 1, 10000, 10, '##pull_radius')
     if radiusCh then pull.radius = radiusNew; recomputePullSquared(pull); runConfigLoaders() end
@@ -62,7 +123,7 @@ function M.draw()
     ImGui.Text('Max Z')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Max vertical (Z) difference from camp; mobs outside this are ignored.') end
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(numericInputWidth)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local zVal = pull.zrange or 150
     local zNew, zCh = inputs.boundedInt('pull_zrange', zVal, 1, 500, 10, '##pull_zrange')
     if zCh then pull.zrange = zNew; runConfigLoaders() end
@@ -77,7 +138,7 @@ function M.draw()
     local conColors = botconfig.ConColors or {}
     ImGui.Spacing()
     ImGui.Text('Target Filter: ')
-    ImGui.SetNextItemWidth(numericInputWidth)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local tfNew, tfCh = combos.combo('pull_target_filter', targetFilterIdx, targetFilterOptions, nil, nil)
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Target filter: Con colors or level range for valid pull targets.') end
     ImGui.Spacing()
@@ -91,7 +152,7 @@ function M.draw()
     if targetFilterIdx == 1 then
         local minC = pull.pullMinCon or 2
         if minC < 1 or minC > 7 then minC = 2 end
-        ImGui.SetNextItemWidth(numericInputWidth)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local minCNew, minCCh = combos.combo('pull_mincon', minC, conColors, nil, conColorRgb)
         if minCCh then pull.pullMinCon = minCNew; runConfigLoaders() end
         ImGui.SameLine()
@@ -100,19 +161,19 @@ function M.draw()
         ImGui.SameLine()
         local maxC = pull.pullMaxCon or 5
         if maxC < 1 or maxC > 7 then maxC = 5 end
-        ImGui.SetNextItemWidth(numericInputWidth)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local maxCNew, maxCCh = combos.combo('pull_maxcon', maxC, conColors, nil, conColorRgb)
         if maxCCh then pull.pullMaxCon = maxCNew; runConfigLoaders() end
         ImGui.SameLine()
         ImGui.Text('Red Cap')
         if ImGui.IsItemHovered() then ImGui.SetTooltip('Max levels above you when using con (e.g. levels into red).') end
         ImGui.SameLine()
-        ImGui.SetNextItemWidth(numericInputWidth)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local mld = pull.maxLevelDiff or 6
         local mldNew, mldCh = inputs.boundedInt('pull_maxleveldiff', mld, 4, 125, 1, '##pull_maxleveldiff')
         if mldCh then pull.maxLevelDiff = mldNew; runConfigLoaders() end
     else
-        ImGui.SetNextItemWidth(numericInputWidth)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local pmin = pull.pullMinLevel or 1
         local pminNew, pminCh = inputs.boundedInt('pull_minlevel', pmin, 1, 125, 1, '##pull_minlevel')
         if pminCh then pull.pullMinLevel = pminNew; runConfigLoaders() end
@@ -120,7 +181,7 @@ function M.draw()
         ImGui.Text('Max Level')
         if ImGui.IsItemHovered() then ImGui.SetTooltip('Maximum level when using level-based pulling.') end
         ImGui.SameLine()
-        ImGui.SetNextItemWidth(numericInputWidth)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local pmax = pull.pullMaxLevel or 125
         local pmaxNew, pmaxCh = inputs.boundedInt('pull_maxlevel', pmax, 1, 125, 1, '##pull_maxlevel')
         if pmaxCh then pull.pullMaxLevel = pmaxNew; runConfigLoaders() end
@@ -131,7 +192,7 @@ function M.draw()
     ImGui.Text('Chain pull HP %')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('When current target HP %% is at or below this (and chain count allows), start next pull.') end
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(numericInputWidth)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local cph = pull.chainpullhp or 0
     local cphNew, cphCh = inputs.boundedInt('pull_chainpullhp', cph, 0, 100, 5, '##pull_chainpullhp')
     if cphCh then pull.chainpullhp = cphNew; runConfigLoaders() end
@@ -139,7 +200,7 @@ function M.draw()
     ImGui.Text('Count')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Allow chain-pulling when mob count is at or below this value.') end
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(numericInputWidth)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local cpc = pull.chainpullcnt or 0
     local cpcNew, cpcCh = inputs.boundedInt('pull_chainpullcnt', cpc, 0, 20, 1, '##pull_chainpullcnt')
     if cpcCh then pull.chainpullcnt = cpcNew; runConfigLoaders() end
@@ -180,7 +241,7 @@ function M.draw()
     ImGui.Text('Mana %')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Minimum mana %% required for designated healer classes before a new pull.') end
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(numericInputWidth)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local mana = pull.mana or 60
     local manaNew, manaCh = inputs.boundedInt('pull_mana', mana, 0, 100, 5, '##pull_mana')
     if manaCh then pull.mana = manaNew; runConfigLoaders() end
@@ -189,7 +250,7 @@ function M.draw()
     ImGui.Text('Outrun Distance')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('While returning to camp with a mob, nav pauses if the mob is farther than this distance.') end
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(numericInputWidth)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local leash = pull.leash or 500
     local leashNew, leashCh = inputs.boundedInt('pull_leash', leash, 0, 2000, 50, '##pull_leash')
     if leashCh then pull.leash = leashNew; recomputePullSquared(pull); runConfigLoaders() end
