@@ -49,7 +49,7 @@ end
 local function debuffCustomSection(entry, idPrefix, onChanged)
     -- First line: Recast and Delay (SameLine)
     ImGui.Text('Recast')
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('After this many resists on the same spawn, the bot disables this spell for that spawn for a duration. 0 = no limit.') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('After this many resists on the same spawn, disable this spell for that spawn. 0 = no limit.') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local recast = entry.recast or 0
@@ -59,14 +59,14 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
     ImGui.Text('Delay')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Delay (ms) before this spell can be used again after cast.') end
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(2 * NUMERIC_INPUT_WIDTH)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH + 28)
     local delay = entry.delay or 0
     local newDelay, delayCh = inputs.boundedInt(idPrefix .. '_delay', delay, 0, 60000, 100, '##' .. idPrefix .. '_delay')
     if delayCh then entry.delay = newDelay; if onChanged then onChanged() end end
 
     -- Second line: Don't stack checkboxes
     ImGui.Text("Don't stack:")
-    if ImGui.IsItemHovered() then ImGui.SetTooltip("If target already has any of these categories (e.g. Snared), the bot will not cast this spell and will interrupt if it appears while casting.") end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip("If target already has any of these categories (e.g. Snared), don't cast this spell and interrupt if it appears while casting.") end
     ImGui.SameLine()
     local function hasKey(t, k) for _, v in ipairs(t) do if v == k then return true end end return false end
     local list = entry.dontStack or {}
@@ -87,7 +87,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
             end
             if onChanged then onChanged() end
         end
-        if vi < #DONTSTACK_OPTIONS then ImGui.SameLine() end
+        if vi < #DONTSTACK_OPTIONS and (vi % 4) ~= 0 then ImGui.SameLine() end
     end
 end
 
