@@ -52,7 +52,7 @@ function M.draw()
     if not debuff then return end
     if not debuff.spells then debuff.spells = {} end
     local spells = debuff.spells
-
+    ImGui.Separator()
     for i, entry in ipairs(spells) do
         spell_entry.draw(entry, {
             id = 'debuff_' .. i,

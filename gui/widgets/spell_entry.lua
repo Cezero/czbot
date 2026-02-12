@@ -322,7 +322,7 @@ function M.draw(spell, opts)
                 -- Phases row: checkboxes + Delete (except first band)
                 ImGui.Text('Phases:')
                 ImGui.SameLine()
-                for _, opt in ipairs(targetphaseOptions) do
+                for pi, opt in ipairs(targetphaseOptions) do
                     local key, label, tooltip = opt.key, opt.label, opt.tooltip
                     local function hasKey(t, k) for _, v in ipairs(t) do if v == k then return true end end return false end
                     local checked = hasKey(band.targetphase, key)
@@ -336,7 +336,8 @@ function M.draw(spell, opts)
                         end
                         if onChanged then onChanged() end
                     end
-                    ImGui.SameLine()
+                    -- SameLine after last phase only when Delete is on this row (bi > 1), so next row starts on new line
+                    if pi < #targetphaseOptions or bi > 1 then ImGui.SameLine() end
                 end
                 if bi > 1 then
                     local delW = select(1, ImGui.CalcTextSize('Delete')) + 24
@@ -352,7 +353,7 @@ function M.draw(spell, opts)
                 if #validtargetsOptions > 0 then
                     ImGui.Text('Targets:')
                     ImGui.SameLine()
-                    for _, opt in ipairs(validtargetsOptions) do
+                    for vi, opt in ipairs(validtargetsOptions) do
                         local key, label, tooltip = opt.key, opt.label, opt.tooltip
                         local function hasKey(t, k) for _, v in ipairs(t) do if v == k then return true end end return false end
                         local checked = hasKey(band.validtargets, key)
@@ -362,13 +363,13 @@ function M.draw(spell, opts)
                             if cNew then band.validtargets[#band.validtargets + 1] = key else for i = #band.validtargets, 1, -1 do if band.validtargets[i] == key then table.remove(band.validtargets, i) break end end end
                             if onChanged then onChanged() end
                         end
-                        ImGui.SameLine()
+                        if vi < #validtargetsOptions then ImGui.SameLine() end
                     end
                 end
                 -- HP % / # Targets row
                 if showBandMinMax or showBandMinTarMaxtar then
                     if showBandMinMax then
-                        ImGui.Text('HP %%:')
+                        ImGui.Text('HP %:')
                         ImGui.SameLine()
                         ImGui.Text('Min')
                         ImGui.SameLine()
