@@ -119,7 +119,7 @@ local _modalState = {}
 local TYPE_COMBO_WIDTH = 100
 local SPELL_SELECTABLE_WIDTH = 140
 local NUMERIC_INPUT_WIDTH = 80
-local ALIAS_INPUT_WIDTH = 120
+local ALIAS_INPUT_WIDTH = 100
 
 local GREEN = ImVec4(0, 0.8, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
@@ -286,7 +286,7 @@ function M.draw(spell, opts)
         end
         ImGui.SameLine()
         ImGui.Text('Min mana')
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('Minimum mana %% (or endurance) required to cast.') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Minimum mana % (or endurance) required to cast.') end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local mn = spell.minmana or 0
@@ -297,7 +297,7 @@ function M.draw(spell, opts)
         end
         ImGui.SameLine()
         ImGui.Text('Announce')
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('Announce in chat when this spell is cast.') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Announce in console when this spell is cast.') end
         ImGui.SameLine()
         local ann = spell.announce == true
         local annValue, annPressed = ImGui.Checkbox('##' .. id .. '_announce', ann)
@@ -371,47 +371,46 @@ function M.draw(spell, opts)
                     end
                 end
                 -- HP % / # Targets row
-                if showBandMinMax or showBandMinTarMaxtar then
-                    if showBandMinMax then
-                        ImGui.Text('HP %:')
-                        ImGui.SameLine()
-                        ImGui.Text('Min')
-                        ImGui.SameLine()
-                        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-                        local bmin = band.min
-                        if bmin == nil then bmin = 0 end
-                        local newMin, minCh = inputs.boundedInt(id .. '_band' .. bi .. '_min', bmin, 0, 100, 1, '##' .. id .. '_band' .. bi .. '_min')
-                        if minCh then band.min = newMin; if onChanged then onChanged() end end
-                        ImGui.SameLine()
-                        ImGui.Text('Max')
-                        ImGui.SameLine()
-                        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-                        local bmax = band.max
-                        if bmax == nil then bmax = 100 end
-                        local newMax, maxCh = inputs.boundedInt(id .. '_band' .. bi .. '_max', bmax, 0, 100, 1, '##' .. id .. '_band' .. bi .. '_max')
-                        if maxCh then band.max = newMax; if onChanged then onChanged() end end
-                        ImGui.SameLine()
-                    end
-                    if showBandMinTarMaxtar then
-                        ImGui.Text('# Targets:')
-                        ImGui.SameLine()
-                        ImGui.Text('Min')
-                        ImGui.SameLine()
-                        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-                        local bmintar = band.mintar
-                        if bmintar == nil then bmintar = 0 end
-                        local newMinT, minTCh = inputs.boundedInt(id .. '_band' .. bi .. '_mintar', bmintar, 0, 50, 1, '##' .. id .. '_band' .. bi .. '_mintar')
-                        if minTCh then band.mintar = newMinT; if onChanged then onChanged() end end
-                        ImGui.SameLine()
-                        ImGui.Text('Max')
-                        ImGui.SameLine()
-                        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-                        local bmaxtar = band.maxtar
-                        if bmaxtar == nil then bmaxtar = 50 end
-                        local newMaxT, maxTCh = inputs.boundedInt(id .. '_band' .. bi .. '_maxtar', bmaxtar, 0, 50, 1, '##' .. id .. '_band' .. bi .. '_maxtar')
-                        if maxTCh then band.maxtar = newMaxT; if onChanged then onChanged() end end
-                    end
+
+                if showBandMinMax then
+                    ImGui.Text('HP %:')
+                    ImGui.SameLine()
+                    ImGui.Text('Min')
+                    ImGui.SameLine()
+                    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+                    local bmin = band.min
+                    if bmin == nil then bmin = 0 end
+                    local newMin, minCh = inputs.boundedInt(id .. '_band' .. bi .. '_min', bmin, 0, 100, 1, '##' .. id .. '_band' .. bi .. '_min')
+                    if minCh then band.min = newMin; if onChanged then onChanged() end end
+                    ImGui.SameLine()
+                    ImGui.Text('Max')
+                    ImGui.SameLine()
+                    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+                    local bmax = band.max
+                    if bmax == nil then bmax = 100 end
+                    local newMax, maxCh = inputs.boundedInt(id .. '_band' .. bi .. '_max', bmax, 0, 100, 1, '##' .. id .. '_band' .. bi .. '_max')
+                    if maxCh then band.max = newMax; if onChanged then onChanged() end end
                 end
+                if showBandMinTarMaxtar then
+                    ImGui.Text('# Targets:')
+                    ImGui.SameLine()
+                    ImGui.Text('Min')
+                    ImGui.SameLine()
+                    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+                    local bmintar = band.mintar
+                    if bmintar == nil then bmintar = 0 end
+                    local newMinT, minTCh = inputs.boundedInt(id .. '_band' .. bi .. '_mintar', bmintar, 0, 50, 1, '##' .. id .. '_band' .. bi .. '_mintar')
+                    if minTCh then band.mintar = newMinT; if onChanged then onChanged() end end
+                    ImGui.SameLine()
+                    ImGui.Text('Max')
+                    ImGui.SameLine()
+                    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+                    local bmaxtar = band.maxtar
+                    if bmaxtar == nil then bmaxtar = 50 end
+                    local newMaxT, maxTCh = inputs.boundedInt(id .. '_band' .. bi .. '_maxtar', bmaxtar, 0, 50, 1, '##' .. id .. '_band' .. bi .. '_maxtar')
+                    if maxTCh then band.maxtar = newMaxT; if onChanged then onChanged() end end
+                end
+
                 if bi < #spell.bands then ImGui.Separator() end
             end
             -- Add Band button (right-aligned, below last band)
@@ -438,7 +437,7 @@ function M.draw(spell, opts)
         ImGui.Text('Preconditions:')
         if ImGui.IsItemHovered() then ImGui.SetTooltip('When to allow casting: true or a Lua expression (e.g. condition on EvalID).') end
         ImGui.SameLine()
-        ImGui.SetNextItemWidth(200)
+        ImGui.SetNextItemWidth(300)
         local preBuf, preChanged = ImGui.InputText('##' .. id .. '_precondition', state.preconditionBuf or '', 512)
         if preChanged then
             state.preconditionBuf = preBuf
