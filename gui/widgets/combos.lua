@@ -9,24 +9,36 @@ local M = {}
 ---@param currentIndex number 1-based index into options
 ---@param options string[] display strings
 ---@param label string|nil
+---@param optionColors table|nil optional: array of {r,g,b,a} per option (indices 1..#options); colors the text
 ---@return number newIndex, boolean changed
-function M.combo(id, currentIndex, options, label)
+function M.combo(id, currentIndex, options, label, optionColors)
     local idx = currentIndex
     if idx < 1 or idx > #options then idx = 1 end
     local preview = options[idx] or ''
     if label then ImGui.SetNextItemWidth(-1) end
     local changed = false
+    local ImGuiCol_Text = ImGuiCol and ImGuiCol.Text or 0
+    if optionColors and optionColors[idx] then
+        local c = optionColors[idx]
+        ImGui.PushStyleColor(ImGuiCol_Text, c[1], c[2], c[3], c[4] or 1)
+    end
     if ImGui.BeginCombo(label or ('##' .. id), preview, 0) then
         for i, opt in ipairs(options) do
             local selected = (i == idx)
+            if optionColors and optionColors[i] then
+                local c = optionColors[i]
+                ImGui.PushStyleColor(ImGuiCol_Text, c[1], c[2], c[3], c[4] or 1)
+            end
             if ImGui.Selectable(opt, selected) then
                 idx = i
                 changed = true
             end
+            if optionColors and optionColors[i] then ImGui.PopStyleColor() end
             if selected then ImGui.SetItemDefaultFocus() end
         end
         ImGui.EndCombo()
     end
+    if optionColors and optionColors[idx] then ImGui.PopStyleColor() end
     return idx, changed
 end
 

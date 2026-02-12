@@ -30,8 +30,8 @@ function M.draw()
     local spell = pull.spell
     if not spell then spell = { gem = 'melee', spell = '', range = nil } end
 
-    -- ----- Pull spell -----
-    if layout.beginTwoColumn('pull_spell_table', 200) then
+    -- ----- Pull spell (3 rows: Type/Gem, Spell/Item/Ability, Range; table height = content only) -----
+    if layout.beginTwoColumn('pull_spell_table', 200, 0) then
         ImGui.TableSetupColumn('Label', 0, 0.35)
         ImGui.TableSetupColumn('Value', 0, 0.65)
         spell_entry.draw('pull_spell', spell, spell_entry.PRIMARY_OPTIONS_PULL, { onChanged = runConfigLoaders })
@@ -39,6 +39,7 @@ function M.draw()
         ImGui.TableNextColumn()
         ImGui.Text('Range')
         ImGui.TableNextColumn()
+        ImGui.SetNextItemWidth(-1)
         local r = spell.range or 0
         local newR, rChanged = inputs.boundedInt('pull_range', r, 0, 500, 5, '##pull_range')
         if rChanged then
@@ -68,6 +69,16 @@ function M.draw()
         layout.endTwoColumn()
     end
 
+    -- Con color names and RGB for colored combo display (Grey, Green, Light Blue, Blue, White, Yellow, Red)
+    local conColorRgb = {
+        { 0.5, 0.5, 0.5, 1 },   -- Grey
+        { 0, 0.8, 0, 1 },        -- Green
+        { 0.4, 0.7, 1, 1 },     -- Light Blue
+        { 0.2, 0.4, 1, 1 },    -- Blue
+        { 1, 1, 1, 1 },        -- White
+        { 1, 1, 0, 1 },        -- Yellow
+        { 1, 0.2, 0.2, 1 },    -- Red
+    }
     ImGui.Spacing()
     ImGui.Separator()
     ImGui.Text('Targets (con / level)')
@@ -79,7 +90,7 @@ function M.draw()
         ImGui.TableNextColumn()
         local minC = pull.pullMinCon or 2
         if minC < 1 or minC > 7 then minC = 2 end
-        local minCNew, minCCh = combos.combo('pull_mincon', minC, conColors, '##pull_mincon')
+        local minCNew, minCCh = combos.combo('pull_mincon', minC, conColors, '##pull_mincon', conColorRgb)
         if minCCh then pull.pullMinCon = minCNew; runConfigLoaders() end
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
@@ -87,7 +98,7 @@ function M.draw()
         ImGui.TableNextColumn()
         local maxC = pull.pullMaxCon or 5
         if maxC < 1 or maxC > 7 then maxC = 5 end
-        local maxCNew, maxCCh = combos.combo('pull_maxcon', maxC, conColors, '##pull_maxcon')
+        local maxCNew, maxCCh = combos.combo('pull_maxcon', maxC, conColors, '##pull_maxcon', conColorRgb)
         if maxCCh then pull.pullMaxCon = maxCNew; runConfigLoaders() end
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
@@ -102,7 +113,7 @@ function M.draw()
         ImGui.TableNextColumn()
         local useLvl = pull.usePullLevels == true
         local useLvlCh, useLvlNew = ImGui.Checkbox('##pull_uselevels', useLvl)
-        if useLvlCh then pull.usePullLevels = useLvlCh; runConfigLoaders() end
+        if useLvlCh then pull.usePullLevels = useLvlNew; runConfigLoaders() end
         if pull.usePullLevels then
             ImGui.TableNextRow()
             ImGui.TableNextColumn()
@@ -128,7 +139,7 @@ function M.draw()
     if layout.beginTwoColumn('pull_other_table', 200) then
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
-        ImGui.Text('Chain pull HP %%')
+        ImGui.Text('Chain pull HP %')
         ImGui.TableNextColumn()
         local cph = pull.chainpullhp or 0
         local cphNew, cphCh = inputs.boundedInt('pull_chainpullhp', cph, 0, 100, 5, '##pull_chainpullhp')
@@ -142,7 +153,7 @@ function M.draw()
         if cpcCh then pull.chainpullcnt = cpcNew; runConfigLoaders() end
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
-        ImGui.Text('Mana %%')
+        ImGui.Text('Mana %')
         ImGui.TableNextColumn()
         local mana = pull.mana or 60
         local manaNew, manaCh = inputs.boundedInt('pull_mana', mana, 0, 100, 5, '##pull_mana')
@@ -168,14 +179,14 @@ function M.draw()
         ImGui.TableNextColumn()
         local up = pull.usepriority == true
         local upCh, upNew = ImGui.Checkbox('##pull_usepriority', up)
-        if upCh then pull.usepriority = upCh; runConfigLoaders() end
+        if upCh then pull.usepriority = upNew; runConfigLoaders() end
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
         ImGui.Text('Hunter mode')
         ImGui.TableNextColumn()
         local hunt = pull.hunter == true
         local huntCh, huntNew = ImGui.Checkbox('##pull_hunter', hunt)
-        if huntCh then pull.hunter = huntCh; runConfigLoaders() end
+        if huntCh then pull.hunter = huntNew; runConfigLoaders() end
         layout.endTwoColumn()
     end
 end

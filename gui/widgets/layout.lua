@@ -17,9 +17,11 @@ end
 --- Optional: begin a two-column table for multiple rows. Caller uses TableNextColumn for label, then control.
 ---@param id string
 ---@param labelWidth number|nil
-function M.beginTwoColumn(id, labelWidth)
+---@param outerHeight number|nil if 0, table height auto-sizes to content (no extra vertical space)
+function M.beginTwoColumn(id, labelWidth, outerHeight)
     labelWidth = labelWidth or 180
-    return ImGui.BeginTable(id, 2, ImGuiTableFlags.None, -1, -1)
+    local sy = (outerHeight ~= nil and outerHeight == 0) and 0 or -1
+    return ImGui.BeginTable(id, 2, ImGuiTableFlags.None, -1, sy)
 end
 
 function M.endTwoColumn()

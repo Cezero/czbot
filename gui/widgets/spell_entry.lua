@@ -118,9 +118,9 @@ function M.draw(id, spell, primaryOptions, opts)
     ImGui.Text('%s', labelGem)
     ImGui.TableNextColumn()
     local primary, sub = gemToPrimarySub(spell.gem)
-    -- Narrow width for gem number (1-12) so it stays a bit wider than one character
-    local gemComboWidth = 24
-    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, gemComboWidth)
+    -- -1 = same width as other value column widgets (Type/Gem, Spell, Range)
+    ImGui.SetNextItemWidth(-1)
+    local newPrimary, newSub, gemChanged = combos.nestedCombo(id .. '_gem', primaryOptions, 'gem', GEM_SUB_OPTIONS, primary, sub, -1)
     if gemChanged then
         spell.gem = primarySubToGem(newPrimary, newSub)
         if newPrimary == 'gem' then
@@ -167,12 +167,10 @@ function M.draw(id, spell, primaryOptions, opts)
     else
         displayName = spell.spell
     end
-    -- Use current table column width so we match Type/Gem and Range controls (GetContentRegionAvail can be 0 in table cells)
-    local w = ImGui.GetColumnWidth(-1)
-    if not w or w <= 0 then w = 200 end
-    ImGui.SetNextItemWidth(w)
+    -- Same width as Type/Gem and Range (fill value column)
+    ImGui.SetNextItemWidth(-1)
     ---@diagnostic disable-next-line: undefined-global
-    if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(w, 0)) then
+    if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(-1, 0)) then
         if not isUnused then
             state.open = true
             state.buffer = spell.spell or ''
