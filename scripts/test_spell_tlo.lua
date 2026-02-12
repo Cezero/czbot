@@ -39,103 +39,103 @@ log('')
 local results = {}
 
 -- Test 1: Direct chain - invoke ()
-local function test_direct_invoke()
+local function test_direct_invoke(name)
     local r = mq.TLO.Spell(spellName)()
-    results['direct_invoke()'] = ok(r)
-    return results['direct_invoke()']
+    results[name] = ok(r)
+    return results[name]
 end
 
 -- Test 2: Direct chain - .ID()
-local function test_direct_id()
+local function test_direct_id(name)
     local r = mq.TLO.Spell(spellName).ID()
-    results['direct.ID()'] = ok(r)
-    return results['direct.ID()']
+    results[name] = ok(r)
+    return results[name]
 end
 
 -- Test 3: Direct chain - .MyRange() .AERange() .Mana() .MyCastTime()
-local function test_direct_props()
+local function test_direct_props(name)
     local a = mq.TLO.Spell(spellName).MyRange()
     local b = mq.TLO.Spell(spellName).AERange()
     local c = mq.TLO.Spell(spellName).Mana()
     local d = mq.TLO.Spell(spellName).MyCastTime()
-    results['direct.MyRange/AERange/Mana/MyCastTime'] = ok(a) or ok(b) or ok(c) or ok(d)
-    return results['direct.MyRange/AERange/Mana/MyCastTime']
+    results[name] = ok(a) or ok(b) or ok(c) or ok(d)
+    return results[name]
 end
 
 -- Test 4: Direct chain - .ReagentID(slot)() .ReagentCount(slot)()
-local function test_direct_reagents()
+local function test_direct_reagents(name)
     local r1 = mq.TLO.Spell(spellName).ReagentID(1)()
     local r2 = mq.TLO.Spell(spellName).ReagentCount(1)()
-    results['direct.ReagentID(1)/ReagentCount(1)'] = true -- don't fail if spell has no reagents
+    results[name] = true -- don't fail if spell has no reagents
     return true
 end
 
 -- Test 5: Stored proxy - store then invoke ()
-local function test_stored_invoke()
+local function test_stored_invoke(name)
     local sp = mq.TLO.Spell(spellName)
     local r = sp and sp()
-    results['stored_proxy then sp()'] = ok(r)
-    return results['stored_proxy then sp()']
+    results[name] = ok(r)
+    return results[name]
 end
 
 -- Test 6: Stored proxy - store then .ID()
-local function test_stored_id()
+local function test_stored_id(name)
     local sp = mq.TLO.Spell(spellName)
     local r = sp and sp.ID and sp.ID()
-    results['stored_proxy then sp.ID()'] = ok(r)
-    return results['stored_proxy then sp.ID()']
+    results[name] = ok(r)
+    return results[name]
 end
 
 -- Test 7: Stored proxy - store then .MyRange() .AERange()
-local function test_stored_range()
+local function test_stored_range(name)
     local sp = mq.TLO.Spell(spellName)
     local a = sp and sp.MyRange and sp.MyRange()
     local b = sp and sp.AERange and sp.AERange()
-    results['stored_proxy then sp.MyRange/AERange()'] = ok(a) or ok(b)
-    return results['stored_proxy then sp.MyRange/AERange()']
+    results[name] = ok(a) or ok(b)
+    return results[name]
 end
 
 -- Test 8: Stored proxy - store then .ReagentID(1)() .ReagentCount(1)()
-local function test_stored_reagents()
+local function test_stored_reagents(name)
     local sp = mq.TLO.Spell(spellName)
     local r1 = sp and sp.ReagentID and sp.ReagentID(1) and sp.ReagentID(1)()
     local r2 = sp and sp.ReagentCount and sp.ReagentCount(1) and sp.ReagentCount(1)()
-    results['stored_proxy then sp.ReagentID/ReagentCount(1)()'] = true
+    results[name] = true
     return true
 end
 
 -- Test 9: Stored proxy - multiple method calls in sequence (like buff flow)
-local function test_stored_sequence()
+local function test_stored_sequence(name)
     local sp = mq.TLO.Spell(spellName)
-    if not sp then results['stored_sequence'] = false; return false end
+    if not sp then results[name] = false; return false end
     local a = sp.MyRange and sp.MyRange()
     local b = sp.AERange and sp.AERange()
     local c = sp.Mana and sp.Mana()
     local d = sp.MyCastTime and sp.MyCastTime()
     local e = sp.Stacks and sp.Stacks()
     local f = sp.TargetType and sp.TargetType()
-    results['stored_sequence (Range/Mana/CastTime/Stacks/TargetType)'] = ok(a) or ok(b) or ok(c) or ok(d) or ok(e) or ok(f)
-    return results['stored_sequence (Range/Mana/CastTime/Stacks/TargetType)']
+    results[name] = ok(a) or ok(b) or ok(c) or ok(d) or ok(e) or ok(f)
+    return results[name]
 end
 
 -- Test 10: Spell by ID (e.g. mq.TLO.Spell(123).Name())
-local function test_by_id()
-    if not spellId or spellId == 0 then results['by_id'] = nil; return end
-    local name = mq.TLO.Spell(spellId).Name()
-    results['Spell(id).Name()'] = name and name ~= ''
-    return results['Spell(id).Name()']
+local function test_by_id(name)
+    if not spellId or spellId == 0 then results[name] = nil; return end
+    local n = mq.TLO.Spell(spellId).Name()
+    results[name] = n and n ~= ''
+    return results[name]
 end
 
 -- Test 11: Stored proxy then call from a different spell (Bone Walk style - spell with reagents)
-local function test_stored_second_spell()
+local function test_stored_second_spell(name)
     local other = 'Bone Walk'
     local sp = mq.TLO.Spell(other)
-    if not sp then results['stored_second_spell(Bone Walk)'] = nil; return end
+    if not sp then results[name] = nil; return end
     local r = sp()
     local rid = sp.ReagentID and sp.ReagentID(1) and sp.ReagentID(1)()
     local rcnt = sp.ReagentCount and sp.ReagentCount(1) and sp.ReagentCount(1)()
-    results['stored_second_spell(Bone Walk)'] = ok(r)
-    return results['stored_second_spell(Bone Walk)']
+    results[name] = ok(r)
+    return results[name]
 end
 
 local tests = {
@@ -156,7 +156,7 @@ log('Running tests (any test may hang if MQ blocks on stored proxy)...')
 log('')
 
 for _, t in ipairs(tests) do
-    local ok_result, err = pcall(t.fn)
+    local ok_result, err = pcall(function() t.fn(t.name) end)
     if not ok_result then
         results[t.name] = false
         log('\arFAIL\ax ' .. t.name .. ': ' .. tostring(err))
