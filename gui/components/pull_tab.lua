@@ -53,9 +53,7 @@ function M.draw()
     end
 
     ImGui.Spacing()
-    ImGui.Separator()
-    ImGui.Text('Distance')
-    ImGui.Text('Radius')
+    ImGui.Text('Pull Radius')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Max horizontal distance from camp (X,Y) for pullable mobs.') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(rangeInputWidth)
@@ -63,7 +61,7 @@ function M.draw()
     local radiusNew, radiusCh = inputs.boundedInt('pull_radius', radiusVal, 1, 10000, 10, '##pull_radius')
     if radiusCh then pull.radius = radiusNew; recomputePullSquared(pull); runConfigLoaders() end
     ImGui.SameLine()
-    ImGui.Text('Z range')
+    ImGui.Text('Max Z')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Max vertical (Z) difference from camp; mobs outside this are ignored.') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(rangeInputWidth)
@@ -71,75 +69,67 @@ function M.draw()
     local zNew, zCh = inputs.boundedInt('pull_zrange', zVal, 1, 500, 10, '##pull_zrange')
     if zCh then pull.zrange = zNew; runConfigLoaders() end
 
-    -- Con color names and RGB for colored combo display (Grey, Green, Light Blue, Blue, White, Yellow, Red)
+    -- Target filter: Con vs Level (replaces "Use level based pulling" checkbox)
+    local targetFilterOptions = { 'Con', 'Level' }
+    local targetFilterIdx = pull.usePullLevels and 2 or 1
     local conColorRgb = {
-        { 0.5, 0.5, 0.5, 1 },   -- Grey
-        { 0, 0.8, 0, 1 },        -- Green
-        { 0.4, 0.7, 1, 1 },     -- Light Blue
-        { 0.2, 0.4, 1, 1 },    -- Blue
-        { 1, 1, 1, 1 },        -- White
-        { 1, 1, 0, 1 },        -- Yellow
-        { 1, 0.2, 0.2, 1 },    -- Red
+        { 0.5, 0.5, 0.5, 1 },   { 0, 0.8, 0, 1 },   { 0.4, 0.7, 1, 1 },   { 0.2, 0.4, 1, 1 },
+        { 1, 1, 1, 1 },         { 1, 1, 0, 1 },      { 1, 0.2, 0.2, 1 },
     }
-    ImGui.Spacing()
-    ImGui.Separator()
-    ImGui.Text('Targets (con / level)')
     local conColors = botconfig.ConColors or {}
-    ImGui.Text('Min Con')
+    ImGui.Spacing()
+    ImGui.SetNextItemWidth(rangeInputWidth)
+    local tfNew, tfCh = combos.combo('pull_target_filter', targetFilterIdx, targetFilterOptions, nil, nil)
+    if tfCh then
+        pull.usePullLevels = (tfNew == 2)
+        runConfigLoaders()
+    end
     ImGui.SameLine()
-    local minC = pull.pullMinCon or 2
-    if minC < 1 or minC > 7 then minC = 2 end
-    local minCNew, minCCh = combos.combo('pull_mincon', minC, conColors, '##pull_mincon', conColorRgb)
-    if minCCh then pull.pullMinCon = minCNew; runConfigLoaders() end
+    ImGui.Text(targetFilterIdx == 1 and 'Min Con' or 'Min Level')
     ImGui.SameLine()
-    ImGui.Text('Max Con')
-    ImGui.SameLine()
-    local maxC = pull.pullMaxCon or 5
-    if maxC < 1 or maxC > 7 then maxC = 5 end
-    local maxCNew, maxCCh = combos.combo('pull_maxcon', maxC, conColors, '##pull_maxcon', conColorRgb)
-    if maxCCh then pull.pullMaxCon = maxCNew; runConfigLoaders() end
-    if layout.beginTwoColumn('pull_targets_table', 200, 0) then
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Max Red Con Level Diff')
-        ImGui.TableNextColumn()
+    if targetFilterIdx == 1 then
+        local minC = pull.pullMinCon or 2
+        if minC < 1 or minC > 7 then minC = 2 end
+        ImGui.SetNextItemWidth(rangeInputWidth)
+        local minCNew, minCCh = combos.combo('pull_mincon', minC, conColors, nil, conColorRgb)
+        if minCCh then pull.pullMinCon = minCNew; runConfigLoaders() end
+        ImGui.SameLine()
+        ImGui.Text('Max Con')
+        ImGui.SameLine()
+        local maxC = pull.pullMaxCon or 5
+        if maxC < 1 or maxC > 7 then maxC = 5 end
+        ImGui.SetNextItemWidth(rangeInputWidth)
+        local maxCNew, maxCCh = combos.combo('pull_maxcon', maxC, conColors, nil, conColorRgb)
+        if maxCCh then pull.pullMaxCon = maxCNew; runConfigLoaders() end
+        ImGui.SameLine()
+        ImGui.Text('Red Cap')
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Max levels above you when using con (e.g. levels into red).') end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(rangeInputWidth)
         local mld = pull.maxLevelDiff or 6
         local mldNew, mldCh = inputs.boundedInt('pull_maxleveldiff', mld, 4, 125, 1, '##pull_maxleveldiff')
         if mldCh then pull.maxLevelDiff = mldNew; runConfigLoaders() end
-        ImGui.TableNextRow()
-        ImGui.TableNextColumn()
-        ImGui.Text('Use Level-Based Pulling')
-        ImGui.TableNextColumn()
-        local useLvl = pull.usePullLevels == true
-        local useLvlCh, useLvlNew = ImGui.Checkbox('##pull_uselevels', useLvl)
-        if useLvlCh then pull.usePullLevels = useLvlNew; runConfigLoaders() end
-        if pull.usePullLevels then
-            ImGui.TableNextRow()
-            ImGui.TableNextColumn()
-            ImGui.Text('Min Level')
-            ImGui.TableNextColumn()
-            local pmin = pull.pullMinLevel or 1
-            local pminNew, pminCh = inputs.boundedInt('pull_minlevel', pmin, 1, 125, 1, '##pull_minlevel')
-            if pminCh then pull.pullMinLevel = pminNew; runConfigLoaders() end
-            ImGui.TableNextRow()
-            ImGui.TableNextColumn()
-            ImGui.Text('Max Level')
-            ImGui.TableNextColumn()
-            local pmax = pull.pullMaxLevel or 125
-            local pmaxNew, pmaxCh = inputs.boundedInt('pull_maxlevel', pmax, 1, 125, 1, '##pull_maxlevel')
-            if pmaxCh then pull.pullMaxLevel = pmaxNew; runConfigLoaders() end
-        end
-        layout.endTwoColumn()
+    else
+        ImGui.SetNextItemWidth(rangeInputWidth)
+        local pmin = pull.pullMinLevel or 1
+        local pminNew, pminCh = inputs.boundedInt('pull_minlevel', pmin, 1, 125, 1, '##pull_minlevel')
+        if pminCh then pull.pullMinLevel = pminNew; runConfigLoaders() end
+        ImGui.SameLine()
+        ImGui.Text('Max Level')
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(rangeInputWidth)
+        local pmax = pull.pullMaxLevel or 125
+        local pmaxNew, pmaxCh = inputs.boundedInt('pull_maxlevel', pmax, 1, 125, 1, '##pull_maxlevel')
+        if pmaxCh then pull.pullMaxLevel = pmaxNew; runConfigLoaders() end
     end
 
     ImGui.Spacing()
-    ImGui.Separator()
-    ImGui.Text('Other')
     if layout.beginTwoColumn('pull_other_table', 200, 0) then
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
         ImGui.Text('Chain pull HP %')
         ImGui.TableNextColumn()
+        ImGui.SetNextItemWidth(rangeInputWidth)
         local cph = pull.chainpullhp or 0
         local cphNew, cphCh = inputs.boundedInt('pull_chainpullhp', cph, 0, 100, 5, '##pull_chainpullhp')
         if cphCh then pull.chainpullhp = cphNew; runConfigLoaders() end
@@ -147,6 +137,7 @@ function M.draw()
         ImGui.TableNextColumn()
         ImGui.Text('Chain pull count')
         ImGui.TableNextColumn()
+        ImGui.SetNextItemWidth(rangeInputWidth)
         local cpc = pull.chainpullcnt or 0
         local cpcNew, cpcCh = inputs.boundedInt('pull_chainpullcnt', cpc, 0, 20, 1, '##pull_chainpullcnt')
         if cpcCh then pull.chainpullcnt = cpcNew; runConfigLoaders() end
@@ -154,6 +145,7 @@ function M.draw()
         ImGui.TableNextColumn()
         ImGui.Text('Mana %')
         ImGui.TableNextColumn()
+        ImGui.SetNextItemWidth(rangeInputWidth)
         local mana = pull.mana or 60
         local manaNew, manaCh = inputs.boundedInt('pull_mana', mana, 0, 100, 5, '##pull_mana')
         if manaCh then pull.mana = manaNew; runConfigLoaders() end
@@ -169,6 +161,7 @@ function M.draw()
         ImGui.TableNextColumn()
         ImGui.Text('Leash')
         ImGui.TableNextColumn()
+        ImGui.SetNextItemWidth(rangeInputWidth)
         local leash = pull.leash or 500
         local leashNew, leashCh = inputs.boundedInt('pull_leash', leash, 0, 2000, 50, '##pull_leash')
         if leashCh then pull.leash = leashNew; recomputePullSquared(pull); runConfigLoaders() end
