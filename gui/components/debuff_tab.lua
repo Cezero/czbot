@@ -33,9 +33,12 @@ function M.draw()
     end
     ImGui.PopStyleColor(1)
 
-    local spells = (botconfig.config.debuff and botconfig.config.debuff.spells) or {}
+    local debuff = botconfig.config.debuff
+    if not debuff then return end
+    if not debuff.spells then debuff.spells = {} end
+    local spells = debuff.spells
+
     for i, entry in ipairs(spells) do
-        ImGui.Separator()
         spell_entry.draw(entry, {
             id = 'debuff_' .. i,
             label = 'Debuff ' .. i,
@@ -43,6 +46,23 @@ function M.draw()
             onChanged = runConfigLoaders,
             displayCommonFields = false,
         })
+        ImGui.Separator()
+    end
+
+    -- Right-align "Add debuff" button after the list
+    local addLabel = 'Add debuff'
+    local addTextW = select(1, ImGui.CalcTextSize(addLabel))
+    local addAvail = ImGui.GetContentRegionAvail()
+    local addButtonWidth = addTextW + 24
+    if addAvail and addAvail > 0 and addButtonWidth > 0 then
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + addAvail - addButtonWidth)
+    end
+    if ImGui.Button(addLabel) then
+        local defaultEntry = botconfig.getDefaultSpellEntry('debuff')
+        if defaultEntry then
+            table.insert(debuff.spells, defaultEntry)
+            runConfigLoaders()
+        end
     end
 end
 
