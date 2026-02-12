@@ -100,9 +100,18 @@ local function BuffEvalTank(index, entry, spell, spellid, rangeSq, tank, tankid)
     return nil, nil
 end
 
+-- Avoid storing mq.TLO.Spell/FindItem.Spell proxy; use direct chains (TLO quirk).
+local function getSpellRanges(entry)
+    if not entry or not entry.spell then return nil, nil end
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return nil, nil end
+        return mq.TLO.FindItem(entry.spell).Spell.MyRange(), mq.TLO.FindItem(entry.spell).Spell.AERange()
+    end
+    return mq.TLO.Spell(entry.spell).MyRange(), mq.TLO.Spell(entry.spell).AERange()
+end
+
 local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
-    local spellEntity = spellutils.GetSpellEntity(entry)
-    local aeRange = spellEntity and spellEntity.AERange()
+    local _, aeRange = getSpellRanges(entry)
     if not aeRange or aeRange <= 0 then return nil, nil end
     local aeRangeSq = aeRange * aeRange
     local function needBuff(grpmember, grpid, grpname, peer)
@@ -196,9 +205,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local spell, _, _, spellid = spellutils.GetSpellInfo(entry)
     if not spell or not spellid then return nil, nil end
     local sid = (spellid == 1536) and 1538 or spellid
-    local spellEntity = spellutils.GetSpellEntity(entry)
-    local myRange = spellEntity and spellEntity.MyRange()
-    local aeRange = spellEntity and spellEntity.AERange()
+    local myRange, aeRange = getSpellRanges(entry)
     local range = (myRange and myRange > 0) and myRange or aeRange
     local rangeSq = range and (range * range) or nil
     local tank, tankid, tanktar = spellutils.GetTankInfo(false)
