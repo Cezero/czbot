@@ -55,6 +55,7 @@ function spellutils.MountCheck()
 end
 
 -- Returns true if the spell has no reagents or the character has >= required count of each reagent in inventory.
+-- Do not store mq.TLO.Spell() proxy; use direct chains to avoid TLO quirk (stored proxy can break/hang).
 function spellutils.HasReagents(Sub, ID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry or not entry.spell then return true end
@@ -63,12 +64,11 @@ function spellutils.HasReagents(Sub, ID)
         spellForReagents = mq.TLO.FindItem(entry.spell).Spell.Name()
         if not spellForReagents or spellForReagents == '' then return true end
     end
-    local sp = mq.TLO.Spell(spellForReagents)
-    if not sp() then return true end
+    if not mq.TLO.Spell(spellForReagents)() then return true end
     for slot = 1, 4 do
-        local rid = sp.ReagentID(slot)()
+        local rid = mq.TLO.Spell(spellForReagents).ReagentID(slot)()
         if rid and rid > 0 then
-            local need = sp.ReagentCount(slot)() or 1
+            local need = mq.TLO.Spell(spellForReagents).ReagentCount(slot)() or 1
             local have = mq.TLO.FindItemCount(tostring(rid))() or 0
             if have < need then return false end
         end
@@ -100,10 +100,9 @@ function spellutils.SpellCheck(Sub, ID)
         printf('\ayCZBot:\axMissing reagent for %s, disabling spell for 5 minutes', spell)
         return false
     end
-    local spellEntity = mq.TLO.Spell(spell)
-    if not spellEntity then return false end
-    local spellmana = spellEntity.Mana()
-    local spellend = spellEntity.EnduranceCost()
+    if not mq.TLO.Spell(spell)() then return false end
+    local spellmana = mq.TLO.Spell(spell).Mana()
+    local spellend = mq.TLO.Spell(spell).EnduranceCost()
     if not ((tonumber(gem) and gem <= 13 and gem > 0) or gem == 'alt' or gem == 'item' or gem == 'script' or gem == 'disc' or gem == 'ability') then return false end
     if (tonumber(gem) or gem == 'alt') and spellmana then
         if (spellmana > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < spellmana) or (mq.TLO.Me.PctMana() < minmana)) then return false end
