@@ -82,11 +82,18 @@ function M.draw()
         ImGui.EndTable()
     end
     ImGui.Spacing()
-    if ImGui.BeginTable('flags table', 5, bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter), -1, 0) then
+    local style = ImGui.GetStyle()
+    ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, style.CellPadding.x, style.CellPadding.y + 3)
+    if ImGui.BeginTable('flags table', 5, ImGuiTableFlags.None, -1, 0) then
         for _, entry in ipairs(DO_FLAGS) do
             ImGui.TableNextColumn()
             local value = botconfig.config.settings[entry.key] == true
             local label = entry.label .. ': ' .. (value and 'On' or 'Off')
+            local avail = ImGui.GetContentRegionAvail()
+            local btnW = select(1, ImGui.CalcTextSize(label)) + style.FramePadding.x * 2
+            if avail > 0 and btnW > 0 and avail > btnW then
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - btnW) * 0.5)
+            end
             ImGui.PushStyleColor(ImGuiCol.Button, value and GREEN or RED)
             if ImGui.Button(label .. '##' .. entry.key) then
                 botconfig.config.settings[entry.key] = not value
@@ -96,6 +103,7 @@ function M.draw()
         end
         ImGui.EndTable()
     end
+    ImGui.PopStyleVar(1)
 end
 
 return M
