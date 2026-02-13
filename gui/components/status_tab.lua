@@ -1,6 +1,7 @@
 -- Status tab: status line, run state table, and doXXX flag On/Off buttons.
 
 local ImGui = require('ImGui') ---@cast ImGui ImGui
+local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 
@@ -88,16 +89,23 @@ function M.draw()
         for _, entry in ipairs(DO_FLAGS) do
             ImGui.TableNextColumn()
             local value = botconfig.config.settings[entry.key] == true
-            local label = entry.label .. ': ' .. (value and 'On' or 'Off')
+            local icon = value and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
+            local labelW = select(1, ImGui.CalcTextSize(entry.label)) or 0
+            local iconW = (select(1, ImGui.CalcTextSize(icon)) or 0) + style.FramePadding.x * 2
+            local totalW = labelW + style.ItemSpacing.x + iconW
             local avail = ImGui.GetContentRegionAvail()
-            local btnW = select(1, ImGui.CalcTextSize(label)) + style.FramePadding.x * 2
-            if avail > 0 and btnW > 0 and avail > btnW then
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - btnW) * 0.5)
+            if avail > 0 and totalW > 0 and avail > totalW then
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - totalW) * 0.5)
             end
+            ImGui.Text('%s', entry.label)
+            ImGui.SameLine()
             ImGui.PushStyleColor(ImGuiCol.Button, value and GREEN or RED)
-            if ImGui.Button(label .. '##' .. entry.key) then
+            if ImGui.SmallButton(icon .. '##' .. entry.key) then
                 botconfig.config.settings[entry.key] = not value
                 botconfig.ApplyAndPersist()
+            end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip(value and 'On' or 'Off')
             end
             ImGui.PopStyleColor(1)
         end
