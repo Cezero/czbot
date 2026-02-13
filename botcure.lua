@@ -51,7 +51,7 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
         if not botname then
             local curetype = mq.TLO.Me[v] and mq.TLO.Me[v]()
             if string.lower(v) ~= 'all' and curetype then
-                if spelltartype == 'Self' then return 1, 'self' end
+                if spelltartype == 'Self' then return mq.TLO.Me.ID(), 'self' end
                 return mq.TLO.Me.ID(), 'self'
             end
         else

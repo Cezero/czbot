@@ -733,7 +733,7 @@ function spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltar
     local lostOrCorpse = (targetSpawn.ID() == 0) or (string.find(targetSpawn.Name() or '', 'corpse') and criteria ~= 'corpse')
     if not lostOrCorpse then return end
     mq.cmd('/squelch /multiline; /stick off ; /target clear')
-    if mq.TLO.Me.CastTimeLeft() > 0 and rc.CurSpell.target ~= 1 and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
+    if mq.TLO.Me.CastTimeLeft() > 0 and rc.CurSpell.target ~= mq.TLO.Me.ID() and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
         mq.cmd('/echo I lost my target, interrupting')
         if rc.CurSpell.viaMQ2Cast then mq.cmd('/interrupt') else mq.cmd('/stopcast') end
         if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
@@ -909,11 +909,12 @@ function spellutils.RequireTargetThenDontStackDebuff(entry, EvalID)
 end
 
 function spellutils.BuildMQ2CastCommand(entry, EvalID, targethit, sub)
+    local meId = mq.TLO.Me.ID()
     local gem = entry.gem
     local spellname = entry.spell
     local castArg = (type(gem) == 'number') and tostring(gem) or gem
     local cmd = string.format('/casting "%s" %s', spellname, castArg)
-    if EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
+    if EvalID ~= meId or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
         cmd = cmd .. string.format(' -targetid|%s', EvalID)
     end
     if sub == 'debuff' then
@@ -923,7 +924,7 @@ function spellutils.BuildMQ2CastCommand(entry, EvalID, targethit, sub)
 end
 
 function spellutils.ExecuteNativeCast(gem, spell, entry, sub, index, EvalID, targethit)
-    local isSelfOrGroup = (EvalID == 1 and (targethit == 'self' or targethit == 'groupheal' or targethit == 'groupbuff' or targethit == 'groupcure'))
+    local isSelfOrGroup = (EvalID == mq.TLO.Me.ID() and (targethit == 'self' or targethit == 'groupheal' or targethit == 'groupbuff' or targethit == 'groupcure'))
     if type(gem) == 'number' or gem == 'item' or gem == 'alt' or gem == 'script' then
         if isSelfOrGroup then
             if type(gem) == 'number' then
@@ -954,8 +955,10 @@ function spellutils.ExecuteNativeCast(gem, spell, entry, sub, index, EvalID, tar
     end
 end
 
+--- EvalID is the spawn ID of the cast target; for self/group it is Me.ID().
 function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellcheckResume)
     local rc = state.getRunconfig()
+    local meId = mq.TLO.Me.ID()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return false end
     local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
@@ -977,7 +980,8 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     end
     local spell = string.lower(entry.spell or '')
     local gem = entry.gem
-    local targetname = mq.TLO.Spawn(EvalID).CleanName()
+    local spawn = mq.TLO.Spawn(EvalID)
+    local targetname = (spawn and spawn.CleanName()) or 'Unknown'
     local spellname = entry.spell or spell
     if not resuming then
         spellutils.SetCastStatusMessage(sub, targetname, spellname)
@@ -1000,7 +1004,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
     local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
-    if not useMQ2Cast and (EvalID ~= 1 or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then
+    if not useMQ2Cast and (EvalID ~= meId or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then
         if mq.TLO.Target.ID() ~= EvalID then
             mq.cmdf('/tar id %s', EvalID)
             rc.CurSpell.phase = 'precast'

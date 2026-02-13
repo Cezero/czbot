@@ -171,21 +171,6 @@ local function updateImGui()
     ImGui.SetNextWindowSize(ImVec2(600, 800), ImGuiCond.FirstUseEver)
     isOpen, shouldDraw = ImGui.Begin('CZBot ' .. VERSION .. '###CZBotMain', isOpen)
     if shouldDraw then
-        if ImGui.Button('Open Config') then
-            os.execute('start "" "' .. botconfig.getPath() .. '"')
-        end
-        ImGui.SameLine()
-        local endButtonLabel = 'End CZBot'
-        local endButtonWidth = select(1, ImGui.CalcTextSize(endButtonLabel)) + ImGui.GetStyle().FramePadding.x * 2
-        local avail = ImGui.GetContentRegionAvail()
-        if avail > 0 then
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - endButtonWidth)
-        end
-        ImGui.PushStyleColor(ImGuiCol.Button, RED)
-        if ImGui.Button(endButtonLabel) then
-            state.getRunconfig().terminate = true
-        end
-        ImGui.PopStyleColor(1)
         ImGui.Spacing()
         if ImGui.BeginTabBar('CZBot GUI') then
             if ImGui.BeginTabItem('Status') then

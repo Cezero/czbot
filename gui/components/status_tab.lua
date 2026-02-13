@@ -69,6 +69,19 @@ end
 
 function M.draw()
     ImGui.TextColored(YELLOW, '%s', getStatusLine())
+    ImGui.SameLine()
+    local exitButtonLabel = Icons.FA_POWER_OFF .. ' Exit'
+    local exitButtonWidth = (select(1, ImGui.CalcTextSize(exitButtonLabel)) or 0) + ImGui.GetStyle().FramePadding.x * 2
+    local avail = ImGui.GetContentRegionAvail()
+    if avail > 0 then
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - exitButtonWidth)
+    end
+    ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+    ImGui.PushStyleColor(ImGuiCol.Text, RED)
+    if ImGui.Button(exitButtonLabel) then
+        state.getRunconfig().terminate = true
+    end
+    ImGui.PopStyleColor(2)
     ImGui.Spacing()
     if ImGui.BeginTable('status table', 2, bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter)) then
         ImGui.TableSetupColumn('Key', 0, 0.35)

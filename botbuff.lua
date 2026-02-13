@@ -68,7 +68,7 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             local freebuffslots = mq.TLO.Me.FreeBuffSlots()
             if (not buff) or (buffdur and buffdur < 24000 and mycasttime > 0 and freebuffslots > 0) then
                 if IconCheck(index, myid) then
-                    if tartype == 'Self' and stacks then return 1, 'self' end
+                    if tartype == 'Self' and stacks then return myid, 'self' end
                     if stacks then return myid, 'self' end
                 end
             end

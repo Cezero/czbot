@@ -63,7 +63,7 @@ function botevents.Event_CastImm(line)
     if string.find(line, "(with this spell)") then return false end
     if mq.TLO.Cast.Stored.ID() == spellid then
         if mq.TLO.Spell(spellid).TargetType() ~= "Targeted AE" and mq.TLO.Spell(spellid).TargetType() ~= "PB AE" then
-            if state.getRunconfig().CurSpell.target or state.getRunconfig().CurSpell.target == 1 then
+            if state.getRunconfig().CurSpell.target then
                 if state.getRunconfig().CurSpell.target == curtarget then
                     local immuneID = state.getRunconfig().CurSpell.target
                     immune.processList(immuneID)

@@ -100,7 +100,7 @@ function castutils.evalGroupAECount(entry, targethit, index, bandTable, phaseKey
         end
     end
     if needCount >= (entry.tarcnt or 1) then
-        if tartype == 'Group v1' then return 1, targethit end
+        if tartype == 'Group v1' then return mq.TLO.Me.ID(), targethit end
         return mq.TLO.Me.ID(), targethit
     end
     return nil, nil
