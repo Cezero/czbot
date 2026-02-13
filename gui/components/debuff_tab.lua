@@ -34,9 +34,9 @@ local PRIMARY_OPTIONS_DEBUFF = {
 }
 
 local TARGETPHASE_OPTIONS_DEBUFF = {
-    { key = 'tanktar',   label = "Tank's Target",  tooltip = "Use when tank has a target (e.g. debuff tank's target)." },
+    { key = 'tanktar',   label = "Tank's Target",     tooltip = "Use when tank has a target (e.g. debuff tank's target)." },
     { key = 'notanktar', label = "Not Tank's Target", tooltip = 'Use on mobs not targeted by the tank (e.g. mez adds).' },
-    { key = 'named',     label = 'Named',          tooltip = 'Use on named mobs only.' },
+    { key = 'named',     label = 'Named',             tooltip = 'Use on named mobs only.' },
 }
 
 local function runConfigLoaders()
@@ -47,12 +47,15 @@ end
 local function debuffCustomSection(entry, idPrefix, onChanged)
     -- First line: Recast and Delay (SameLine)
     ImGui.Text('Recast')
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('After this many resists on the same spawn, disable this spell for that spawn. 0 = no limit.') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip(
+        'After this many resists on the same spawn, disable this spell for that spawn. 0 = no limit.') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local recast = entry.recast or 0
     local newRecast, recastCh = inputs.boundedInt(idPrefix .. '_recast', recast, 0, 999, 1, '##' .. idPrefix .. '_recast')
-    if recastCh then entry.recast = newRecast; if onChanged then onChanged() end end
+    if recastCh then
+        entry.recast = newRecast; if onChanged then onChanged() end
+    end
     ImGui.SameLine()
     ImGui.Text('Delay')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Delay (ms) before this spell can be used again after cast.') end
@@ -60,13 +63,16 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH + 28)
     local delay = entry.delay or 0
     local newDelay, delayCh = inputs.boundedInt(idPrefix .. '_delay', delay, 0, 60000, 100, '##' .. idPrefix .. '_delay')
-    if delayCh then entry.delay = newDelay; if onChanged then onChanged() end end
+    if delayCh then
+        entry.delay = newDelay; if onChanged then onChanged() end
+    end
 
     -- Don't stack: labeled grid (4 options per row)
     labeled_grid.checkboxGrid({
         id = idPrefix .. '_dontstack',
         label = "Don't stack:",
-        labelTooltip = "If target already has any of these categories (e.g. Snared), don't cast this spell and interrupt if it appears while casting.",
+        labelTooltip =
+        "If target already has any of these categories (e.g. Snared), don't cast this spell and interrupt if it appears while casting.",
         options = DONTSTACK_OPTIONS,
         value = entry.dontStack or {},
         columns = 4,
@@ -76,7 +82,10 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
                 entry.dontStack[#entry.dontStack + 1] = key
             else
                 for i = #entry.dontStack, 1, -1 do
-                    if entry.dontStack[i] == key then table.remove(entry.dontStack, i) break end
+                    if entry.dontStack[i] == key then
+                        table.remove(entry.dontStack, i)
+                        break
+                    end
                 end
                 if #entry.dontStack == 0 then entry.dontStack = nil end
             end
@@ -103,7 +112,9 @@ function M.draw()
             validtargetsOptions = {},
             showBandMinMax = true,
             showBandMinTarMaxtar = true,
-            onDelete = function() table.remove(debuff.spells, i); runConfigLoaders() end,
+            onDelete = function()
+                table.remove(debuff.spells, i); runConfigLoaders()
+            end,
             deleteEntryLabel = 'Debuff',
         })
         ImGui.Separator()

@@ -17,16 +17,16 @@ local PRIMARY_OPTIONS = {
 
 -- Order matches botheal HEAL_PHASE_ORDER; cbt is optional (allow rez in combat with corpse).
 local TARGETPHASE_OPTIONS_HEAL = {
-    { key = 'corpse',      label = 'Corpse',      tooltip = 'Resurrect PC corpses.' },
-    { key = 'self',        label = 'Self',        tooltip = 'Heal self.' },
-    { key = 'groupheal',   label = 'Grp Heal',    tooltip = 'Group AE heals (group v1/v2).' },
-    { key = 'tank',        label = 'Tank',        tooltip = 'Heal tank (main assist).' },
-    { key = 'groupmember', label = 'Group',  tooltip = 'Heal group members (class filter below).' },
-    { key = 'pc',          label = 'PC',          tooltip = 'Heal other PCs/bots (class filter below).' },
-    { key = 'mypet',       label = 'My Pet',      tooltip = 'Heal your pet.' },
-    { key = 'pet',         label = 'Pet',         tooltip = 'Heal other group pets.' },
-    { key = 'xtgt',        label = 'XTarget',     tooltip = 'Heal extended targets (heal.xttargets).' },
-    { key = 'cbt',         label = 'Cbt',         tooltip = 'With Corpse: allow rez in combat (MobList present).' },
+    { key = 'corpse',      label = 'Corpse',   tooltip = 'Resurrect PC corpses.' },
+    { key = 'self',        label = 'Self',     tooltip = 'Heal self.' },
+    { key = 'groupheal',   label = 'Grp Heal', tooltip = 'Group AE heals' },
+    { key = 'tank',        label = 'Tank',     tooltip = 'Heal tank (main assist).' },
+    { key = 'groupmember', label = 'Group',    tooltip = 'Heal group members (class filter below).' },
+    { key = 'pc',          label = 'PC',       tooltip = 'Heal other PCs/bots (class filter below).' },
+    { key = 'mypet',       label = 'My Pet',   tooltip = 'Heal your pet.' },
+    { key = 'pet',         label = 'Pet',      tooltip = 'Heal other group pets.' },
+    { key = 'xtgt',        label = 'XTarget',  tooltip = 'Heal extended targets.' },
+    { key = 'cbt',         label = 'Cbt',      tooltip = 'With Corpse: allow rez in combat (MobList present).' },
 }
 
 -- Corpse-phase target options (who to rez).
@@ -87,7 +87,9 @@ function M.draw()
             validtargetsOptionsPerPhase = VALIDTARGETS_OPTIONS_PER_PHASE_HEAL,
             showBandMinMax = true,
             showBandMinTarMaxtar = false,
-            onDelete = function() table.remove(heal.spells, i); runConfigLoaders() end,
+            onDelete = function()
+                table.remove(heal.spells, i); runConfigLoaders()
+            end,
             deleteEntryLabel = 'Heal',
         })
         ImGui.Separator()
