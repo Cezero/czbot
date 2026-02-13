@@ -12,6 +12,7 @@ local mq = require('mq') ---@cast mq mq
 local ImGui = require('ImGui') ---@cast ImGui ImGui
 local combos = require('gui.widgets.combos')
 local inputs = require('gui.widgets.inputs')
+local labeled_grid = require('gui.widgets.labeled_grid')
 local modals = require('gui.widgets.modals')
 
 local M = {}
@@ -316,6 +317,8 @@ function M.draw(spell, opts)
         -- Bands widget
         local targetphaseOptions = opts.targetphaseOptions or {}
         local validtargetsOptions = opts.validtargetsOptions or {}
+        local phasesColumns = opts.phasesColumns or 5
+        local targetsColumns = opts.targetsColumns or 5
         local showBandMinMax = opts.showBandMinMax == true
         local showBandMinTarMaxtar = opts.showBandMinTarMaxtar == true
         if not spell.bands or #spell.bands == 0 then
@@ -326,33 +329,27 @@ function M.draw(spell, opts)
                 local band = spell.bands[bi]
                 if not band.targetphase then band.targetphase = {} end
                 if not band.validtargets then band.validtargets = {} end
-                -- Phases row: checkboxes + Delete (except first band)
-                ImGui.Text('Phases:')
-                ImGui.SameLine()
-                for pi, opt in ipairs(targetphaseOptions) do
-                    local key, label, tooltip = opt.key, opt.label, opt.tooltip
-                    local function hasKey(t, k)
-                        for _, v in ipairs(t) do if v == k then return true end end
-                        return false
-                    end
-                    local checked = hasKey(band.targetphase, key)
-                    local cNew, cPressed = ImGui.Checkbox((label or key) .. '##' .. id .. '_band' .. bi .. '_ph_' .. key,
-                        checked)
-                    if tooltip and ImGui.IsItemHovered() then ImGui.SetTooltip('%s', tooltip) end
-                    if cPressed then
-                        if cNew then
+                -- Phases: labeled grid (5 per row by default)
+                labeled_grid.checkboxGrid({
+                    id = id .. '_band' .. bi .. '_ph',
+                    label = 'Phases:',
+                    options = targetphaseOptions,
+                    value = band.targetphase,
+                    columns = phasesColumns,
+                    onToggle = function(key, isChecked)
+                        if isChecked then
                             band.targetphase[#band.targetphase + 1] = key
                         else
-                            for i = #band.targetphase, 1, -1 do if band.targetphase[i] == key then
+                            for i = #band.targetphase, 1, -1 do
+                                if band.targetphase[i] == key then
                                     table.remove(band.targetphase, i)
                                     break
-                                end end
+                                end
+                            end
                         end
                         if onChanged then onChanged() end
-                    end
-                    -- SameLine after last phase only when Delete is on this row (bi > 1), so next row starts on new line
-                    if pi < #targetphaseOptions or bi > 1 then ImGui.SameLine() end
-                end
+                    end,
+                })
                 if bi > 1 then
                     local delW = select(1, ImGui.CalcTextSize('Delete')) + 24
                     local availDel = ImGui.GetContentRegionAvail()
@@ -383,27 +380,26 @@ function M.draw(spell, opts)
                     effectiveTargetOpts = validtargetsOptions
                 end
                 if #effectiveTargetOpts > 0 then
-                    ImGui.Text('Targets:')
-                    ImGui.SameLine()
-                    local function hasKey(t, k)
-                        for _, v in ipairs(t) do if v == k then return true end end
-                        return false
-                    end
-                    for vi, opt in ipairs(effectiveTargetOpts) do
-                        local key, label, tooltip = opt.key, opt.label, opt.tooltip
-                        local checked = hasKey(band.validtargets, key)
-                        local cNew, cPressed = ImGui.Checkbox(
-                        (label or key) .. '##' .. id .. '_band' .. bi .. '_vt_' .. key, checked)
-                        if tooltip and ImGui.IsItemHovered() then ImGui.SetTooltip('%s', tooltip) end
-                        if cPressed then
-                            if cNew then band.validtargets[#band.validtargets + 1] = key else for i = #band.validtargets, 1, -1 do if band.validtargets[i] == key then
+                    labeled_grid.checkboxGrid({
+                        id = id .. '_band' .. bi .. '_vt',
+                        label = 'Targets:',
+                        options = effectiveTargetOpts,
+                        value = band.validtargets,
+                        columns = targetsColumns,
+                        onToggle = function(key, isChecked)
+                            if isChecked then
+                                band.validtargets[#band.validtargets + 1] = key
+                            else
+                                for i = #band.validtargets, 1, -1 do
+                                    if band.validtargets[i] == key then
                                         table.remove(band.validtargets, i)
                                         break
-                                    end end end
+                                    end
+                                end
+                            end
                             if onChanged then onChanged() end
-                        end
-                        if vi < #effectiveTargetOpts then ImGui.SameLine() end
-                    end
+                        end,
+                    })
                 end
                 -- HP % / # Targets row
 
