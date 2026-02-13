@@ -12,6 +12,10 @@ local RED = ImVec4(1, 0, 0, 1)
 local GREEN = ImVec4(0, 0.8, 0, 1)
 local BLACK = ImVec4(0, 0, 0, 1)
 
+local FLAGS_COLUMN_WIDTH = 60
+local FLAGS_ROW_PADDING_Y = 2
+local FLAGS_PANEL_WIDTH = 2 * FLAGS_COLUMN_WIDTH
+
 local DO_FLAGS = {
     { key = 'dopull', label = 'Pull' },
     { key = 'dodebuff', label = 'Debuff' },
@@ -70,15 +74,19 @@ end
 function M.draw()
     ImGui.TextColored(YELLOW, '%s', getStatusLine())
     ImGui.SameLine()
-    local exitButtonLabel = Icons.FA_POWER_OFF .. ' Exit'
-    local exitButtonWidth = (select(1, ImGui.CalcTextSize(exitButtonLabel)) or 0) + ImGui.GetStyle().FramePadding.x * 2
+    local style = ImGui.GetStyle()
+    local exitLabelW = (select(1, ImGui.CalcTextSize('Exit')) or 0)
+    local exitIconW = (select(1, ImGui.CalcTextSize(Icons.FA_POWER_OFF)) or 0) + style.FramePadding.x * 2
+    local exitTotalW = exitLabelW + style.ItemSpacing.x + exitIconW
     local avail = ImGui.GetContentRegionAvail()
     if avail > 0 then
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - exitButtonWidth)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - exitTotalW)
     end
+    ImGui.Text('%s', 'Exit')
+    ImGui.SameLine()
     ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
     ImGui.PushStyleColor(ImGuiCol.Text, RED)
-    if ImGui.Button(exitButtonLabel) then
+    if ImGui.SmallButton(Icons.FA_POWER_OFF .. '##exit') then
         state.getRunconfig().terminate = true
     end
     ImGui.PopStyleColor(2)
@@ -97,36 +105,41 @@ function M.draw()
         ImGui.EndTable()
     end
     ImGui.Spacing()
-    local style = ImGui.GetStyle()
-    ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, style.CellPadding.x, style.CellPadding.y + 3)
-    if ImGui.BeginTable('flags table', 5, ImGuiTableFlags.None, -1, 0) then
-        for _, entry in ipairs(DO_FLAGS) do
-            ImGui.TableNextColumn()
-            local value = botconfig.config.settings[entry.key] == true
-            local icon = value and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
-            local labelW = select(1, ImGui.CalcTextSize(entry.label)) or 0
-            local iconW = (select(1, ImGui.CalcTextSize(icon)) or 0) + style.FramePadding.x * 2
-            local totalW = labelW + style.ItemSpacing.x + iconW
-            local avail = ImGui.GetContentRegionAvail()
-            if avail > 0 and totalW > 0 and avail > totalW then
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - totalW)
+    if ImGui.BeginTable('flags wrapper', 2, ImGuiTableFlags.None) then
+        ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
+        ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, FLAGS_PANEL_WIDTH)
+        ImGui.TableNextRow()
+        ImGui.TableNextColumn()
+        ImGui.TableNextColumn()
+        ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, style.CellPadding.x, FLAGS_ROW_PADDING_Y)
+        if ImGui.BeginTable('flags table', 2, ImGuiTableFlags.None) then
+            ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, FLAGS_COLUMN_WIDTH)
+            ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, FLAGS_COLUMN_WIDTH)
+            for i, entry in ipairs(DO_FLAGS) do
+                if (i - 1) % 2 == 0 then
+                    ImGui.TableNextRow()
+                end
+                ImGui.TableNextColumn()
+                local value = botconfig.config.settings[entry.key] == true
+                local icon = value and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
+                ImGui.Text('%s', entry.label)
+                ImGui.SameLine()
+                ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+                ImGui.PushStyleColor(ImGuiCol.Text, value and GREEN or RED)
+                if ImGui.SmallButton(icon .. '##' .. entry.key) then
+                    botconfig.config.settings[entry.key] = not value
+                    botconfig.ApplyAndPersist()
+                end
+                if ImGui.IsItemHovered() then
+                    ImGui.SetTooltip(value and 'On' or 'Off')
+                end
+                ImGui.PopStyleColor(2)
             end
-            ImGui.Text('%s', entry.label)
-            ImGui.SameLine()
-            ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
-            ImGui.PushStyleColor(ImGuiCol.Text, value and GREEN or RED)
-            if ImGui.SmallButton(icon .. '##' .. entry.key) then
-                botconfig.config.settings[entry.key] = not value
-                botconfig.ApplyAndPersist()
-            end
-            if ImGui.IsItemHovered() then
-                ImGui.SetTooltip(value and 'On' or 'Off')
-            end
-            ImGui.PopStyleColor(2)
+            ImGui.EndTable()
         end
+        ImGui.PopStyleVar(1)
         ImGui.EndTable()
     end
-    ImGui.PopStyleVar(1)
 end
 
 return M
