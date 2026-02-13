@@ -526,9 +526,10 @@ function M.Load(path)
     for _, section in ipairs({ 'heal', 'buff', 'debuff', 'cure' }) do
         if not M.config[section].spells then M.config[section].spells = {} end
     end
-    -- Normalize precondition to string or nil (no boolean) in all spell entries
+    -- Normalize precondition to string or nil (no boolean) in all spell entries; spell to string (config may have number e.g. 0)
     for _, section in ipairs({ 'heal', 'buff', 'debuff', 'cure' }) do
         for _, entry in ipairs(M.config[section].spells or {}) do
+            if type(entry.spell) ~= 'string' then entry.spell = '' end
             if type(entry.precondition) == 'boolean' then
                 entry.precondition = entry.precondition and nil or 'false'
             elseif type(entry.precondition) == 'string' and (entry.precondition == '' or entry.precondition:match('^%s*$')) then

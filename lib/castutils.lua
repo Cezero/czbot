@@ -51,9 +51,6 @@ function castutils.LoadSpellSectionConfig(section, opts)
         myconfig[section].spells = {}
         spells = myconfig[section].spells
     end
-    while #spells < 2 do
-        table.insert(spells, opts.defaultEntry())
-    end
     for i = 1, #spells do
         local entry = spells[i]
         if not entry then
