@@ -21,7 +21,7 @@ local TARGETPHASE_OPTIONS_HEAL = {
     { key = 'self',        label = 'Self',        tooltip = 'Heal self.' },
     { key = 'groupheal',   label = 'Grp Heal',    tooltip = 'Group AE heals (group v1/v2).' },
     { key = 'tank',        label = 'Tank',        tooltip = 'Heal tank (main assist).' },
-    { key = 'groupmember', label = 'Grp Member',  tooltip = 'Heal group members (class filter below).' },
+    { key = 'groupmember', label = 'Group',  tooltip = 'Heal group members (class filter below).' },
     { key = 'pc',          label = 'PC',          tooltip = 'Heal other PCs/bots (class filter below).' },
     { key = 'mypet',       label = 'My Pet',      tooltip = 'Heal your pet.' },
     { key = 'pet',         label = 'Pet',         tooltip = 'Heal other group pets.' },
@@ -87,6 +87,8 @@ function M.draw()
             validtargetsOptionsPerPhase = VALIDTARGETS_OPTIONS_PER_PHASE_HEAL,
             showBandMinMax = true,
             showBandMinTarMaxtar = false,
+            onDelete = function() table.remove(heal.spells, i); runConfigLoaders() end,
+            deleteEntryLabel = 'Heal',
         })
         ImGui.Separator()
     end

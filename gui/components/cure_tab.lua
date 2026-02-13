@@ -37,6 +37,8 @@ function M.draw()
             validtargetsOptions = {},
             showBandMinMax = false,
             showBandMinTarMaxtar = false,
+            onDelete = function() table.remove(cure.spells, i); runConfigLoaders() end,
+            deleteEntryLabel = 'Cure',
         })
         ImGui.Separator()
     end

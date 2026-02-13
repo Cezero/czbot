@@ -37,6 +37,8 @@ function M.draw()
             validtargetsOptions = {},
             showBandMinMax = false,
             showBandMinTarMaxtar = false,
+            onDelete = function() table.remove(buff.spells, i); runConfigLoaders() end,
+            deleteEntryLabel = 'Buff',
         })
         ImGui.Separator()
     end

@@ -103,6 +103,8 @@ function M.draw()
             validtargetsOptions = {},
             showBandMinMax = true,
             showBandMinTarMaxtar = true,
+            onDelete = function() table.remove(debuff.spells, i); runConfigLoaders() end,
+            deleteEntryLabel = 'Debuff',
         })
         ImGui.Separator()
     end

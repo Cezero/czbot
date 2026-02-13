@@ -8,6 +8,7 @@ local ImGui = require('ImGui') ---@cast ImGui ImGui
 local M = {}
 
 local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
+local RED = ImVec4(1, 0, 0, 1)
 local EnterReturnsTrue = ImGuiInputTextFlags.EnterReturnsTrue or 0
 local POPUP_FLAGS = bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.NoResize)
 
@@ -81,6 +82,54 @@ end
 ---@param id string
 function M.openValidatedEditModal(id)
     ImGui.OpenPopup('##ValidatedEditModal_' .. id)
+end
+
+--- Delete confirmation modal: "Are you sure?" with DELETE (red) and CANCEL. Deferred close like validatedEditModal.
+---@param id string unique id for this popup
+---@param state table { open: boolean, pendingClose: 'delete'|'cancel'|nil } caller-owned
+---@param entryLabel string e.g. "Heal" for message
+---@param onConfirm fun() called when DELETE confirmed
+---@param onCancel fun() called when CANCEL
+function M.deleteConfirmModal(id, state, entryLabel, onConfirm, onCancel)
+    if not state.open then
+        return
+    end
+    local popupId = '##DeleteConfirm_' .. id
+    local show = ImGui.BeginPopupModal(popupId, nil, POPUP_FLAGS)
+    if not show then
+        return
+    end
+    if state.pendingClose then
+        local wasDelete = (state.pendingClose == 'delete')
+        ImGui.CloseCurrentPopup()
+        if wasDelete then
+            onConfirm()
+        else
+            onCancel()
+        end
+        state.open = false
+        state.pendingClose = nil
+        ImGui.EndPopup()
+        return
+    end
+    ImGui.Text('Are you sure you want to delete this %s?', entryLabel or 'entry')
+    ImGui.Spacing()
+    ImGui.PushStyleColor(ImGuiCol.Button, RED)
+    if ImGui.Button('DELETE##DeleteConfirm_Delete_' .. id) then
+        state.pendingClose = 'delete'
+    end
+    ImGui.PopStyleColor(1)
+    ImGui.SameLine()
+    if ImGui.Button('CANCEL##DeleteConfirm_Cancel_' .. id) then
+        state.pendingClose = 'cancel'
+    end
+    ImGui.EndPopup()
+end
+
+--- Open the delete confirm popup (call after setting state.open = true).
+---@param id string
+function M.openDeleteConfirmModal(id)
+    ImGui.OpenPopup('##DeleteConfirm_' .. id)
 end
 
 return M

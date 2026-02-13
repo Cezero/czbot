@@ -10,6 +10,7 @@
 
 local mq = require('mq') ---@cast mq mq
 local ImGui = require('ImGui') ---@cast ImGui ImGui
+local Icons = require('mq.ICONS')
 local combos = require('gui.widgets.combos')
 local inputs = require('gui.widgets.inputs')
 local labeled_grid = require('gui.widgets.labeled_grid')
@@ -144,6 +145,15 @@ function M.draw(spell, opts)
         _modalState[id] = { open = false, buffer = '', error = nil }
     end
     local state = _modalState[id]
+    if opts.onDelete and not state.deleteConfirm then
+        state.deleteConfirm = { open = false, pendingClose = nil }
+    end
+    if state.deleteConfirm and state.deleteConfirm.open then
+        modals.deleteConfirmModal(id, state.deleteConfirm, opts.deleteEntryLabel or 'entry', opts.onDelete, function()
+            state.deleteConfirm.open = false
+            state.deleteConfirm.pendingClose = nil
+        end)
+    end
     local function ensureEditBuffers()
         if state.aliasBuf == nil then
             state.aliasBuf = (type(spell.alias) == 'string' and spell.alias or '')
@@ -261,10 +271,29 @@ function M.draw(spell, opts)
         local enabledColor = (spell.enabled ~= false) and GREEN or RED
         local enabledTextW = select(1, ImGui.CalcTextSize(enabledLabel))
         local enabledButtonWidth = (enabledTextW or 0) + 24
+        local deleteButtonWidth = 0
+        if opts.onDelete then
+            local trashW = select(1, ImGui.CalcTextSize(Icons.FA_TRASH))
+            deleteButtonWidth = (trashW or 0) + 24
+        end
+        local totalRightWidth = enabledButtonWidth + (opts.onDelete and (deleteButtonWidth + 4) or 0)
         local availEnabled = ImGui.GetContentRegionAvail()
-        if availEnabled and availEnabled > enabledButtonWidth then
-            ImGui.SameLine(ImGui.GetCursorPosX() + availEnabled - enabledButtonWidth)
+        if availEnabled and availEnabled > totalRightWidth then
+            ImGui.SameLine(ImGui.GetCursorPosX() + availEnabled - totalRightWidth)
         else
+            ImGui.SameLine()
+        end
+        if opts.onDelete then
+            ImGui.PushStyleColor(ImGuiCol.Button, RED)
+            if ImGui.SmallButton(Icons.FA_TRASH .. '##' .. id .. '_delete') then
+                state.deleteConfirm.open = true
+                state.deleteConfirm.pendingClose = nil
+                modals.openDeleteConfirmModal(id)
+            end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip('Delete this %s', opts.deleteEntryLabel or 'entry')
+            end
+            ImGui.PopStyleColor(1)
             ImGui.SameLine()
         end
         ImGui.PushStyleColor(ImGuiCol.Button, enabledColor)
