@@ -38,9 +38,6 @@ local TARGETPHASE_OPTIONS_DEBUFF = {
     { key = 'named',     label = 'Named',          tooltip = 'Use on named mobs only.' },
 }
 
-local GREEN = ImVec4(0, 0.8, 0, 1)
-local RED = ImVec4(1, 0, 0, 1)
-
 local function runConfigLoaders()
     botconfig.RunConfigLoaders()
 end
@@ -106,29 +103,10 @@ end
 
 --- Draw the full Debuff tab content.
 function M.draw()
-    local doDebuff = botconfig.config.settings.dodebuff == true
-    local label = doDebuff and 'Debuff: On' or 'Debuff: Off'
-    local color = doDebuff and GREEN or RED
-
-    -- Center the toggle button on the first line
-    local textW = select(1, ImGui.CalcTextSize(label))
-    local avail = ImGui.GetContentRegionAvail()
-    local buttonWidth = textW + 24
-    if avail and avail > 0 and buttonWidth > 0 then
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - buttonWidth) / 2)
-    end
-    ImGui.PushStyleColor(ImGuiCol.Button, color)
-    if ImGui.Button(label) then
-        botconfig.config.settings.dodebuff = not doDebuff
-        runConfigLoaders()
-    end
-    ImGui.PopStyleColor(1)
-
     local debuff = botconfig.config.debuff
     if not debuff then return end
     if not debuff.spells then debuff.spells = {} end
     local spells = debuff.spells
-    ImGui.Separator()
     for i, entry in ipairs(spells) do
         spell_entry.draw(entry, {
             id = 'debuff_' .. i,

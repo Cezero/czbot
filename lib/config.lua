@@ -106,7 +106,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'dopet' },
+    settings = { 'mountcast', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
