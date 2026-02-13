@@ -95,7 +95,7 @@ function M.draw()
             local totalW = labelW + style.ItemSpacing.x + iconW
             local avail = ImGui.GetContentRegionAvail()
             if avail > 0 and totalW > 0 and avail > totalW then
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - totalW) * 0.5)
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - totalW)
             end
             ImGui.Text('%s', entry.label)
             ImGui.SameLine()
