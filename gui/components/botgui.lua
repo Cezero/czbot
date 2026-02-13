@@ -50,6 +50,7 @@ local function drawNestedTableTree(tbl)
                     else
                         tbl[k] = strVal
                     end
+                    botconfig.ApplyAndPersist()
                 end
                 ImGui.TableNextColumn()
             end
@@ -128,7 +129,7 @@ local function drawOrderedNestedTableTree(tbl, order)
                     else
                         tbl[v] = strVal
                     end
-                    botconfig.RunConfigLoaders()
+                    botconfig.ApplyAndPersist()
                 end
                 ImGui.TableNextColumn()
             end
@@ -167,11 +168,6 @@ local function updateImGui()
     ImGui.SetNextWindowSize(ImVec2(600, 800), ImGuiCond.FirstUseEver)
     isOpen, shouldDraw = ImGui.Begin('CZBot ' .. VERSION .. '###CZBotMain', isOpen)
     if shouldDraw then
-        if ImGui.Button('Save Config') then
-            botconfig.Save(botconfig.getPath())
-            botconfig.RunConfigLoaders()
-        end
-        ImGui.SameLine()
         if ImGui.Button('Open Config') then
             os.execute('start "" "' .. botconfig.getPath() .. '"')
         end
@@ -219,6 +215,10 @@ local function updateImGui()
                 end
             end
             ImGui.EndTabBar()
+        end
+        if botconfig.IsDirty() then
+            botconfig.Save(botconfig.getPath())
+            botconfig.ClearDirty()
         end
     end
     ImGui.End()

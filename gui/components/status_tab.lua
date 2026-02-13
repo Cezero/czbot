@@ -97,7 +97,7 @@ function M.draw()
             ImGui.PushStyleColor(ImGuiCol.Button, value and GREEN or RED)
             if ImGui.Button(label .. '##' .. entry.key) then
                 botconfig.config.settings[entry.key] = not value
-                botconfig.RunConfigLoaders()
+                botconfig.ApplyAndPersist()
             end
             ImGui.PopStyleColor(1)
         end

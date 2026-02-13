@@ -39,7 +39,7 @@ local TARGETPHASE_OPTIONS_DEBUFF = {
 }
 
 local function runConfigLoaders()
-    botconfig.RunConfigLoaders()
+    botconfig.ApplyAndPersist()
 end
 
 --- Custom section for debuff entries: recast, delay, dontStack (passed to spell_entry as customSection).

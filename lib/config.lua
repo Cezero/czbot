@@ -97,6 +97,7 @@ M.config = {}
 M.DEBUFF_DONTSTACK_ALLOWED = { Charmed = true, Crippled = true, Feared = true, Maloed = true, Mezzed = true, Rooted = true, Snared = true, Tashed = true }
 M._configLoaders = {}
 M._common = nil
+M._guiDirty = false
 
 -- Consider (con) color names and name-to-index map for pull filtering and UI. Indices 1-7.
 M.ConColors = { "Grey", "Green", "Light Blue", "Blue", "White", "Yellow", "Red" }
@@ -212,6 +213,24 @@ function M.RunConfigLoaders()
     for _, fn in ipairs(M._configLoaders) do
         fn()
     end
+end
+
+function M.MarkDirty()
+    M._guiDirty = true
+end
+
+function M.IsDirty()
+    return M._guiDirty
+end
+
+function M.ClearDirty()
+    M._guiDirty = false
+end
+
+--- Call after GUI mutates config: refresh derived state and schedule persist at end of frame.
+function M.ApplyAndPersist()
+    M.RunConfigLoaders()
+    M.MarkDirty()
 end
 
 local function sanitizeConfigFile(filepath)
@@ -334,7 +353,8 @@ local function writeConfigToFile(config, filename)
                 elseif key == 'precondition' then
                     if value ~= nil and not (type(value) == 'string' and value:match('^%s*$')) then
                         local preStr = type(value) == 'string' and value or tostring(value)
-                        file:write(indent .. formatKey('precondition') .. " = " .. '"' .. preStr:gsub('\\', '\\\\'):gsub('"', '\\"') .. '",\n')
+                        file:write(indent ..
+                        formatKey('precondition') .. " = " .. '"' .. preStr:gsub('\\', '\\\\'):gsub('"', '\\"') .. '",\n')
                         file:flush()
                     end
                 elseif type(value) == "table" then
@@ -426,7 +446,7 @@ local function writeConfigToFile(config, filename)
                                     parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
                                 end
                                 file:write(indent ..
-                                "  " .. formatKey('manaclass') .. " = { " .. table.concat(parts, ", ") .. " },\n")
+                                    "  " .. formatKey('manaclass') .. " = { " .. table.concat(parts, ", ") .. " },\n")
                                 file:flush()
                             elseif tonumber(subval) then
                                 file:write(indent .. "  " .. formatKey(subkey) .. " = ", tonumber(subval), ",\n")
@@ -533,11 +553,12 @@ function M.Load(path)
     if (M.config.settings.followdistance == nil) then M.config.settings.followdistance = 35 end
     M.config.settings.acleashSq = (M.config.settings.acleash or 0) * (M.config.settings.acleash or 0)
     M.config.settings.followdistanceSq = (M.config.settings.followdistance or 0) *
-    (M.config.settings.followdistance or 0)
+        (M.config.settings.followdistance or 0)
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "manual" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
-    if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings.TargetFilter) or 0 end
+    if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings
+        .TargetFilter) or 0 end
     if (M.config.settings.petassist == nil) then M.config.settings.petassist = false end
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
     if (M.config.settings.dopet == nil) then M.config.settings.dopet = false end

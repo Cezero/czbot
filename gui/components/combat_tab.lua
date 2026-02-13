@@ -25,7 +25,7 @@ local PRIMARY_OPTIONS_PULL = {
 }
 
 local function runConfigLoaders()
-    botconfig.RunConfigLoaders()
+    botconfig.ApplyAndPersist()
 end
 
 local function recomputePullSquared(pull)
