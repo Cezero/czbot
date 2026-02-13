@@ -24,6 +24,13 @@ function M.checkboxGrid(opts)
     local numRows = math.ceil(#options / columns)
     local tableColumns = 1 + columns
     if ImGui.BeginTable(id .. '_table', tableColumns, ImGuiTableFlags.None, -1, 0) then
+        local labelText = opts.label or ''
+        local labelW = select(1, ImGui.CalcTextSize(labelText))
+        labelW = (labelW and labelW > 0) and (labelW + 8) or 80
+        ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, labelW)
+        for _ = 1, columns do
+            ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
+        end
         for r = 1, numRows do
             ImGui.TableNextRow()
             ImGui.TableNextColumn()
