@@ -2,9 +2,10 @@
 -- Signature: M.draw(spell, opts)
 --   spell: spell entry table to read/write (e.g. config.pull.spell or config.heal.spells[i]).
 --   opts: required id (string), primaryOptions (table); optional label, onChanged, displayCommonFields (default true),
---         showRange (default false), customSection, targetphaseOptions, validtargetsOptions,
+--         showRange (default false), customSection, targetphaseOptions, validtargetsOptions, validtargetsOptionsPerPhase,
 --         showBandMinMax, showBandMinTarMaxtar. customSection(entry, idPrefix, onChanged) renders category-only fields.
 --   targetphaseOptions / validtargetsOptions: each entry { key, label, tooltip }.
+--   validtargetsOptionsPerPhase: optional; when set, target options shown are those for this band's selected phases only (phase -> options array).
 -- Widths are hardcoded; caller does not control layout. All widget IDs use opts.id as prefix.
 
 local mq = require('mq') ---@cast mq mq
@@ -126,7 +127,7 @@ local RED = ImVec4(1, 0, 0, 1)
 
 --- Draw spell entry: label, type combo, spell/item/ability selectable; optionally range, common fields, customSection.
 --- @param spell table spell entry to read/write
---- @param opts table required: id (string), primaryOptions (table). optional: label, onChanged, displayCommonFields (default true), showRange (default false), customSection(entry, idPrefix, onChanged), targetphaseOptions, validtargetsOptions, showBandMinMax, showBandMinTarMaxtar. targetphaseOptions/validtargetsOptions entries: { key, label, tooltip }.
+--- @param opts table required: id (string), primaryOptions (table). optional: label, onChanged, displayCommonFields (default true), showRange (default false), customSection(entry, idPrefix, onChanged), targetphaseOptions, validtargetsOptions, validtargetsOptionsPerPhase, showBandMinMax, showBandMinTarMaxtar. targetphaseOptions/validtargetsOptions entries: { key, label, tooltip }. validtargetsOptionsPerPhase: optional table phase -> options; when set, targets row shows only options for this band's selected phases.
 function M.draw(spell, opts)
     opts = opts or {}
     local id = opts.id
@@ -362,16 +363,34 @@ function M.draw(spell, opts)
                         break
                     end
                 end
-                -- Targets row
-                if #validtargetsOptions > 0 then
+                -- Targets row: show options from validtargetsOptionsPerPhase (for this band's selected phases) or validtargetsOptions
+                local validtargetsOptionsPerPhase = opts.validtargetsOptionsPerPhase or {}
+                local effectiveTargetOpts = {}
+                if next(validtargetsOptionsPerPhase) then
+                    local seen = {}
+                    for _, phase in ipairs(band.targetphase) do
+                        local phaseOpts = validtargetsOptionsPerPhase[phase]
+                        if phaseOpts then
+                            for _, opt in ipairs(phaseOpts) do
+                                if opt.key and not seen[opt.key] then
+                                    seen[opt.key] = true
+                                    effectiveTargetOpts[#effectiveTargetOpts + 1] = opt
+                                end
+                            end
+                        end
+                    end
+                else
+                    effectiveTargetOpts = validtargetsOptions
+                end
+                if #effectiveTargetOpts > 0 then
                     ImGui.Text('Targets:')
                     ImGui.SameLine()
-                    for vi, opt in ipairs(validtargetsOptions) do
+                    local function hasKey(t, k)
+                        for _, v in ipairs(t) do if v == k then return true end end
+                        return false
+                    end
+                    for vi, opt in ipairs(effectiveTargetOpts) do
                         local key, label, tooltip = opt.key, opt.label, opt.tooltip
-                        local function hasKey(t, k)
-                            for _, v in ipairs(t) do if v == k then return true end end
-                            return false
-                        end
                         local checked = hasKey(band.validtargets, key)
                         local cNew, cPressed = ImGui.Checkbox(
                         (label or key) .. '##' .. id .. '_band' .. bi .. '_vt_' .. key, checked)
@@ -383,7 +402,7 @@ function M.draw(spell, opts)
                                     end end end
                             if onChanged then onChanged() end
                         end
-                        if vi < #validtargetsOptions then ImGui.SameLine() end
+                        if vi < #effectiveTargetOpts then ImGui.SameLine() end
                     end
                 end
                 -- HP % / # Targets row

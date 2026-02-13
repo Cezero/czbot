@@ -15,6 +15,55 @@ local PRIMARY_OPTIONS = {
     { value = 'script',  label = 'Script' },
 }
 
+-- Order matches botheal HEAL_PHASE_ORDER; cbt is optional (allow rez in combat with corpse).
+local TARGETPHASE_OPTIONS_HEAL = {
+    { key = 'corpse',      label = 'Corpse',      tooltip = 'Resurrect PC corpses.' },
+    { key = 'self',        label = 'Self',        tooltip = 'Heal self.' },
+    { key = 'groupheal',   label = 'Group Heal',  tooltip = 'Group AE heals (group v1/v2).' },
+    { key = 'tank',        label = 'Tank',        tooltip = 'Heal tank (main assist).' },
+    { key = 'groupmember', label = 'Group Member', tooltip = 'Heal group members (class filter below).' },
+    { key = 'pc',          label = 'PC',          tooltip = 'Heal other PCs/bots (class filter below).' },
+    { key = 'mypet',       label = 'My Pet',      tooltip = 'Heal your pet.' },
+    { key = 'pet',         label = 'Pet',         tooltip = 'Heal other group pets.' },
+    { key = 'xtgt',        label = 'XTarget',     tooltip = 'Heal extended targets (heal.xttargets).' },
+    { key = 'cbt',         label = 'Cbt',         tooltip = 'With Corpse: allow rez in combat (MobList present).' },
+}
+
+-- Corpse-phase target options (who to rez).
+local VALIDTARGETS_OPTIONS_CORPSE = {
+    { key = 'all',  label = 'All',  tooltip = 'Any PC corpse in range.' },
+    { key = 'bots', label = 'Bots', tooltip = 'Bot corpses only.' },
+    { key = 'raid', label = 'Raid', tooltip = 'Raid member corpses only.' },
+}
+
+-- PC/groupmember-phase target options (class filter). Keys match spellbands CLASS_TOKENS.
+local VALIDTARGETS_OPTIONS_PC_GROUP = {
+    { key = 'all', label = 'All', tooltip = 'All classes.' },
+    { key = 'war', label = 'Warrior', tooltip = 'Warrior' },
+    { key = 'shd', label = 'Shadowknight', tooltip = 'Shadowknight' },
+    { key = 'pal', label = 'Paladin', tooltip = 'Paladin' },
+    { key = 'rng', label = 'Ranger', tooltip = 'Ranger' },
+    { key = 'mnk', label = 'Monk', tooltip = 'Monk' },
+    { key = 'rog', label = 'Rogue', tooltip = 'Rogue' },
+    { key = 'brd', label = 'Bard', tooltip = 'Bard' },
+    { key = 'bst', label = 'Beastlord', tooltip = 'Beastlord' },
+    { key = 'ber', label = 'Berserker', tooltip = 'Berserker' },
+    { key = 'shm', label = 'Shaman', tooltip = 'Shaman' },
+    { key = 'clr', label = 'Cleric', tooltip = 'Cleric' },
+    { key = 'dru', label = 'Druid', tooltip = 'Druid' },
+    { key = 'wiz', label = 'Wizard', tooltip = 'Wizard' },
+    { key = 'mag', label = 'Mage', tooltip = 'Mage' },
+    { key = 'enc', label = 'Enchanter', tooltip = 'Enchanter' },
+    { key = 'nec', label = 'Necromancer', tooltip = 'Necromancer' },
+}
+
+-- Options per phase for Option B: show only targets relevant to selected phases.
+local VALIDTARGETS_OPTIONS_PER_PHASE_HEAL = {
+    corpse = VALIDTARGETS_OPTIONS_CORPSE,
+    groupmember = VALIDTARGETS_OPTIONS_PC_GROUP,
+    pc = VALIDTARGETS_OPTIONS_PC_GROUP,
+}
+
 local function runConfigLoaders()
     botconfig.ApplyAndPersist()
 end
@@ -33,9 +82,10 @@ function M.draw()
             onChanged = runConfigLoaders,
             displayCommonFields = true,
             customSection = nil,
-            targetphaseOptions = {},
+            targetphaseOptions = TARGETPHASE_OPTIONS_HEAL,
             validtargetsOptions = {},
-            showBandMinMax = false,
+            validtargetsOptionsPerPhase = VALIDTARGETS_OPTIONS_PER_PHASE_HEAL,
+            showBandMinMax = true,
             showBandMinTarMaxtar = false,
         })
         ImGui.Separator()
