@@ -267,10 +267,11 @@ function M.draw(spell, opts)
     end
 
     if displayCommonFields then
-        local enabledLabel = (spell.enabled ~= false) and 'On' or 'Off'
-        local enabledColor = (spell.enabled ~= false) and GREEN or RED
-        local enabledTextW = select(1, ImGui.CalcTextSize(enabledLabel))
-        local enabledButtonWidth = (enabledTextW or 0) + 24
+        local enabled = spell.enabled ~= false
+        local enabledIcon = enabled and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
+        local enabledColor = enabled and GREEN or RED
+        local enabledIconW = select(1, ImGui.CalcTextSize(enabledIcon))
+        local enabledButtonWidth = (enabledIconW or 0) + 24
         local deleteButtonWidth = 0
         if opts.onDelete then
             local trashW = select(1, ImGui.CalcTextSize(Icons.FA_TRASH))
@@ -297,9 +298,12 @@ function M.draw(spell, opts)
             ImGui.SameLine()
         end
         ImGui.PushStyleColor(ImGuiCol.Button, enabledColor)
-        if ImGui.Button(enabledLabel .. '##' .. id .. '_enabled') then
+        if ImGui.Button(enabledIcon .. '##' .. id .. '_enabled') then
             spell.enabled = not (spell.enabled ~= false)
             if onChanged then onChanged() end
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(enabled and 'On' or 'Off')
         end
         ImGui.PopStyleColor(1)
     end
