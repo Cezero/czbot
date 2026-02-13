@@ -10,6 +10,7 @@ local M = {}
 local YELLOW = ImVec4(1, 1, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
 local GREEN = ImVec4(0, 0.8, 0, 1)
+local BLACK = ImVec4(0, 0, 0, 1)
 
 local DO_FLAGS = {
     { key = 'dopull', label = 'Pull' },
@@ -99,7 +100,8 @@ function M.draw()
             end
             ImGui.Text('%s', entry.label)
             ImGui.SameLine()
-            ImGui.PushStyleColor(ImGuiCol.Button, value and GREEN or RED)
+            ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+            ImGui.PushStyleColor(ImGuiCol.Text, value and GREEN or RED)
             if ImGui.SmallButton(icon .. '##' .. entry.key) then
                 botconfig.config.settings[entry.key] = not value
                 botconfig.ApplyAndPersist()
@@ -107,7 +109,7 @@ function M.draw()
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip(value and 'On' or 'Off')
             end
-            ImGui.PopStyleColor(1)
+            ImGui.PopStyleColor(2)
         end
         ImGui.EndTable()
     end
