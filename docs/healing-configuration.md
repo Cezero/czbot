@@ -41,7 +41,6 @@ Each entry in **`heal.spells`** can have:
 | **minmana** | Minimum mana (absolute) to cast. |
 | **minmanapct** / **maxmanapct** | Your mana % must be within this range to use this spell (default 0–100). |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
-| **isHoT** | Optional. When `true`, the spell is treated as a heal-over-time: the bot will not consider a target to need the spell if they already have it (buff or shortbuff). For **group heals**, members who already have the HoT are excluded when counting how many members need the heal for **tarcnt**. Default is `false`. |
 | **tarcnt** | Optional. Only used for **group/AE heals**: minimum number of group members in the HP band (and in range) required to trigger the spell. When omitted, group heals fire when at least 1 member is in band. Not used for single-target heals. |
 | **bands** | Who and at what HP % this spell applies. Each band has **targetphase** (phase stages) and **validtargets** (within-phase types). See [Heal bands](#heal-bands) below. |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip this spell for this evaluation; **string** — Lua script run with `mq` and `EvalID` (current target spawn ID) in scope; return a truthy value to allow the cast, otherwise the spell is skipped (e.g. only cast when target HP > X%, or only when not in a certain zone). |
@@ -84,7 +83,7 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 
 **Heal over time (HoT)**
 
-Spells that heal over time (or regeneration effects) typically place a buff in the target’s **short buff** window. Set **isHoT** to `true` for such spells so the bot does not recast them on targets who already have the effect. For **single-target** heals, a target is not considered to need the spell if they already have it (buff or shortbuff). For **group heals**, when counting how many group members need the heal for **tarcnt**, members who already have the HoT are excluded; the group HoT is only cast when the number of members who are in HP band, in range, and do not already have the HoT is at least **tarcnt**. Group HoT **tarcnt** is most accurate when group members are peers (known via charinfo); non-peer group members are counted as “need” when in band if their buff state is unknown.
+HoT spells are **autodetected** from spell data (SPA 100); no configuration is needed. The bot will not recast them on targets who already have the effect (buff or shortbuff). For **single-target** heals, a target is not considered to need the spell if they already have it. For **group heals**, when counting how many group members need the heal for **tarcnt**, members who already have the HoT are excluded; the group HoT is only cast when the number of members who are in HP band, in range, and do not already have the HoT is at least **tarcnt**. Group HoT **tarcnt** is most accurate when group members are peers (known via charinfo); non-peer group members are counted as “need” when in band if their buff state is unknown.
 
 **validtargets for corpse:** Use `all`, `bots`, or `raid` to choose which corpses to consider (any corpse, peers’ corpses, or raid corpses).
 

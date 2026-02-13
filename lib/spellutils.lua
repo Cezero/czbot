@@ -170,7 +170,7 @@ function spellutils.PeerHasPetBuff(peerInfo, spellid)
     return false
 end
 
--- Returns true if the spawn already has this heal spell (buff or shortbuff). Used when entry.isHoT is true
+-- Returns true if the spawn already has this heal spell (buff or shortbuff). Used for HoT spells (autodetected via IsHoTSpell)
 -- to avoid recasting HoTs. Covers self and peer PCs; non-peers are treated as not having the spell (no targeting).
 function spellutils.TargetHasHealSpell(entry, spawnId)
     if not entry or not entry.spell or not spawnId or spawnId <= 0 then return false end
@@ -353,6 +353,18 @@ function spellutils.IsTargetedAESpell(entry)
         aerange = mq.TLO.Spell(spell).AERange() or 0
     end
     return aerange > 0
+end
+
+-- SPA 100 = HoT Heals (MacroQuest spelleffects.h). Returns true if the spell for entry has the HoT effect.
+function spellutils.IsHoTSpell(entry)
+    if not entry or not entry.spell then return false end
+    local spellTLO = spellutils.GetSpellEntity(entry)
+    if not spellTLO then return false end
+    local ok, hasHoT = pcall(function() return spellTLO.HasSPA and spellTLO:HasSPA(100) end)
+    if ok and hasHoT then return true end
+    ok, hasHoT = pcall(function() return spellTLO.HasSPA(100) end)
+    if ok and hasHoT then return true end
+    return false
 end
 
 -- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.

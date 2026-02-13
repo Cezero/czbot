@@ -159,7 +159,7 @@ local function HPEvalGrp(index, ctx)
         if not (grpmember.Present() and grpmempcthp and hpInBand(grpmempcthp, AHThreshold[index].groupheal) and grpspawn.Type() ~= 'Corpse') then
             return false
         end
-        if ctx.entry.isHoT then
+        if spellutils.IsHoTSpell(ctx.entry) then
             if grpid == mq.TLO.Me.ID() then
                 if mq.TLO.Me.FindBuff(ctx.entry.spell)() then return false end
             elseif peer and spellIdForBuff then
@@ -281,7 +281,7 @@ end
 
 local function rejectIfAlreadyHoT(entry, id, hit)
     if not id then return nil, nil end
-    if entry.isHoT and spellutils.TargetHasHealSpell(entry, id) then return nil, nil end
+    if spellutils.IsHoTSpell(entry) and spellutils.TargetHasHealSpell(entry, id) then return nil, nil end
     return id, hit
 end
 
