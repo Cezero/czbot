@@ -4,6 +4,9 @@ local botconfig = require('lib.config')
 local state = require('lib.state')
 local combat_tab = require('gui.components.combat_tab')
 local debuff_tab = require('gui.components.debuff_tab')
+local heal_tab = require('gui.components.heal_tab')
+local buff_tab = require('gui.components.buff_tab')
+local cure_tab = require('gui.components.cure_tab')
 local moblist_tab = require('gui.components.moblist_tab')
 local status_tab = require('gui.components.status_tab')
 local ok, VERSION = pcall(require, 'version')
@@ -196,6 +199,12 @@ local function updateImGui()
                         combat_tab.draw()
                     elseif key == 'debuff' then
                         debuff_tab.draw()
+                    elseif key == 'heal' then
+                        heal_tab.draw()
+                    elseif key == 'buff' then
+                        buff_tab.draw()
+                    elseif key == 'cure' then
+                        cure_tab.draw()
                     elseif key == 'moblist' then
                         moblist_tab.draw()
                     else
@@ -203,8 +212,6 @@ local function updateImGui()
                         if tbl then
                             if key == 'script' then
                                 drawTableTree(tbl, label, nil)
-                            elseif key == 'heal' or key == 'buff' or key == 'cure' then
-                                drawTableTree({ [key] = tbl }, label, { key })
                             else
                                 local order = botconfig.getSubOrder() and botconfig.getSubOrder()[key]
                                 drawTableTree(tbl, label, order)
