@@ -126,6 +126,7 @@ local ALIAS_INPUT_WIDTH = 100
 
 local GREEN = ImVec4(0, 0.8, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
+local BLACK = ImVec4(0, 0, 0, 1)
 
 --- Draw spell entry: label, type combo, spell/item/ability selectable; optionally range, common fields, customSection.
 --- @param spell table spell entry to read/write
@@ -285,7 +286,8 @@ function M.draw(spell, opts)
             ImGui.SameLine()
         end
         if opts.onDelete then
-            ImGui.PushStyleColor(ImGuiCol.Button, RED)
+            ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+            ImGui.PushStyleColor(ImGuiCol.Text, RED)
             if ImGui.SmallButton(Icons.FA_TRASH .. '##' .. id .. '_delete') then
                 state.deleteConfirm.open = true
                 state.deleteConfirm.pendingClose = nil
@@ -294,10 +296,11 @@ function M.draw(spell, opts)
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip('Delete this %s', opts.deleteEntryLabel or 'entry')
             end
-            ImGui.PopStyleColor(1)
+            ImGui.PopStyleColor(2)
             ImGui.SameLine()
         end
-        ImGui.PushStyleColor(ImGuiCol.Button, enabledColor)
+        ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+        ImGui.PushStyleColor(ImGuiCol.Text, enabledColor)
         if ImGui.Button(enabledIcon .. '##' .. id .. '_enabled') then
             spell.enabled = not (spell.enabled ~= false)
             if onChanged then onChanged() end
@@ -305,7 +308,7 @@ function M.draw(spell, opts)
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip(enabled and 'On' or 'Off')
         end
-        ImGui.PopStyleColor(1)
+        ImGui.PopStyleColor(2)
     end
 
     if displayCommonFields then
