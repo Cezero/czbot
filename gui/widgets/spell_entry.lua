@@ -240,8 +240,10 @@ function M.draw(spell, opts)
             ImGui.SameLine()
         end
         ImGui.Text('Range')
-        if ImGui.IsItemHovered() then ImGui.SetTooltip(
-            'Max range to use when casting the pull spell (0 = use spell default).') end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(
+                'Max range to use when casting the pull spell (0 = use spell default).')
+        end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local r = spell.range or 0
@@ -328,15 +330,22 @@ function M.draw(spell, opts)
                 ImGui.SameLine()
                 for pi, opt in ipairs(targetphaseOptions) do
                     local key, label, tooltip = opt.key, opt.label, opt.tooltip
-                    local function hasKey(t, k) for _, v in ipairs(t) do if v == k then return true end end return false end
+                    local function hasKey(t, k)
+                        for _, v in ipairs(t) do if v == k then return true end end
+                        return false
+                    end
                     local checked = hasKey(band.targetphase, key)
-                    local cNew, cPressed = ImGui.Checkbox((label or key) .. '##' .. id .. '_band' .. bi .. '_ph_' .. key, checked)
+                    local cNew, cPressed = ImGui.Checkbox((label or key) .. '##' .. id .. '_band' .. bi .. '_ph_' .. key,
+                        checked)
                     if tooltip and ImGui.IsItemHovered() then ImGui.SetTooltip('%s', tooltip) end
                     if cPressed then
                         if cNew then
                             band.targetphase[#band.targetphase + 1] = key
                         else
-                            for i = #band.targetphase, 1, -1 do if band.targetphase[i] == key then table.remove(band.targetphase, i) break end end
+                            for i = #band.targetphase, 1, -1 do if band.targetphase[i] == key then
+                                    table.remove(band.targetphase, i)
+                                    break
+                                end end
                         end
                         if onChanged then onChanged() end
                     end
@@ -359,12 +368,19 @@ function M.draw(spell, opts)
                     ImGui.SameLine()
                     for vi, opt in ipairs(validtargetsOptions) do
                         local key, label, tooltip = opt.key, opt.label, opt.tooltip
-                        local function hasKey(t, k) for _, v in ipairs(t) do if v == k then return true end end return false end
+                        local function hasKey(t, k)
+                            for _, v in ipairs(t) do if v == k then return true end end
+                            return false
+                        end
                         local checked = hasKey(band.validtargets, key)
-                        local cNew, cPressed = ImGui.Checkbox((label or key) .. '##' .. id .. '_band' .. bi .. '_vt_' .. key, checked)
+                        local cNew, cPressed = ImGui.Checkbox(
+                        (label or key) .. '##' .. id .. '_band' .. bi .. '_vt_' .. key, checked)
                         if tooltip and ImGui.IsItemHovered() then ImGui.SetTooltip('%s', tooltip) end
                         if cPressed then
-                            if cNew then band.validtargets[#band.validtargets + 1] = key else for i = #band.validtargets, 1, -1 do if band.validtargets[i] == key then table.remove(band.validtargets, i) break end end end
+                            if cNew then band.validtargets[#band.validtargets + 1] = key else for i = #band.validtargets, 1, -1 do if band.validtargets[i] == key then
+                                        table.remove(band.validtargets, i)
+                                        break
+                                    end end end
                             if onChanged then onChanged() end
                         end
                         if vi < #validtargetsOptions then ImGui.SameLine() end
@@ -374,43 +390,57 @@ function M.draw(spell, opts)
 
                 if showBandMinMax then
                     ImGui.Text('HP %:')
-                    if ImGui.IsItemHovered() then ImGui.SetTooltip('Target HP %% range for this band (only use when target HP is within min-max).') end
+                    if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                        'Target HP %% range for this band (only use when target HP is within min-max).') end
                     ImGui.SameLine()
                     ImGui.Text('Min')
                     ImGui.SameLine()
                     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
                     local bmin = band.min
                     if bmin == nil then bmin = 0 end
-                    local newMin, minCh = inputs.boundedInt(id .. '_band' .. bi .. '_min', bmin, 0, 100, 1, '##' .. id .. '_band' .. bi .. '_min')
-                    if minCh then band.min = newMin; if onChanged then onChanged() end end
+                    local newMin, minCh = inputs.boundedInt(id .. '_band' .. bi .. '_min', bmin, 0, 100, 1,
+                        '##' .. id .. '_band' .. bi .. '_min')
+                    if minCh then
+                        band.min = newMin; if onChanged then onChanged() end
+                    end
                     ImGui.SameLine()
                     ImGui.Text('Max')
                     ImGui.SameLine()
                     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
                     local bmax = band.max
                     if bmax == nil then bmax = 100 end
-                    local newMax, maxCh = inputs.boundedInt(id .. '_band' .. bi .. '_max', bmax, 0, 100, 1, '##' .. id .. '_band' .. bi .. '_max')
-                    if maxCh then band.max = newMax; if onChanged then onChanged() end end
+                    local newMax, maxCh = inputs.boundedInt(id .. '_band' .. bi .. '_max', bmax, 0, 100, 1,
+                        '##' .. id .. '_band' .. bi .. '_max')
+                    if maxCh then
+                        band.max = newMax; if onChanged then onChanged() end
+                    end
                 end
                 if showBandMinTarMaxtar then
                     ImGui.Text('Mob count:')
-                    if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp mob-count gate: only use when mob count is within min-max (0 = no limit).') end
+                    if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                        'Camp mob-count gate: only use when mob count is within min-max (0 = no limit).') end
                     ImGui.SameLine()
                     ImGui.Text('Min')
                     ImGui.SameLine()
                     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
                     local bmintar = band.mintar
                     if bmintar == nil then bmintar = 0 end
-                    local newMinT, minTCh = inputs.boundedInt(id .. '_band' .. bi .. '_mintar', bmintar, 0, 50, 1, '##' .. id .. '_band' .. bi .. '_mintar')
-                    if minTCh then band.mintar = (newMinT == 0) and nil or newMinT; if onChanged then onChanged() end end
+                    local newMinT, minTCh = inputs.boundedInt(id .. '_band' .. bi .. '_mintar', bmintar, 0, 50, 1,
+                        '##' .. id .. '_band' .. bi .. '_mintar')
+                    if minTCh then
+                        band.mintar = (newMinT == 0) and nil or newMinT; if onChanged then onChanged() end
+                    end
                     ImGui.SameLine()
                     ImGui.Text('Max')
                     ImGui.SameLine()
                     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
                     local bmaxtar = band.maxtar
                     if bmaxtar == nil then bmaxtar = 0 end
-                    local newMaxT, maxTCh = inputs.boundedInt(id .. '_band' .. bi .. '_maxtar', bmaxtar, 0, 50, 1, '##' .. id .. '_band' .. bi .. '_maxtar')
-                    if maxTCh then band.maxtar = (newMaxT == 0) and nil or newMaxT; if onChanged then onChanged() end end
+                    local newMaxT, maxTCh = inputs.boundedInt(id .. '_band' .. bi .. '_maxtar', bmaxtar, 0, 50, 1,
+                        '##' .. id .. '_band' .. bi .. '_maxtar')
+                    if maxTCh then
+                        band.maxtar = (newMaxT == 0) and nil or newMaxT; if onChanged then onChanged() end
+                    end
                 end
 
                 if bi < #spell.bands then ImGui.Separator() end
@@ -437,14 +467,18 @@ function M.draw(spell, opts)
         end
         -- Precondition line
         ImGui.Text('Precondition:')
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('When to allow casting: true or a Lua expression (e.g. condition on EvalID).') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'When to allow casting: true or a Lua expression (e.g. condition on EvalID).') end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(360)
         local preBuf, preChanged = ImGui.InputText('##' .. id .. '_precondition', state.preconditionBuf or '', 512)
         if preChanged then
             state.preconditionBuf = preBuf
-            if preBuf == '' or (preBuf and preBuf:match('^%s*$')) then spell.precondition = nil
-            else spell.precondition = preBuf end
+            if preBuf == '' or (preBuf and preBuf:match('^%s*$')) then
+                spell.precondition = nil
+            else
+                spell.precondition = preBuf
+            end
             if onChanged then onChanged() end
         end
     end
