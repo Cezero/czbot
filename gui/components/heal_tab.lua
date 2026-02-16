@@ -74,6 +74,7 @@ function M.draw()
     if not heal then return end
     if not heal.spells then heal.spells = {} end
     local spells = heal.spells
+    if not spells then return end
     for i, entry in ipairs(spells) do
         spell_entry.draw(entry, {
             id = 'heal_' .. i,
