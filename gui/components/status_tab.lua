@@ -14,7 +14,7 @@ local BLACK = ImVec4(0, 0, 0, 1)
 
 local FLAGS_COLUMN_WIDTH = 60
 local FLAGS_ROW_PADDING_Y = 2
-local FLAGS_PANEL_WIDTH = 2 * FLAGS_COLUMN_WIDTH
+local FLAGS_PANEL_WIDTH = 130
 
 local DO_FLAGS = {
     { key = 'dopull', label = 'Pull' },
@@ -122,8 +122,6 @@ function M.draw()
                 ImGui.TableNextColumn()
                 local value = botconfig.config.settings[entry.key] == true
                 local icon = value and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
-                ImGui.Text('%s', entry.label)
-                ImGui.SameLine()
                 ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
                 ImGui.PushStyleColor(ImGuiCol.Text, value and GREEN or RED)
                 if ImGui.SmallButton(icon .. '##' .. entry.key) then
@@ -134,6 +132,8 @@ function M.draw()
                     ImGui.SetTooltip(value and 'On' or 'Off')
                 end
                 ImGui.PopStyleColor(2)
+                ImGui.SameLine()
+                ImGui.Text('%s', entry.label)
             end
             ImGui.EndTable()
         end
