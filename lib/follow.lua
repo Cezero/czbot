@@ -2,7 +2,7 @@
 -- Option C (chchain-style): module owns event registration and core behavior.
 -- Used by lib/commands (cmd_follow) and botevents (follow.registerEvents only).
 
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 local state = require('lib.state')
 local botmove = require('botmove')
 local charinfo = require("mqcharinfo")

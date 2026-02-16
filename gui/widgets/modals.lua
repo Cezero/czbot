@@ -3,7 +3,7 @@
 -- when closing from deep nesting). state.pendingClose ('save'|'cancel') is set on button click.
 -- validateFn(value) returns success (boolean), optional errorMessage (string).
 
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local imgui = require('ImGui')
 
 local M = {}
 
@@ -23,15 +23,15 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
         return nil
     end
     local popupId = '##ValidatedEditModal_' .. id
-    ImGui.SetNextWindowSize(320, 0, ImGuiCond.Appearing)
-    local show = ImGui.BeginPopupModal(popupId, nil, POPUP_FLAGS)
+    imgui.SetNextWindowSize(320, 0, ImGuiCond.Appearing)
+    local show = imgui.BeginPopupModal(popupId, nil, POPUP_FLAGS)
     if not show then
         return nil
     end
     -- Deferred close: run at start of block (no button has ActiveId) to avoid crash
     if state.pendingClose then
         local wasSave = (state.pendingClose == 'save')
-        ImGui.CloseCurrentPopup()
+        imgui.CloseCurrentPopup()
         if wasSave then
             onSave(state.buffer or '')
         else
@@ -41,22 +41,22 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
         state.buffer = ''
         state.error = nil
         state.pendingClose = nil
-        ImGui.EndPopup()
+        imgui.EndPopup()
         return wasSave
     end
     -- Reserve space for error message so window does not resize when validation fails
-    local lineHeight = ImGui.GetTextLineHeight()
+    local lineHeight = imgui.GetTextLineHeight()
     if state.error and state.error ~= '' then
-        ImGui.TextColored(1.0, 0.3, 0.3, 1.0, state.error)
+        imgui.TextColored(1.0, 0.3, 0.3, 1.0, state.error)
     else
-        ImGui.Dummy(0, lineHeight)
+        imgui.Dummy(0, lineHeight)
     end
-    ImGui.Spacing()
-    ImGui.SetNextItemWidth(280)
-    local buf, changed = ImGui.InputText('##value' .. popupId, state.buffer or '', EnterReturnsTrue)
+    imgui.Spacing()
+    imgui.SetNextItemWidth(280)
+    local buf, changed = imgui.InputText('##value' .. popupId, state.buffer or '', EnterReturnsTrue)
     if changed then state.buffer = buf end
-    ImGui.Spacing()
-    if ImGui.Button('Save##ValidatedEditModal_Save_' .. id) then
+    imgui.Spacing()
+    if imgui.Button('Save##ValidatedEditModal_Save_' .. id) then
         state.error = nil
         local ok, errMsg
         if validateFn then
@@ -70,18 +70,18 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
             state.error = errMsg or 'Invalid'
         end
     end
-    ImGui.SameLine()
-    if ImGui.Button('Cancel##ValidatedEditModal_Cancel_' .. id) then
+    imgui.SameLine()
+    if imgui.Button('Cancel##ValidatedEditModal_Cancel_' .. id) then
         state.pendingClose = 'cancel'
     end
-    ImGui.EndPopup()
+    imgui.EndPopup()
     return nil
 end
 
 --- Open the validated edit popup (call after setting state.open = true and state.buffer = initialValue).
 ---@param id string
 function M.openValidatedEditModal(id)
-    ImGui.OpenPopup('##ValidatedEditModal_' .. id)
+    imgui.OpenPopup('##ValidatedEditModal_' .. id)
 end
 
 --- Delete confirmation modal: "Are you sure?" with DELETE (red) and CANCEL. Deferred close like validatedEditModal.
@@ -95,13 +95,13 @@ function M.deleteConfirmModal(id, state, entryLabel, onConfirm, onCancel)
         return
     end
     local popupId = '##DeleteConfirm_' .. id
-    local show = ImGui.BeginPopupModal(popupId, nil, POPUP_FLAGS)
+    local show = imgui.BeginPopupModal(popupId, nil, POPUP_FLAGS)
     if not show then
         return
     end
     if state.pendingClose then
         local wasDelete = (state.pendingClose == 'delete')
-        ImGui.CloseCurrentPopup()
+        imgui.CloseCurrentPopup()
         if wasDelete then
             onConfirm()
         else
@@ -109,27 +109,27 @@ function M.deleteConfirmModal(id, state, entryLabel, onConfirm, onCancel)
         end
         state.open = false
         state.pendingClose = nil
-        ImGui.EndPopup()
+        imgui.EndPopup()
         return
     end
-    ImGui.Text('Are you sure you want to delete this %s?', entryLabel or 'entry')
-    ImGui.Spacing()
-    ImGui.PushStyleColor(ImGuiCol.Button, RED)
-    if ImGui.Button('DELETE##DeleteConfirm_Delete_' .. id) then
+    imgui.Text('Are you sure you want to delete this %s?', entryLabel or 'entry')
+    imgui.Spacing()
+    imgui.PushStyleColor(ImGuiCol.Button, RED)
+    if imgui.Button('DELETE##DeleteConfirm_Delete_' .. id) then
         state.pendingClose = 'delete'
     end
-    ImGui.PopStyleColor(1)
-    ImGui.SameLine()
-    if ImGui.Button('CANCEL##DeleteConfirm_Cancel_' .. id) then
+    imgui.PopStyleColor(1)
+    imgui.SameLine()
+    if imgui.Button('CANCEL##DeleteConfirm_Cancel_' .. id) then
         state.pendingClose = 'cancel'
     end
-    ImGui.EndPopup()
+    imgui.EndPopup()
 end
 
 --- Open the delete confirm popup (call after setting state.open = true).
 ---@param id string
 function M.openDeleteConfirmModal(id)
-    ImGui.OpenPopup('##DeleteConfirm_' .. id)
+    imgui.OpenPopup('##DeleteConfirm_' .. id)
 end
 
 return M

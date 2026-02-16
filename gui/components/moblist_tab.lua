@@ -1,7 +1,7 @@
 -- Mob Lists tab: exclude, priority, and charm lists for the current zone.
 
-local mq = require('mq') ---@cast mq mq
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local mq = require('mq')
+local ImGui = require('ImGui')
 local state = require('lib.state')
 local mobfilter = require('lib.mobfilter')
 

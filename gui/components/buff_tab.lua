@@ -1,6 +1,6 @@
 -- Buff tab: dedicated panel for buff config (one spell_entry per buff).
 
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spell_entry = require('gui.widgets.spell_entry')
 

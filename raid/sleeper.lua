@@ -1,5 +1,5 @@
 -- Zone 128: Milas An`Rev (Velious)
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 local utils = require('lib.utils')
 
 local M = {}

@@ -1,6 +1,6 @@
 -- Status tab: status line, run state table, and doXXX flag On/Off buttons.
 
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local ImGui = require('ImGui')
 local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
 local state = require('lib.state')

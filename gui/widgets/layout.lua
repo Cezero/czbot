@@ -1,6 +1,6 @@
 -- Labeled row for two-column layout: label on left, control on right.
 
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local ImGui = require('ImGui')
 
 local M = {}
 

@@ -1,5 +1,5 @@
 -- Zone 89: Trakanon (Kunark)
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local utils = require('lib.utils')

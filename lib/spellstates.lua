@@ -1,4 +1,4 @@
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 local spellstates = {}
 
 -- Module-local state: spawn/target -> spell duration tracking and debuff delay/recast counters

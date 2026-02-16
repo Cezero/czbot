@@ -1,5 +1,5 @@
-local mq = require('mq') ---@cast mq mq
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local mq = require('mq')
+local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local combat_tab = require('gui.components.combat_tab')

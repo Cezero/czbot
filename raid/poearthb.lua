@@ -1,5 +1,5 @@
 -- Zone 222: Rathe Council (PoP)
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 local utils = require('lib.utils')
 
 local M = {}

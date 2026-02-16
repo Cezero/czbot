@@ -1,4 +1,4 @@
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 local botconfig = require('lib.config')
 local spellsdb = require('lib.spellsdb')
 local immune = require('lib.immune')

@@ -8,8 +8,8 @@
 --   validtargetsOptionsPerPhase: optional; when set, target options shown are those for this band's selected phases only (phase -> options array).
 -- Widths are hardcoded; caller does not control layout. All widget IDs use opts.id as prefix.
 
-local mq = require('mq') ---@cast mq mq
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local mq = require('mq')
+local ImGui = require('ImGui')
 local Icons = require('mq.ICONS')
 local combos = require('gui.widgets.combos')
 local inputs = require('gui.widgets.inputs')

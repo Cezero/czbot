@@ -206,7 +206,7 @@ end
 function M.runStateDeadlinePassed()
     local rc = M.getRunconfig()
     if not rc.runStateDeadline then return true end
-    local mq = require('mq') ---@cast mq mq
+    local mq = require('mq')
     return mq.gettime() >= rc.runStateDeadline
 end
 

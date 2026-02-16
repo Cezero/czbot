@@ -1,6 +1,6 @@
 -- Cure tab: dedicated panel for cure config (one spell_entry per cure).
 
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spell_entry = require('gui.widgets.spell_entry')
 

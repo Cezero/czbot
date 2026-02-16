@@ -1,6 +1,6 @@
 -- Bounded integer input widget for range, radius, etc. Clamps to min/max.
 
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local ImGui = require('ImGui')
 
 local M = {}
 

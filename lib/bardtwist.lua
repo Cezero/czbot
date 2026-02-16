@@ -1,7 +1,7 @@
 -- Bard MQ2Twist integration: twist list builders, mode, ensure, stop/resume, twist once.
 -- Requires mq, botconfig, state. No dependency on spellutils/botbuff to avoid circular refs.
 
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 
 local botconfig = require('lib.config')
 local state = require('lib.state')

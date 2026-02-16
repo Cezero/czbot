@@ -1,5 +1,5 @@
 -- Zone 317: Ture, OMM (OoW)
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 
 local M = {}
 

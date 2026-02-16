@@ -1,6 +1,6 @@
 -- Labeled grid: table with label in column 1 (first row only) and N columns of checkboxes per row.
 
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local ImGui = require('ImGui')
 
 local M = {}
 

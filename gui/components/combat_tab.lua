@@ -2,8 +2,8 @@
 -- Uses gui/widgets for modals, combos, inputs, layout, spell_entry.
 -- ImGui Lua API (return values, e.g. Checkbox → value, pressed) is defined in typings/imgui.d.lua.
 
-local mq = require('mq') ---@cast mq mq
-local ImGui = require('ImGui') ---@cast ImGui ImGui
+local mq = require('mq')
+local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local combos = require('gui.widgets.combos')
 local inputs = require('gui.widgets.inputs')

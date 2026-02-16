@@ -1,7 +1,7 @@
 -- Raid/group formation: save/load raid config, group invites.
 -- LoadRaid runs the full sequence with mq.delay() between steps (blocking).
 
-local mq = require('mq') ---@cast mq mq
+local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 
