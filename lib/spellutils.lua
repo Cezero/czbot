@@ -546,6 +546,11 @@ function spellutils.handleSpellCheckReentry(sub, options)
         return true
     end
 
+    -- Another sub is casting; do not run our phase loop or we overwrite CurSpell and get stuck (e.g. heal fizzles, we set CurSpell=buff, storedId stays heal).
+    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub and rc.CurSpell.sub ~= sub then
+        return true
+    end
+
     return false
 end
 
