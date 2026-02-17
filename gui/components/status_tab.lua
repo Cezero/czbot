@@ -219,7 +219,14 @@ function M.draw()
         ImGui.PopStyleColor(2)
         -- Other section
         ImGui.Spacing()
-        ImGui.Text('%s', 'Other')
+        do
+            local availX = select(1, ImGui.GetContentRegionAvail())
+            local otherLabel = 'Other'
+            local textW = select(1, ImGui.CalcTextSize(otherLabel))
+            local startX = ImGui.GetCursorPosX()
+            ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
+            ImGui.Text('%s', otherLabel)
+        end
         ImGui.Spacing()
         ImGui.TextColored(WHITE, '%s', 'Sit Mana %: ')
         ImGui.SameLine(0, 2)
@@ -245,9 +252,10 @@ function M.draw()
         if mountName and mountName:match('^%s*$') then mountName = nil end
         if mountName == 'none' then mountName = nil end
         local mountTypeIdx = (mountType == 'item') and 2 or 1
-        ImGui.SetNextItemWidth(80)
+        local MOUNT_TYPE_COMBO_WIDTH = 80
+        ImGui.SetNextItemWidth(MOUNT_TYPE_COMBO_WIDTH)
         local mountTypeOptions = { 'Spell', 'Item' }
-        local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, '##mount_type')
+        local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, nil)
         if mountTypeCh then
             local newType = (mountTypeNew == 1) and 'gem' or 'item'
             botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and (mountName .. '|' .. newType) or 'none'
