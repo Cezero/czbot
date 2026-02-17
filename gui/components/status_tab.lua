@@ -4,6 +4,7 @@ local ImGui = require('ImGui')
 local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local tankrole = require('lib.tankrole')
 
 local M = {}
 
@@ -12,9 +13,9 @@ local RED = ImVec4(1, 0, 0, 1)
 local GREEN = ImVec4(0, 0.8, 0, 1)
 local BLACK = ImVec4(0, 0, 0, 1)
 
-local FLAGS_COLUMN_WIDTH = 60
+local FLAGS_COLUMN_WIDTH = 65
 local FLAGS_ROW_PADDING_Y = 2
-local FLAGS_PANEL_WIDTH = 140
+local FLAGS_PANEL_WIDTH = 145
 
 local DO_FLAGS = {
     { key = 'dopull', label = 'Pull' },
@@ -78,6 +79,16 @@ function M.draw()
         ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, FLAGS_PANEL_WIDTH)
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
+        -- Assist Name (before Camp section)
+        local assistName = tankrole.GetAssistTargetName()
+        local assistDisplay = (assistName and assistName ~= '') and assistName or '—'
+        if botconfig.config.settings.AssistName == 'automatic' then
+            assistDisplay = assistDisplay .. ' (auto)'
+        end
+        ImGui.TextColored(YELLOW, '%s', 'Assist Name: ')
+        ImGui.SameLine()
+        ImGui.TextColored(RED, '%s', assistDisplay)
+        ImGui.Spacing()
         -- Camp section in left column (same style as Pulling on combat_tab)
         local leftX, lineY = ImGui.GetCursorScreenPos()
         local availX = select(1, ImGui.GetContentRegionAvail())

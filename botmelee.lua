@@ -25,10 +25,9 @@ local function clearTankCombatState()
     combat.ResetCombatState()
 end
 
--- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Returns mtPick spawn, engageTargetRefound.
+-- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Skip mezzed; if all mezzed, return closest.
+-- Returns mtPick spawn, engageTargetRefound.
 local function selectTankTarget(mainTankName)
-    local mtPick = nil
-    local engageTargetRefound = false
     if mainTankName ~= mq.TLO.Me.Name() then return nil, false end
     local gmt = mq.TLO.Group.MainTank
     local groupMTName = (gmt and gmt.Name) and gmt.Name() or nil
@@ -36,25 +35,30 @@ local function selectTankTarget(mainTankName)
     if mq.TLO.Me.Combat() then return nil, false end
     local pullerTarID = tankrole.GetPullerTargetID()
     local rc = state.getRunconfig()
+    local losList = {}
     for _, v in ipairs(rc.MobList) do
-        if v.LineOfSight() then
-            if mtPick then
-                if pullerTarID and v.ID() == pullerTarID then
-                    mtPick = v
-                elseif v.ID() == rc.engageTargetId then
-                    mtPick = v
-                    engageTargetRefound = true
-                elseif not (pullerTarID and mtPick.ID() == pullerTarID) then
-                    local vDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
-                    local mtDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mtPick.X(), mtPick.Y())
-                    if vDistSq and mtDistSq and vDistSq < mtDistSq then mtPick = v end
-                end
-            else
-                mtPick = v
+        if v.LineOfSight() then table.insert(losList, v) end
+    end
+    if #losList == 0 then return nil, false end
+    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+    table.sort(losList, function(a, b)
+        local aId, bId = a.ID(), b.ID()
+        if aId == pullerTarID and bId ~= pullerTarID then return true end
+        if aId ~= pullerTarID and bId == pullerTarID then return false end
+        if aId == rc.engageTargetId and bId ~= rc.engageTargetId then return true end
+        if aId ~= rc.engageTargetId and bId == rc.engageTargetId then return false end
+        local da = utils.getDistanceSquared2D(meX, meY, a.X(), a.Y())
+        local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
+        return (da or 0) < (db or 0)
+    end)
+    for _, spawn in ipairs(losList) do
+        if targeting.TargetAndWaitBuffsPopulated(spawn.ID(), 1000) then
+            if not mq.TLO.Target.Mezzed() then
+                return spawn, (spawn.ID() == rc.engageTargetId)
             end
         end
     end
-    return mtPick, engageTargetRefound
+    return losList[1], (losList[1].ID() == rc.engageTargetId)
 end
 
 -- Offtank: if MT target == MA target pick add (Nth other mob); if MT target != MA target tank MA's target (agro/taunt).
