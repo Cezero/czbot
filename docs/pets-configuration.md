@@ -41,11 +41,13 @@ For all buff spell fields (gem, spell, alias, minmana, spellicon, etc.), see [Bu
 
 ## Pet assist
 
-When the bot is meleeing and has an **engage target** (e.g. the MA’s target), it can send its pet to attack that target.
+**petassist** is a **boolean** and is the only setting that controls whether the pet engages. When `true`, the bot sends its pet to attack the current engage target when it engages; when `false`, the pet does not engage (and is called back / follow when applicable). There is no percentage or threshold—engagement is purely on/off.
 
-| Option | Where | Default | Purpose |
-|--------|--------|--------|---------|
-| **petassist** | `settings.petassist` | `false` | When true, the bot sends its pet to attack the current engage target when it engages. When there is no engage target or the target changes, the bot calls pet back / follow. |
+When the bot is meleeing and has an **engage target** (e.g. the MA’s target), it can send its pet to attack that target if **petassist** is true.
+
+| Option | Where | Default | Type | Purpose |
+|--------|--------|--------|------|---------|
+| **petassist** | `settings.petassist` | `false` | Boolean | When true, the bot sends its pet to attack the current engage target when it engages. When there is no engage target or the target changes, the bot calls pet back / follow. |
 
 **Example (in settings):**
 

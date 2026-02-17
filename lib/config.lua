@@ -22,7 +22,6 @@
 ---@field followdistanceSq number|nil precomputed followdistance^2 for distance-squared comparisons
 ---@field zradius number|nil
 ---@field spelldb string|nil
----@field dopet boolean|nil
 
 ---@class ConfigPullSpell
 ---@field gem number|string|nil 1-12, 'item', 'alt', 'disc', 'ability', 'script', 'melee', or 'ranged'
@@ -107,7 +106,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'dopet' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -562,7 +561,6 @@ function M.Load(path)
         .TargetFilter) or 0 end
     if (M.config.settings.petassist == nil) then M.config.settings.petassist = false end
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
-    if (M.config.settings.dopet == nil) then M.config.settings.dopet = false end
     applySectionDefaults('pull', {
         radius = 400,
         zrange = 150,

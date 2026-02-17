@@ -155,7 +155,7 @@ return StoredConfig
 | **TankName**       | `"manual"`    | Main Tank name or `"automatic"` / `"manual"`.                                                                           |
 | **AssistName**     | (unset)       | Main Assist name or `"automatic"` / `"manual"`.                                                                         |
 | **TargetFilter**   | `0`           | Mob list filter (0/1/2).                                                                                                |
-| **petassist**      | `false`       | Send pet on engage target.                                                                                              |
+| **petassist**      | `false`       | Boolean. When true, send pet on engage target; when false, pet does not engage. Default `false`.                                                                                      |
 | **acleash**        | 75            | Camp leash distance.                                                                                                    |
 | **followdistance** | 35            | Follow distance: beyond this distance the bot stands and runs follow; within it, sit is allowed when mana &lt; sitmana. |
 | **zradius**        | 75            | Vertical range from camp for mob list.                                                                                  |

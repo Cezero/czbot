@@ -470,7 +470,6 @@ local function cmd_setvar(args)
         botconfig.config.settings.doheal = false
         botconfig.config.settings.docure = false
         botconfig.config.settings.dopull = false
-        botconfig.config.settings.dopet = false
     end
     if not valfound then printf('\ayCZBot:\ax\ar%s not found', args[2]) end
 end
@@ -563,10 +562,6 @@ local function cmd_chchain(args)
         if state.getRunconfig().PreCH['dopull'] then
             botconfig.config.settings.dopull = state.getRunconfig().PreCH
                 ['dopull']
-        end
-        if state.getRunconfig().PreCH['dopet'] then
-            botconfig.config.settings.dopet = state.getRunconfig().PreCH
-                ['dopet']
         end
         if state.getRunconfig().PreCH['docure'] then
             botconfig.config.settings.docure = state.getRunconfig().PreCH
@@ -813,7 +808,6 @@ function M.chchainSetupContinuation(setupArgs)
         botconfig.config.settings.doheal = false
         botconfig.config.settings.docure = false
         botconfig.config.settings.dopull = false
-        botconfig.config.settings.dopet = false
         mq.cmdf('/rs CHChain ON (NextClr: %s, Pause: %s, Tank: %s)', rc.chnextClr, rc.chchainPause, chtankstr)
     end
 end

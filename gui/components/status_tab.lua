@@ -26,7 +26,6 @@ local DO_FLAGS = {
     { key = 'dobuff', label = 'Buff' },
     { key = 'docure', label = 'Cure' },
     { key = 'domelee', label = 'Melee' },
-    { key = 'dopet', label = 'Pet' },
     { key = 'doraid', label = 'Raid' },
     { key = 'dodrag', label = 'Drag' },
     { key = 'domount', label = 'Mount' },
