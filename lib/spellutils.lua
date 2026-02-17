@@ -909,14 +909,11 @@ function spellutils.RequireTargetThenDontStackDebuff(entry, EvalID)
 end
 
 function spellutils.BuildMQ2CastCommand(entry, EvalID, targethit, sub)
-    local meId = mq.TLO.Me.ID()
     local gem = entry.gem
     local spellname = entry.spell
     local castArg = (type(gem) == 'number') and tostring(gem) or gem
     local cmd = string.format('/casting "%s" %s', spellname, castArg)
-    if EvalID ~= meId or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure') then
-        cmd = cmd .. string.format(' -targetid|%s', EvalID)
-    end
+    cmd = cmd .. string.format(' -targetid|%s', EvalID)
     if sub == 'debuff' then
         cmd = cmd .. ' -maxtries|2'
     end
@@ -1004,14 +1001,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
     local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
-    if not useMQ2Cast and (EvalID ~= meId or (targethit ~= 'self' and targethit ~= 'groupheal' and targethit ~= 'groupbuff' and targethit ~= 'groupcure')) then
-        if mq.TLO.Target.ID() ~= EvalID then
-            mq.cmdf('/tar id %s', EvalID)
-            rc.CurSpell.phase = 'precast'
-            rc.CurSpell.deadline = mq.gettime() + 1000
-            state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
-            return true
-        end
+    if not useMQ2Cast and mq.TLO.Target.ID() ~= EvalID then
+        mq.cmdf('/tar id %s', EvalID)
+        rc.CurSpell.phase = 'precast'
+        rc.CurSpell.deadline = mq.gettime() + 1000
+        state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        return true
     end
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
         return false
