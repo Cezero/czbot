@@ -1,14 +1,44 @@
 -- Status tab: status line, Camp section, and doXXX flag On/Off buttons.
 
 local ImGui = require('ImGui')
+local mq = require('mq')
 local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local tankrole = require('lib.tankrole')
 local inputs = require('gui.widgets.inputs')
 local combos = require('gui.widgets.combos')
+local modals = require('gui.widgets.modals')
 
 local M = {}
+
+-- Validators for mount spell/item (same logic as spell_entry: spellbook / inventory).
+local function validateSpellInBook(name)
+    if not name or name:match('^%s*$') then return false, 'Enter a spell name' end
+    name = name:match('^%s*(.-)%s*$')
+    local book = mq.TLO.Me and mq.TLO.Me.Book and mq.TLO.Me.Book(name)
+    if not book then return false, 'Spell not in your spell book' end
+    local ok, slot = pcall(function() return book() end)
+    if ok and slot and slot > 0 then return true end
+    return false, 'Spell not in your spell book'
+end
+
+local function validateFindItem(name)
+    if not name or name:match('^%s*$') then return false, 'Enter an item name' end
+    name = name:match('^%s*(.-)%s*$')
+    if mq.TLO.FindItem(name)() and mq.TLO.FindItem(name)() > 0 then return true end
+    return false, 'Item not found in inventory'
+end
+
+local MOUNT_MODAL_ID = 'status_mount'
+local _mountModalState = nil
+
+local function getMountModalState()
+    if not _mountModalState then
+        _mountModalState = { open = false, buffer = '', error = nil }
+    end
+    return _mountModalState
+end
 
 local function runConfigLoaders()
     botconfig.ApplyAndPersist()
@@ -174,7 +204,6 @@ function M.draw()
             ImGui.TextColored(WHITE, '%s', '# Mobs: ')
             ImGui.SameLine(0,2)
             ImGui.TextColored(LIGHT_GREY, '%s', tostring(rc.MobCount or 0))
-            ImGui.SameLine()
             ImGui.TextColored(WHITE, '%s', 'Filter: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(120)
@@ -188,6 +217,70 @@ function M.draw()
             ImGui.EndTable()
         end
         ImGui.PopStyleColor(2)
+        -- Other section
+        ImGui.Spacing()
+        ImGui.Text('%s', 'Other')
+        ImGui.Spacing()
+        ImGui.TextColored(WHITE, '%s', 'Sit Mana %: ')
+        ImGui.SameLine(0, 2)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local sitmanaVal = botconfig.config.settings.sitmana or 90
+        local sitmanaNew, sitmanaCh = inputs.boundedInt('sit_mana_pct', sitmanaVal, 0, 100, 5, '##sit_mana_pct')
+        if sitmanaCh then botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders() end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Sit when mana is at or below this %%.') end
+        ImGui.SameLine()
+        ImGui.TextColored(WHITE, '%s', 'Sit Endurance %: ')
+        ImGui.SameLine(0, 2)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local sitendurVal = botconfig.config.settings.sitendur or 90
+        local sitendurNew, sitendurCh = inputs.boundedInt('sit_endur_pct', sitendurVal, 0, 100, 5, '##sit_endur_pct')
+        if sitendurCh then botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders() end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Sit when endurance is at or below this %%.') end
+        -- Mount: type dropdown + click-to-edit name (spellbook/item validation)
+        ImGui.TextColored(WHITE, '%s', 'Mount: ')
+        ImGui.SameLine(0, 2)
+        local mountcast = botconfig.config.settings.mountcast or 'none'
+        local mountName, mountType = mountcast:match('^%s*(.-)%s*|%s*(.-)%s*$')
+        if not mountType or mountType == '' then mountType = 'gem' end
+        if mountName and mountName:match('^%s*$') then mountName = nil end
+        if mountName == 'none' then mountName = nil end
+        local mountTypeIdx = (mountType == 'item') and 2 or 1
+        ImGui.SetNextItemWidth(80)
+        local mountTypeOptions = { 'Spell', 'Item' }
+        local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, '##mount_type')
+        if mountTypeCh then
+            local newType = (mountTypeNew == 1) and 'gem' or 'item'
+            botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and (mountName .. '|' .. newType) or 'none'
+            runConfigLoaders()
+        end
+        ImGui.SameLine()
+        local mountDisplayName = (mountName and mountName ~= '') and mountName or 'click to edit'
+        local mountState = getMountModalState()
+        local currentMountType = (mountTypeIdx == 1) and 'gem' or 'item'
+        local mountValidator = (currentMountType == 'gem') and validateSpellInBook or validateFindItem
+        ImGui.SetNextItemWidth(140)
+        if ImGui.Selectable(mountDisplayName .. '##' .. MOUNT_MODAL_ID, false, 0, ImVec2(140, 0)) then
+            mountState.open = true
+            mountState.buffer = mountName and mountName ~= 'none' and mountName or ''
+            mountState.error = nil
+            modals.openValidatedEditModal(MOUNT_MODAL_ID)
+        end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Click to edit: spell (search spellbook) or item (search inventory).') end
+        if mountState.open then
+            local function onMountSave(value)
+                local trimmed = (value or ''):match('^%s*(.-)%s*$')
+                botconfig.config.settings.mountcast = (trimmed == '' or trimmed == 'none') and 'none' or (trimmed .. '|' .. currentMountType)
+                mountState.open = false
+                mountState.buffer = ''
+                runConfigLoaders()
+            end
+            local function onMountCancel()
+                mountState.open = false
+                mountState.buffer = ''
+                mountState.error = nil
+            end
+            modals.validatedEditModal(MOUNT_MODAL_ID, mountState, mountValidator, onMountSave, onMountCancel)
+        end
         ImGui.TableNextColumn()
         ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, style.CellPadding.x, FLAGS_ROW_PADDING_Y)
         if ImGui.BeginTable('flags table', 2, ImGuiTableFlags.None) then
