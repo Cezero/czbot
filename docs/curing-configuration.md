@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **curing** behavior: which c
 ## Overview
 
 - **Master switch:** Curing runs only when **`settings.docure`** is `true`. Default is `false`.
-- **Cure types:** Each spell entry has **curetype**: either **all** (any detrimental) or space-separated types (e.g. **poison**, **disease**, **curse**, **corruption**). The bot only considers the spell when the target has a matching effect.
+- **Cure types:** Each spell entry has **curetype**: a **table of strings**, e.g. **{ 'all' }** (any detrimental) or **{ 'poison', 'disease' }**. Default when unset or empty is **{ 'all' }**. The bot only considers the spell when the target has a matching effect.
 - **Priority cure:** Spells that include the **priority** phase in a band’s **targetphase** run in a separate, higher-priority hook (before the normal cure hook and before heals). No top-level flag is required: if at least one cure spell has **priority** in its band, the priority pass runs. After casting a cure in the main pass, the bot may re-evaluate to cure again if needed.
 
 ---
@@ -33,7 +33,7 @@ Each entry in **`config.cure.spells`** can have:
 | **alias** | Optional. Short name for `/cz cast <alias>`. Pipe-separated for multiple. |
 | **announce** | Optional. If true, announce when casting. |
 | **minmana** | Minimum mana (absolute) to cast. |
-| **curetype** | **all** or space-separated types: e.g. **poison**, **disease**, **curse**, **corruption**. The spell is only used when the target has at least one matching detrimental. |
+| **curetype** | Table of strings: e.g. **{ 'all' }** or **{ 'poison', 'disease', 'curse', 'corruption' }**. Default **{ 'all' }** when unset. The spell is only used when the target has at least one matching detrimental. |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **bands** | Who can be cured. See [Cure bands](#cure-bands) below. |
 | **priority** | Deprecated. Use the **priority** phase in a band’s **targetphase** instead (see [Cure bands](#cure-bands)). |
@@ -60,7 +60,7 @@ cure = {
       spell = 'Counteract Poison',
       alias = 'curepoison',
       minmana = 0,
-      curetype = 'poison',
+      curetype = { 'poison' },
       bands = {
         { targetphase = { 'priority', 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'war', 'shd', 'pal', 'clr', 'shm', 'dru', 'rng', 'mnk', 'rog', 'brd', 'bst', 'ber' } }
       }
@@ -70,7 +70,7 @@ cure = {
       spell = 'Counteract Disease',
       alias = 'curedisease',
       minmana = 0,
-      curetype = 'disease',
+      curetype = { 'disease' },
       bands = {
         { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } }
       }

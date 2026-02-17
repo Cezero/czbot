@@ -3,8 +3,11 @@
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spell_entry = require('gui.widgets.spell_entry')
+local inputs = require('gui.widgets.inputs')
 
 local M = {}
+
+local NUMERIC_INPUT_WIDTH = 80
 
 local PRIMARY_OPTIONS = {
     { value = 'gem',     label = 'Gem' },
@@ -68,6 +71,51 @@ local function runConfigLoaders()
     botconfig.ApplyAndPersist()
 end
 
+local function healCustomSection(entry, idPrefix, onChanged)
+    -- Mana % row: Min / Max (only cast when caster mana is within range)
+    ImGui.Text('Mana %%:')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Only cast when your mana %% is within min-max. 0-100.')
+    end
+    ImGui.SameLine()
+    ImGui.Text('Min')
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local minPct = entry.minmanapct
+    if minPct == nil then minPct = 0 end
+    local newMin, minCh = inputs.boundedInt(idPrefix .. '_minmanapct', minPct, 0, 100, 1, '##' .. idPrefix .. '_minmanapct')
+    if minCh then
+        entry.minmanapct = newMin
+        if onChanged then onChanged() end
+    end
+    ImGui.SameLine()
+    ImGui.Text('Max')
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local maxPct = entry.maxmanapct
+    if maxPct == nil then maxPct = 100 end
+    local newMax, maxCh = inputs.boundedInt(idPrefix .. '_maxmanapct', maxPct, 0, 100, 1, '##' .. idPrefix .. '_maxmanapct')
+    if maxCh then
+        entry.maxmanapct = newMax
+        if onChanged then onChanged() end
+    end
+    ImGui.Spacing()
+    -- tarcnt row
+    ImGui.Text('Target count')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Minimum number of targets (e.g. group members in AE range) that must be present before this spell can be used. Used for group/AE heals; 1 = no minimum.')
+    end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local tc = entry.tarcnt
+    if tc == nil then tc = 1 end
+    local newTc, tcCh = inputs.boundedInt(idPrefix .. '_tarcnt', tc, 1, 24, 1, '##' .. idPrefix .. '_tarcnt')
+    if tcCh then
+        entry.tarcnt = newTc
+        if onChanged then onChanged() end
+    end
+end
+
 --- Draw the full Heal tab content.
 function M.draw()
     local heal = botconfig.config.heal
@@ -82,7 +130,7 @@ function M.draw()
             primaryOptions = PRIMARY_OPTIONS,
             onChanged = runConfigLoaders,
             displayCommonFields = true,
-            customSection = nil,
+            customSection = healCustomSection,
             targetphaseOptions = TARGETPHASE_OPTIONS_HEAL,
             validtargetsOptions = {},
             validtargetsOptionsPerPhase = VALIDTARGETS_OPTIONS_PER_PHASE_HEAL,

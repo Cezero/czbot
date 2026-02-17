@@ -137,7 +137,7 @@ local defaultSpellEntries = {
     heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, precondition = nil },
     buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
     debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil },
-    cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = "all", enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
+    cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = { 'all' }, enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
 
 function M.getDefaultSpellEntry(section)
@@ -146,12 +146,20 @@ function M.getDefaultSpellEntry(section)
     local t = {}
     for k, v in pairs(src) do
         if type(v) == "table" and v[1] then
-            local copy = {}
-            for i, band in ipairs(v) do
-                copy[i] = {}
-                for bk, bv in pairs(band) do copy[i][bk] = bv end
+            if type(v[1]) == "table" then
+                -- array of tables (e.g. bands)
+                local copy = {}
+                for i, band in ipairs(v) do
+                    copy[i] = {}
+                    for bk, bv in pairs(band) do copy[i][bk] = bv end
+                end
+                t[k] = copy
+            else
+                -- array of strings or other primitives (e.g. curetype)
+                local copy = {}
+                for i, x in ipairs(v) do copy[i] = x end
+                t[k] = copy
             end
-            t[k] = copy
         else
             t[k] = v
         end
@@ -356,6 +364,18 @@ local function writeConfigToFile(config, filename)
                         formatKey('precondition') .. " = " .. '"' .. preStr:gsub('\\', '\\\\'):gsub('"', '\\"') .. '",\n')
                         file:flush()
                     end
+                elseif key == 'curetype' and type(value) == "table" then
+                    if #value > 0 then
+                        local parts = {}
+                        for _, s in ipairs(value) do
+                            parts[#parts + 1] = "'" .. tostring(s):gsub("'", "\\'") .. "'"
+                        end
+                        file:write(indent .. formatKey('curetype') .. " = { ")
+                        file:write(table.concat(parts, ", "))
+                        file:write(" },\n")
+                        file:flush()
+                    end
+                    -- omit when empty; readers treat as { 'all' }
                 elseif type(value) == "table" then
                     print("detected a corrupted value for:", key, " = ", value)
                     print("setting ", key, " to nil, please check your config")

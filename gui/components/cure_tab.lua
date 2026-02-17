@@ -3,8 +3,21 @@
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spell_entry = require('gui.widgets.spell_entry')
+local labeled_grid = require('gui.widgets.labeled_grid')
+local inputs = require('gui.widgets.inputs')
 
 local M = {}
+
+local NUMERIC_INPUT_WIDTH = 80
+
+-- Cure type options for the checkbox grid. Keys match botcure (all, poison, disease, curse, corruption).
+local CURETYPE_OPTIONS = {
+    { key = 'all',        label = 'All',        tooltip = 'Any detrimental.' },
+    { key = 'poison',     label = 'Poison',     tooltip = 'Poison only.' },
+    { key = 'disease',    label = 'Disease',    tooltip = 'Disease only.' },
+    { key = 'curse',      label = 'Curse',      tooltip = 'Curse only.' },
+    { key = 'corruption', label = 'Corruption', tooltip = 'Corruption only.' },
+}
 
 local PRIMARY_OPTIONS = {
     { value = 'gem',     label = 'Gem' },
@@ -15,8 +28,78 @@ local PRIMARY_OPTIONS = {
     { value = 'script',  label = 'Script' },
 }
 
+-- Phases for cure bands. Keys match spellbands and config default.
+local TARGETPHASE_OPTIONS_CURE = {
+    { key = 'self',        label = 'Self',     tooltip = 'Cure self.' },
+    { key = 'tank',        label = 'Tank',     tooltip = 'Cure tank (main assist).' },
+    { key = 'groupmember', label = 'Group',    tooltip = 'Cure group members (class filter below).' },
+    { key = 'pc',          label = 'PC',       tooltip = 'Cure other PCs/bots (class filter below).' },
+}
+
+-- PC/groupmember target options (class filter). Keys match spellbands CLASS_TOKENS.
+local VALIDTARGETS_OPTIONS_PC_GROUP = {
+    { key = 'all', label = 'All', tooltip = 'All classes.' },
+    { key = 'war', label = 'WAR', tooltip = 'Warrior' },
+    { key = 'shd', label = 'SHD', tooltip = 'Shadowknight' },
+    { key = 'pal', label = 'PAL', tooltip = 'Paladin' },
+    { key = 'rng', label = 'RNG', tooltip = 'Ranger' },
+    { key = 'mnk', label = 'MNK', tooltip = 'Monk' },
+    { key = 'rog', label = 'ROG', tooltip = 'Rogue' },
+    { key = 'brd', label = 'BRD', tooltip = 'Bard' },
+    { key = 'bst', label = 'BST', tooltip = 'Beastlord' },
+    { key = 'ber', label = 'BER', tooltip = 'Berserker' },
+    { key = 'shm', label = 'SHM', tooltip = 'Shaman' },
+    { key = 'clr', label = 'CLR', tooltip = 'Cleric' },
+    { key = 'dru', label = 'DRU', tooltip = 'Druid' },
+    { key = 'wiz', label = 'WIZ', tooltip = 'Wizard' },
+    { key = 'mag', label = 'MAG', tooltip = 'Mage' },
+    { key = 'enc', label = 'ENC', tooltip = 'Enchanter' },
+    { key = 'nec', label = 'NEC', tooltip = 'Necromancer' },
+}
+
 local function runConfigLoaders()
     botconfig.ApplyAndPersist()
+end
+
+local function curetypeCustomSection(entry, idPrefix, onChanged)
+    if type(entry.curetype) ~= 'table' or #entry.curetype == 0 then
+        entry.curetype = { 'all' }
+    end
+    labeled_grid.checkboxGrid({
+        id = idPrefix .. '_curetype',
+        label = 'Cure type:',
+        options = CURETYPE_OPTIONS,
+        value = entry.curetype,
+        columns = 5,
+        onToggle = function(key, isChecked)
+            if isChecked then
+                entry.curetype[#entry.curetype + 1] = key
+            else
+                for i = #entry.curetype, 1, -1 do
+                    if entry.curetype[i] == key then
+                        table.remove(entry.curetype, i)
+                        break
+                    end
+                end
+            end
+            if onChanged then onChanged() end
+        end,
+    })
+    ImGui.Spacing()
+    -- tarcnt row
+    ImGui.Text('Target count')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Minimum number of targets (e.g. group members in AE range) that must be present before this spell can be used. 1 = no minimum.')
+    end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local tc = entry.tarcnt
+    if tc == nil then tc = 1 end
+    local newTc, tcCh = inputs.boundedInt(idPrefix .. '_tarcnt', tc, 1, 24, 1, '##' .. idPrefix .. '_tarcnt')
+    if tcCh then
+        entry.tarcnt = newTc
+        if onChanged then onChanged() end
+    end
 end
 
 --- Draw the full Cure tab content.
@@ -32,9 +115,9 @@ function M.draw()
             primaryOptions = PRIMARY_OPTIONS,
             onChanged = runConfigLoaders,
             displayCommonFields = true,
-            customSection = nil,
-            targetphaseOptions = {},
-            validtargetsOptions = {},
+            customSection = curetypeCustomSection,
+            targetphaseOptions = TARGETPHASE_OPTIONS_CURE,
+            validtargetsOptions = VALIDTARGETS_OPTIONS_PC_GROUP,
             showBandMinMax = false,
             showBandMinTarMaxtar = false,
             onDelete = function()

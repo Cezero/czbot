@@ -22,7 +22,9 @@ function botcure.LoadCureConfig()
         storeIn = CureClass,
         perEntryAfterBands = function(entry, i)
             CureType[i] = {}
-            for word in (entry.curetype or 'all'):gmatch("%S+") do
+            local list = entry.curetype
+            if not list or #list == 0 then list = { 'all' } end
+            for _, word in ipairs(list) do
                 CureType[i][word] = word
             end
         end,

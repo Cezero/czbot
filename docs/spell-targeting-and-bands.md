@@ -141,7 +141,7 @@ See [Curing configuration](curing-configuration.md) and [Out-of-group peers](out
 
 ### Bands
 
-Bands use **targetphase** and **validtargets** (no min/max). **targetphase** tokens: **self**, **tank**, **groupcure**, **groupmember**, **pc**, and **priority**. When any cure spell has **priority** in targetphase, the priority cure pass runs (earlier hook); no separate configuration is needed. **validtargets**: class shorts or **all**. **tarcnt** optional for **groupcure**. **curetype** (e.g. poison, disease, curse, corruption, all) determines when the spell is considered; targeting is by bands and the phase order above.
+Bands use **targetphase** and **validtargets** (no min/max). **targetphase** tokens: **self**, **tank**, **groupcure**, **groupmember**, **pc**, and **priority**. When any cure spell has **priority** in targetphase, the priority cure pass runs (earlier hook); no separate configuration is needed. **validtargets**: class shorts or **all**. **tarcnt** optional for **groupcure**. **curetype** (table of types, e.g. **{ 'all' }** or **{ 'poison', 'disease' }**) determines when the spell is considered; targeting is by bands and the phase order above.
 
 ---
 
