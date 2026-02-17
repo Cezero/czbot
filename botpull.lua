@@ -77,6 +77,7 @@ local function clearPullState()
     rc.pulledmobLastDistSq = nil
     rc.pulledmobLastCloserTime = nil
     rc.pullNavStartHP = nil
+    rc.pullAggroingStartTime = nil
     state.clearRunState()
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         bardtwist.EnsureTwistForMode('combat')
@@ -387,6 +388,7 @@ local function tickNavigating(rc, spawn)
         end
         if spawnDistSq and rangeSq and spawnDistSq < rangeSq and spawn.LineOfSight() then
             rc.pullState = 'aggroing'
+            rc.pullAggroingStartTime = mq.gettime()
             rc.pullPhase = 'aggro_wait_target'
             rc.pullDeadline = mq.gettime() + 1000
             mq.cmd('/nav stop log=off')
@@ -403,6 +405,18 @@ local function tickNavigating(rc, spawn)
     end
 end
 
+-- Returns true when the pull target's current target is the player (confirmed agro). Nil-safe.
+local function pullMobHasAgroOnMe(spawn)
+    local meId = mq.TLO.Me.ID()
+    if not meId then return false end
+    local t = spawn.Target
+    if not t then return false end
+    if type(t) == 'function' then t = t() end
+    if not t then return false end
+    local tid = t.ID and t.ID() or nil
+    return tid and tid == meId
+end
+
 -- One tick of aggroing state (with sub-phases aggro_wait_target, aggro_wait_cast, aggro_wait_stop_moving).
 local function tickAggroing(rc, spawn)
     if rc.pullPhase == 'aggro_wait_target' then
@@ -410,7 +424,10 @@ local function tickAggroing(rc, spawn)
             clearPullState()
             return
         end
-        if mq.TLO.Target.ID() ~= rc.pullAPTargetID then return end
+        if mq.TLO.Target.ID() ~= rc.pullAPTargetID then
+            mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
+            return
+        end
         rc.pullPhase = nil
     end
     if rc.pullPhase == 'aggro_wait_cast' then
@@ -425,7 +442,14 @@ local function tickAggroing(rc, spawn)
         end
     end
 
-    if spawn.Aggressive() then
+    -- Aggroing timeout: no agro after 15s -> abort and return to camp
+    local aggroingElapsed = mq.gettime() - (rc.pullAggroingStartTime or 0)
+    if aggroingElapsed > 15000 and not pullMobHasAgroOnMe(spawn) then
+        abortPullAndReturnToCamp('No agro after 15s, returning to camp.')
+        return
+    end
+    -- Only transition to returning when mob has agro on me and min wait (1.5s) has passed
+    if spawn.Aggressive() and pullMobHasAgroOnMe(spawn) and aggroingElapsed >= 1500 then
         rc.pullState = 'returning'
         rc.pullPhase = nil
         rc.pulledmob = rc.pullAPTargetID
@@ -448,6 +472,10 @@ local function tickAggroing(rc, spawn)
 
     -- Melee (default or explicit)
     if not entry or gem == 'melee' then
+        if mq.TLO.Target.ID() ~= rc.pullAPTargetID then
+            mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
+            return
+        end
         mq.cmd('/multiline ; /squelch /nav stop log=off ; /attack on')
         if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', tostring(spawn.ID())) end
         return

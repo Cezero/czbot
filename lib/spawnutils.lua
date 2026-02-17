@@ -126,7 +126,8 @@ local function filterSpawnForPull(spawn, rc)
     if pull.usePullLevels then
         local minl = pull.pullMinLevel or 0
         local maxl = pull.pullMaxLevel or 255
-        if spawn.Level() < minl or spawn.Level() > maxl then return false end
+        local sl = spawn.Level()
+        if not sl or sl < minl or sl > maxl then return false end
     else
         local conName = spawn.ConColor()
         local conLevel = conName and botconfig.ConColorsNameToId[conName:upper()] or 0
@@ -134,8 +135,11 @@ local function filterSpawnForPull(spawn, rc)
         local minCon = pull.pullMinCon or 1
         local maxCon = pull.pullMaxCon or 7
         if conLevel < minCon or conLevel > maxCon then return false end
-        local maxLvl = mq.TLO.Me.Level() + (pull.maxLevelDiff or 6)
-        if spawn.Level() > maxLvl then return false end
+        local myLevel = mq.TLO.Me.Level()
+        local spawnLvl = spawn.Level()
+        if not spawnLvl then return false end
+        local maxLvl = myLevel and (myLevel + (pull.maxLevelDiff or 6))
+        if maxLvl and spawnLvl > maxLvl then return false end
     end
     local radiusSq = pull.radiusSq
     local zrange = pull.zrange or 200
