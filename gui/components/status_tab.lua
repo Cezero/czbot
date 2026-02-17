@@ -20,6 +20,7 @@ local GREEN = ImVec4(0, 0.8, 0, 1)
 local BLACK = ImVec4(0, 0, 0, 1)
 local WHITE = ImVec4(1, 1, 1, 1)
 local LIGHT_GREY = ImVec4(0.75, 0.75, 0.75, 1)
+local TABLE_BORDER_BLUE = ImVec4(51/255, 105/255, 173/255, 1.0)
 
 local FLAGS_COLUMN_WIDTH = 65
 local FLAGS_ROW_PADDING_Y = 2
@@ -107,6 +108,8 @@ function M.draw()
         ImGui.SameLine(0, 2)
         ImGui.TextColored(LIGHT_GREY, '%s', tankDisplay)
         ImGui.Spacing()
+        ImGui.PushStyleColor(ImGuiCol.TableBorderStrong, TABLE_BORDER_BLUE)
+        ImGui.PushStyleColor(ImGuiCol.TableBorderLight, TABLE_BORDER_BLUE)
         if ImGui.BeginTable('follow_camp layout', 2, bit32.bor(ImGuiTableFlags.BordersOuter, ImGuiTableFlags.BordersInner)) then
             ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
             ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
@@ -121,16 +124,6 @@ function M.draw()
             local startX = ImGui.GetCursorPosX()
             ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
             ImGui.Text('%s', followLabel)
-            local tMinX, tMinY = ImGui.GetItemRectMin()
-            local tMaxX, tMaxY = ImGui.GetItemRectMax()
-            local midY = (tMinY + tMaxY) / 2
-            local pad = 4
-            local rightX = leftX + availX
-            local drawList = ImGui.GetWindowDrawList()
-            local col = ImGui.GetColorU32(51/255, 105/255, 173/255, 1.0)
-            local thickness = 1.0
-            drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
-            drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
             ImGui.Spacing()
             ImGui.TextColored(WHITE, '%s', 'Following: ')
             ImGui.SameLine(0, 2)
@@ -152,23 +145,12 @@ function M.draw()
                 local campX = select(1, ImGui.GetCursorScreenPos())
                 ImGui.SetCursorScreenPos(campX, rowStartY)
             end
-            leftX, lineY = ImGui.GetCursorScreenPos()
             availX = select(1, ImGui.GetContentRegionAvail())
             local campLabel = 'Camp'
             textW, textH = ImGui.CalcTextSize(campLabel)
             startX = ImGui.GetCursorPosX()
             ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
             ImGui.Text('%s', campLabel)
-            tMinX, tMinY = ImGui.GetItemRectMin()
-            tMaxX, tMaxY = ImGui.GetItemRectMax()
-            midY = (tMinY + tMaxY) / 2
-            pad = 4
-            rightX = leftX + availX
-            drawList = ImGui.GetWindowDrawList()
-            col = ImGui.GetColorU32(51/255, 105/255, 173/255, 1.0)
-            thickness = 1.0
-            drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
-            drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
             local locationStr = 'unset'
             if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
                 locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)
@@ -207,6 +189,7 @@ function M.draw()
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Filter for which spawns count as valid camp mobs.') end
             ImGui.EndTable()
         end
+        ImGui.PopStyleColor(2)
         ImGui.TableNextColumn()
         ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, style.CellPadding.x, FLAGS_ROW_PADDING_Y)
         if ImGui.BeginTable('flags table', 2, ImGuiTableFlags.None) then
