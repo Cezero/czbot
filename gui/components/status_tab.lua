@@ -234,7 +234,7 @@ function M.draw()
         local sitmanaVal = botconfig.config.settings.sitmana or 90
         local sitmanaNew, sitmanaCh = inputs.boundedInt('sit_mana_pct', sitmanaVal, 0, 100, 5, '##sit_mana_pct')
         if sitmanaCh then botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders() end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('Sit when mana is at or below this %%.') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('If Sit is on, sit when mana is at or below this %%.') end
         ImGui.SameLine()
         ImGui.TextColored(WHITE, '%s', 'Sit Endurance %: ')
         ImGui.SameLine(0, 2)
@@ -242,8 +242,9 @@ function M.draw()
         local sitendurVal = botconfig.config.settings.sitendur or 90
         local sitendurNew, sitendurCh = inputs.boundedInt('sit_endur_pct', sitendurVal, 0, 100, 5, '##sit_endur_pct')
         if sitendurCh then botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders() end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('Sit when endurance is at or below this %%.') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('If Sit is on, sit when endurance is at or below this %%.') end
         -- Mount: type dropdown + click-to-edit name (spellbook/item validation)
+        ImGui.Spacing()
         ImGui.TextColored(WHITE, '%s', 'Mount: ')
         ImGui.SameLine(0, 2)
         local mountcast = botconfig.config.settings.mountcast or 'none'
@@ -262,7 +263,7 @@ function M.draw()
             runConfigLoaders()
         end
         ImGui.SameLine()
-        local mountDisplayName = (mountName and mountName ~= '') and mountName or 'click to edit'
+        local mountDisplayName = (mountName and mountName ~= '') and mountName or 'no mount'
         local mountState = getMountModalState()
         local currentMountType = (mountTypeIdx == 1) and 'gem' or 'item'
         local mountValidator = (currentMountType == 'gem') and validateSpellInBook or validateFindItem
