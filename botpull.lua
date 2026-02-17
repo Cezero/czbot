@@ -405,6 +405,16 @@ local function tickNavigating(rc, spawn)
     end
 end
 
+-- Returns true when we have clear line of sight to spawn (spawn check + coordinate ray). Used to avoid agro through walls/tents.
+local function pullHasLoS(spawn)
+    if not spawn or not spawn.LineOfSight() then return false end
+    local mx, my, mz = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+    local sx, sy, sz = spawn.X(), spawn.Y(), spawn.Z()
+    if not mx or not sx then return false end
+    local losStr = string.format('%s,%s,%s:%s,%s,%s', mx, my, mz, sx, sy, sz)
+    return mq.TLO.LineOfSight(losStr)()
+end
+
 -- Returns true when the pull target's current target is the player (confirmed agro). Nil-safe.
 local function pullMobHasAgroOnMe(spawn)
     local meId = mq.TLO.Me.ID()
@@ -422,6 +432,10 @@ local function tickAggroing(rc, spawn)
     if rc.pullPhase == 'aggro_wait_target' then
         if mq.gettime() >= (rc.pullDeadline or 0) then
             clearPullState()
+            return
+        end
+        if not pullHasLoS(spawn) then
+            mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(rc.pullAPTargetID))
             return
         end
         if mq.TLO.Target.ID() ~= rc.pullAPTargetID then
@@ -469,6 +483,12 @@ local function tickAggroing(rc, spawn)
     local gem = entry and entry.gem
     local spell = entry and entry.spell and tostring(entry.spell) or ''
     if rc.pullPhase then return end
+
+    -- Require LoS before any agro (targeting/melee/cast); nav closer if blocked (spawn + coordinate check for walls/tents)
+    if not pullHasLoS(spawn) then
+        mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(spawn.ID()))
+        return
+    end
 
     -- Melee (default or explicit)
     if not entry or gem == 'melee' then
@@ -556,7 +576,7 @@ local function tickAggroing(rc, spawn)
         return
     end
 
-    if not spawn.Aggressive() and mq.TLO.Target.ID() == spawn.ID() and (not mq.TLO.Stick.Active() or not spawn.LineOfSight()) then
+    if not spawn.Aggressive() and mq.TLO.Target.ID() == spawn.ID() and (not mq.TLO.Stick.Active() or not pullHasLoS(spawn)) then
         mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(spawn.ID()))
     end
 end
