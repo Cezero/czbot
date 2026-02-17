@@ -5,8 +5,13 @@ local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local tankrole = require('lib.tankrole')
+local inputs = require('gui.widgets.inputs')
 
 local M = {}
+
+local function runConfigLoaders()
+    botconfig.ApplyAndPersist()
+end
 
 local YELLOW = ImVec4(1, 1, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
@@ -91,13 +96,48 @@ function M.draw()
         ImGui.SameLine(0, 2)
         ImGui.TextColored(LIGHT_GREY, '%s', assistDisplay)
         ImGui.Spacing()
-        -- Camp section in left column (same style as Pulling on combat_tab)
+        -- Follow section
         local leftX, lineY = ImGui.GetCursorScreenPos()
         local availX = select(1, ImGui.GetContentRegionAvail())
-        local textW, textH = ImGui.CalcTextSize('Camp')
+        local followLabel = 'Follow'
+        local textW, textH = ImGui.CalcTextSize(followLabel)
         local startX = ImGui.GetCursorPosX()
         ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
-        ImGui.Text('Camp')
+        ImGui.Text('%s', followLabel)
+        local tMinX, tMinY = ImGui.GetItemRectMin()
+        local tMaxX, tMaxY = ImGui.GetItemRectMax()
+        local midY = (tMinY + tMaxY) / 2
+        local pad = 4
+        local rightX = leftX + availX
+        local drawList = ImGui.GetWindowDrawList()
+        local col = ImGui.GetColorU32(51/255, 105/255, 173/255, 1.0)
+        local thickness = 1.0
+        drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
+        drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
+        ImGui.Spacing()
+        ImGui.TextColored(WHITE, '%s', 'Following: ')
+        ImGui.SameLine(0, 2)
+        if rc.followid and rc.followid > 0 and rc.followname and rc.followname ~= '' then
+            ImGui.TextColored(LIGHT_GREY, '%s', rc.followname)
+        else
+            ImGui.TextColored(LIGHT_GREY, '%s', 'unset')
+        end
+        ImGui.TextColored(WHITE, '%s', 'Distance: ')
+        ImGui.SameLine(0, 2)
+        ImGui.SetNextItemWidth(60)
+        local followdistanceVal = botconfig.config.settings.followdistance or 35
+        local followDistNew, followDistCh = inputs.boundedInt('follow_distance', followdistanceVal, 1, 500, 5, '##follow_distance')
+        if followDistCh then botconfig.config.settings.followdistance = followDistNew; runConfigLoaders() end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Follow distance (units) before moving to catch up.') end
+        ImGui.Spacing()
+        -- Camp section in left column (same style as Pulling on combat_tab)
+        leftX, lineY = ImGui.GetCursorScreenPos()
+        availX = select(1, ImGui.GetContentRegionAvail())
+        local campLabel = 'Camp'
+        textW, textH = ImGui.CalcTextSize(campLabel)
+        local startX = ImGui.GetCursorPosX()
+        ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
+        ImGui.Text('%s', campLabel)
         local tMinX, tMinY = ImGui.GetItemRectMin()
         local tMaxX, tMaxY = ImGui.GetItemRectMax()
         local midY = (tMinY + tMaxY) / 2
@@ -117,9 +157,20 @@ function M.draw()
         ImGui.SameLine(0,2)
         ImGui.TextColored(LIGHT_GREY, '%s', locationStr)
         ImGui.TextColored(WHITE, '%s', 'Radius: ')
-        ImGui.SameLine(0,2)
-        ImGui.TextColored(LIGHT_GREY, '%s', tostring(botconfig.config.settings.acleash or 75))
+        ImGui.SameLine(0, 2)
+        ImGui.SetNextItemWidth(60)
+        local acleashVal = botconfig.config.settings.acleash or 75
+        local radiusNew, radiusCh = inputs.boundedInt('camp_radius', acleashVal, 1, 10000, 5, '##camp_radius')
+        if radiusCh then botconfig.config.settings.acleash = radiusNew; runConfigLoaders() end
         if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp radius for in-camp mob checks.') end
+        ImGui.SameLine()
+        ImGui.TextColored(WHITE, '%s', 'ZRadius: ')
+        ImGui.SameLine(0, 2)
+        ImGui.SetNextItemWidth(60)
+        local zradiusVal = botconfig.config.settings.zradius or 75
+        local zradiusNew, zradiusCh = inputs.boundedInt('camp_zradius', zradiusVal, 1, 10000, 5, '##camp_zradius')
+        if zradiusCh then botconfig.config.settings.zradius = zradiusNew; runConfigLoaders() end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp Z (vertical) radius for in-camp mob checks.') end
         ImGui.TextColored(WHITE, '%s', '# Mobs: ')
         ImGui.SameLine(0,2)
         ImGui.TextColored(LIGHT_GREY, '%s', tostring(rc.MobCount or 0))
