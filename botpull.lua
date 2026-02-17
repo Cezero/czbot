@@ -435,15 +435,15 @@ local function pullHasLoS(spawn)
 end
 
 -- Returns true when the pull target's current target is the player (confirmed agro). Nil-safe.
+-- Uses spawn.Target when available; fallback to Me.TargetOfTarget when we have the pull mob targeted.
 local function pullMobHasAgroOnMe(spawn)
     local meId = mq.TLO.Me.ID()
     if not meId then return false end
-    local t = spawn.Target
-    if not t then return false end
-    if type(t) == 'function' then t = t() end
-    if not t then return false end
-    local tid = t.ID and t.ID() or nil
-    return tid and tid == meId
+    if mq.TLO.Target.ID() == spawn.ID() then
+        local totId = mq.TLO.Me.TargetOfTarget.ID()
+        return totId and totId == meId
+    end
+    return false
 end
 
 -- One tick of aggroing state (with sub-phases aggro_wait_target, aggro_wait_cast, aggro_wait_stop_moving).
