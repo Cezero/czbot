@@ -43,11 +43,6 @@ local function CharState(...)
         if not mq.TLO.Me.Moving() or (state.getRunStatePayload() and state.getRunStatePayload().deadline and mq.gettime() >= state.getRunStatePayload().deadline) then
             state.clearRunState()
         end
-    elseif state.getRunconfig().campstatus and state.getRunconfig().makecamp.x and state.getRunconfig().makecamp.y then
-        local campSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), state.getRunconfig().makecamp.x,
-            state.getRunconfig().makecamp.y)
-        if campSq and botconfig.config.settings.acleashSq and campSq > botconfig.config.settings.acleashSq then botmove
-                .MakeCamp('return') end
     end
     -- Stand when follow is on and target is beyond follow distance (so follow logic can run)
     do

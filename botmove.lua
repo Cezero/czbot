@@ -368,6 +368,7 @@ function botmove.MakeCampLeashCheck()
     if not state.getRunconfig().campstatus then return end
     if state.getRunconfig().engageTargetId then return end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
+    if state.getRunState() == 'pulling' then return end
     local rc = state.getRunconfig()
     if campDistanceOk(rc) and campLOSOk(rc) then return end
     print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
