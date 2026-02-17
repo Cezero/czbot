@@ -348,22 +348,24 @@ function spellutils.SpellStacksSpawn(entry, spawnId)
 end
 
 -- SPA 22 = Charm (MacroQuest spelleffects.h). Returns true if the spell for entry has the Charm effect.
+-- Do not store mq.TLO.Spell() proxy; use direct chains (see HasReagents comment).
 function spellutils.IsCharmSpell(entry)
     if not entry or not entry.spell then return false end
-    local spellTLO
     if entry.gem == 'item' then
         if not mq.TLO.FindItem(entry.spell)() then return false end
-        spellTLO = mq.TLO.FindItem(entry.spell).Spell
-    else
-        spellTLO = mq.TLO.Spell(entry.spell)
+        local ok, hasCharm = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(22) end)
+        if ok and hasCharm then return true end
+        local ok2, cat = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.Category() end)
+        local ok3, sub = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.Subcategory() end)
+        if cat and type(cat) == 'string' and cat:lower():find('charm') then return true end
+        if sub and type(sub) == 'string' and sub:lower():find('charm') then return true end
+        return false
     end
-    if not spellTLO then return false end
-    local ok, hasCharm = pcall(function() return spellTLO.HasSPA and spellTLO:HasSPA(22) end)
+    if not mq.TLO.Spell(entry.spell)() then return false end
+    local ok, hasCharm = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(22) end)
     if ok and hasCharm then return true end
-    ok, hasCharm = pcall(function() return spellTLO.HasSPA(22) end)
-    if ok and hasCharm then return true end
-    local cat = spellTLO.Category and spellTLO:Category() or spellTLO.Category()
-    local sub = spellTLO.Subcategory and spellTLO:Subcategory() or spellTLO.Subcategory()
+    local ok2, cat = pcall(function() return mq.TLO.Spell(entry.spell).Category() end)
+    local ok3, sub = pcall(function() return mq.TLO.Spell(entry.spell).Subcategory() end)
     if cat and type(cat) == 'string' and cat:lower():find('charm') then return true end
     if sub and type(sub) == 'string' and sub:lower():find('charm') then return true end
     return false
@@ -394,15 +396,17 @@ function spellutils.IsTargetedAESpell(entry)
 end
 
 -- SPA 100 = HoT Heals (MacroQuest spelleffects.h). Returns true if the spell for entry has the HoT effect.
+-- Do not store mq.TLO.Spell() proxy; use direct chains (see HasReagents comment).
 function spellutils.IsHoTSpell(entry)
     if not entry or not entry.spell then return false end
-    local spellTLO = spellutils.GetSpellEntity(entry)
-    if not spellTLO then return false end
-    local ok, hasHoT = pcall(function() return spellTLO.HasSPA and spellTLO:HasSPA(100) end)
-    if ok and hasHoT then return true end
-    ok, hasHoT = pcall(function() return spellTLO.HasSPA(100) end)
-    if ok and hasHoT then return true end
-    return false
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return false end
+        local ok, hasHoT = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(100) end)
+        return ok and hasHoT
+    end
+    if not mq.TLO.Spell(entry.spell)() then return false end
+    local ok, hasHoT = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(100) end)
+    return ok and hasHoT
 end
 
 -- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.

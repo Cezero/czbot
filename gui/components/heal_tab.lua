@@ -74,7 +74,7 @@ end
 
 local function healCustomSection(entry, idPrefix, onChanged)
     -- Mana % row: Min / Max (only cast when caster mana is within range)
-    ImGui.Text('Mana %%:')
+    ImGui.Text('Mana %:')
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip('Only cast when your mana %% is within min-max. 0-100.')
     end

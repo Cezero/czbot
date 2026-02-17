@@ -102,7 +102,13 @@ function M.draw()
     if not debuff.spells then debuff.spells = {} end
     local spells = debuff.spells
     for i, entry in ipairs(spells) do
-        local detectedTypeLabel = spellutils.IsNukeSpell(entry) and 'Nuke' or (spellutils.IsMezSpell(entry) and 'Mez' or nil)
+        local detectedTypeLabel
+        if spellutils.IsNukeSpell(entry) then
+            local flavor = spellutils.GetNukeFlavor(entry)
+            detectedTypeLabel = flavor and (flavor:gsub('^%l', string.upper) .. ' nuke') or 'Nuke'
+        else
+            detectedTypeLabel = spellutils.IsMezSpell(entry) and 'Mez' or nil
+        end
         local detectedTypeLabel2 = spellutils.IsTargetedAESpell(entry) and 'Targeted AE' or nil
         spell_entry.draw(entry, {
             id = 'debuff_' .. i,
