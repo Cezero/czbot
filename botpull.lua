@@ -66,7 +66,6 @@ local function getEffectiveAbilityRange()
 end
 
 local function clearPullState(reason)
-    if reason then printf('\ayCZBot:\ax [Pull] clearPullState: %s', reason) else printf('\ayCZBot:\ax [Pull] clearPullState: (no reason)') end
     local rc = state.getRunconfig()
     rc.pullState = nil
     rc.pullAPTargetID = nil
@@ -74,7 +73,13 @@ local function clearPullState(reason)
     rc.pullReturnTimer = nil
     rc.pullPhase = nil
     rc.pullDeadline = nil
-    rc.statusMessage = ''
+    if reason == 'waiting_combat: AP in camp or timer' or reason == 'returning: warp' then
+        rc.statusMessage = ''
+    elseif reason and reason ~= '' then
+        rc.statusMessage = string.format('Pull aborted: %s', reason)
+    else
+        rc.statusMessage = ''
+    end
     rc.pullHealerManaWait = nil
     rc.pulledmobLastDistSq = nil
     rc.pulledmobLastCloserTime = nil
@@ -348,13 +353,9 @@ local function tickNavigating(rc, spawn)
         local meToCampSq = utils.getDistanceSquared3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z())
         outsideCamp = meToCampSq and myconfig.pull.radiusPlus40Sq and meToCampSq > myconfig.pull.radiusPlus40Sq
     end
-    printf('\ayCZBot:\ax [Pull] navigating: distSq=%s rangeSq=%s inRange=%s los=%s haveTar=%s camp=%s outCamp=%s',
-        tostring(spawnDistSq), tostring(rangeSq), tostring(inRange2D), tostring(spawnLoS), tostring(haveTarget),
-        tostring(rc.campstatus and true or false), tostring(outsideCamp))
 
     -- Add-abort: HP dropped (we took damage)
     if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP then
-        printf('\ayCZBot:\ax [Pull] navigating: CLEAR/ABORT -> Add aggro / took damage, returning to camp.')
         abortPullAndReturnToCamp('Add aggro / took damage, returning to camp.')
         return
     end
@@ -369,7 +370,6 @@ local function tickNavigating(rc, spawn)
                 local conName = mq.TLO.NearestSpawn(i, addFilter).ConColor()
                 local conId = conName and botconfig.ConColorsNameToId[conName:upper()] or 0
                 if conId ~= 1 and mq.TLO.NearestSpawn(i, addFilter).LineOfSight() then -- not Grey, has LoS
-                    printf('\ayCZBot:\ax [Pull] navigating: CLEAR/ABORT -> Add aggro, returning to camp.')
                     abortPullAndReturnToCamp('Add aggro, returning to camp.')
                     return
                 end
@@ -382,19 +382,16 @@ local function tickNavigating(rc, spawn)
         if isPullWarp() then
             mq.cmdf('/warp loc %s %s %s', rc.makecamp.y, rc.makecamp.x, rc.makecamp.z)
         end
-        printf('\ayCZBot:\ax [Pull] navigating: CLEAR/ABORT -> navigating: tag timeout')
         clearPullState('navigating: tag timeout')
         return
     end
     if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then
-        printf('\ayCZBot:\ax [Pull] navigating: CLEAR/ABORT -> navigating: low HP')
         clearPullState('navigating: low HP')
         return
     end
     if rc.campstatus then
         local meToCampSq = utils.getDistanceSquared3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z())
         if meToCampSq and myconfig.pull.radiusPlus40Sq and meToCampSq > myconfig.pull.radiusPlus40Sq then
-            printf('\ayCZBot:\ax [Pull] navigating: CLEAR/ABORT -> navigating: outside camp radius')
             clearPullState('navigating: outside camp radius')
             return
         end
@@ -405,13 +402,13 @@ local function tickNavigating(rc, spawn)
         end
         if mq.TLO.Me.TargetOfTarget.ID() and mq.TLO.Target.ID() and mq.TLO.Target.Type() == 'NPC' and spawnDistSq and spawnDistSq <= rangeSq then
             if botpull.EngageCheck() then
-                printf('\ayCZBot:\ax [Pull] navigating: CLEAR/ABORT -> navigating: EngageCheck (mob engaged by other)')
                 clearPullState('navigating: EngageCheck (mob engaged by other)')
                 return
             end
         end
         if spawnDistSq and rangeSq and spawnDistSq < rangeSq and spawn.LineOfSight() then
             rc.pullState = 'aggroing'
+            rc.statusMessage = string.format('Aggroing %s (%s)', spawn.Name(), spawn.ID())
             rc.pullAggroingStartTime = mq.gettime()
             rc.pullPhase = 'aggro_wait_target'
             rc.pullDeadline = mq.gettime() + 1000
@@ -489,6 +486,7 @@ local function tickAggroing(rc, spawn)
     -- Only transition to returning when mob has agro on me and min wait (1.5s) has passed
     if spawn.Aggressive() and pullMobHasAgroOnMe(spawn) and aggroingElapsed >= 1500 then
         rc.pullState = 'returning'
+        rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
         rc.pullPhase = nil
         rc.pulledmob = rc.pullAPTargetID
         rc.pullreturntimer = mq.gettime() + 60000
@@ -609,6 +607,7 @@ end
 local function tickReturning(rc, spawn)
     if not mq.TLO.Navigation.Active() then
         rc.pullState = 'waiting_combat'
+        rc.statusMessage = string.format('Waiting for combat with %s (%s)', spawn.Name(), spawn.ID())
         return
     end
     if rc.pullReturnTimer and mq.gettime() >= rc.pullReturnTimer then
@@ -628,6 +627,7 @@ local function tickReturning(rc, spawn)
     end
     if mq.TLO.Me.CombatState() == 'COMBAT' then
         rc.pullState = 'waiting_combat'
+        rc.statusMessage = string.format('Waiting for combat with %s (%s)', spawn.Name(), spawn.ID())
     end
 end
 
@@ -648,7 +648,6 @@ end
 function botpull.PullTick()
     local rc = state.getRunconfig()
     if not rc.pullState or not rc.pullAPTargetID then return end
-    printf('\ayCZBot:\ax [Pull] tick state=%s id=%s', rc.pullState or 'nil', tostring(rc.pullAPTargetID))
     local spawn = mq.TLO.Spawn(rc.pullAPTargetID)
     if not spawn or not spawn.ID() or spawn.Type() == 'Corpse' then
         clearPullState('PullTick: no spawn or corpse')
@@ -684,7 +683,6 @@ function botpull.getHookFn(name)
             if state.getRunState() == 'raid_mechanic' then return end
             local rc = state.getRunconfig()
             if state.getRunState() == 'pulling' then
-                printf('\ayCZBot:\ax [Pull] doPull: runState=pulling pullState=%s', tostring(rc.pullState))
                 botpull.PullTick()
                 return
             end
@@ -693,17 +691,14 @@ function botpull.getHookFn(name)
                     local tempcnt = myconfig.pull.chainpullcnt == 0 and (myconfig.pull.chainpullcnt + 1) or
                         myconfig.pull.chainpullcnt
                     if (tonumber(mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs()) <= myconfig.pull.chainpullhp) and state.getRunconfig().MobCount <= tempcnt then
-                        printf('\ayCZBot:\ax [Pull] doPull: calling StartPull (chainpull PctHPs low MobCount=%s)', tostring(rc.MobCount))
                         botpull.StartPull()
                     end
                 end
             end
             if (state.getRunconfig().MobCount < myconfig.pull.chainpullcnt) then
-                printf('\ayCZBot:\ax [Pull] doPull: calling StartPull (MobCount=%s < chainpullcnt=%s)', tostring(rc.MobCount), tostring(myconfig.pull.chainpullcnt))
                 botpull.StartPull()
             end
             if (state.getRunconfig().MobCount == 0) and not state.getRunconfig().engageTargetId then
-                printf('\ayCZBot:\ax [Pull] doPull: calling StartPull (MobCount=0 no engageTargetId)')
                 botpull.StartPull()
             end
         end

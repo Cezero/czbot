@@ -2,6 +2,7 @@
 
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
+local spellutils = require('lib.spellutils')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
 
@@ -124,9 +125,11 @@ function M.draw()
     local spells = heal.spells
     if not spells then return end
     for i, entry in ipairs(spells) do
+        local detectedTypeLabel = spellutils.IsHoTSpell(entry) and 'HoT' or nil
         spell_entry.draw(entry, {
             id = 'heal_' .. i,
             label = 'Heal ' .. i,
+            detectedTypeLabel = detectedTypeLabel,
             primaryOptions = PRIMARY_OPTIONS,
             onChanged = runConfigLoaders,
             displayCommonFields = true,

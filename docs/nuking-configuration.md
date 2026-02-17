@@ -6,6 +6,9 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
 
 - **Nuking = debuffs.** There is no separate “nuke” section. You add your nuke spell(s) under **`config.debuff.spells`** and set **bands** to **tanktar** (MA/tank’s target), and optionally **notanktar** (adds) or **named** (named only).
 - **Master switch:** Turn on debuffing with **`settings.dodebuff`** (or `/cz dodebuff on`).
+- **Nuke rotation:** If you configure multiple nuke spells (e.g. Shock of Ice and Shock of Fire), the bot **rotates** between them—one cast of each in sequence—instead of only ever casting the first. Nukes are auto-detected (spells with no duration).
+- **Nuke flavor (resist type):** Each nuke’s **flavor** (fire, ice, magic, poison, disease, etc.) is **auto-detected** from the spell’s resist type. You can disable specific flavors at runtime (e.g. turn off fire nukes in Plane of Fire) via the Status tab checkboxes or **`/cz togglenuke <flavor> [on|off]`**. Settings are stored per zone in **cz_common.lua**.
+- **Recast and auto-disable:** The existing **recast** option (resist count per spawn) applies to nukes. If the same flavor is disabled due to resists on **3 mobs in a row**, that flavor is **globally auto-disabled** until you re-enable it (checkbox or `/cz togglenuke <flavor> on`).
 - For all debuff options (recast, delay, charm, gem types, etc.), see [Debuffing configuration](debuffing-configuration.md).
 - See [Spell targeting and bands](spell-targeting-and-bands.md) for how tanktar and notanktar interact and evaluation order.
 
@@ -59,6 +62,8 @@ bands = {
 ## Runtime control
 
 - **Toggle debuffing (nuking):** `/cz dodebuff on` or `/cz dodebuff off`.
+- **Nuke flavor filter:** `/cz togglenuke <flavor>` — toggle that flavor on or off (e.g. `/cz togglenuke ice`). Use `/cz togglenuke <flavor> off` or `on` to force off or on. Flavors: **fire**, **ice** (or **cold**), **magic**, **poison**, **disease**. Only flavors that appear in your configured nukes are valid. Settings are saved per zone in **cz_common.lua**.
+- **Status tab:** When you have at least one nuke in your debuff list, the Status tab shows a row of checkboxes for each nuke flavor (Fire, Ice, Magic, etc.). Uncheck a flavor to disable it (e.g. fire in a fire-resistant zone). Auto-disabled flavors (after 3 resists in a row) appear unchecked; you can re-enable them by checking the box or using `/cz togglenuke <flavor> on`.
 - **Cast by alias:** `/cz cast <alias> [target]` — cast the nuke by alias. `/cz cast <alias> on` or `off` to enable or disable the spell (**enabled**).
 - **Add a spell slot:** `/cz addspell debuff <position>`.
 

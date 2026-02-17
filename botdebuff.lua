@@ -128,7 +128,7 @@ local function DebuffEvalTankTar(index, ctx)
             if not (myrangeSq and distSq and distSq > myrangeSq) then
                 if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
                     local tanktarstack = spellutils.SpellStacksSpawn(entry, ctx.tanktar)
-                    if ctx.tanktarlvl and mq.TLO.Spell(ctx.spellid).Subcategory() == 'Enthrall' and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
+                    if ctx.tanktarlvl and spellutils.IsMezSpell(entry) and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
                         return nil, nil
                     end
                     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
@@ -197,7 +197,7 @@ local function DebuffEvalNamedTankTar(index, ctx)
             if myrangeSq and distSq and distSq > myrangeSq then return nil, nil end
             if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
                 local tanktarstack = spellutils.SpellStacksSpawn(entry, ctx.tanktar)
-                if ctx.tanktarlvl and mq.TLO.Spell(ctx.spellid).Subcategory() == 'Enthrall' and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
+                if ctx.tanktarlvl and spellutils.IsMezSpell(entry) and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
                     return nil, nil
                 end
                 if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
@@ -281,11 +281,23 @@ local function debuffGetTargetsForPhase(phase, context)
     return out
 end
 
+local function nukeFlavorAllowed(rc, flavor)
+    if not flavor then return true end
+    if rc.nukeFlavorsAutoDisabled and rc.nukeFlavorsAutoDisabled[flavor] then return false end
+    if not rc.nukeFlavorsAllowed then return true end
+    return rc.nukeFlavorsAllowed[flavor] == true
+end
+
 local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry then return nil, nil end
     local db = DebuffBands[spellIndex]
     if not campCountOk(state.getRunconfig().MobCount, db and db.mintar, db and db.maxtar) then return nil, nil end
+    local rc = state.getRunconfig()
+    if spellutils.IsNukeSpell(entry) then
+        local flavor = spellutils.GetNukeFlavor(entry)
+        if not nukeFlavorAllowed(rc, flavor) then return nil, nil end
+    end
     if targethit == 'charmtar' or targethit == 'charm' then
         if context.charmRecasts and context.charmRecasts[spellIndex] and context.charmRecasts[spellIndex].id == targetId then
             return targetId, context.charmRecasts[spellIndex].targethit or 'charmtar'
@@ -444,12 +456,35 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
         local newCount = spellstates.IncrementRecastCounter(EvalID, spellIndex)
         state.getRunconfig().CurSpell = {}
         if newCount >= adEntry.recast then
+            local rc = state.getRunconfig()
             printf(
                 '\ayCZBot:\ax\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
                 mq.TLO.Spawn(EvalID).CleanName(), adEntry.spell, spellIndex, adEntry.recast)
             local recastduration = 600000 + mq.gettime()
             local duration_sec = spellutils.GetSpellDurationSec(adEntry)
             if duration_sec > 0 then spellstates.DebuffListUpdate(EvalID, adEntry.spell, recastduration) end
+            if spellutils.IsNukeSpell(adEntry) then
+                local flavor = spellutils.GetNukeFlavor(adEntry)
+                if flavor then
+                    if not rc.nukeResistDisabledRecent then rc.nukeResistDisabledRecent = {} end
+                    rc.nukeResistDisabledRecent[#rc.nukeResistDisabledRecent + 1] = { flavor = flavor }
+                    if #rc.nukeResistDisabledRecent > 5 then
+                        table.remove(rc.nukeResistDisabledRecent, 1)
+                    end
+                    local n = #rc.nukeResistDisabledRecent
+                    if n >= 3 then
+                        local f = rc.nukeResistDisabledRecent[n].flavor
+                        if rc.nukeResistDisabledRecent[n - 1].flavor == f and rc.nukeResistDisabledRecent[n - 2].flavor == f then
+                            if not rc.nukeFlavorsAutoDisabled then rc.nukeFlavorsAutoDisabled = {} end
+                            if not rc.nukeFlavorsAutoDisabled[f] then
+                                rc.nukeFlavorsAutoDisabled[f] = true
+                                printf('\ayCZBot:\ax \ar%s\ax nukes auto-disabled after resists on 3 mobs in a row.', f:gsub('^%l', string.upper))
+                                botconfig.saveNukeFlavorsToCommon()
+                            end
+                        end
+                    end
+                end
+            end
         end
         return true
     end
@@ -480,7 +515,36 @@ local function debuffGetSpellIndices(phase, count, ctx)
         end
         return out
     end
-    return spellutils.getSpellIndicesForPhase(count, phase, DebuffBands)
+    local base = spellutils.getSpellIndicesForPhase(count, phase, DebuffBands)
+    if not base or #base == 0 then return base end
+    local rc = state.getRunconfig()
+    local nonNuke, nukeIndices = {}, {}
+    for _, i in ipairs(base) do
+        local entry = botconfig.getSpellEntry('debuff', i)
+        if entry and spellutils.IsNukeSpell(entry) then
+            local flavor = spellutils.GetNukeFlavor(entry)
+            if nukeFlavorAllowed(rc, flavor) then nukeIndices[#nukeIndices + 1] = i end
+        else
+            nonNuke[#nonNuke + 1] = i
+        end
+    end
+    if #nukeIndices == 0 then return nonNuke end
+    local n = #nukeIndices
+    local startPos = 1
+    if rc.lastNukeIndex then
+        for pos, spellIdx in ipairs(nukeIndices) do
+            if spellIdx == rc.lastNukeIndex then
+                startPos = (pos % n) + 1
+                break
+            end
+        end
+    end
+    local rotated = {}
+    for j = 0, n - 1 do
+        rotated[#rotated + 1] = nukeIndices[((startPos - 1 + j) % n) + 1]
+    end
+    for _, i in ipairs(rotated) do nonNuke[#nonNuke + 1] = i end
+    return nonNuke
 end
 
 function botdebuff.DebuffCheck(runPriority)

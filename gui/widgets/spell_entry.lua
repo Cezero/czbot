@@ -172,6 +172,16 @@ function M.draw(spell, opts)
     local gemType = type(spell.gem) == 'number' and 'gem' or spell.gem
 
     ImGui.Text('%s', labelText)
+    if opts.detectedTypeLabel and opts.detectedTypeLabel ~= '' then
+        ImGui.SameLine()
+        ImGui.TextDisabled('(%s)', opts.detectedTypeLabel)
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Auto-detected spell type') end
+    end
+    if opts.detectedTypeLabel2 and opts.detectedTypeLabel2 ~= '' then
+        ImGui.SameLine()
+        ImGui.TextDisabled('(%s)', opts.detectedTypeLabel2)
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Targeted AE spell') end
+    end
     ImGui.SameLine()
     local primary, sub = gemToPrimarySub(spell.gem)
     ImGui.SetNextItemWidth(TYPE_COMBO_WIDTH)

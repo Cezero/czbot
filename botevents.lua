@@ -27,6 +27,7 @@ local function DelayOnZone()
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')
+    botconfig.loadNukeFlavorsFromZone()
     spellstates.CleanMobList()
     MountCastFailed = false
 end

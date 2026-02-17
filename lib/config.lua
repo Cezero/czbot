@@ -193,6 +193,33 @@ function M.saveCommon()
     if M._common then mq.pickle(COMMON_FILENAME, M._common) end
 end
 
+--- Load nuke flavor state for current zone from cz_common into runconfig. Call on zone change.
+function M.loadNukeFlavorsFromZone()
+    local common = M.getCommon()
+    if not common.nukeFlavorsByZone then common.nukeFlavorsByZone = {} end
+    if not common.nukeFlavorsAutoDisabledByZone then common.nukeFlavorsAutoDisabledByZone = {} end
+    local zone = mq.TLO.Zone.ShortName()
+    local rc = state.getRunconfig()
+    rc.nukeFlavorsAllowed = common.nukeFlavorsByZone[zone]
+    rc.nukeFlavorsAutoDisabled = common.nukeFlavorsAutoDisabledByZone[zone]
+    if rc.nukeFlavorsAutoDisabled and next(rc.nukeFlavorsAutoDisabled) == nil then
+        rc.nukeFlavorsAutoDisabled = nil
+    end
+end
+
+--- Persist current runconfig nuke flavor state to cz_common for current zone. Call after toggle or auto-disable.
+function M.saveNukeFlavorsToCommon()
+    local zone = mq.TLO.Zone.ShortName()
+    if not zone or zone == '' then return end
+    local rc = state.getRunconfig()
+    local common = M.getCommon()
+    if not common.nukeFlavorsByZone then common.nukeFlavorsByZone = {} end
+    if not common.nukeFlavorsAutoDisabledByZone then common.nukeFlavorsAutoDisabledByZone = {} end
+    common.nukeFlavorsByZone[zone] = rc.nukeFlavorsAllowed
+    common.nukeFlavorsAutoDisabledByZone[zone] = rc.nukeFlavorsAutoDisabled
+    M.saveCommon()
+end
+
 function M.getSubOrder()
     return subOrder
 end

@@ -2,6 +2,7 @@
 
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
+local spellutils = require('lib.spellutils')
 local labeled_grid = require('gui.widgets.labeled_grid')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
@@ -101,9 +102,13 @@ function M.draw()
     if not debuff.spells then debuff.spells = {} end
     local spells = debuff.spells
     for i, entry in ipairs(spells) do
+        local detectedTypeLabel = spellutils.IsNukeSpell(entry) and 'Nuke' or (spellutils.IsMezSpell(entry) and 'Mez' or nil)
+        local detectedTypeLabel2 = spellutils.IsTargetedAESpell(entry) and 'Targeted AE' or nil
         spell_entry.draw(entry, {
             id = 'debuff_' .. i,
             label = 'Debuff ' .. i,
+            detectedTypeLabel = detectedTypeLabel,
+            detectedTypeLabel2 = detectedTypeLabel2,
             primaryOptions = PRIMARY_OPTIONS_DEBUFF,
             onChanged = runConfigLoaders,
             displayCommonFields = true,

@@ -70,6 +70,11 @@
 --- Abort flags: true when abort turned off domelee/dodebuff so "abort off" can restore them.
 ---@field meleeAbort boolean
 ---@field debuffAbort boolean
+--- Nuke rotation and flavor: last cast nuke index; recent resist-disables for global auto-disable; allowed/auto-disabled flavors (loaded from common per zone).
+---@field lastNukeIndex number|nil
+---@field nukeResistDisabledRecent table|nil last N entries { flavor = string }; used to detect 3-in-a-row same flavor -> global auto-disable
+---@field nukeFlavorsAllowed table|nil flavor -> true (allowed); nil = all allowed
+---@field nukeFlavorsAutoDisabled table|nil flavor -> true (auto-disabled due to resist streak)
 
 local M = {}
 
@@ -160,6 +165,10 @@ function M.resetRunconfig()
         chchainList = nil,
         meleeAbort = false,
         debuffAbort = false,
+        lastNukeIndex = nil,
+        nukeResistDisabledRecent = nil,
+        nukeFlavorsAllowed = nil,
+        nukeFlavorsAutoDisabled = nil,
     }
     return M._runconfig
 end
@@ -171,10 +180,6 @@ end
 ---@param payload table|nil Optional: { deadline = number?, phase = string?, priority = number?, ... }
 function M.setRunState(name, payload)
     local rc = M.getRunconfig()
-    local prev = rc.runState
-    if prev == 'pulling' and (name or 'idle') ~= 'pulling' then
-        printf('\ayCZBot:\ax [Pull] run state left pulling -> %s', tostring(name or 'idle'))
-    end
     rc.runState = name or 'idle'
     rc.runStatePayload = payload
     if payload then

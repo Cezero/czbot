@@ -5,9 +5,11 @@ local mq = require('mq')
 local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local spellutils = require('lib.spellutils')
 local tankrole = require('lib.tankrole')
 local inputs = require('gui.widgets.inputs')
 local combos = require('gui.widgets.combos')
+local labeled_grid = require('gui.widgets.labeled_grid')
 local modals = require('gui.widgets.modals')
 
 local M = {}
@@ -141,6 +143,57 @@ function M.draw()
         ImGui.SameLine(0, 2)
         ImGui.TextColored(LIGHT_GREY, '%s', tankDisplay)
         ImGui.Spacing()
+        do
+            local applicable = {}
+            local count = botconfig.getSpellCount('debuff')
+            for i = 1, count do
+                local entry = botconfig.getSpellEntry('debuff', i)
+                if entry and spellutils.IsNukeSpell(entry) then
+                    local f = spellutils.GetNukeFlavor(entry)
+                    if f then applicable[f] = true end
+                end
+            end
+            local order = { 'fire', 'ice', 'magic', 'poison', 'disease', 'chromatic', 'prismatic', 'unresistable', 'corruption' }
+            if next(applicable) then
+                local options = {}
+                local value = {}
+                for _, f in ipairs(order) do
+                    if applicable[f] then
+                        local allowed = (not rc.nukeFlavorsAutoDisabled or not rc.nukeFlavorsAutoDisabled[f])
+                            and (not rc.nukeFlavorsAllowed or rc.nukeFlavorsAllowed[f])
+                        local autoDisabled = rc.nukeFlavorsAutoDisabled and rc.nukeFlavorsAutoDisabled[f]
+                        local label = f:gsub('^%l', string.upper)
+                        options[#options + 1] = {
+                            key = f,
+                            label = label,
+                            tooltip = autoDisabled and 'Auto-disabled (resist streak). Uncheck then check to re-enable.' or ('Toggle ' .. label .. ' nukes.'),
+                        }
+                        if allowed then value[#value + 1] = f end
+                    end
+                end
+                labeled_grid.checkboxGrid({
+                    id = 'nukeflavor',
+                    label = 'Nuke:',
+                    options = options,
+                    value = value,
+                    onToggle = function(key, isChecked)
+                        if not rc.nukeFlavorsAllowed then
+                            rc.nukeFlavorsAllowed = {}
+                            for k in pairs(applicable) do rc.nukeFlavorsAllowed[k] = true end
+                        end
+                        if isChecked then
+                            rc.nukeFlavorsAllowed[key] = nil
+                        else
+                            rc.nukeFlavorsAllowed[key] = true
+                            if rc.nukeFlavorsAutoDisabled then rc.nukeFlavorsAutoDisabled[key] = nil end
+                        end
+                        rc.nukeResistDisabledRecent = nil
+                        botconfig.saveNukeFlavorsToCommon()
+                    end,
+                })
+                ImGui.Spacing()
+            end
+        end
         ImGui.PushStyleColor(ImGuiCol.TableBorderStrong, TABLE_BORDER_BLUE)
         ImGui.PushStyleColor(ImGuiCol.TableBorderLight, TABLE_BORDER_BLUE)
         if ImGui.BeginTable('follow_camp layout', 2, bit32.bor(ImGuiTableFlags.BordersOuter, ImGuiTableFlags.BordersInner)) then

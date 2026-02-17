@@ -670,6 +670,61 @@ local function cmd_spread(args)
     mq.cmdf('/rc zone /face fast heading %s', heading)
 end
 
+local function getApplicableNukeFlavors()
+    local count = botconfig.getSpellCount('debuff')
+    local out = {}
+    for i = 1, count do
+        local entry = botconfig.getSpellEntry('debuff', i)
+        if entry and spellutils.IsNukeSpell(entry) then
+            local f = spellutils.GetNukeFlavor(entry)
+            if f then out[f] = true end
+        end
+    end
+    return out
+end
+
+local function cmd_togglenuke(args)
+    local raw = args[2] and tostring(args[2]) or ''
+    local flavorArg = string.lower(raw:match('^%s*(.-)%s*$') or '')
+    if flavorArg == '' then
+        printf('\ayCZBot:\ax Usage: /cz togglenuke <flavor> [on|off]. Flavors: fire, ice, magic, poison, disease (and cold=ice).')
+        return
+    end
+    local flavor = (flavorArg == 'cold') and 'ice' or flavorArg
+    local applicable = getApplicableNukeFlavors()
+    if not applicable[flavor] then
+        printf('\ayCZBot:\ax No nuke with flavor \ar%s\ax in debuff list. Use a flavor from your configured nukes.', flavor)
+        return
+    end
+    local force = args[3] and string.lower(args[3])
+    local rc = state.getRunconfig()
+    local function setOff()
+        if not rc.nukeFlavorsAllowed then
+            rc.nukeFlavorsAllowed = {}
+            for f in pairs(applicable) do rc.nukeFlavorsAllowed[f] = true end
+        end
+        rc.nukeFlavorsAllowed[flavor] = nil
+    end
+    local function setOn()
+        if rc.nukeFlavorsAutoDisabled then rc.nukeFlavorsAutoDisabled[flavor] = nil end
+        if rc.nukeFlavorsAllowed then rc.nukeFlavorsAllowed[flavor] = true end
+    end
+    if force == 'off' then
+        setOff()
+        printf('\ayCZBot:\ax Nuke flavor \ar%s\ax turned off.', flavor)
+    elseif force == 'on' then
+        setOn()
+        printf('\ayCZBot:\ax Nuke flavor \ag%s\ax turned on.', flavor)
+    else
+        local allowed = (not rc.nukeFlavorsAutoDisabled or not rc.nukeFlavorsAutoDisabled[flavor])
+            and (not rc.nukeFlavorsAllowed or rc.nukeFlavorsAllowed[flavor])
+        if allowed then setOff(); printf('\ayCZBot:\ax Nuke flavor \ar%s\ax turned off.', flavor)
+        else setOn(); printf('\ayCZBot:\ax Nuke flavor \ag%s\ax turned on.', flavor) end
+    end
+    rc.nukeResistDisabledRecent = nil
+    botconfig.saveNukeFlavorsToCommon()
+end
+
 local function cmd_raid(args)
     local sub = args[2] and string.lower(args[2])
     if sub == 'save' then
@@ -723,6 +778,7 @@ local handlers = {
     linkaugs = cmd_linkaugs,
     spread = cmd_spread,
     raid = cmd_raid,
+    togglenuke = cmd_togglenuke,
     quit = cmd_quit,
 }
 

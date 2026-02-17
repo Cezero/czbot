@@ -313,6 +313,34 @@ function spellutils.GetSpellDurationSec(entry)
     return tonumber(e and e.MyDuration()) or 0
 end
 
+-- Returns true if the debuff entry is a nuke (no duration / direct damage). Used for rotation and flavor filtering.
+function spellutils.IsNukeSpell(entry)
+    if not entry or not entry.spell then return false end
+    return spellutils.GetSpellDurationSec(entry) == 0
+end
+
+-- MQ Spell.ResistType() -> normalized flavor string. Returns nil if unknown or no entity.
+local RESIST_TYPE_TO_FLAVOR = {
+    ['Cold'] = 'ice',
+    ['Fire'] = 'fire',
+    ['Magic'] = 'magic',
+    ['Poison'] = 'poison',
+    ['Disease'] = 'disease',
+    ['Chromatic'] = 'chromatic',
+    ['Prismatic'] = 'prismatic',
+    ['Unresistable'] = 'unresistable',
+    ['Corruption'] = 'corruption',
+}
+
+function spellutils.GetNukeFlavor(entry)
+    local e = spellutils.GetSpellEntity(entry)
+    if not e then return nil end
+    local rt = e.ResistType and e.ResistType() or e.ResistType
+    if type(rt) == 'function' then rt = rt(e) end
+    if not rt or type(rt) ~= 'string' then return nil end
+    return RESIST_TYPE_TO_FLAVOR[rt] or rt:lower()
+end
+
 -- Return whether the spell stacks on the given spawn (handles item). Nil/false if no stack or no entity.
 function spellutils.SpellStacksSpawn(entry, spawnId)
     local e = spellutils.GetSpellEntity(entry)
@@ -339,6 +367,16 @@ function spellutils.IsCharmSpell(entry)
     if cat and type(cat) == 'string' and cat:lower():find('charm') then return true end
     if sub and type(sub) == 'string' and sub:lower():find('charm') then return true end
     return false
+end
+
+-- Returns true if the spell is a mez (Enthrall subcategory). Used for GUI label and level checks.
+function spellutils.IsMezSpell(entry)
+    if not entry or not entry.spell then return false end
+    local e = spellutils.GetSpellEntity(entry)
+    if not e then return false end
+    local sub = e.Subcategory and e.Subcategory() or e.Subcategory
+    if type(sub) == 'function' then sub = sub(e) end
+    return sub and type(sub) == 'string' and sub == 'Enthrall'
 end
 
 -- Returns true if the spell is targeted AE (radius around target) with AERange > 0.
@@ -405,6 +443,9 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     if sub == 'debuff' then
         if entry.delay and entry.delay > 0 then
             spellstates.SetDebuffDelay(index, mq.gettime() + (entry.delay * 1000))
+        end
+        if spellutils.IsNukeSpell(entry) then
+            rc.lastNukeIndex = index
         end
         if (mq.TLO.Spell(spell).MyDuration() and tonumber(mq.TLO.Spell(spell).MyDuration()) > 0) then
             if mq.TLO.Target.Buff(spell).ID() or mq.TLO.Me.Class.ShortName() == 'BRD' and not rc.MissedNote then

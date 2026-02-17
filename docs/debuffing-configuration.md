@@ -122,6 +122,6 @@ When the **MQ2Cast** plugin is loaded, the bot uses `/casting` for debuff spells
 
 ## See also
 
-- [Nuking configuration](nuking-configuration.md) — Configure nukes as debuffs (typically **tanktar**, optionally **notanktar**).
+- [Nuking configuration](nuking-configuration.md) — Configure nukes as debuffs (typically **tanktar**, optionally **notanktar**). Multiple nukes rotate; flavor (fire/ice/magic, etc.) is auto-detected and can be filtered at runtime via Status tab or `/cz togglenuke`.
 - [Mezzing configuration](mezzing-configuration.md) — Configure mez as debuffs (typically **notanktar**; Charm list for charm mez).
 - [Melee combat abilities](melee-combat-abilities.md) — Configure disciplines and /doability-style abilities as debuffs (typically **tanktar**).
