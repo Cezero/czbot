@@ -41,7 +41,7 @@ function M.draw()
     if not botconfig.config.melee then botconfig.config.melee = {} end
     local melee = botconfig.config.melee
 
-    -- Line 1: Assist At, Off Tank, optional Offset
+    -- Line 1: Assist At, Pet Attack, Off Tank, optional Offset
     ImGui.Text('Assist At')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('MA target HP %% at or below which to sync.') end
     ImGui.SameLine()
@@ -49,6 +49,17 @@ function M.draw()
     local apVal = melee.assistpct or 99
     local apNew, apCh = inputs.boundedInt('combat_assistpct', apVal, 0, 100, 1, '##combat_assistpct')
     if apCh then melee.assistpct = apNew; runConfigLoaders() end
+    ImGui.SameLine()
+    ImGui.Text('Pet Attack')
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Send pet on engage target.') end
+    ImGui.SameLine()
+    local petAssistChecked = (botconfig.config.settings and botconfig.config.settings.petassist == true) or false
+    local petVal, petPressed = ImGui.Checkbox('##combat_petassist', petAssistChecked)
+    if petPressed then
+        if not botconfig.config.settings then botconfig.config.settings = {} end
+        botconfig.config.settings.petassist = petVal
+        runConfigLoaders()
+    end
     ImGui.SameLine()
     ImGui.Text('Off Tank')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('This bot is an offtank.') end
