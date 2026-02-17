@@ -14,7 +14,7 @@ local BLACK = ImVec4(0, 0, 0, 1)
 
 local FLAGS_COLUMN_WIDTH = 60
 local FLAGS_ROW_PADDING_Y = 2
-local FLAGS_PANEL_WIDTH = 130
+local FLAGS_PANEL_WIDTH = 135
 
 local DO_FLAGS = {
     { key = 'dopull', label = 'Pull' },
@@ -132,7 +132,7 @@ function M.draw()
                     ImGui.SetTooltip(value and 'On' or 'Off')
                 end
                 ImGui.PopStyleColor(2)
-                ImGui.SameLine(0, 3)
+                ImGui.SameLine(0, 2)
                 ImGui.Text('%s', entry.label)
             end
             ImGui.EndTable()
