@@ -23,6 +23,7 @@ local LIGHT_GREY = ImVec4(0.75, 0.75, 0.75, 1)
 local FLAGS_COLUMN_WIDTH = 65
 local FLAGS_ROW_PADDING_Y = 2
 local FLAGS_PANEL_WIDTH = 145
+local NUMERIC_INPUT_WIDTH = 80
 
 local DO_FLAGS = {
     { key = 'dopull', label = 'Pull' },
@@ -85,16 +86,25 @@ function M.draw()
         ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, FLAGS_PANEL_WIDTH)
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
-        -- Assist Name (before Camp section)
+        -- Assist Name and Tank Name (same row, before Follow/Camp)
         local rc = state.getRunconfig()
         local assistName = tankrole.GetAssistTargetName()
         local assistDisplay = (assistName and assistName ~= '') and assistName or '—'
         if rc.AssistName == 'automatic' then
             assistDisplay = assistDisplay .. ' (auto)'
         end
+        local tankName = tankrole.GetMainTankName()
+        local tankDisplay = (tankName and tankName ~= '') and tankName or '—'
+        if (botconfig.config.settings.TankName or rc.TankName) == 'automatic' then
+            tankDisplay = tankDisplay .. ' (auto)'
+        end
         ImGui.TextColored(WHITE, '%s', 'Assist Name: ')
         ImGui.SameLine(0, 2)
         ImGui.TextColored(LIGHT_GREY, '%s', assistDisplay)
+        ImGui.SameLine()
+        ImGui.TextColored(WHITE, '%s', 'Tank Name: ')
+        ImGui.SameLine(0, 2)
+        ImGui.TextColored(LIGHT_GREY, '%s', tankDisplay)
         ImGui.Spacing()
         -- Follow section
         local leftX, lineY = ImGui.GetCursorScreenPos()
@@ -124,7 +134,7 @@ function M.draw()
         end
         ImGui.TextColored(WHITE, '%s', 'Distance: ')
         ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(60)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local followdistanceVal = botconfig.config.settings.followdistance or 35
         local followDistNew, followDistCh = inputs.boundedInt('follow_distance', followdistanceVal, 1, 500, 5, '##follow_distance')
         if followDistCh then botconfig.config.settings.followdistance = followDistNew; runConfigLoaders() end
@@ -158,7 +168,7 @@ function M.draw()
         ImGui.TextColored(LIGHT_GREY, '%s', locationStr)
         ImGui.TextColored(WHITE, '%s', 'Radius: ')
         ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(60)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local acleashVal = botconfig.config.settings.acleash or 75
         local radiusNew, radiusCh = inputs.boundedInt('camp_radius', acleashVal, 1, 10000, 5, '##camp_radius')
         if radiusCh then botconfig.config.settings.acleash = radiusNew; runConfigLoaders() end
@@ -166,7 +176,7 @@ function M.draw()
         ImGui.SameLine()
         ImGui.TextColored(WHITE, '%s', 'ZRadius: ')
         ImGui.SameLine(0, 2)
-        ImGui.SetNextItemWidth(60)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local zradiusVal = botconfig.config.settings.zradius or 75
         local zradiusNew, zradiusCh = inputs.boundedInt('camp_zradius', zradiusVal, 1, 10000, 5, '##camp_zradius')
         if zradiusCh then botconfig.config.settings.zradius = zradiusNew; runConfigLoaders() end
