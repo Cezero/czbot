@@ -40,35 +40,44 @@ local TOGGLELIST = {
 
 -- --- Toggle handler (domelee, dopull, etc.) ---
 local function cmd_toggle(args)
+    local rc = state.getRunconfig()
+    local isDopull = (args[1] == 'dopull')
+    local function getVal()
+        if isDopull then return rc.dopull == true end
+        return botconfig.config.settings[args[1]] == true
+    end
+    local function setVal(v)
+        if isDopull then rc.dopull = v else botconfig.config.settings[args[1]] = v end
+    end
     if args[2] == 'on' then
-        botconfig.config.settings[args[1]] = true
+        setVal(true)
     elseif args[2] == 'off' then
-        botconfig.config.settings[args[1]] = false
+        setVal(false)
         if args[1] == 'dopull' then
             if APTarget and APTarget.ID() then APTarget = nil end
             if botconfig.config.pull.hunter then
-                state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
+                rc.makecamp = { x = nil, y = nil, z = nil }
             end
             mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
         end
     else
-        if botconfig.config.settings[args[1]] == true then
-            botconfig.config.settings[args[1]] = false
+        if getVal() then
+            setVal(false)
             if args[1] == 'dopull' or args[1] == 'domelee' then
                 if APTarget and APTarget.ID() then APTarget = nil end
                 mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
             end
             if args[1] == 'dopull' and botconfig.config.pull.hunter then
-                state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
+                rc.makecamp = { x = nil, y = nil, z = nil }
             end
         else
-            botconfig.config.settings[args[1]] = false
-            botconfig.config.settings[args[1]] = true
+            setVal(false)
+            setVal(true)
         end
     end
     botconfig.RunConfigLoaders()
     if botconfig.config.settings.doraid then botraid.LoadRaidConfig() end
-    printf('\ayCZBot:\axTurning %s to %s', args[1], botconfig.config.settings[args[1]])
+    printf('\ayCZBot:\axTurning %s to %s', args[1], isDopull and tostring(rc.dopull) or tostring(botconfig.config.settings[args[1]]))
 end
 
 local function cmd_import(args)
@@ -469,7 +478,7 @@ local function cmd_setvar(args)
         botconfig.config.settings.domelee = false
         botconfig.config.settings.doheal = false
         botconfig.config.settings.docure = false
-        botconfig.config.settings.dopull = false
+        state.getRunconfig().dopull = false
     end
     if not valfound then printf('\ayCZBot:\ax\ar%s not found', args[2]) end
 end
@@ -560,8 +569,7 @@ local function cmd_chchain(args)
                 ['doheal']
         end
         if state.getRunconfig().PreCH['dopull'] then
-            botconfig.config.settings.dopull = state.getRunconfig().PreCH
-                ['dopull']
+            state.getRunconfig().dopull = state.getRunconfig().PreCH['dopull']
         end
         if state.getRunconfig().PreCH['docure'] then
             botconfig.config.settings.docure = state.getRunconfig().PreCH
@@ -570,7 +578,10 @@ local function cmd_chchain(args)
     end
     if args[2] == 'setup' then
         local spell = 'complete heal'
-        if not rc.doChchain then state.getRunconfig().PreCH = utils.DeepCopy(botconfig.config.settings) end
+        if not rc.doChchain then
+            state.getRunconfig().PreCH = utils.DeepCopy(botconfig.config.settings)
+            state.getRunconfig().PreCH.dopull = state.getRunconfig().dopull
+        end
         local tmpchchainlist = args[3]
         local aminlist = false
         local meName = mq.TLO.Me.Name()
@@ -807,7 +818,7 @@ function M.chchainSetupContinuation(setupArgs)
         botconfig.config.settings.domelee = false
         botconfig.config.settings.doheal = false
         botconfig.config.settings.docure = false
-        botconfig.config.settings.dopull = false
+        state.getRunconfig().dopull = false
         mq.cmdf('/rs CHChain ON (NextClr: %s, Pause: %s, Tank: %s)', rc.chnextClr, rc.chchainPause, chtankstr)
     end
 end

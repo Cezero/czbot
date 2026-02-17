@@ -72,6 +72,9 @@ local DO_FLAGS = {
 
 local function getStatusLine()
     local rc = state.getRunconfig()
+    if rc.pullHealerManaWait and rc.pullHealerManaWait.name then
+        return string.format("Waiting on %s's mana to be > %d%%", rc.pullHealerManaWait.name, rc.pullHealerManaWait.pct)
+    end
     if rc.statusMessage and rc.statusMessage ~= '' then return rc.statusMessage end
     local runState = state.getRunState()
     if runState == 'pulling' then return 'Pulling' end
@@ -300,13 +303,22 @@ function M.draw()
                     ImGui.TableNextRow()
                 end
                 ImGui.TableNextColumn()
-                local value = botconfig.config.settings[entry.key] == true
+                local value
+                if entry.key == 'dopull' then
+                    value = (state.getRunconfig().dopull == true)
+                else
+                    value = botconfig.config.settings[entry.key] == true
+                end
                 local icon = value and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
                 ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
                 ImGui.PushStyleColor(ImGuiCol.Text, value and GREEN or RED)
                 if ImGui.SmallButton(icon .. '##' .. entry.key) then
-                    botconfig.config.settings[entry.key] = not value
-                    botconfig.ApplyAndPersist()
+                    if entry.key == 'dopull' then
+                        state.getRunconfig().dopull = not value
+                    else
+                        botconfig.config.settings[entry.key] = not value
+                        botconfig.ApplyAndPersist()
+                    end
                 end
                 if ImGui.IsItemHovered() then
                     ImGui.SetTooltip(value and 'On' or 'Off')

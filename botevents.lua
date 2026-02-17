@@ -22,7 +22,6 @@ local function DelayOnZone()
         state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
     end
     state.getRunconfig().campstatus = false
-    if botconfig.config.settings.dopull == true then botconfig.config.settings.dopull = false end
     if state.getRunconfig().engageTargetId then state.getRunconfig().engageTargetId = nil end
     if APTarget then APTarget = nil end
     mobfilter.process('exclude', 'zone')
@@ -139,7 +138,7 @@ function botevents.Event_FTELocked()
         state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 3, timer = mq.gettime() + 90500 }
     end
     mq.cmd('/multiline ; /squelch /target myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
-    if botconfig.config.settings.dopull then
+    if state.getRunconfig().dopull then
         print('clearing pull target because FTELock detected') -- not debug, real error message
         APTarget = false
     end

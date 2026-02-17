@@ -4,7 +4,6 @@
 ---@field dobuff boolean|nil
 ---@field docure boolean|nil
 ---@field domelee boolean|nil
----@field dopull boolean|nil
 ---@field doraid boolean|nil
 ---@field dodrag boolean|nil
 ---@field domount boolean|nil
@@ -106,7 +105,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'dopull', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -561,7 +560,6 @@ function M.Load(path)
     if (M.config.settings.dobuff == nil) then M.config.settings.dobuff = false end
     if (M.config.settings.dodebuff == nil) then M.config.settings.dodebuff = false end
     if (M.config.settings.docure == nil) then M.config.settings.docure = false end
-    if (M.config.settings.dopull == nil) then M.config.settings.dopull = false end
     if (M.config.settings.doraid == nil) then M.config.settings.doraid = false end
     if (M.config.settings.dodrag == nil) then M.config.settings.dodrag = false end
     if (M.config.settings.domount == nil) then M.config.settings.domount = false end

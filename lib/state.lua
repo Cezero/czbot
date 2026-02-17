@@ -18,6 +18,7 @@
 ---@field makecamp {x:number|nil, y:number|nil, z:number|nil}
 ---@field charmid number|nil
 ---@field domelee boolean|nil
+---@field dopull boolean|nil
 ---@field pulledmob number|nil
 ---@field pullreturntimer number|nil
 ---@field pulledmobLastDistSq number|nil cached distance-squared from puller to pulled mob when last saw it closer
@@ -54,6 +55,7 @@
 ---@field mobprobtimer number
 ---@field spellNotInBook table|nil
 ---@field statusMessage string User-facing activity line for GUI
+---@field pullHealerManaWait { name: string, pct: number }|nil when set, puller is waiting on this healer's mana before next pull; status tab shows it
 ---@field bardNotanktarWait table|nil BRD notanktar twist-once: { spellIndex, EvalID, entry } while waiting for cast to finish
 ---@field notanktarDebuffTimers table|nil BRD: spawn ID -> mq.gettime() when to re-apply notanktar debuff (e.g. mez)
 ---@field OutOfSpace boolean|nil true when inventory was full (cursor item); cleared when space available again
@@ -108,6 +110,7 @@ function M.resetRunconfig()
         makecamp = { x = nil, y = nil, z = nil },
         charmid = nil,
         domelee = nil,
+        dopull = false,
         pulledmob = nil,
         pullreturntimer = nil,
         pulledmobLastDistSq = nil,
@@ -144,6 +147,7 @@ function M.resetRunconfig()
         mobprobtimer = 0,
         spellNotInBook = {},
         statusMessage = '',
+        pullHealerManaWait = nil,
         bardNotanktarWait = nil,
         notanktarDebuffTimers = nil,
         OutOfSpace = false,

@@ -75,6 +75,7 @@ local function clearPullState(reason)
     rc.pullPhase = nil
     rc.pullDeadline = nil
     rc.statusMessage = ''
+    rc.pullHealerManaWait = nil
     rc.pulledmobLastDistSq = nil
     rc.pulledmobLastCloserTime = nil
     rc.pullNavStartHP = nil
@@ -94,7 +95,7 @@ function botpull.LoadPullConfig()
     if not rc.pullarc then rc.pullarc = nil end
 end
 
-botconfig.RegisterConfigLoader(function() if botconfig.config.settings.dopull then botpull.LoadPullConfig() end end)
+botconfig.RegisterConfigLoader(function() botpull.LoadPullConfig() end)
 
 --- Returns the single pull spell block from config, or nil if missing/empty (treat as melee).
 function botpull.GetPullSpell()
@@ -162,6 +163,7 @@ end
 
 -- Pre-checks: return false if we should not start a pull.
 local function canStartPull(rc)
+    rc.pullHealerManaWait = nil
     if rc.pulledmob then
         local pmob = mq.TLO.Spawn(rc.pulledmob)
         if not pmob or not pmob.ID() or pmob.Type() == 'Corpse' then
@@ -209,7 +211,7 @@ local function canStartPull(rc)
     if not mq.TLO.Navigation.MeshLoaded() then
         printf(
             '\ayCZBot:\axI have DoPull set TRUE but have \arno MQ2Nav Mesh loaded\ax, please generate a NavMesh before using DoPull, \arsetting DoPull to FALSE\ax')
-        myconfig.settings.dopull = false
+        state.getRunconfig().dopull = false
         return false
     end
     if mq.TLO.Group() then
@@ -222,7 +224,10 @@ local function canStartPull(rc)
                 local grpClass = string.upper(grpSpawn.Class.ShortName() or '')
                 for _, entry in ipairs(myconfig.pull.manaclass) do
                     if string.upper(tostring(entry)) == grpClass then
-                        if grpSpawn.PctMana() and myconfig.pull.mana > grpSpawn.PctMana() then return false end
+                        if grpSpawn.PctMana() and myconfig.pull.mana > grpSpawn.PctMana() then
+                            rc.pullHealerManaWait = { name = grpSpawn.CleanName() or 'healer', pct = myconfig.pull.mana }
+                            return false
+                        end
                         break
                     end
                 end
@@ -674,7 +679,7 @@ end
 function botpull.getHookFn(name)
     if name == 'doPull' then
         return function(hookName)
-            if not myconfig.settings.dopull then return end
+            if not state.getRunconfig().dopull then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if state.getRunState() == 'raid_mechanic' then return end
             local rc = state.getRunconfig()
