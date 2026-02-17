@@ -460,6 +460,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
             options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
         end
         spellutils.clearCastingStateOrResume()
+        printf('[buffdbg] reentry return true: phase=cast_complete_pending_resist sub=%s', rc.CurSpell and rc.CurSpell.sub or '?')
         return true
     end
 
@@ -472,6 +473,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
         local storedId = mq.TLO.Cast.Stored.ID() or 0
         local castResult = mq.TLO.Cast.Result() or ''
         local complete = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
+        printf('[buffdbg] MQ2Cast reentry sub=%s spellid=%s status=%s storedId=%s result=%s complete=%s', rc.CurSpell.sub, rc.CurSpell.spellid, status, storedId, castResult, tostring(complete))
         if complete then
             rc.CurSpell.resisted = (castResult == 'CAST_RESIST')
             if castResult == 'CAST_IMMUNE' and rc.CurSpell.target then
@@ -482,9 +484,11 @@ function spellutils.handleSpellCheckReentry(sub, options)
                 options.afterCast(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit)
             end
             spellutils.clearCastingStateOrResume()
+            printf('[buffdbg] reentry return true: MQ2Cast complete sub=%s result=%s', rc.CurSpell and rc.CurSpell.sub or '?', castResult)
             return true
         end
         if sub == rc.CurSpell.sub then
+            printf('[buffdbg] reentry return true: MQ2Cast waiting sub=%s status=%s storedId=%s result=%s', sub, status, storedId, castResult)
             return true
         end
     end
@@ -495,6 +499,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
         end
         if mq.TLO.Me.CastTimeLeft() > 0 then
             if sub == rc.CurSpell.sub then
+                printf('[buffdbg] reentry return true: legacy casting waiting sub=%s castTimeLeft=%s', sub, mq.TLO.Me.CastTimeLeft())
                 return true
             end
         else
@@ -513,8 +518,12 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     if rc.CurSpell and rc.CurSpell.phase == 'precast_wait_move' then
         if mq.TLO.Me.Moving() then
-            if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
+            if mq.gettime() < (rc.CurSpell.deadline or 0) then
+                printf('[buffdbg] reentry return true: precast_wait_move')
+                return true
+            end
             spellutils.clearCastingStateOrResume()
+            printf('[buffdbg] reentry return true: precast_wait_move')
             return true
         end
         spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub,
@@ -524,12 +533,16 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     if rc.CurSpell and rc.CurSpell.phase == 'precast' then
         if mq.TLO.Target.ID() ~= rc.CurSpell.target then
-            if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
+            if mq.gettime() < (rc.CurSpell.deadline or 0) then
+                printf('[buffdbg] reentry return true: precast waiting for target')
+                return true
+            end
             spellutils.clearCastingStateOrResume()
             return true
         end
         spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub,
             options.runPriority, rc.CurSpell.spellcheckResume)
+        printf('[buffdbg] reentry return true: precast retry CastSpell')
         return true
     end
 
@@ -582,6 +595,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     local rc = state.getRunconfig()
 
     if spellutils.handleSpellCheckReentry(sub, options) then
+        printf('[buffdbg] doBuff: reentry handled, skipping phase loop')
         return false
     end
 
@@ -637,6 +651,8 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                 if options.customCastFn and options.customCastFn(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
                                     return false
                                 end
+                                local castEntry = botconfig.getSpellEntry(sub, spellIndex)
+                                printf('[buffdbg] doBuff: calling CastSpell sub=%s spellIndex=%s spell=%s EvalID=%s targethit=%s', sub, spellIndex, castEntry and castEntry.spell or '?', EvalID, targethit)
                                 if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
                                     return false
                                 end
@@ -659,10 +675,16 @@ function spellutils.PreCondCheck(Sub, ID, spawnID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return false end
     if entry.precondition == nil then return true end
-    if type(entry.precondition) ~= 'string' then EvalID = nil; return true end
+    if type(entry.precondition) ~= 'string' then
+        EvalID = nil; return true
+    end
     local precond = entry.precondition:match('^%s*(.-)%s*$') or entry.precondition
-    if precond == 'true' then EvalID = nil; return true end
-    if precond == 'false' then EvalID = nil; return false end
+    if precond == 'true' then
+        EvalID = nil; return true
+    end
+    if precond == 'false' then
+        EvalID = nil; return false
+    end
     EvalID = spawnID
     local loadprecond, loadError = load('local mq = require("mq") ' .. precond)
     if loadprecond then
@@ -730,7 +752,8 @@ end
 function spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
     if mq.TLO.Me.Class.ShortName() == 'BRD' then return end
     if not targetSpawn.ID() or string.lower(spelltartype) == 'self' then return end
-    local lostOrCorpse = (targetSpawn.ID() == 0) or (string.find(targetSpawn.Name() or '', 'corpse') and criteria ~= 'corpse')
+    local lostOrCorpse = (targetSpawn.ID() == 0) or
+        (string.find(targetSpawn.Name() or '', 'corpse') and criteria ~= 'corpse')
     if not lostOrCorpse then return end
     mq.cmd('/squelch /multiline; /stick off ; /target clear')
     if mq.TLO.Me.CastTimeLeft() > 0 and rc.CurSpell.target ~= mq.TLO.Me.ID() and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
@@ -764,7 +787,8 @@ function spellutils.InterruptCheckDontStack(entry, target, spellname)
     spellutils.clearCastingStateOrResume()
 end
 
-function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spellname, spellid, spelldurMs, target, targetname)
+function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spellname, spellid, spelldurMs, target,
+                                                           targetname)
     if mq.TLO.Me.CastTimeLeft() <= 0 or (sub ~= 'debuff' and sub ~= 'buff') or not spelldurMs or spelldurMs <= 0 or mq.TLO.Me.Class.ShortName() == 'BRD' then return end
     if mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
     local buffid = mq.TLO.Target.Buff(spellname).ID() or false
@@ -773,7 +797,8 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     if buffid and buffstaleness < 2000 and buffdur > (spelldurMs * 0.10) then
         if sub == 'buff' then
             if mq.TLO.Spell(spellid).StacksTarget() then
-                mq.cmdf('/multiline ; /echo Interrupt %s, buff does not stack on target: %s ; /interrupt', spellname, spellname, targetname)
+                mq.cmdf('/multiline ; /echo Interrupt %s, buff does not stack on target: %s ; /interrupt', spellname,
+                    spellname, targetname)
             end
             mq.cmdf('/multiline ; /echo Interrupt %s, buff already present ; /interrupt', spellname, spellname)
             mq.cmd('/interrupt')
@@ -959,10 +984,17 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return false end
     local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
+    printf('[buffdbg] CastSpell entry sub=%s index=%s spell=%s EvalID=%s targethit=%s resuming=%s', sub, index, entry.spell or index, EvalID, targethit, tostring(resuming))
     if not resuming then
-        if not spellutils.SpellCheck(sub, index) then return false end
+        if not spellutils.SpellCheck(sub, index) then
+            printf('[buffdbg] CastSpell return false: SpellCheck failed')
+            return false
+        end
         if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then return false end
-        if not spellutils.CheckGemReadiness(sub, index, entry) then return false end
+        if not spellutils.CheckGemReadiness(sub, index, entry) then
+            printf('[buffdbg] CastSpell return false: CheckGemReadiness failed')
+            return false
+        end
         rc.CurSpell = {
             sub = sub,
             spell = index,
@@ -1006,9 +1038,11 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
         state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        printf('[buffdbg] CastSpell return true: precast /tar and wait')
         return true
     end
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
+        printf('[buffdbg] CastSpell return false: RequireTargetThenDontStackDebuff')
         return false
     end
     if entry.announce then
@@ -1018,6 +1052,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmd('/stand')
     end
     if useMQ2Cast then
+        printf('[buffdbg] CastSpell sending MQ2Cast cmd spell=%s gem=%s targetid=%s', entry.spell, entry.gem, EvalID)
         local castSpellId = spellutils.GetSpellId(entry)
         local cmd = spellutils.BuildMQ2CastCommand(entry, EvalID, targethit, sub)
         rc.CurSpell.viaMQ2Cast = true
