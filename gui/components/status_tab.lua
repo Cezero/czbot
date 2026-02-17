@@ -73,45 +73,44 @@ function M.draw()
     end
     ImGui.PopStyleColor(2)
     ImGui.Spacing()
-    -- Camp section (same style as Pulling on combat_tab)
-    local leftX, lineY = ImGui.GetCursorScreenPos()
-    local availX = select(1, ImGui.GetContentRegionAvail())
-    local textW, textH = ImGui.CalcTextSize('Camp')
-    local startX = ImGui.GetCursorPosX()
-    ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
-    ImGui.Text('Camp')
-    local tMinX, tMinY = ImGui.GetItemRectMin()
-    local tMaxX, tMaxY = ImGui.GetItemRectMax()
-    local midY = (tMinY + tMaxY) / 2
-    local pad = 4
-    local rightX = leftX + availX
-    local drawList = ImGui.GetWindowDrawList()
-    local col = ImGui.GetColorU32(51/255, 105/255, 173/255, 1.0)
-    local thickness = 1.0
-    drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
-    drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
-    local rc = state.getRunconfig()
-    local locationStr = 'unset'
-    if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
-        locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)
-    end
-    ImGui.Spacing()
-    ImGui.TextColored(YELLOW, '%s', 'Location: ')
-    ImGui.SameLine()
-    ImGui.TextColored(RED, '%s', locationStr)
-    ImGui.TextColored(YELLOW, '%s', 'Radius: ')
-    ImGui.SameLine()
-    ImGui.TextColored(RED, '%s', tostring(botconfig.config.settings.acleash or 75))
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp radius for in-camp mob checks.') end
-    ImGui.TextColored(YELLOW, '%s', '# Mobs: ')
-    ImGui.SameLine()
-    ImGui.TextColored(RED, '%s', tostring(rc.MobCount or 0))
-    ImGui.Spacing()
     if ImGui.BeginTable('flags wrapper', 2, ImGuiTableFlags.None) then
         ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
         ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, FLAGS_PANEL_WIDTH)
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
+        -- Camp section in left column (same style as Pulling on combat_tab)
+        local leftX, lineY = ImGui.GetCursorScreenPos()
+        local availX = select(1, ImGui.GetContentRegionAvail())
+        local textW, textH = ImGui.CalcTextSize('Camp')
+        local startX = ImGui.GetCursorPosX()
+        ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
+        ImGui.Text('Camp')
+        local tMinX, tMinY = ImGui.GetItemRectMin()
+        local tMaxX, tMaxY = ImGui.GetItemRectMax()
+        local midY = (tMinY + tMaxY) / 2
+        local pad = 4
+        local rightX = leftX + availX
+        local drawList = ImGui.GetWindowDrawList()
+        local col = ImGui.GetColorU32(51/255, 105/255, 173/255, 1.0)
+        local thickness = 1.0
+        drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
+        drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
+        local rc = state.getRunconfig()
+        local locationStr = 'unset'
+        if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
+            locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)
+        end
+        ImGui.Spacing()
+        ImGui.TextColored(YELLOW, '%s', 'Location: ')
+        ImGui.SameLine()
+        ImGui.TextColored(RED, '%s', locationStr)
+        ImGui.TextColored(YELLOW, '%s', 'Radius: ')
+        ImGui.SameLine()
+        ImGui.TextColored(RED, '%s', tostring(botconfig.config.settings.acleash or 75))
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp radius for in-camp mob checks.') end
+        ImGui.TextColored(YELLOW, '%s', '# Mobs: ')
+        ImGui.SameLine()
+        ImGui.TextColored(RED, '%s', tostring(rc.MobCount or 0))
         ImGui.TableNextColumn()
         ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, style.CellPadding.x, FLAGS_ROW_PADDING_Y)
         if ImGui.BeginTable('flags table', 2, ImGuiTableFlags.None) then
