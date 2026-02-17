@@ -107,13 +107,14 @@ function M.draw()
         ImGui.SameLine(0, 2)
         ImGui.TextColored(LIGHT_GREY, '%s', tankDisplay)
         ImGui.Spacing()
-        if ImGui.BeginTable('follow_camp layout', 2, ImGuiTableFlags.None) then
+        if ImGui.BeginTable('follow_camp layout', 2, bit32.bor(ImGuiTableFlags.BordersOuter, ImGuiTableFlags.BordersInner)) then
             ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
             ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
             ImGui.TableNextRow()
             ImGui.TableNextColumn()
-            -- Follow section
+            -- Follow section (save row start Y so Camp can align)
             local leftX, lineY = ImGui.GetCursorScreenPos()
+            local rowStartY = lineY
             local availX = select(1, ImGui.GetContentRegionAvail())
             local followLabel = 'Follow'
             local textW, textH = ImGui.CalcTextSize(followLabel)
@@ -146,7 +147,11 @@ function M.draw()
             if followDistCh then botconfig.config.settings.followdistance = followDistNew; runConfigLoaders() end
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Follow distance (units) before moving to catch up.') end
             ImGui.TableNextColumn()
-            -- Camp section
+            -- Camp section (align to same Y as Follow)
+            do
+                local campX = select(1, ImGui.GetCursorScreenPos())
+                ImGui.SetCursorScreenPos(campX, rowStartY)
+            end
             leftX, lineY = ImGui.GetCursorScreenPos()
             availX = select(1, ImGui.GetContentRegionAvail())
             local campLabel = 'Camp'
