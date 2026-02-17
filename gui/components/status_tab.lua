@@ -132,7 +132,7 @@ function M.draw()
                     ImGui.SetTooltip(value and 'On' or 'Off')
                 end
                 ImGui.PopStyleColor(2)
-                ImGui.SameLine()
+                ImGui.SameLine(0, 3)
                 ImGui.Text('%s', entry.label)
             end
             ImGui.EndTable()
