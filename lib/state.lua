@@ -167,6 +167,10 @@ end
 ---@param payload table|nil Optional: { deadline = number?, phase = string?, priority = number?, ... }
 function M.setRunState(name, payload)
     local rc = M.getRunconfig()
+    local prev = rc.runState
+    if prev == 'pulling' and (name or 'idle') ~= 'pulling' then
+        printf('\ayCZBot:\ax [Pull] run state left pulling -> %s', tostring(name or 'idle'))
+    end
     rc.runState = name or 'idle'
     rc.runStatePayload = payload
     if payload then
