@@ -12,6 +12,8 @@ local YELLOW = ImVec4(1, 1, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
 local GREEN = ImVec4(0, 0.8, 0, 1)
 local BLACK = ImVec4(0, 0, 0, 1)
+local WHITE = ImVec4(1, 1, 1, 1)
+local LIGHT_GREY = ImVec4(0.75, 0.75, 0.75, 1)
 
 local FLAGS_COLUMN_WIDTH = 65
 local FLAGS_ROW_PADDING_Y = 2
@@ -80,14 +82,15 @@ function M.draw()
         ImGui.TableNextRow()
         ImGui.TableNextColumn()
         -- Assist Name (before Camp section)
+        local rc = state.getRunconfig()
         local assistName = tankrole.GetAssistTargetName()
         local assistDisplay = (assistName and assistName ~= '') and assistName or '—'
-        if botconfig.config.settings.AssistName == 'automatic' then
+        if rc.AssistName == 'automatic' then
             assistDisplay = assistDisplay .. ' (auto)'
         end
-        ImGui.TextColored(YELLOW, '%s', 'Assist Name: ')
-        ImGui.SameLine()
-        ImGui.TextColored(RED, '%s', assistDisplay)
+        ImGui.TextColored(WHITE, '%s', 'Assist Name: ')
+        ImGui.SameLine(0, 2)
+        ImGui.TextColored(LIGHT_GREY, '%s', assistDisplay)
         ImGui.Spacing()
         -- Camp section in left column (same style as Pulling on combat_tab)
         local leftX, lineY = ImGui.GetCursorScreenPos()
@@ -106,22 +109,21 @@ function M.draw()
         local thickness = 1.0
         drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
         drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
-        local rc = state.getRunconfig()
         local locationStr = 'unset'
         if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
             locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)
         end
         ImGui.Spacing()
-        ImGui.TextColored(YELLOW, '%s', 'Location: ')
-        ImGui.SameLine()
-        ImGui.TextColored(RED, '%s', locationStr)
-        ImGui.TextColored(YELLOW, '%s', 'Radius: ')
-        ImGui.SameLine()
-        ImGui.TextColored(RED, '%s', tostring(botconfig.config.settings.acleash or 75))
+        ImGui.TextColored(WHITE, '%s', 'Location: ')
+        ImGui.SameLine(0,2)
+        ImGui.TextColored(LIGHT_GREY, '%s', locationStr)
+        ImGui.TextColored(WHITE, '%s', 'Radius: ')
+        ImGui.SameLine(0,2)
+        ImGui.TextColored(LIGHT_GREY, '%s', tostring(botconfig.config.settings.acleash or 75))
         if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp radius for in-camp mob checks.') end
-        ImGui.TextColored(YELLOW, '%s', '# Mobs: ')
-        ImGui.SameLine()
-        ImGui.TextColored(RED, '%s', tostring(rc.MobCount or 0))
+        ImGui.TextColored(WHITE, '%s', '# Mobs: ')
+        ImGui.SameLine(0,2)
+        ImGui.TextColored(LIGHT_GREY, '%s', tostring(rc.MobCount or 0))
         ImGui.TableNextColumn()
         ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, style.CellPadding.x, FLAGS_ROW_PADDING_Y)
         if ImGui.BeginTable('flags table', 2, ImGuiTableFlags.None) then
