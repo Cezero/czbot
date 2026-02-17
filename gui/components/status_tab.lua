@@ -1,4 +1,4 @@
--- Status tab: status line, run state table, and doXXX flag On/Off buttons.
+-- Status tab: status line, Camp section, and doXXX flag On/Off buttons.
 
 local ImGui = require('ImGui')
 local Icons = require('mq.ICONS')
@@ -14,7 +14,7 @@ local BLACK = ImVec4(0, 0, 0, 1)
 
 local FLAGS_COLUMN_WIDTH = 60
 local FLAGS_ROW_PADDING_Y = 2
-local FLAGS_PANEL_WIDTH = 135
+local FLAGS_PANEL_WIDTH = 140
 
 local DO_FLAGS = {
     { key = 'dopull', label = 'Pull' },
@@ -53,24 +53,6 @@ local function getStatusLine()
     return 'Idle'
 end
 
-local function getStatusRows()
-    local rc = state.getRunconfig()
-    local runState = state.getRunState()
-    local rows = {}
-    rows[#rows + 1] = { 'Run state', runState }
-    if rc.followid and rc.followid > 0 then
-        rows[#rows + 1] = { 'Follow', rc.followname or tostring(rc.followid) }
-    elseif rc.campstatus then
-        local campVal = 'on'
-        if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
-            campVal = string.format('on at %.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)
-        end
-        rows[#rows + 1] = { 'Camp', campVal }
-    end
-    rows[#rows + 1] = { 'Mob count', tostring(rc.MobCount or 0) }
-    return rows
-end
-
 function M.draw()
     ImGui.TextColored(YELLOW, '%s', getStatusLine())
     ImGui.SameLine()
@@ -91,19 +73,39 @@ function M.draw()
     end
     ImGui.PopStyleColor(2)
     ImGui.Spacing()
-    if ImGui.BeginTable('status table', 2, bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter)) then
-        ImGui.TableSetupColumn('Key', 0, 0.35)
-        ImGui.TableSetupColumn('Value', 0, 0.65)
-        ImGui.TableHeadersRow()
-        for _, row in ipairs(getStatusRows()) do
-            ImGui.TableNextRow()
-            ImGui.TableNextColumn()
-            ImGui.TextColored(YELLOW, '%s', row[1])
-            ImGui.TableNextColumn()
-            ImGui.TextColored(RED, '%s', tostring(row[2]))
-        end
-        ImGui.EndTable()
+    -- Camp section (same style as Pulling on combat_tab)
+    local leftX, lineY = ImGui.GetCursorScreenPos()
+    local availX = select(1, ImGui.GetContentRegionAvail())
+    local textW, textH = ImGui.CalcTextSize('Camp')
+    local startX = ImGui.GetCursorPosX()
+    ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
+    ImGui.Text('Camp')
+    local tMinX, tMinY = ImGui.GetItemRectMin()
+    local tMaxX, tMaxY = ImGui.GetItemRectMax()
+    local midY = (tMinY + tMaxY) / 2
+    local pad = 4
+    local rightX = leftX + availX
+    local drawList = ImGui.GetWindowDrawList()
+    local col = ImGui.GetColorU32(51/255, 105/255, 173/255, 1.0)
+    local thickness = 1.0
+    drawList:AddLine(ImVec2(leftX, midY), ImVec2(tMinX - pad, midY), col, thickness)
+    drawList:AddLine(ImVec2(tMaxX + pad, midY), ImVec2(rightX, midY), col, thickness)
+    local rc = state.getRunconfig()
+    local locationStr = 'unset'
+    if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
+        locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)
     end
+    ImGui.Spacing()
+    ImGui.TextColored(YELLOW, '%s', 'Location: ')
+    ImGui.SameLine()
+    ImGui.TextColored(RED, '%s', locationStr)
+    ImGui.TextColored(YELLOW, '%s', 'Radius: ')
+    ImGui.SameLine()
+    ImGui.TextColored(RED, '%s', tostring(botconfig.config.settings.acleash or 75))
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp radius for in-camp mob checks.') end
+    ImGui.TextColored(YELLOW, '%s', '# Mobs: ')
+    ImGui.SameLine()
+    ImGui.TextColored(RED, '%s', tostring(rc.MobCount or 0))
     ImGui.Spacing()
     if ImGui.BeginTable('flags wrapper', 2, ImGuiTableFlags.None) then
         ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthStretch, 0)
