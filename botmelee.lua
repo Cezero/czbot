@@ -263,6 +263,7 @@ function botmelee.getHookFn(name)
                 botmove.TickReturnToFollowAfterEngage()
                 return
             end
+            if state.getRunState() == 'pulling' then return end
             if not myconfig.settings.domelee then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if not state.getRunconfig().MobList[1] then
