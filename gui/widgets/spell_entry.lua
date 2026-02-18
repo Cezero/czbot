@@ -328,7 +328,7 @@ function M.draw(spell, opts)
         if ImGui.IsItemHovered() then ImGui.SetTooltip('Optional display name or key for spell DB lookup.') end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(ALIAS_INPUT_WIDTH)
-        local aliasBuf, aliasChanged = ImGui.InputText('##' .. id .. '_alias', state.aliasBuf or '', 256)
+        local aliasBuf, aliasChanged = ImGui.InputText('##' .. id .. '_alias', state.aliasBuf or '')
         if aliasChanged then
             state.aliasBuf = aliasBuf
             spell.alias = (aliasBuf == '' and false or aliasBuf)
@@ -532,7 +532,7 @@ function M.draw(spell, opts)
             'When to allow casting: true or a Lua expression (e.g. condition on EvalID).') end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(360)
-        local preBuf, preChanged = ImGui.InputText('##' .. id .. '_precondition', state.preconditionBuf or '', 512)
+        local preBuf, preChanged = ImGui.InputText('##' .. id .. '_precondition', state.preconditionBuf or '')
         if preChanged then
             state.preconditionBuf = preBuf
             if preBuf == '' or (preBuf and preBuf:match('^%s*$')) then
