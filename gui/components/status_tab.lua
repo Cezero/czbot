@@ -4,6 +4,7 @@ local ImGui = require('ImGui')
 local mq = require('mq')
 local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
+local commands = require('lib.commands')
 local state = require('lib.state')
 local spellutils = require('lib.spellutils')
 local tankrole = require('lib.tankrole')
@@ -184,6 +185,23 @@ function M.draw()
             startX = ImGui.GetCursorPosX()
             ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
             ImGui.Text('%s', campLabel)
+            ImGui.SameLine()
+            local campSet = rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z)
+            local campIcon = Icons.FA_FREE_CODE_CAMP
+            local campIconW = (select(1, ImGui.CalcTextSize(campIcon)) or 0) + style.FramePadding.x * 2
+            local campAvail = select(1, ImGui.GetContentRegionAvail())
+            if campAvail > 0 then
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW)
+            end
+            ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+            ImGui.PushStyleColor(ImGuiCol.Text, campSet and RED or GREEN)
+            if ImGui.SmallButton(campIcon .. '##camp_toggle') then
+                commands.MakeCamp(campSet and 'off' or 'on')
+            end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip(campSet and 'Clear camp' or 'Set camp here')
+            end
+            ImGui.PopStyleColor(2)
             local locationStr = 'unset'
             if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
                 locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)

@@ -382,7 +382,9 @@ end
 local function DebuffOnBeforeCast(i, EvalID, targethit)
     local myconfig = botconfig.config
     local entry = botconfig.getSpellEntry('debuff', i)
-    if entry ~= nil and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
+    if not entry then return false end
+    if not spellutils.CheckGemReadiness('debuff', i, entry) then return false end
+    if entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false
     end
     charm.BeforeCast(EvalID, targethit)
