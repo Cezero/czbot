@@ -196,6 +196,10 @@ end
 function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethit, cureTypeList, resumePhase,
                                               resumeGroupIndex)
     if not spawnId or not sub then return false end
+    if sub == 'buff' then
+        local sp = mq.TLO.Spawn(spawnId)
+        if sp and sp.Type and sp.Type() == 'Corpse' then return false end
+    end
     if mq.TLO.Target.ID() == spawnId then
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
@@ -827,12 +831,13 @@ end
 
 function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spellname, spellid, spelldurMs, target,
                                                            targetname)
-    if mq.TLO.Me.CastTimeLeft() <= 0 or (sub ~= 'debuff' and sub ~= 'buff') or not spelldurMs or spelldurMs <= 0 or mq.TLO.Me.Class.ShortName() == 'BRD' then return end
+    local durMs = tonumber(spelldurMs) or 0
+    if mq.TLO.Me.CastTimeLeft() <= 0 or (sub ~= 'debuff' and sub ~= 'buff') or not spelldurMs or durMs <= 0 or mq.TLO.Me.Class.ShortName() == 'BRD' then return end
     if mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
     local buffid = mq.TLO.Target.Buff(spellname).ID() or false
     local buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
     local buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
-    local buffPresent = buffid and buffstaleness < 2000 and buffdur > (spelldurMs * 0.10)
+    local buffPresent = buffid and buffstaleness < 2000 and buffdur > (durMs * 0.10)
     local stacks = mq.TLO.Spell(spellid).StacksTarget()
 
     if sub == 'buff' then
@@ -855,7 +860,7 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
             else
                 printf('\ayCZBot:\axInterrupt %s on MobID %s, debuff already present', spellname, target)
             end
-            local expire = mq.TLO.Target.Buff(spellname).Duration() + mq.gettime()
+            local expire = (mq.TLO.Target.Buff(spellname).Duration() or 0) + mq.gettime()
             spellstates.DebuffListUpdate(target, spellid, expire)
             mq.cmd('/interrupt')
             spellutils.clearCastingStateOrResume()
@@ -879,10 +884,8 @@ function spellutils.InterruptCheck()
     local targetname = mq.TLO.Spawn(target).CleanName()
     local spellid = spellutils.GetSpellId(entry)
     if not spellid then return false end
-    local spelldur = mq.TLO.Spell(spellname).MyDuration.TotalSeconds() or
-        (entry.gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.MyDuration())
+    local spelldur = spellutils.GetSpellDurationSec(entry) * 1000
     if not criteria then return false end
-    if spelldur then spelldur = spelldur * 1000 end
     if not target or not spell or not criteria or not sub then return false end
     if not mq.TLO.Target.ID() or mq.TLO.Target.ID() == 0 then return false end
     local targetSpawn = mq.TLO.Target
@@ -927,14 +930,22 @@ function spellutils.CheckGemReadiness(sub, index, entry)
     return true
 end
 
-function spellutils.SetCastStatusMessage(sub, targetname, spellname)
+function spellutils.SetCastStatusMessage(sub, targetname, spellname, entry)
     local rc = state.getRunconfig()
     if sub == 'heal' then
         rc.statusMessage = string.format('Healing %s with %s', targetname, spellname)
     elseif sub == 'buff' then
         rc.statusMessage = string.format('Buffing %s with %s', targetname, spellname)
     elseif sub == 'debuff' or sub == 'ad' then
-        rc.statusMessage = string.format('Nuking %s with %s', targetname, spellname)
+        if entry and (entry.gem == 'ability' or entry.gem == 'disc') then
+            rc.statusMessage = string.format('Using %s on %s', spellname, targetname)
+        elseif entry and spellutils.IsMezSpell(entry) then
+            rc.statusMessage = string.format('Mezzing %s with %s', targetname, spellname)
+        elseif entry and spellutils.IsNukeSpell(entry) then
+            rc.statusMessage = string.format('Nuking %s with %s', targetname, spellname)
+        else
+            rc.statusMessage = string.format('Casting %s on %s', spellname, targetname)
+        end
     elseif sub == 'cure' then
         rc.statusMessage = string.format('Curing %s with %s', targetname, spellname)
     else
@@ -1020,7 +1031,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     local targetname = (spawn and spawn.CleanName()) or 'Unknown'
     local spellname = entry.spell or spell
     if not resuming then
-        spellutils.SetCastStatusMessage(sub, targetname, spellname)
+        spellutils.SetCastStatusMessage(sub, targetname, spellname, (sub == 'debuff' or sub == 'ad') and entry or nil)
     end
 
     if not resuming and spellutils.ShouldWaitForMovement(entry) then

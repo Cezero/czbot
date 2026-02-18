@@ -380,6 +380,13 @@ function botmove.NavToCamp(opts)
     doNavToCamp(opts)
 end
 
+--- Returns true when the current position is at camp (within camp-close distance and LOS).
+function botmove.AtCamp()
+    local rc = state.getRunconfig()
+    if not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then return false end
+    return campDistanceOk(rc) and campLOSOk(rc)
+end
+
 function botmove.SetCampHere()
     setCampHere()
 end

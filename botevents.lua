@@ -167,14 +167,18 @@ function botevents.Event_HitYou()
 end
 
 function botevents.Event_MobProb(line, arg1, arg2)
-    if state.getRunconfig().mobprobtimer <= mq.gettime() then return true end
-    if state.getRunconfig().engageTargetId then
-        if mq.TLO.Navigation.PathLength('id ' .. state.getRunconfig().engageTargetId)() <= botconfig.config.settings.acleash then
-            mq.cmdf(
-                '/nav id %s dist=0 log=off', state.getRunconfig().engageTargetId)
+    local rc = state.getRunconfig()
+    if rc.mobprobtimer <= mq.gettime() then return true end
+    if rc.dopull and state.getRunState() == 'pulling' and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
+        rc.mobprobtimer = mq.gettime() + 3000
+        return true
+    end
+    if rc.engageTargetId then
+        if mq.TLO.Navigation.PathLength('id ' .. rc.engageTargetId)() <= botconfig.config.settings.acleash then
+            mq.cmdf('/nav id %s dist=0 log=off', rc.engageTargetId)
         end
     end
-    state.getRunconfig().mobprobtimer = mq.gettime() + 3000
+    rc.mobprobtimer = mq.gettime() + 3000
 end
 
 function botevents.BindEvents()

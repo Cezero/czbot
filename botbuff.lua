@@ -166,12 +166,24 @@ end
 
 local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
 
+local function filterCorpses(targets)
+    if not targets or #targets == 0 then return targets end
+    local out = {}
+    for i = 1, #targets do
+        local t = targets[i]
+        if t and t.id and mq.TLO.Spawn(t.id).Type() ~= 'Corpse' then
+            out[#out + 1] = t
+        end
+    end
+    return out
+end
+
 local function buffGetTargetsForPhase(phase, context)
     if phase == 'self' then return castutils.getTargetsSelf() end
-    if phase == 'tank' then return castutils.getTargetsTank(context) end
+    if phase == 'tank' then return filterCorpses(castutils.getTargetsTank(context)) end
     if phase == 'groupbuff' then return castutils.getTargetsGroupCaster('groupbuff') end
-    if phase == 'groupmember' then return castutils.getTargetsGroupMember(context, {}) end
-    if phase == 'pc' then return castutils.getTargetsPc(context) end
+    if phase == 'groupmember' then return filterCorpses(castutils.getTargetsGroupMember(context, {})) end
+    if phase == 'pc' then return filterCorpses(castutils.getTargetsPc(context)) end
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then return castutils.getTargetsPet(context) end
     if phase == 'byname' and context.buffCount then
@@ -189,7 +201,7 @@ local function buffGetTargetsForPhase(phase, context)
                 end
             end
         end
-        return out
+        return filterCorpses(out)
     end
     return {}
 end

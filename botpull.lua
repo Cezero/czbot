@@ -14,6 +14,8 @@ local botpull = {}
 local bardtwist = require('lib.bardtwist')
 
 local PULLEDMOB_NO_CLOSER_MS = 10000
+local RETURNING_AFTER_ABORT_WAIT_MS = 5000
+local PULL_RETURN_EXTRA_WAIT_MS = 5000
 
 --- Returns effective pull range in units for the given pull spell entry.
 local function getPullRange(entry)
@@ -85,6 +87,7 @@ local function clearPullState(reason)
     rc.pulledmobLastCloserTime = nil
     rc.pullNavStartHP = nil
     rc.pullAggroingStartTime = nil
+    rc.pullAtCampSince = nil
     state.clearRunState()
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         bardtwist.EnsureTwistForMode('combat')
@@ -117,7 +120,7 @@ function botpull.TagTimeCalc(trip, spawnId, x, y, z)
     end
     if trip == 'return' and x and y and z then
         return (((mq.TLO.Navigation.PathLength('locxyz ' .. x .. ',' .. y .. ',' .. z)() + 100) / 100) * 18000) +
-            mq.gettime()
+            PULL_RETURN_EXTRA_WAIT_MS + mq.gettime()
     end
     return mq.gettime() + 60000
 end
@@ -335,9 +338,31 @@ end
 
 local function abortPullAndReturnToCamp(reason)
     mq.cmd('/multiline ; /squelch /target clear ; /nav stop log=off')
+    local rc = state.getRunconfig()
+    rc.engageTargetId = nil
+    rc.pullState = 'returning_after_abort'
+    rc.pullAPTargetID = nil
+    rc.pullAtCampSince = nil
+    rc.statusMessage = 'Returning to camp after abort'
     botmove.NavToCamp({ dist = 0, echoMsg = '\\ayAdd aggro, returning to camp' })
-    clearPullState(reason or 'abort')
     if reason then printf('\ayCZBot:\ax [Pull] abort: %s', reason) end
+end
+
+-- One tick of returning_after_abort: nav to camp, then wait at camp before allowing next pull.
+local function tickReturningAfterAbort(rc)
+    if not botmove.AtCamp() then
+        rc.pullAtCampSince = nil
+        if not mq.TLO.Navigation.Active() then
+            botmove.NavToCamp({ dist = 0 })
+        end
+        return
+    end
+    if not rc.pullAtCampSince then
+        rc.pullAtCampSince = mq.gettime()
+    end
+    if (mq.gettime() - rc.pullAtCampSince) >= RETURNING_AFTER_ABORT_WAIT_MS then
+        clearPullState('returning_after_abort: at camp, wait done')
+    end
 end
 
 -- One tick of navigating state.
@@ -606,8 +631,12 @@ end
 -- One tick of returning state.
 local function tickReturning(rc, spawn)
     if not mq.TLO.Navigation.Active() then
-        rc.pullState = 'waiting_combat'
-        rc.statusMessage = string.format('Waiting for combat with %s (%s)', spawn.Name(), spawn.ID())
+        if botmove.AtCamp() then
+            rc.pullState = 'waiting_combat'
+            rc.statusMessage = string.format('Waiting for combat with %s (%s)', spawn.Name(), spawn.ID())
+        else
+            botmove.NavToCamp({ dist = 0 })
+        end
         return
     end
     if rc.pullReturnTimer and mq.gettime() >= rc.pullReturnTimer then
@@ -625,7 +654,7 @@ local function tickReturning(rc, spawn)
     elseif retSpawnDistSq and myconfig.pull.leashSq and retSpawnDistSq < myconfig.pull.leashSq and mq.TLO.Navigation.Paused() then
         mq.cmd('/nav pause off log=off')
     end
-    if mq.TLO.Me.CombatState() == 'COMBAT' then
+    if mq.TLO.Me.CombatState() == 'COMBAT' and botmove.AtCamp() then
         rc.pullState = 'waiting_combat'
         rc.statusMessage = string.format('Waiting for combat with %s (%s)', spawn.Name(), spawn.ID())
     end
@@ -647,6 +676,10 @@ end
 
 function botpull.PullTick()
     local rc = state.getRunconfig()
+    if rc.pullState == 'returning_after_abort' then
+        tickReturningAfterAbort(rc)
+        return
+    end
     if not rc.pullState or not rc.pullAPTargetID then return end
     local spawn = mq.TLO.Spawn(rc.pullAPTargetID)
     if not spawn or not spawn.ID() or spawn.Type() == 'Corpse' then
