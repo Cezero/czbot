@@ -408,11 +408,17 @@ local function DebuffCheckHandleBardNotanktarWait(rc)
         state.clearRunState()
         return false
     end
-    if mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0) then
+    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
+    if stillSinging then
+        w.singingStarted = true
         return true
     end
     rc.bardNotanktarWait = nil
     state.clearRunState()
+    -- Only run post-cast (timers, DebuffListUpdate) if we ever saw the song actually start; otherwise twist may not have started yet and we would mark target mezzed without singing.
+    if not w.singingStarted then
+        return true
+    end
     local duration_sec = spellutils.GetSpellDurationSec(w.entry)
     local duration_end = duration_sec > 0 and (mq.gettime() + duration_sec * 1000) or nil
     if duration_end then
@@ -436,7 +442,7 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     if mq.TLO.Target.ID() ~= EvalID then mq.cmdf('/tar id %s', EvalID) end
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
-    rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry }
+    rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry, singingStarted = false }
     state.setRunState('casting', { priority = bothooks.getPriority('doDebuff') })
     return true
 end
