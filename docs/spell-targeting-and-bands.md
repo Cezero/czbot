@@ -67,8 +67,8 @@ For each debuff spell, the bot tries the following in order; the **first** valid
 
 1. **Charm recast** — If charm broke and a recast was requested for this spell.
 2. **Charm targets** — Mobs in the per-zone **Charm list** (Mob Lists tab or `/cz charm`); charm spells are auto-detected (spell has Charm effect).
-3. **tanktar** — The MA’s current target. Only tried if the spell’s bands include **tanktar**.
-4. **notanktar** — Any other mob in the camp list (adds). Only tried if bands include **notanktar**.
+3. **notanktar** — Any other mob in the camp list (adds). Only tried if bands include **notanktar**.
+4. **tanktar** — The MA’s current target. Only tried if the spell’s bands include **tanktar**.
 5. **named** — Named mob that is the tank target. Only tried if bands include **named**.
 
 ```mermaid
@@ -79,7 +79,7 @@ flowchart LR
     tanktar[tanktar]
     notanktar[notanktar]
     named[named]
-    campCountCheck --> charmRecast --> charmTargets --> tanktar --> notanktar --> named
+    campCountCheck --> charmRecast --> charmTargets --> notanktar --> tanktar --> named
 ```
 
 ### Band tags and combining them
@@ -88,7 +88,7 @@ flowchart LR
 - **notanktar** — Any other mob in the list (adds).
 - **named** — Named mob; with tanktar, only the tank target when it is named.
 
-A spell can have **multiple** valid target types (e.g. both **tanktar** and **notanktar**). Because **tanktar** is tried before **notanktar**, the tank’s target is chosen when it qualifies; otherwise an add can be chosen. So the same spell can fire on the tank’s target in one tick and on an add in another. If only **notanktar** is in bands, only adds are ever chosen.
+A spell can have **multiple** valid target types (e.g. both **tanktar** and **notanktar**). Because **notanktar** is tried before **tanktar**, adds are considered first; when no add needs the spell, the tank's target can be chosen. So the same spell can fire on an add in one tick and on the tank's target in another. If only **notanktar** is in bands, only adds are ever chosen.
 
 ### HP band
 

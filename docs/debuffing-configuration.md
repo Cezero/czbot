@@ -6,7 +6,7 @@ This document explains how to configure the bot’s **debuffing** behavior: whic
 
 - **Master switch:** Debuffing runs only when **`settings.dodebuff`** is `true`. Default is `false`.
 - **Mob list:** The bot builds a list of valid mobs (within **acleash** and **zradius** of camp, filtered by **TargetFilter**). Debuffs are only cast on mobs in this list.
-- **Evaluation order:** The bot evaluates **phases** in order: charm (if the zone has a **Charm list** and a charm spell is configured) → **tanktar** (MA/tank’s current target) → **notanktar** (other mobs / adds) → **named** (named mobs that are the tank target). For each phase it considers each mob target and checks **all** debuff spells that have that phase in their bands before moving on. For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
+- **Evaluation order:** The bot evaluates **phases** in order: charm (if the zone has a **Charm list** and a charm spell is configured) → **notanktar** (other mobs / adds) → **tanktar** (MA/tank’s current target) → **named** (named mobs that are the tank target). For each phase it considers each mob target and checks **all** debuff spells that have that phase in their bands before moving on. For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
 - **Melee combat abilities** (disciplines, kick/bash-style abilities) use this same debuff system with **gem** `'disc'` or `'ability'`; see [Melee combat abilities](melee-combat-abilities.md).
 
 ---

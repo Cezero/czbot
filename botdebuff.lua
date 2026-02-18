@@ -236,7 +236,7 @@ local function DebuffEval(index)
     return nil, nil
 end
 
-local DEBUFF_PHASE_ORDER = { 'charm', 'tanktar', 'notanktar', 'named' }
+local DEBUFF_PHASE_ORDER = { 'charm', 'notanktar', 'tanktar', 'named' }
 
 local function debuffGetTargetsForPhase(phase, context)
     local out = {}
