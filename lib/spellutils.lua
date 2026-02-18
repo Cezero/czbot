@@ -419,6 +419,28 @@ function spellutils.IsHoTSpell(entry)
     return ok and hasHoT
 end
 
+-- Returns true if the spell is a pet summon (Category Pet, or SPA 33 SUMMON_PET / SPA 103 CALL_PET).
+-- Do not store mq.TLO.Spell() proxy; use direct chains (see HasReagents comment).
+function spellutils.IsPetSummonSpell(entry)
+    if not entry or not entry.spell then return false end
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return false end
+        local okCat, cat = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.Category() end)
+        if okCat and cat and type(cat) == 'string' and cat == 'Pet' then return true end
+        local ok33, has33 = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(33)() end)
+        if ok33 and has33 then return true end
+        local ok103, has103 = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(103)() end)
+        return ok103 and has103
+    end
+    if not mq.TLO.Spell(entry.spell)() then return false end
+    local okCat, cat = pcall(function() return mq.TLO.Spell(entry.spell).Category() end)
+    if okCat and cat and type(cat) == 'string' and cat == 'Pet' then return true end
+    local ok33, has33 = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(33)() end)
+    if ok33 and has33 then return true end
+    local ok103, has103 = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(103)() end)
+    return ok103 and has103
+end
+
 -- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.
 function spellutils.GetTankInfo(includeTarget)
     local mainTankName = state.getRunconfig().TankName

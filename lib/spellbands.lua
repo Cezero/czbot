@@ -78,9 +78,13 @@ function spellbands.applyBands(section, entry, index)
                 local hasByname = false
                 for _, p in ipairs(targetPhase) do
                     if type(p) == 'string' and p ~= '' then
-                        rt[p] = true
-                        if p == 'byname' then hasByname = true; rt.name = true end
-                        if p == 'bots' then rt.pc = true end -- backward compat: bots and pc same for buff/cure
+                        if p == 'petspell' then
+                            rt.petspell = true
+                        else
+                            rt[p] = true
+                            if p == 'byname' then hasByname = true; rt.name = true end
+                            if p == 'bots' then rt.pc = true end -- backward compat: bots and pc same for buff/cure
+                        end
                     end
                 end
                 if type(validTgts) == 'table' then

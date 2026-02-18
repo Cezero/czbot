@@ -41,7 +41,7 @@ Bands use **targetphase** (priority stages) and **validtargets** (classes or `al
 
 - **targetphase** tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc** (other PCs by class), **mypet**, **pet**, **byname**; **cbt** / **idle** control when the spell can run (combat vs no mobs in camp). **bots** in config is accepted for backward compatibility and treated as **pc**.
 - **validtargets**: Class shorts (e.g. `war`, `clr`, …) or `all`. Restricts which classes get the buff for **groupmember** and **pc** phases. Absent = all classes.
-- **petspell** — Summon pet: cast on self when you have **no pet**. Use with **self** in the same band. Documented in [Pets configuration](pets-configuration.md).
+- **Pet summon:** Pet summon spells are **auto-detected** (spell Category Pet or SPA 33/103). For a summon, add a buff entry with **self** in targetphase; the bot only casts it when it has no pet. The token **petspell** in targetphase is deprecated (not a phase); if present it still sets the pet-summon flag for backward compatibility. See [Pets configuration](pets-configuration.md).
 - **name** — Buff specific characters by name (list their names in **validtargets** when using **byname** in targetphase).
 - **groupbuff** — Group AE buff: when the spell targets the group (e.g. Group v1), the bot counts group members in range who need the buff (peers from charinfo, non-peers from Spawn when BuffsPopulated); if the count is at least **tarcnt** (optional, default 1), it casts on self. **tarcnt** can be set on the spell entry.
 - **groupmember** — Single-target buffs only for characters in the bot’s (EQ) group; includes non-bot group members. For non-peers, buff state comes only from **Spawn** after targeting (Spawn.BuffsPopulated must be true). Add **pc** in targetphase to also buff peers outside the group (evaluated after groupmember).
@@ -51,7 +51,7 @@ Bands use **targetphase** (priority stages) and **validtargets** (classes or `al
 
 The bot evaluates buff targets in a **fixed, literal order**. The list below is the actual priority:
 
-1. **self** (including **petspell** when no pet)
+1. **self** (including auto-detected pet summon when no pet)
 2. **byname**
 3. **tank**
 4. **groupbuff** (group AE)

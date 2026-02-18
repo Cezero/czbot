@@ -104,7 +104,7 @@ Buff spells choose a target in a fixed order. Bands use **targetphase** (priorit
 
 From `BuffEval` in the code, the order is:
 
-1. **self** — Yourself (including **petspell** when you have no pet, for summon).
+1. **self** — Yourself (including auto-detected pet summon when you have no pet).
 2. **byname** — Specific characters whose names appear in **validtargets** when **byname** is in targetphase.
 3. **tank** — Main Tank (can be non-bot when explicitly named; only out-of-group non-bot we buff). Non-peer buff state from Spawn after targeting (BuffsPopulated).
 4. **groupbuff** — Group AE buff; spell targets group; cast when enough group members need the buff (**tarcnt**). Need is from charinfo for peers, Spawn (when BuffsPopulated) for non-peers.
@@ -117,7 +117,7 @@ For **BRD**, only **self** is tried after the initial self check (no tank/groupb
 
 ### Bands
 
-Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**, **byname**, **cbt**, **idle**. validtargets: class shorts or **all** (for **groupmember** and **pc**); or character names (for **byname**). **cbt** / **idle** = when the spell can run. **tarcnt** optional for **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
+Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**, **byname**, **cbt**, **idle**. (**petspell** is deprecated: spell-type flag only, not a phase; pet summon is auto-detected.) validtargets: class shorts or **all** (for **groupmember** and **pc**); or character names (for **byname**). **cbt** / **idle** = when the spell can run. **tarcnt** optional for **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
 
 ---
 

@@ -4,7 +4,7 @@ This document explains how to configure **pet summoning**, **pet assist** (sendi
 
 ## Overview
 
-- **Summoning a pet:** Configured as a **buff** with the **petspell** band. The bot casts the summon spell on itself when it has no pet.
+- **Summoning a pet:** Configured as a **buff** with **targetphase** including **self**. The bot **auto-detects** pet summon spells (spell Category Pet or SPA 33/103) and only casts when it has no pet.
 - **Pet assist:** When **petassist** is true and the bot has an engage target, the bot sends its pet to attack that target. When there is no engage target or the target is wrong, the bot calls pet back / follow.
 - **Pet buffing:** Configured in the **buff** section with bands **mypet** (your pet) or **pet** (other group members’ pets). See [Buffing configuration](buffing-configuration.md).
 
@@ -18,7 +18,7 @@ Pet summoning is a **self buff** that the bot casts when it has **no pet**.
 2. Add a spell entry under **`config.buff.spells`** with your **summon pet** spell:
    - Set **gem** and **spell** (e.g. gem 3, spell `"Summon Warder"`).
    - The spell is active by default (**enabled** is `true` when omitted). Set **enabled** to `false` to disable it.
-   - In **bands**, include the class token **petspell** (and typically **self**). The bot will only cast this spell when it has no pet (`mypetid == 0`).
+   - In **bands**, set **targetphase** to include **self** (use `all` or omit validtargets for a self-only summon). The bot **auto-detects** pet summon spells (Category Pet or SPA 33/103) and only casts when it has no pet.
 
 **Example: summon pet buff entry**
 
@@ -29,7 +29,7 @@ Pet summoning is a **self buff** that the bot casts when it has **no pet**.
   ['alias'] = 'pet',
   ['minmana'] = 0,
   ['bands'] = {
-    { ['validtargets'] = { 'self', 'petspell' } }
+    { ['targetphase'] = { 'self' }, ['validtargets'] = { 'all' } }
   },
   ['spellicon'] = 0
 }
@@ -81,6 +81,6 @@ See [Debuffing configuration](debuffing-configuration.md) for the Charm list, **
 
 ## Runtime control
 
-- **Toggle buffing (for summon):** `/cz dobuff on` or `/cz dobuff off`. Pet summon runs only when buffing is on and the petspell entry is **enabled** (default is true when omitted).
+- **Toggle buffing (for summon):** `/cz dobuff on` or `/cz dobuff off`. Pet summon runs only when buffing is on and the summon spell entry is **enabled** (default is true when omitted).
 - **Enable/disable a buff by alias:** `/cz cast <alias> on` or `/cz cast <alias> off` — use the alias you gave the summon spell (or any buff).
 - **Engage (pet follows):** `/cz attack` — engages the MA’s target; if **petassist** is true, the pet attacks that target.

@@ -21,6 +21,9 @@ function botbuff.LoadBuffConfig()
         defaultEntry = defaultBuffEntry,
         bandsKey = 'buff',
         storeIn = BuffClass,
+        perEntryAfterBands = function(entry, i)
+            BuffClass[i].petspell = spellutils.IsPetSummonSpell(entry) or BuffClass[i].petspell
+        end,
     })
 end
 
@@ -58,6 +61,9 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
         local mypetid = mq.TLO.Me.Pet.ID()
         if BuffClass[index].petspell and IconCheck(index, myid) and mypetid == 0 then
             return myid, 'petspell'
+        end
+        if BuffClass[index].petspell and mypetid > 0 then
+            return nil, nil
         end
         if BuffClass[index].self then
             local buffdur = mq.TLO.Me.Buff(spell).Duration()
