@@ -119,7 +119,7 @@ local function DebuffEvalTankTar(index, ctx)
         if v.ID() == ctx.tanktar then
             local myrangeSq = ctx.myrangeSq
             if entry.gem == 'ability' then
-                local mr = v.MaxRangeTo(); myrangeSq = mr and (mr * mr)
+                local mr = v.MaxRangeTo(); local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
             end
             local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
             if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
@@ -155,7 +155,7 @@ local function DebuffEvalNotanktar(index, ctx)
             if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
                 local myrangeSq = ctx.myrangeSq
                 if entry.gem == 'ability' then
-                    local mr = v.MaxRangeTo(); myrangeSq = mr and (mr * mr)
+                    local mr = v.MaxRangeTo(); local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
                 end
                 local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
                 if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
@@ -190,7 +190,7 @@ local function DebuffEvalNamedTankTar(index, ctx)
         if v.ID() == ctx.tanktar and v.Named() then
             local myrangeSq = ctx.myrangeSq
             if entry.gem == 'ability' then
-                local mr = v.MaxRangeTo(); myrangeSq = mr and (mr * mr)
+                local mr = v.MaxRangeTo(); local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
             end
             local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
             if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then return nil, nil end
@@ -335,7 +335,7 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
                     if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
                         local myrangeSq = ctx.myrangeSq
                         if entry.gem == 'ability' then
-                            local mr = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange; myrangeSq = mr and (mr * mr)
+                            local mr = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange; local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
                         end
                         local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
                         if not (myrangeSq and distSq and distSq > myrangeSq) then
@@ -356,7 +356,7 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
                     end
                     local myrangeSq = ctx.myrangeSq
                     if entry.gem == 'ability' then
-                        local mr = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange; myrangeSq = mr and (mr * mr)
+                        local mr = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange; local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
                     end
                     if not (myrangeSq and distSq and distSq > myrangeSq) then
                         local tarstacks = spellutils.SpellStacksSpawn(entry, targetId)
