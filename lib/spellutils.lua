@@ -100,9 +100,12 @@ function spellutils.SpellCheck(Sub, ID)
         printf('\ayCZBot:\axMissing reagent for %s, disabling spell for 5 minutes', spell)
         return false
     end
-    if not mq.TLO.Spell(spell)() then return false end
-    local spellmana = mq.TLO.Spell(spell).Mana()
-    local spellend = mq.TLO.Spell(spell).EnduranceCost()
+    local spellmana, spellend
+    if gem ~= 'ability' then
+        if not mq.TLO.Spell(spell)() then return false end
+        spellmana = mq.TLO.Spell(spell).Mana()
+        spellend = mq.TLO.Spell(spell).EnduranceCost()
+    end
     if not ((tonumber(gem) and gem <= 13 and gem > 0) or gem == 'alt' or gem == 'item' or gem == 'script' or gem == 'disc' or gem == 'ability') then return false end
     if (tonumber(gem) or gem == 'alt') and spellmana then
         if (spellmana > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < spellmana) or (mq.TLO.Me.PctMana() < minmana)) then return false end
@@ -983,7 +986,6 @@ function spellutils.ExecuteNativeCast(gem, spell, sub, index)
     elseif gem == 'disc' and mq.TLO.Me.CombatAbilityReady(spell)() then
         mq.cmdf('/squelch /disc %s', spell)
     elseif gem == 'ability' then
-        printf('\ayCZBot:\axExecuting ability %s', spell)
         mq.cmdf('/squelch /face fast')
         mq.cmdf('/doability %s', spell)
     end
