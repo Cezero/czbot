@@ -983,6 +983,7 @@ function spellutils.ExecuteNativeCast(gem, spell, sub, index)
     elseif gem == 'disc' and mq.TLO.Me.CombatAbilityReady(spell)() then
         mq.cmdf('/squelch /disc %s', spell)
     elseif gem == 'ability' then
+        printf('\ayCZBot:\axExecuting ability %s', spell)
         mq.cmdf('/squelch /face fast')
         mq.cmdf('/doability %s', spell)
     end
