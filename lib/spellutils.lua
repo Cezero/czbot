@@ -316,6 +316,7 @@ end
 -- Returns true if the debuff entry is a nuke (no duration / direct damage). Used for rotation and flavor filtering.
 function spellutils.IsNukeSpell(entry)
     if not entry or not entry.spell then return false end
+    if entry.gem == 'disc' or entry.gem == 'ability' then return false end
     return spellutils.GetSpellDurationSec(entry) == 0
 end
 
