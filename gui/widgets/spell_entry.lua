@@ -81,9 +81,10 @@ end
 local function validateAbility(name)
     if not name or name:match('^%s*$') then return false, 'Enter an ability name' end
     name = name:match('^%s*(.-)%s*$')
-    for i = 1, 20 do
-        local ab = mq.TLO.Me.Ability(i)
-        if ab and ab.Name() and ab.Name():lower() == name:lower() then return true end
+    local ar = mq.TLO.Me.AbilityReady(name)
+    if ar then
+        local ok, result = pcall(function() return ar() end)
+        if ok and result ~= nil then return true end
     end
     return false, 'Ability not found'
 end
