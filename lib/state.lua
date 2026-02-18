@@ -53,6 +53,7 @@
 ---@field stucktimer number|nil
 ---@field unstuckWiggleIndex number|nil current step (1–9) in unstuck wiggle sequence; nil when not wiggling or after sequence
 ---@field mobprobtimer number
+---@field sitTimer number|nil mq.gettime() until which we should not auto-sit (set when hit; cleared when expired or no mobs in camp)
 ---@field spellNotInBook table|nil
 ---@field statusMessage string User-facing activity line for GUI
 ---@field pullHealerManaWait { name: string, pct: number }|nil when set, puller is waiting on this healer's mana before next pull; status tab shows it
@@ -150,6 +151,7 @@ function M.resetRunconfig()
         stucktimer = 0,
         unstuckWiggleIndex = nil,
         mobprobtimer = 0,
+        sitTimer = nil,
         spellNotInBook = {},
         statusMessage = '',
         pullHealerManaWait = nil,

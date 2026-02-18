@@ -56,13 +56,15 @@ local function CharState(...)
     end
     if botconfig.config.settings.dosit and state.getRunState() ~= 'casting' and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
         local rc = state.getRunconfig()
+        if (rc.MobCount or 0) == 0 then rc.sitTimer = nil end
         local skipSitForFollow = false
         if rc.followid and rc.followid > 0 then
             local followSpawn = mq.TLO.Spawn(rc.followid)
             local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), followSpawn.X(), followSpawn.Y())
             if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then skipSitForFollow = true end
         end
-        if not skipSitForFollow then
+        local sitBlockedByHit = rc.sitTimer and mq.gettime() < rc.sitTimer and (rc.MobCount or 0) > 0
+        if not skipSitForFollow and not sitBlockedByHit then
             local sitcheck = true
             if (tonumber(botconfig.config.settings.sitmana) >= mq.TLO.Me.PctMana() and mq.TLO.Me.MaxMana() > 0) or tonumber(botconfig.config.settings.sitendur) >= mq.TLO.Me.PctEndurance() then
                 if mq.TLO.Me.PctHPs() < 40 and state.getRunconfig().MobCount > 0 then sitcheck = false end

@@ -11,7 +11,9 @@ local charinfo = require("mqcharinfo")
 
 local botevents = {}
 
--- Internal: reset zone-specific variables. Used by OnZoneChange only.
+local SIT_AFTER_HIT_MS = 3000
+
+-- Internal: reset zone-specific variables. Used by OnZoneChange only. Used by OnZoneChange only.
 local function DelayOnZone()
     if state.getRunState() == 'dead' then
         state.clearRunState()
@@ -160,6 +162,10 @@ function botevents.Event_MountFailed()
     if botconfig.config.settings.domount then MountCastFailed = true end
 end
 
+function botevents.Event_HitYou()
+    state.getRunconfig().sitTimer = mq.gettime() + SIT_AFTER_HIT_MS
+end
+
 function botevents.Event_MobProb(line, arg1, arg2)
     if state.getRunconfig().mobprobtimer <= mq.gettime() then return true end
     if state.getRunconfig().engageTargetId then
@@ -202,6 +208,8 @@ function botevents.BindEvents()
     mq.event('MobProb1', "#*#Your target is too far away,#*#", botevents.Event_MobProb)
     mq.event('MobProb2', "#*#You cannot see your target#*#", botevents.Event_MobProb)
     mq.event('MobProb3', "#*#You can\'t hit them from here#*#", botevents.Event_MobProb)
+    mq.event('HitYou1', "#*#YOU for #1# point of#*#", botevents.Event_HitYou)
+    mq.event('HitYou2', "#*#YOU for #1# points of#*#", botevents.Event_HitYou)
 end
 
 return botevents
