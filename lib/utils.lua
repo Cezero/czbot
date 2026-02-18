@@ -12,7 +12,11 @@ end
 ---@param zone string|nil Zone short name (e.g. mq.TLO.Zone.ShortName()). If nil, returns false.
 function utils.isNonCombatZone(zone)
     if not zone then return false end
-    return utils.isInList(zone, NONCOMBAT_ZONES)
+    local z = string.lower(zone)
+    for _, v in ipairs(NONCOMBAT_ZONES) do
+        if z == string.lower(v) then return true end
+    end
+    return false
 end
 
 -- Create full copy of a table instead of a reference (recursive, including metatable).

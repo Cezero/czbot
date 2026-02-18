@@ -399,7 +399,7 @@ end
 
 -- BRD notanktar twist-once: wait for cast to finish then post-cast (resist, DebuffListUpdate, timer, re-target MA). Returns true if handled.
 local function DebuffCheckHandleBardNotanktarWait(rc)
-    if mq.TLO.Me.Class.ShortName() ~= 'BRD' or state.getRunState() ~= 'doDebuff_bard_notanktar_wait' or not rc.bardNotanktarWait then
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' or not rc.bardNotanktarWait then
         return false
     end
     local w = rc.bardNotanktarWait
@@ -409,7 +409,7 @@ local function DebuffCheckHandleBardNotanktarWait(rc)
         return false
     end
     if mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0) then
-        return false
+        return true
     end
     rc.bardNotanktarWait = nil
     state.clearRunState()
@@ -437,7 +437,7 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry }
-    state.setRunState('doDebuff_bard_notanktar_wait', {})
+    state.setRunState('casting', { priority = bothooks.getPriority('doDebuff') })
     return true
 end
 
@@ -598,9 +598,9 @@ end
 function botdebuff.getHookFn(name)
     if name == 'doDebuff' then
         return function(hookName)
+            if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local myconfig = botconfig.config
             if not myconfig.settings.dodebuff or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) or not state.getRunconfig().MobList[1] then return end
-            if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Debuff Check' end
             botdebuff.DebuffCheck(bothooks.getPriority(hookName))
         end
