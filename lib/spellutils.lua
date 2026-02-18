@@ -353,7 +353,7 @@ function spellutils.IsCharmSpell(entry)
     if not entry or not entry.spell then return false end
     if entry.gem == 'item' then
         if not mq.TLO.FindItem(entry.spell)() then return false end
-        local ok, hasCharm = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(22) end)
+        local ok, hasCharm = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(22)() end)
         if ok and hasCharm then return true end
         local ok2, cat = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.Category() end)
         local ok3, sub = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.Subcategory() end)
@@ -362,7 +362,7 @@ function spellutils.IsCharmSpell(entry)
         return false
     end
     if not mq.TLO.Spell(entry.spell)() then return false end
-    local ok, hasCharm = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(22) end)
+    local ok, hasCharm = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(22)() end)
     if ok and hasCharm then return true end
     local ok2, cat = pcall(function() return mq.TLO.Spell(entry.spell).Category() end)
     local ok3, sub = pcall(function() return mq.TLO.Spell(entry.spell).Subcategory() end)
@@ -401,11 +401,11 @@ function spellutils.IsHoTSpell(entry)
     if not entry or not entry.spell then return false end
     if entry.gem == 'item' then
         if not mq.TLO.FindItem(entry.spell)() then return false end
-        local ok, hasHoT = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(100) end)
+        local ok, hasHoT = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(100)() end)
         return ok and hasHoT
     end
     if not mq.TLO.Spell(entry.spell)() then return false end
-    local ok, hasHoT = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(100) end)
+    local ok, hasHoT = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(100)() end)
     return ok and hasHoT
 end
 
@@ -828,35 +828,31 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     local buffid = mq.TLO.Target.Buff(spellname).ID() or false
     local buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
     local buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
-    if buffid and buffstaleness < 2000 and buffdur > (spelldurMs * 0.10) then
-        if sub == 'buff' then
-            if mq.TLO.Spell(spellid).StacksTarget() then
-                mq.cmdf('/multiline ; /echo Interrupt %s, buff does not stack on target: %s ; /interrupt', spellname,
-                    spellname, targetname)
+    local buffPresent = buffid and buffstaleness < 2000 and buffdur > (spelldurMs * 0.10)
+    local stacks = mq.TLO.Spell(spellid).StacksTarget()
+
+    if sub == 'buff' then
+        if buffPresent or not stacks then
+            if not stacks then
+                printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, targetname)
+            else
+                printf('\ayCZBot:\axInterrupt %s, buff already present', spellname)
             end
-            mq.cmdf('/multiline ; /echo Interrupt %s, buff already present ; /interrupt', spellname, spellname)
             mq.cmd('/interrupt')
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
-            spellutils.clearCastingStateOrResume()
-        elseif sub == 'debuff' and mq.TLO.Spell(spellid).CategoryID() ~= 20 then
-            mq.cmdf('/multiline ; /echo Interrupt %s on MobID %s, debuff already present ; /interrupt', spellname, target)
-            local expire = mq.TLO.Target.Buff(spellname).Duration() + mq.gettime()
-            spellstates.DebuffListUpdate(target, spellid, expire)
-            mq.cmd('/interrupt')
             spellutils.clearCastingStateOrResume()
         end
-    end
-    if mq.TLO.Spell(spellid).StacksTarget() == 'FALSE' then
-        if sub == 'buff' then
-            printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, spellname, targetname)
-            mq.cmd('/interrupt')
-            if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
-            rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
-            spellutils.clearCastingStateOrResume()
-        elseif sub == 'debuff' then
-            printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target, targetname)
-            spellstates.DebuffListUpdate(target, spellname, mq.TLO.Target.Buff(spellname).Duration() + mq.gettime())
+    elseif sub == 'debuff' then
+        local shouldInterrupt = (buffPresent and mq.TLO.Spell(spellid).CategoryID() ~= 20) or not stacks
+        if shouldInterrupt then
+            if not stacks then
+                printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target, targetname)
+            else
+                printf('\ayCZBot:\axInterrupt %s on MobID %s, debuff already present', spellname, target)
+            end
+            local expire = mq.TLO.Target.Buff(spellname).Duration() + mq.gettime()
+            spellstates.DebuffListUpdate(target, spellid, expire)
             mq.cmd('/interrupt')
             spellutils.clearCastingStateOrResume()
         end

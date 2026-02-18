@@ -34,7 +34,7 @@ function charm.EvalTarget(index, ctx)
     end
     for _, v in ipairs(ctx.mobList) do
         local tarstacks = mq.TLO.Spell(entry.spell).StacksSpawn(v.ID())() or
-            (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(v.ID()))
+            (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.StacksSpawn(v.ID())())
         local overLevel = ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()
         local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
         local outOfRange = ctx.myrange and distSq and distSq > (ctx.myrange * ctx.myrange)
