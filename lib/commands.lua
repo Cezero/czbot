@@ -134,15 +134,7 @@ local function cmd_quit(args, str)
 end
 
 local function cmd_makecamp(args, str)
-    if args[2] then
-        botmove.MakeCamp(args[2])
-    elseif not args[2] then
-        if state.getRunconfig().campstatus then
-            botmove.MakeCamp('off')
-        else
-            botmove.MakeCamp('on')
-        end
-    end
+    botmove.MakeCamp(args[2])
     if state.getRunconfig().followid or state.getRunconfig().followname then
         state.getRunconfig().followid = nil
         state.getRunconfig().followname = nil
@@ -793,7 +785,7 @@ end
 
 -- Entry points for makecamp/follow (callable without going through the parser)
 function M.MakeCamp(mode)
-    cmd_makecamp({ 'makecamp', mode }, '')
+    botmove.MakeCamp(mode)
 end
 
 function M.Follow(tankName)

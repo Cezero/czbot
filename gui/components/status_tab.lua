@@ -4,7 +4,7 @@ local ImGui = require('ImGui')
 local mq = require('mq')
 local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
-local commands = require('lib.commands')
+local botmove = require('botmove')
 local state = require('lib.state')
 local spellutils = require('lib.spellutils')
 local tankrole = require('lib.tankrole')
@@ -196,7 +196,7 @@ function M.draw()
             ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
             ImGui.PushStyleColor(ImGuiCol.Text, campSet and RED or GREEN)
             if ImGui.SmallButton(campIcon .. '##camp_toggle') then
-                commands.MakeCamp(campSet and 'off' or 'on')
+                botmove.MakeCamp(campSet and 'off' or 'on')
             end
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip(campSet and 'Clear camp' or 'Set camp here')

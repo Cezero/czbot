@@ -384,13 +384,18 @@ function botmove.SetCampHere()
     setCampHere()
 end
 
+--- Set or clear camp. mode: 'on' | 'off' | 'return' or nil (toggle).
 function botmove.MakeCamp(...)
     local args = { ... }
-    if args[1] == 'on' then
+    local mode = args[1]
+    if not mode then
+        mode = state.getRunconfig().campstatus and 'off' or 'on'
+    end
+    if mode == 'on' then
         return makeCampOn()
-    elseif args[1] == 'off' then
+    elseif mode == 'off' then
         makeCampOff()
-    elseif args[1] == 'return' then
+    elseif mode == 'return' then
         print('return called') -- not debug, but needs reformatting / context to be meaningful
         makeCampReturn()
     end
