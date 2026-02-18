@@ -13,11 +13,11 @@ local botevents = {}
 
 local SIT_AFTER_HIT_MS = 3000
 
--- Internal: reset zone-specific variables. Used by OnZoneChange only. Used by OnZoneChange only.
+-- Internal: reset zone-specific variables. Used by OnZoneChange only.
 local function DelayOnZone()
-    if state.getRunState() == 'dead' then
-        state.clearRunState()
-    end
+    state.clearRunState()
+    state.getRunconfig().CurSpell = {}
+    state.getRunconfig().statusMessage = ''
     local zonename = mq.TLO.Zone.ShortName()
     if zonename then state.getRunconfig().zonename = zonename end
     if state.getRunconfig().campstatus == true then

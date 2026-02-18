@@ -6,6 +6,7 @@
 --   - Any logic that must fire regardless of runState (pulling, casting, etc.)
 -- Normal hooks: Skipped when MasterPause. When state is busy and payload has priority,
 --   only hooks with hook.priority <= payload.priority run (higher-priority hooks and the busy-holding hook).
+local mq = require('mq')
 local _hooks = {}
 local _hookFns = {} -- name -> function (implementations registered by modules)
 local _sortedNormal = nil
@@ -79,8 +80,9 @@ function hookregistry.runNormalHooks()
     if _sortedNormal == nil then _rebuildSorted() end
     local list = _sortedNormal or {}
     local state = require('lib.state')
-    local runState = state.getRunState()
-    if runState == 'dead' then
+    -- Gate on actual game state so only runWhenDead hooks run when dead/hover (avoids running combat hooks the tick we die).
+    local charDeadOrHover = (mq.TLO.Me.State() == 'DEAD') or (mq.TLO.Me.State() == 'HOVER' and mq.TLO.Me.Hovering())
+    if charDeadOrHover or state.getRunState() == 'dead' then
         for _, h in ipairs(list) do
             if h.runWhenDead then
                 h.fn(h.name)

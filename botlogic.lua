@@ -88,6 +88,9 @@ local function CharState(...)
     end
     if botconfig.config.settings.domount and botconfig.config.settings.mountcast then spellutils.MountCheck() end
     if mq.TLO.Me.State() == 'DEAD' or (mq.TLO.Me.State() == 'HOVER' and mq.TLO.Me.Hovering()) then
+        state.clearRunState()
+        state.getRunconfig().CurSpell = {}
+        state.getRunconfig().statusMessage = ''
         state.setRunState('dead', nil)
         if not state.getRunconfig().HoverEchoTimer or state.getRunconfig().HoverEchoTimer == 0 then
             state.getRunconfig().HoverEchoTimer =

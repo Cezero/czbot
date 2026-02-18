@@ -12,6 +12,8 @@ local utils = require('lib.utils')
 local spellutils = {}
 local _deps = {}
 
+local CASTING_STUCK_MS = 20000
+
 function spellutils.GetDebuffDontStackAllowlist()
     return botconfig.DEBUFF_DONTSTACK_ALLOWED
 end
@@ -507,6 +509,23 @@ function spellutils.handleSpellCheckReentry(sub, options)
     local skipInterruptForBRD = options.skipInterruptForBRD ~= false
     local rc = state.getRunconfig()
 
+    -- Stuck casting recovery: clear if we've been in casting state past deadline.
+    if state.getRunState() == 'casting' and state.runStateDeadlinePassed() then
+        spellutils.clearCastingStateOrResume()
+        return false
+    end
+
+    -- Heal: clear casting state when target is above interrupt threshold (e.g. 100%), even if Cast.Status() has 'M' (HoT) or completion wasn't detected.
+    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub == 'heal' and rc.CurSpell.target and mq.TLO.Target.ID() == rc.CurSpell.target then
+        local entry = botconfig.getSpellEntry('heal', rc.CurSpell.spell)
+        if entry then
+            spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target, rc.CurSpell.target, entry)
+            if not rc.CurSpell.phase then
+                return false
+            end
+        end
+    end
+
     if rc.CurSpell and rc.CurSpell.phase == 'cast_complete_pending_resist' then
         spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
         if options.afterCast then
@@ -518,6 +537,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     -- MQ2Cast completion: poll Cast.Status and Cast.Result; do not use CastTimeLeft.
     if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.viaMQ2Cast then
+        if rc.CurSpell.target and mq.TLO.Target.ID() ~= rc.CurSpell.target then
+            spellutils.clearCastingStateOrResume()
+            return false
+        end
         if (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') then
             spellutils.InterruptCheck()
         end
@@ -543,6 +566,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' and not rc.CurSpell.viaMQ2Cast then
+        if rc.CurSpell.target and mq.TLO.Target.ID() ~= rc.CurSpell.target then
+            spellutils.clearCastingStateOrResume()
+            return false
+        end
         if mq.TLO.Me.CastTimeLeft() > 0 and (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') then
             spellutils.InterruptCheck()
         end
@@ -869,7 +896,6 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
 end
 
 function spellutils.InterruptCheck()
-    if string.find(mq.TLO.Cast.Status() or '', 'M') then return false end
     local rc = state.getRunconfig()
     if not rc.CurSpell.sub then return false end
     local sub = rc.CurSpell.sub
@@ -889,6 +915,12 @@ function spellutils.InterruptCheck()
     if not target or not spell or not criteria or not sub then return false end
     if not mq.TLO.Target.ID() or mq.TLO.Target.ID() == 0 then return false end
     local targetSpawn = mq.TLO.Target
+
+    -- Heal threshold must run even when Cast.Status() contains 'M' (e.g. HoT channeling), so we clear when target is above band.
+    if sub == 'heal' then
+        spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
+    end
+    if string.find(mq.TLO.Cast.Status() or '', 'M') then return false end
 
     spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
     if criteria ~= 'corpse' and targetSpawn.Type() == 'Corpse' then
@@ -1055,7 +1087,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
-        state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        state.setRunState('casting', { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
     end
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
@@ -1074,12 +1106,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.spellid = castSpellId
         mq.cmd(cmd)
         rc.CurSpell.phase = 'casting'
-        state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        state.setRunState('casting', { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
     end
     spellutils.ExecuteNativeCast(gem, spell, sub, index)
     rc.CurSpell.phase = 'casting'
-    state.setRunState('casting', { priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+    state.setRunState('casting', { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
     return true
 end
 

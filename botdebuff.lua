@@ -443,7 +443,7 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry, singingStarted = false }
-    state.setRunState('casting', { priority = bothooks.getPriority('doDebuff') })
+    state.setRunState('casting', { deadline = mq.gettime() + 20000, priority = bothooks.getPriority('doDebuff') })
     return true
 end
 
