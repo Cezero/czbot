@@ -150,7 +150,16 @@ function M.getDefaultSpellEntry(section)
                 local copy = {}
                 for i, band in ipairs(v) do
                     copy[i] = {}
-                    for bk, bv in pairs(band) do copy[i][bk] = bv end
+                    for bk, bv in pairs(band) do
+                        if type(bv) == "table" and bv[1] ~= nil then
+                            -- array of primitives (targetphase, validtargets) - copy by value so each spell entry has its own
+                            local arr = {}
+                            for j, x in ipairs(bv) do arr[j] = x end
+                            copy[i][bk] = arr
+                        else
+                            copy[i][bk] = bv
+                        end
+                    end
                 end
                 t[k] = copy
             else
