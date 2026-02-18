@@ -149,8 +149,6 @@ local function filterSpawnForPull(spawn, rc)
     if not spawnInArea(spawn, cx, cy, cz, radiusSq, zrange) then return false end
     if not spawnInPullArc(spawn, rc) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
-    local tfNum = myconfig.settings.TargetFilter or 0
-    if tfNum == 0 and not spawn.Aggressive() then return false end
     if not mq.TLO.Navigation.PathExists('id ' .. spawn.ID())() then return false end
     if rc.MobList then
         for _, v in pairs(rc.MobList) do
