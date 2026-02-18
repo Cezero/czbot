@@ -212,6 +212,8 @@ local function validateAcmTarget(rc)
     if rc.engageTargetId then
         if not mq.TLO.Spawn(rc.engageTargetId).ID() or mq.TLO.Spawn(rc.engageTargetId).Type() == 'Corpse' then
             rc.engageTargetId = nil
+            rc.statusMessage = ''
+            if state.getRunState() == 'melee' then state.clearRunState() end
         end
     end
     if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return false end

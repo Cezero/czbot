@@ -191,6 +191,7 @@ end
 local function disengageCombat()
     state.getRunconfig().statusMessage = ''
     combat.ResetCombatState()
+    if state.getRunState() == 'melee' then state.clearRunState() end
 end
 
 -- Resolve assistName (MA) and mainTankName (MT). MT picks from MobList (puller priority); MA bot picks named then MT target; offtank/DPS follow MA.
@@ -264,10 +265,17 @@ function botmelee.getHookFn(name)
                 return
             end
             if state.getRunState() == 'pulling' then return end
-            if not myconfig.settings.domelee then return end
+            if not myconfig.settings.domelee then
+                if state.getRunState() == 'melee' then state.clearRunState() end
+                state.getRunconfig().engageTargetId = nil
+                state.getRunconfig().statusMessage = ''
+                return
+            end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if not state.getRunconfig().MobList[1] then
                 if state.getRunState() == 'melee' then state.clearRunState() end
+                state.getRunconfig().engageTargetId = nil
+                state.getRunconfig().statusMessage = ''
                 return
             end
             local payload = (state.getRunState() == 'melee') and state.getRunStatePayload() or nil
