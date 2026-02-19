@@ -58,6 +58,14 @@ local function CharState(...)
                 mq.cmd('/stand') end
         end
     end
+    -- Stand when seated (not on mount), not casting, and full mana/endurance above sit thresholds
+    if botconfig.config.settings.dosit and mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and state.getRunState() ~= 'casting' and mq.TLO.Me.CastTimeLeft() == 0 then
+        local sitmana = tonumber(botconfig.config.settings.sitmana) or 90
+        local sitendur = tonumber(botconfig.config.settings.sitendur) or 90
+        local fullMana = mq.TLO.Me.MaxMana() == 0 or mq.TLO.Me.PctMana() > sitmana
+        local fullEndur = mq.TLO.Me.PctEndurance() > sitendur
+        if fullMana and fullEndur then mq.cmd('/stand') end
+    end
     if botconfig.config.settings.dosit and state.getRunState() ~= 'casting' and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
         local rc = state.getRunconfig()
         if state.getMobCount() == 0 then rc.sitTimer = nil end
