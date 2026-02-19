@@ -475,6 +475,16 @@ end
 
 -- One tick of aggroing state (with sub-phases aggro_wait_target, aggro_wait_cast, aggro_wait_stop_moving).
 local function tickAggroing(rc, spawn)
+    -- Spawn gone or dead: clear immediately so we do not stay stuck in "Aggroing ...".
+    if not spawn or not spawn.ID() or spawn.Type() == 'Corpse' then
+        clearPullState('aggroing: spawn gone or corpse')
+        return
+    end
+    -- Mob engaged by someone else (e.g. MA): clear so puller is effectively assisting, not "aggroing".
+    if botpull.EngageCheck() then
+        clearPullState('aggroing: EngageCheck (mob engaged by other)')
+        return
+    end
     if rc.pullPhase == 'aggro_wait_target' then
         if mq.gettime() >= (rc.pullDeadline or 0) then
             clearPullState('aggroing: aggro_wait_target timeout')
@@ -719,19 +729,19 @@ function botpull.getHookFn(name)
                 botpull.PullTick()
                 return
             end
-            if state.getRunconfig().MobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0 then
+            if state.getMobCount() <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0 then
                 if mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs() then
                     local tempcnt = myconfig.pull.chainpullcnt == 0 and (myconfig.pull.chainpullcnt + 1) or
                         myconfig.pull.chainpullcnt
-                    if (tonumber(mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs()) <= myconfig.pull.chainpullhp) and state.getRunconfig().MobCount <= tempcnt then
+                    if (tonumber(mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs()) <= myconfig.pull.chainpullhp) and state.getMobCount() <= tempcnt then
                         botpull.StartPull()
                     end
                 end
             end
-            if (state.getRunconfig().MobCount < myconfig.pull.chainpullcnt) then
+            if (state.getMobCount() < myconfig.pull.chainpullcnt) then
                 botpull.StartPull()
             end
-            if (state.getRunconfig().MobCount == 0) and not state.getRunconfig().engageTargetId then
+            if (state.getMobCount() == 0) and not state.getRunconfig().engageTargetId then
                 botpull.StartPull()
             end
         end

@@ -217,7 +217,7 @@ local function DebuffEval(index)
     local entry = botconfig.getSpellEntry('debuff', index)
     if not entry then return nil, nil end
     local db = DebuffBands[index]
-    if not campCountOk(state.getRunconfig().MobCount, db and db.mintar, db and db.maxtar) then return nil, nil end
+    if not campCountOk(state.getMobCount(), db and db.mintar, db and db.maxtar) then return nil, nil end
     local id, hit = charm.GetRecastRequestForIndex(index)
     if id then
         charm.ClearRecastRequest()
@@ -292,7 +292,7 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry then return nil, nil end
     local db = DebuffBands[spellIndex]
-    if not campCountOk(state.getRunconfig().MobCount, db and db.mintar, db and db.maxtar) then return nil, nil end
+    if not campCountOk(state.getMobCount(), db and db.mintar, db and db.maxtar) then return nil, nil end
     local rc = state.getRunconfig()
     if spellutils.IsNukeSpell(entry) then
         local flavor = spellutils.GetNukeFlavor(entry)
@@ -456,7 +456,7 @@ end
 
 local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart)
     if spellstates.GetDebuffDelay(spellIndex) and spellstates.GetDebuffDelay(spellIndex) > mq.gettime() then return false end
-    if mobcountstart < state.getRunconfig().MobCount then return false end
+    if mobcountstart < state.getMobCount() then return false end
     local prevID = EvalID
     local newEvalID, newTargethit = DebuffEval(spellIndex)
     local adEntry = botconfig.getSpellEntry('debuff', spellIndex)
@@ -560,8 +560,11 @@ function botdebuff.DebuffCheck(runPriority)
     ---@type RunConfig
     local rc = state.getRunconfig()
     if DebuffCheckHandleBardNotanktarWait(rc) then return false end
-    if not rc.MobCount or rc.MobCount <= 0 then return false end
-    local mobcountstart = rc.MobCount
+    if spellutils.handleSpellCheckReentry('debuff', { runPriority = runPriority, skipInterruptForBRD = true }) then
+        return false
+    end
+    if state.getMobCount() <= 0 then return false end
+    local mobcountstart = state.getMobCount()
     local botmelee = require('botmelee')
     if rc.MobList and rc.MobList[1] then
         local tank, _, tanktar = spellutils.GetTankInfo(true)
@@ -606,8 +609,15 @@ function botdebuff.getHookFn(name)
         return function(hookName)
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local myconfig = botconfig.config
-            if not myconfig.settings.dodebuff or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) or not state.getRunconfig().MobList[1] then return end
-            if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Debuff Check' end
+            if not myconfig.settings.dodebuff or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) then return end
+            local rc = state.getRunconfig()
+            if not rc.MobList[1] then
+                local p = state.getRunStatePayload()
+                if not (state.getRunState() == 'casting' and p and p.spellcheckResume and p.spellcheckResume.hook == 'doDebuff') then
+                    return
+                end
+            end
+            if state.getRunState() == 'idle' then rc.statusMessage = 'Debuff Check' end
             botdebuff.DebuffCheck(bothooks.getPriority(hookName))
         end
     end

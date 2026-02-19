@@ -1099,7 +1099,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     if (sub == 'debuff' and targethit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
     if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
-        if (botconfig.config.settings.domelee and state.getRunconfig().MobCount > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
+        if (botconfig.config.settings.domelee and state.getMobCount() > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
             if _deps.AdvCombat then _deps.AdvCombat() end
         end
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end

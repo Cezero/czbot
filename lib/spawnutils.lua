@@ -223,7 +223,7 @@ end
 function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
     if not validateAcmTarget(rc) then return end
-    local list, count = spawnutils.buildCampMobList(rc)
+    local list = spawnutils.buildCampMobList(rc)
     rc.MobList = list
     local killtarpresent = false
     local KillTarget = rawget(_G, 'KillTarget')
@@ -231,7 +231,6 @@ function spawnutils.AddSpawnCheck()
         _G.KillTarget = nil
         KillTarget = nil
     end
-    rc.MobCount = count
     for _, v in ipairs(rc.MobList) do
         if v.ID() == KillTarget then killtarpresent = true end
     end

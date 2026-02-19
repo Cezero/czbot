@@ -6,6 +6,7 @@ local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
 local botmove = require('botmove')
 local state = require('lib.state')
+local utils = require('lib.utils')
 local spellutils = require('lib.spellutils')
 local tankrole = require('lib.tankrole')
 local inputs = require('gui.widgets.inputs')
@@ -233,7 +234,20 @@ function M.draw()
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Distance (units) from camp to count as \'at camp\' for leash and return.') end
             ImGui.TextColored(WHITE, '%s', '# Mobs: ')
             ImGui.SameLine(0,2)
-            ImGui.TextColored(LIGHT_GREY, '%s', tostring(rc.MobCount or 0))
+            ImGui.TextColored(LIGHT_GREY, '%s', tostring(state.getMobCount(rc)))
+            ImGui.SameLine()
+            local campDist = nil
+            if rc.makecamp and rc.makecamp.x and rc.makecamp.y and rc.makecamp.z then
+                campDist = utils.calcDist3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
+            end
+            local distStr = (campDist and string.format('%.1f', campDist)) or '—'
+            local distAvail = select(1, ImGui.GetContentRegionAvail())
+            local distW = select(1, ImGui.CalcTextSize(distStr))
+            if distAvail > 0 then
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + math.max(0, distAvail - distW))
+            end
+            ImGui.TextColored(LIGHT_GREY, '%s', distStr)
+            if ImGui.IsItemHovered() then ImGui.SetTooltip('Distance from camp (units)') end
             ImGui.TextColored(WHITE, '%s', 'Filter: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(120)

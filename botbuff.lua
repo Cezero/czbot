@@ -283,8 +283,7 @@ end
 
 function botbuff.BuffCheck(runPriority)
     local myconfig = botconfig.config
-    local mobList = state.getRunconfig().MobList
-    local hasMob = mobList and mobList[1]
+    local hasMob = state.getMobCount() > 0
     if mq.TLO.Me.Class.ShortName() == 'BRD' and myconfig.settings.dobuff then
         bardtwist.EnsureDefaultTwistRunning()
     end

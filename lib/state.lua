@@ -12,7 +12,6 @@
 ---@field PriorityList table
 ---@field CharmList table
 ---@field MobList table
----@field MobCount number
 ---@field engagetracker table
 ---@field campstatus boolean
 ---@field makecamp {x:number|nil, y:number|nil, z:number|nil}
@@ -110,7 +109,6 @@ function M.resetRunconfig()
         PriorityList = {},
         CharmList = {},
         MobList = {},
-        MobCount = 0,
         engagetracker = {},
         campstatus = false,
         makecamp = { x = nil, y = nil, z = nil },
@@ -231,6 +229,14 @@ function M.getRunconfig()
         M.resetRunconfig()
     end
     return M._runconfig
+end
+
+---Return number of mobs in camp (length of MobList). Single source of truth; use instead of a separate MobCount.
+---@param rc RunConfig|nil Optional; defaults to getRunconfig().
+---@return number
+function M.getMobCount(rc)
+    rc = rc or M.getRunconfig()
+    return #(rc.MobList or {})
 end
 
 return M
