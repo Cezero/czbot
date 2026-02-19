@@ -224,6 +224,13 @@ function M.draw()
             local zradiusNew, zradiusCh = inputs.boundedInt('camp_zradius', zradiusVal, 1, 10000, 5, '##camp_zradius')
             if zradiusCh then botconfig.config.settings.zradius = zradiusNew; runConfigLoaders() end
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp Z (vertical) radius for in-camp mob checks.') end
+            ImGui.TextColored(WHITE, '%s', 'RestDist: ')
+            ImGui.SameLine(0, 2)
+            ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+            local campRestDistanceVal = botconfig.config.settings.campRestDistance or 15
+            local campRestDistanceNew, campRestDistanceCh = inputs.boundedInt('camp_restdist', campRestDistanceVal, 1, 10000, 1, '##camp_restdist')
+            if campRestDistanceCh then botconfig.config.settings.campRestDistance = campRestDistanceNew; runConfigLoaders() end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip('Distance (units) from camp to count as \'at camp\' for leash and return.') end
             ImGui.TextColored(WHITE, '%s', '# Mobs: ')
             ImGui.SameLine(0,2)
             ImGui.TextColored(LIGHT_GREY, '%s', tostring(rc.MobCount or 0))

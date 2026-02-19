@@ -143,8 +143,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local function campDistanceOk(rc)
-    -- camp "close" threshold is acleash * 0.20; (acleash*0.20)^2 = acleashSq * 0.04
-    local campCloseSq = myconfig.settings.acleashSq and (myconfig.settings.acleashSq * 0.04)
+    local campCloseSq = myconfig.settings.campRestDistanceSq
     local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), rc.makecamp.x, rc.makecamp.y)
     return distSq and campCloseSq and distSq <= campCloseSq
 end

@@ -20,6 +20,8 @@
 ---@field followdistance number|nil
 ---@field followdistanceSq number|nil precomputed followdistance^2 for distance-squared comparisons
 ---@field zradius number|nil
+---@field campRestDistance number|nil distance in units to consider "at camp" for leash and return
+---@field campRestDistanceSq number|nil precomputed campRestDistance^2 for distance-squared comparisons
 ---@field spelldb string|nil
 
 ---@class ConfigPullSpell
@@ -105,7 +107,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -609,6 +611,8 @@ function M.Load(path)
     M.config.settings.followdistanceSq = (M.config.settings.followdistance or 0) *
         (M.config.settings.followdistance or 0)
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
+    if (M.config.settings.campRestDistance == nil) then M.config.settings.campRestDistance = 15 end
+    M.config.settings.campRestDistanceSq = (M.config.settings.campRestDistance or 0) * (M.config.settings.campRestDistance or 0)
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "manual" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
     if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings

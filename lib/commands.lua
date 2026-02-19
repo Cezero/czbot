@@ -330,6 +330,12 @@ local function cmd_acleash(args)
     printf('\ayCZBot:\axSetting acleash to %s', botconfig.config.settings.acleash)
 end
 
+local function cmd_camprestdistance(args)
+    botconfig.config.settings.campRestDistance = tonumber(args[2])
+    botconfig.config.settings.campRestDistanceSq = (botconfig.config.settings.campRestDistance or 0) * (botconfig.config.settings.campRestDistance or 0)
+    printf('\ayCZBot:\axSetting campRestDistance to %s', botconfig.config.settings.campRestDistance)
+end
+
 local function cmd_targetfilter(args)
     botconfig.config.settings.TargetFilter = tonumber(args[2])
     printf('\ayCZBot:\axSetting TargetFilter to %d', botconfig.config.settings.TargetFilter)
@@ -756,6 +762,7 @@ local handlers = {
     assist = cmd_assist,
     stickcmd = cmd_stickcmd,
     acleash = cmd_acleash,
+    camprestdistance = cmd_camprestdistance,
     targetfilter = cmd_targetfilter,
     offtank = cmd_offtank,
     cast = cmd_cast,
