@@ -13,6 +13,8 @@ local spellutils = {}
 local _deps = {}
 
 local CASTING_STUCK_MS = 20000
+--- When buff remaining time on target is below this (ms), do not interrupt with "buff already present" (allow refresh cast to complete). Should match botbuff's refresh window (e.g. 24s for self).
+local BUFF_REFRESH_THRESHOLD_MS = 24000
 
 function spellutils.GetDebuffDontStackAllowlist()
     return botconfig.DEBUFF_DONTSTACK_ALLOWED
@@ -890,12 +892,15 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     local stacks = mq.TLO.Spell(spellid).StacksTarget()
 
     if sub == 'buff' then
-        if buffPresent or not stacks then
-            if not stacks then
-                printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, targetname)
-            else
-                printf('\ayCZBot:\axInterrupt %s, buff already present', spellname)
-            end
+        if not stacks then
+            printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, targetname)
+            mq.cmd('/interrupt')
+            if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
+            rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
+            spellutils.clearCastingStateOrResume()
+        elseif buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS then
+            -- Buff present with enough time left: interrupt. Below threshold we allow refresh cast to complete.
+            printf('\ayCZBot:\axInterrupt %s, buff already present', spellname)
             mq.cmd('/interrupt')
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
@@ -1173,5 +1178,7 @@ function spellutils.RefreshSpells()
     refresh_section('cure')
     printf('Refreshed alias spells. Enabled:%s Disabled:%s', enabled, disabled)
 end
+
+spellutils.BUFF_REFRESH_THRESHOLD_MS = BUFF_REFRESH_THRESHOLD_MS
 
 return spellutils

@@ -72,7 +72,7 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             local stacks = mq.TLO.Spell(spell).Stacks()
             local tartype = mq.TLO.Spell(spell).TargetType()
             local freebuffslots = mq.TLO.Me.FreeBuffSlots()
-            if (not buff) or (buffdur and buffdur < 24000 and mycasttime > 0 and freebuffslots > 0) then
+            if (not buff) or (buffdur and buffdur < spellutils.BUFF_REFRESH_THRESHOLD_MS and mycasttime > 0 and freebuffslots > 0) then
                 if IconCheck(index, myid) then
                     if tartype == 'Self' and stacks then return myid, 'self' end
                     if stacks then return myid, 'self' end
