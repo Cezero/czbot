@@ -80,7 +80,7 @@ Resume states are numeric (e.g. state.STATES.resume_doHeal = 1001). They are **n
 
 ## Single exit from casting
 
-All code that leaves the "casting" busy state must call **spellutils.clearCastingStateOrResume()**. It clears CurSpell/statusMessage, then either sets `hookName_resume` (if payload has spellcheckResume) or clearRunState(). CharState also calls it when casting appears stuck (effectively idle: no mobs and not casting, or deadline passed and CastTimeLeft 0).
+All code that leaves the "casting" busy state must call **spellutils.clearCastingStateOrResume()**. It clears CurSpell/statusMessage, then either sets `hookName_resume` (if payload has spellcheckResume) or clearRunState(). CharState also calls it when casting appears stuck (effectively idle: no mobs and not casting, or deadline passed and CastTimeLeft 0). When MQ2Cast is memorizing (Cast.Status contains 'M'), casting state is **not** cleared as stuck and InterruptCheck is not run; the bot remains in casting state until memorization finishes (see [Spell casting flow](spell-casting-flow.md)).
 
 ## Interruption rules (canStartBusyState)
 

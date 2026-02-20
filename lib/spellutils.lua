@@ -579,20 +579,31 @@ function spellutils.clearCastingStateOrResume()
     end
 end
 
+--- True when MQ2Cast is memorizing (spell into gem). Cast.Status() contains 'M'; no cast bar yet (CastTimeLeft 0) to distinguish from HoT channeling.
+function spellutils.IsMemorizing()
+    local rc = state.getRunconfig()
+    if not rc.CurSpell or not rc.CurSpell.viaMQ2Cast then return false end
+    local status = mq.TLO.Cast.Status() or ''
+    if not string.find(status, 'M') then return false end
+    return (mq.TLO.Me.CastTimeLeft() or 0) == 0
+end
+
 --- Handles CurSpell re-entry (casting, precast, precast_wait_move). Returns true if handled (caller should return), false to run the phase-first loop.
 function spellutils.handleSpellCheckReentry(sub, options)
     options = options or {}
     local skipInterruptForBRD = options.skipInterruptForBRD ~= false
     local rc = state.getRunconfig()
 
-    -- Stuck casting recovery: clear if we've been in casting state past deadline.
+    -- Stuck casting recovery: clear if we've been in casting state past deadline. Do not clear while memorizing.
     if state.getRunState() == state.STATES.casting and state.runStateDeadlinePassed() then
-        spellutils.clearCastingStateOrResume()
-        return false
+        if not spellutils.IsMemorizing() then
+            spellutils.clearCastingStateOrResume()
+            return false
+        end
     end
 
-    -- Heal: clear casting state when target is above interrupt threshold (e.g. 100%), even if Cast.Status() has 'M' (HoT) or completion wasn't detected.
-    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub == 'heal' and rc.CurSpell.target and mq.TLO.Target.ID() == rc.CurSpell.target then
+    -- Heal: clear casting state when target is above interrupt threshold (e.g. 100%), even if Cast.Status() has 'M' (HoT) or completion wasn't detected. Skip when memorizing.
+    if not spellutils.IsMemorizing() and rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub == 'heal' and rc.CurSpell.target and mq.TLO.Target.ID() == rc.CurSpell.target then
         local entry = botconfig.getSpellEntry('heal', rc.CurSpell.spell)
         if entry then
             spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target, rc.CurSpell.target, entry)
@@ -617,7 +628,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
             spellutils.clearCastingStateOrResume()
             return false
         end
-        if (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') then
+        if (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') and not spellutils.IsMemorizing() then
             spellutils.InterruptCheck()
         end
         local status = mq.TLO.Cast.Status() or ''
@@ -784,7 +795,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                 fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn)
                             if spellIndex and EvalID and targethit then
-                                if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 then
+                                if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 and not spellutils.IsMemorizing() then
                                     mq.cmd('/stopcast')
                                     spellutils.clearCastingStateOrResume()
                                 end

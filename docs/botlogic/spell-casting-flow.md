@@ -60,7 +60,7 @@ flowchart TB
 - **SpellCheck:** Reagents, mana/endurance, gem ready, etc. For gem spells, verifies the spell is in the character's book (`mq.TLO.Me.Book(spell)`); if not, the entry is disabled and the cast is aborted. There is no dynamic memorization or gemInUse in the current implementation. When using MQ2Cast, the bot relies on MQ2Cast to memorize the spell into the gem if needed as part of the `/casting` command; the script does not issue separate memorization commands.
 - **precast_wait_move:** If we are moving (or nav/stick active) and the spell has cast time, we set a 3s deadline and return; next tick we stop moving then re-call CastSpell.
 - **precast:** If target is not set (and not using MQ2Cast), we /tar and set a 1s deadline; next tick we re-call CastSpell.
-- **MQ2Cast:** When the plugin is loaded and gem is spell/item/alt, we build `/casting "Spell" gem -targetid|id` (and `-maxtries|2` for debuff), set `CurSpell.viaMQ2Cast` and `CurSpell.spellid`, then set phase and run state. MQ2Cast memorizes the spell into the gem if necessary as part of `/casting`, so the script does not manage gem slots. Completion is detected in handleSpellCheckReentry via `Cast.Status` / `Cast.Result` / `Cast.Stored`.
+- **MQ2Cast:** When the plugin is loaded and gem is spell/item/alt, we build `/casting "Spell" gem -targetid|id` (and `-maxtries|2` for debuff), set `CurSpell.viaMQ2Cast` and `CurSpell.spellid`, then set phase and run state. MQ2Cast memorizes the spell into the gem if necessary as part of `/casting`, so the script does not manage gem slots. Completion is detected in handleSpellCheckReentry via `Cast.Status` / `Cast.Result` / `Cast.Stored`. **Memorization** (Cast.Status contains 'M') is treated as part of the casting busy state: the bot does not clear casting state as stuck, does not run InterruptCheck, and does not stand for sit/stand logic until memorization finishes, so memorization is not interrupted.
 - After the actual cast is fired, `rc.CurSpell.phase = 'casting'` and `state.setRunState('casting', { priority = runPriority, spellcheckResume })`.
 
 ---
@@ -115,7 +115,7 @@ When a cast ends (complete or interrupted):
 
 ## InterruptCheck
 
-Runs when `CurSpell.phase == 'casting'` for **both** MQ2Cast and legacy paths (for legacy, the "wait vs complete" decision uses CastTimeLeft; InterruptCheck is still invoked each tick while casting). For MQ2Cast, completion is determined by Cast.Status/Result only—CastTimeLeft is not used for completion, but InterruptCheck still runs. It can interrupt the cast and call clearCastingStateOrResume in cases such as:
+Runs when `CurSpell.phase == 'casting'` for **both** MQ2Cast and legacy paths (for legacy, the "wait vs complete" decision uses CastTimeLeft; InterruptCheck is still invoked each tick while casting). For MQ2Cast, completion is determined by Cast.Status/Result only—CastTimeLeft is not used for completion. When MQ2Cast is **memorizing** (Cast.Status contains 'M' and no cast bar), InterruptCheck is not run so memorization is never interrupted. Otherwise InterruptCheck runs and can interrupt the cast and call clearCastingStateOrResume in cases such as:
 
 - Target lost or target is corpse (and criteria is not corpse).
 - Heal: target HP above interrupt threshold for that band.

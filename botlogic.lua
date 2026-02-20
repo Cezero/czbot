@@ -43,13 +43,15 @@ local function charState_Always()
             state.clearRunState()
         end
     end
-    -- Clear stuck casting: effectively idle or deadline passed with no active cast
+    -- Clear stuck casting: effectively idle or deadline passed with no active cast. Do not clear while memorizing.
     if state.getRunState() == state.STATES.casting then
-        local castTimeLeft = mq.TLO.Me.CastTimeLeft() or 0
-        local effectivelyIdle = state.getMobCount() == 0 and not mq.TLO.Me.Casting() and castTimeLeft == 0
-        local deadlineStuck = state.runStateDeadlinePassed() and castTimeLeft == 0
-        if effectivelyIdle or deadlineStuck then
-            spellutils.clearCastingStateOrResume()
+        if not spellutils.IsMemorizing() then
+            local castTimeLeft = mq.TLO.Me.CastTimeLeft() or 0
+            local effectivelyIdle = state.getMobCount() == 0 and not mq.TLO.Me.Casting() and castTimeLeft == 0
+            local deadlineStuck = state.runStateDeadlinePassed() and castTimeLeft == 0
+            if effectivelyIdle or deadlineStuck then
+                spellutils.clearCastingStateOrResume()
+            end
         end
     end
 
@@ -76,8 +78,8 @@ local function charState_Always()
             end
         end
     end
-    -- if sitting and must stand or not want to sit, stand
-    if mq.TLO.Me.Sitting() and (mustStand or not wantToSit) then
+    -- if sitting and must stand or (not want to sit and not casting), stand. Do not stand for mana>sitmana while casting/memorizing.
+    if mq.TLO.Me.Sitting() and (mustStand or (not wantToSit and state.getRunState() ~= state.STATES.casting)) then
         mq.cmd('/stand')
     end
     -- if not sitting and want to sit, sit
