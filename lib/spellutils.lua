@@ -532,9 +532,10 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
         if spellutils.IsNukeSpell(entry) then
             rc.lastNukeIndex = index
         end
-        if spellutils.GetSpellDurationSec(entry) > 0 then
+        local durationSec = spellutils.GetSpellDurationSec(entry)
+        if durationSec > 0 then
             if mq.TLO.Target.Buff(spell).ID() or mq.TLO.Me.Class.ShortName() == 'BRD' and not rc.MissedNote then
-                local myduration = mq.TLO.Spell(spell).MyDuration.TotalSeconds() * 1000 + mq.gettime()
+                local myduration = durationSec * 1000 + mq.gettime()
                 if not rc.CurSpell.resisted then
                     spellstates.DebuffListUpdate(EvalID, spellid, myduration)
                     spellstates.ResetRecastCounter(EvalID, index)

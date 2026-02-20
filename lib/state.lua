@@ -60,7 +60,6 @@
 ---@field statusMessage string User-facing activity line for GUI
 ---@field pullHealerManaWait { name: string, pct: number }|nil when set, puller is waiting on this healer's mana before next pull; status tab shows it
 ---@field bardNotanktarWait table|nil BRD notanktar twist-once: { spellIndex, EvalID, entry } while waiting for cast to finish
----@field notanktarDebuffTimers table|nil BRD: spawn ID -> mq.gettime() when to re-apply notanktar debuff (e.g. mez)
 ---@field OutOfSpace boolean|nil true when inventory was full (cursor item); cleared when space available again
 --- CHChain state (set by commands.cmd_chchain / chchainSetupContinuation; read by lib.chchain).
 ---@field doChchain boolean
@@ -263,7 +262,6 @@ function M.resetRunconfig()
         statusMessage = '',
         pullHealerManaWait = nil,
         bardNotanktarWait = nil,
-        notanktarDebuffTimers = nil,
         OutOfSpace = false,
         doChchain = false,
         chchainCurtank = 1,

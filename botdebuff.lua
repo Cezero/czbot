@@ -325,26 +325,6 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         local gem = entry.gem
         local db = DebuffBands[spellIndex]
         if not db or not db.notanktar then return nil, nil end
-        -- Re-apply when bard notanktar timer expired (e.g. mez before duration ends).
-        local timers = context.notanktarDebuffTimers
-        if timers and timers[targetId] and mq.gettime() >= timers[targetId] then
-            for _, v in ipairs(ctx.mobList) do
-                local vid = v.ID and v.ID() or v
-                if vid == targetId then
-                    if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
-                        local myrangeSq = ctx.myrangeSq
-                        if entry.gem == 'ability' then
-                            local mr = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange; local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
-                        end
-                        local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
-                        if not (myrangeSq and distSq and distSq > myrangeSq) then
-                            return targetId, 'notanktar'
-                        end
-                    end
-                    break
-                end
-            end
-        end
         for _, v in ipairs(ctx.mobList) do
             local vid = v.ID and v.ID() or v
             if vid == targetId then
@@ -415,20 +395,11 @@ local function DebuffCheckHandleBardNotanktarWait(rc)
     rc.bardNotanktarWait = nil
     state.clearRunState()
     local duration_sec = spellutils.GetSpellDurationSec(w.entry)
-    local bardCfg = botconfig.config.bard
-    local mezSec = (bardCfg and type(bardCfg.mez_remez_sec) == 'number' and bardCfg.mez_remez_sec) or 6
-    -- Always set re-apply timer when we leave the wait so re-mez runs even if song start was not detected.
-    if not rc.notanktarDebuffTimers then rc.notanktarDebuffTimers = {} end
     if duration_sec > 0 then
-        rc.notanktarDebuffTimers[w.EvalID] = mq.gettime() + (duration_sec - mezSec) * 1000
-    else
-        -- No duration in spell data: re-apply on a fixed interval (12s) so adds stay mezzed.
-        rc.notanktarDebuffTimers[w.EvalID] = mq.gettime() + 12 * 1000
-    end
-    -- Only mark target as mezzed if we saw the song start; otherwise we might not have sung.
-    if w.singingStarted and duration_sec > 0 then
         local duration_end = mq.gettime() + duration_sec * 1000
         spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, duration_end)
+    elseif duration_sec == 0 then
+        spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, mq.gettime() + 12 * 1000)
     end
     local _, _, tanktar = spellutils.GetTankInfo(true)
     if tanktar and tanktar > 0 then mq.cmdf('/tar id %s', tanktar) end
@@ -559,7 +530,7 @@ local function debuffGetSpellIndices(phase, count, ctx)
     return nonNuke
 end
 
---- Single place for debuff hook context: tanktar, charmRecasts, debuffCount, mobList, notanktarDebuffTimers, mobcountstart. Depends on engageTargetId/MobList (doDebuff runs after AddSpawnCheck and doMelee).
+--- Single place for debuff hook context: tanktar, charmRecasts, debuffCount, mobList, mobcountstart. Depends on engageTargetId/MobList (doDebuff runs after AddSpawnCheck and doMelee).
 local function debuffBuildContext(rc)
     rc = rc or state.getRunconfig()
     local count = botconfig.getSpellCount('debuff')
@@ -574,7 +545,6 @@ local function debuffBuildContext(rc)
         charmRecasts = charmRecasts,
         debuffCount = count,
         mobList = rc.MobList or {},
-        notanktarDebuffTimers = rc.notanktarDebuffTimers,
         mobcountstart = state.getMobCount(),
     }
 end
