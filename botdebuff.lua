@@ -443,7 +443,9 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry, singingStarted = false }
-    state.setRunState('casting', { deadline = mq.gettime() + 20000, priority = bothooks.getPriority('doDebuff') })
+    if state.canStartBusyState(state.STATES.casting) then
+        state.setRunState(state.STATES.casting, { deadline = mq.gettime() + 20000, priority = bothooks.getPriority('doDebuff') })
+    end
     return true
 end
 
@@ -613,11 +615,11 @@ function botdebuff.getHookFn(name)
             local rc = state.getRunconfig()
             if not rc.MobList[1] then
                 local p = state.getRunStatePayload()
-                if not (state.getRunState() == 'casting' and p and p.spellcheckResume and p.spellcheckResume.hook == 'doDebuff') then
+                if not (state.getRunState() == state.STATES.casting and p and p.spellcheckResume and p.spellcheckResume.hook == 'doDebuff') then
                     return
                 end
             end
-            if state.getRunState() == 'idle' then rc.statusMessage = 'Debuff Check' end
+            if state.getRunState() == state.STATES.idle then rc.statusMessage = 'Debuff Check' end
             botdebuff.DebuffCheck(bothooks.getPriority(hookName))
         end
     end

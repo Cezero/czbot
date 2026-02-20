@@ -169,7 +169,7 @@ end
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
     if rc.mobprobtimer <= mq.gettime() then return true end
-    if rc.dopull and state.getRunState() == 'pulling' and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
+    if rc.dopull and state.getRunState() == state.STATES.pulling and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
         rc.mobprobtimer = mq.gettime() + 3000
         return true
     end

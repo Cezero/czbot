@@ -502,15 +502,14 @@ end
 -- Phase-first spell-check utilities (small, reusable)
 -- ---------------------------------------------------------------------------
 
---- Returns resume cursor if run state is hookName .. '_resume', else nil.
+--- Returns resume cursor if run state is this hook's resume state (numeric), else nil.
 function spellutils.getResumeCursor(hookName)
-    local runState = state.getRunState()
-    local expected = (hookName or '') .. '_resume'
-    if runState ~= expected then return nil end
+    if state.getRunState() ~= state.RESUME_BY_HOOK[hookName] then return nil end
     return state.getRunStatePayload()
 end
 
---- On leaving a cast: if payload has spellcheckResume, set that hook's _resume state; else clearRunState().
+--- Single exit from casting: clears CurSpell/statusMessage, then sets hookName_resume (if spellcheckResume) or clearRunState().
+--- All code that leaves the "casting" busy state must call this so CurSpell and runState stay in sync.
 function spellutils.clearCastingStateOrResume()
     local rc = state.getRunconfig()
     local hadSub = rc.CurSpell and rc.CurSpell.sub
@@ -521,7 +520,12 @@ function spellutils.clearCastingStateOrResume()
     rc.statusMessage = ''
     local p = state.getRunStatePayload()
     if p and p.spellcheckResume and p.spellcheckResume.hook then
-        state.setRunState(p.spellcheckResume.hook .. '_resume', p.spellcheckResume)
+        local resumeNum = state.RESUME_BY_HOOK[p.spellcheckResume.hook]
+        if resumeNum then
+            state.setRunState(resumeNum, p.spellcheckResume)
+        else
+            state.clearRunState()
+        end
     else
         state.clearRunState()
     end
@@ -534,7 +538,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
     local rc = state.getRunconfig()
 
     -- Stuck casting recovery: clear if we've been in casting state past deadline.
-    if state.getRunState() == 'casting' and state.runStateDeadlinePassed() then
+    if state.getRunState() == state.STATES.casting and state.runStateDeadlinePassed() then
         spellutils.clearCastingStateOrResume()
         return false
     end
@@ -757,7 +761,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
         end
     end
     -- Clear _resume state when loop completes without starting a new cast (so we don't stay stuck in doHeal_resume etc.)
-    if state.getRunState() == hookName .. '_resume' then
+    if state.getRunState() == state.RESUME_BY_HOOK[hookName] then
         state.clearRunState()
     end
     return false
@@ -1069,6 +1073,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     if not entry then return false end
     local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
     if not resuming then
+        if not state.canStartBusyState(state.STATES.casting) then return false end
         if not spellutils.SpellCheck(sub, index) then return false end
         if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then return false end
         if not spellutils.CheckGemReadiness(sub, index, entry) then return false end
@@ -1097,7 +1102,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmd('/multiline ; /nav stop log=off ; /stick off')
         rc.CurSpell.phase = 'precast_wait_move'
         rc.CurSpell.deadline = mq.gettime() + 3000
-        state.setRunState('casting',
+        state.setRunState(state.STATES.casting,
             { deadline = mq.gettime() + 3000, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
     end
@@ -1114,7 +1119,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
-        state.setRunState('casting', { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        state.setRunState(state.STATES.casting, { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
     end
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
@@ -1133,12 +1138,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.spellid = castSpellId
         mq.cmd(cmd)
         rc.CurSpell.phase = 'casting'
-        state.setRunState('casting', { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        state.setRunState(state.STATES.casting, { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
     end
     spellutils.ExecuteNativeCast(gem, spell, sub, index)
     rc.CurSpell.phase = 'casting'
-    state.setRunState('casting', { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+    state.setRunState(state.STATES.casting, { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
     return true
 end
 

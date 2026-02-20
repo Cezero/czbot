@@ -39,7 +39,7 @@
 ---@field YellTimer number
 ---@field MissedNote boolean
 ---@field terminate boolean
----@field runState string
+---@field runState number
 ---@field runStateDeadline number|nil
 ---@field runStatePhase string|nil
 ---@field runStatePayload table|nil
@@ -78,20 +78,123 @@
 
 local M = {}
 
--- Run states that mean "busy". When busy, the main loop runs only hooks with
--- hook.priority <= payload.priority (see hookregistry.runNormalHooks).
--- Payload should include priority = mainloop hook priority of the "owner" of this activity.
-local BUSY_STATES = {
-    pulling = true,
-    raid_mechanic = true,
-    casting = true,
-    dragging = true,
-    camp_return = true,
-    engage_return_follow = true,
-    unstuck = true,
-    chchain = true,
+-- runState is always a number. No string state support; no string comparisons; no regex.
+-- Fixed states 1..11; resume states 1000+ (state >= 1000 means resume).
+-- See RESUME_BY_HOOK for setting resume from spellutils (hook name -> state number).
+
+M.STATES = {
+    idle = 1,
+    dead = 2,
+    pulling = 3,
+    raid_mechanic = 4,
+    casting = 5,
+    melee = 6,
+    camp_return = 7,
+    engage_return_follow = 8,
+    unstuck = 9,
+    dragging = 10,
+    chchain = 11,
+    sumcorpse_pending = 12,
+    resume_doHeal = 1001,
+    resume_doDebuff = 1002,
+    resume_doBuff = 1003,
+    resume_doCure = 1004,
+    resume_priorityCure = 1005,
 }
+
+M.RESUME_BY_HOOK = {
+    doHeal = 1001,
+    doDebuff = 1002,
+    doBuff = 1003,
+    doCure = 1004,
+    priorityCure = 1005,
+}
+
+local BUSY_STATE_NUMS = {
+    [M.STATES.pulling] = true,
+    [M.STATES.raid_mechanic] = true,
+    [M.STATES.casting] = true,
+    [M.STATES.dragging] = true,
+    [M.STATES.camp_return] = true,
+    [M.STATES.engage_return_follow] = true,
+    [M.STATES.unstuck] = true,
+    [M.STATES.chchain] = true,
+}
+
+local ALLOWED_STATE_NUMS = {}
+for _, v in pairs(M.STATES) do
+    ALLOWED_STATE_NUMS[v] = true
+end
+
+local STATE_NUM_TO_NAME = {
+    [1] = 'idle',
+    [2] = 'dead',
+    [3] = 'pulling',
+    [4] = 'raid_mechanic',
+    [5] = 'casting',
+    [6] = 'melee',
+    [7] = 'camp_return',
+    [8] = 'engage_return_follow',
+    [9] = 'unstuck',
+    [10] = 'dragging',
+    [11] = 'chchain',
+    [12] = 'sumcorpse_pending',
+    [1001] = 'doHeal_resume',
+    [1002] = 'doDebuff_resume',
+    [1003] = 'doBuff_resume',
+    [1004] = 'doCure_resume',
+    [1005] = 'priorityCure_resume',
+}
+
 M._runconfig = nil
+
+---True if state number is a resume state (>= 1000).
+---@param num number
+---@return boolean
+function M.isResumeState(num)
+    return type(num) == 'number' and num >= 1000
+end
+
+---Whether it is safe to set runState to the given busy state. Central authority for interruption rules.
+---Uses only numeric comparison. idle/melee/resume (>= 1000) allow starting any activity; dead blocks.
+---@param stateNum number One of M.STATES (e.g. pulling, casting, camp_return).
+---@return boolean
+function M.canStartBusyState(stateNum)
+    local mq = require('mq')
+    local current = M.getRunState()
+    if type(stateNum) ~= 'number' then return false end
+
+    if current == M.STATES.idle then return true end
+    if current == M.STATES.melee then return true end
+    if current >= 1000 then return true end
+    if current == M.STATES.dead then return false end
+
+    if current == stateNum then return true end
+
+    if stateNum == M.STATES.pulling then
+        if current == M.STATES.casting then return false end
+        if mq.TLO.Me.Casting() and (mq.TLO.Me.CastTimeLeft() or 0) > 0 then return false end
+        return true
+    end
+
+    if stateNum == M.STATES.casting then
+        if current == M.STATES.casting then return true end
+        if BUSY_STATE_NUMS[current] then return false end
+        return true
+    end
+
+    if stateNum == M.STATES.camp_return or stateNum == M.STATES.engage_return_follow then
+        return true
+    end
+
+    if stateNum == M.STATES.unstuck or stateNum == M.STATES.dragging or stateNum == M.STATES.chchain or stateNum == M.STATES.raid_mechanic then
+        return false
+    end
+
+    if stateNum == M.STATES.melee then return true end
+
+    return false
+end
 
 ---Create or reset the runconfig table to default values.
 function M.resetRunconfig()
@@ -136,7 +239,7 @@ function M.resetRunconfig()
         YellTimer = 0,
         MissedNote = false,
         terminate = false,
-        runState = 'idle',
+        runState = M.STATES.idle,
         runStateDeadline = nil,
         runStatePhase = nil,
         runStatePayload = nil,
@@ -173,14 +276,17 @@ function M.resetRunconfig()
     return M._runconfig
 end
 
----Set current run state and optional payload (deadline, phase, priority, or custom table).
----When setting a busy state (any in BUSY_STATES), payload should include priority (number) =
----mainloop hook priority of the owner so the main loop can filter which hooks run.
----@param name string One of: idle, pulling, raid_mechanic, casting, dragging, camp_return, engage_return_follow, melee, unstuck, chchain
+---Set current run state and optional payload. Accepts number only; no string state support.
+---Only applies when stateNum is in ALLOWED_STATE_NUMS and (for busy/melee) canStartBusyState(stateNum) allows the transition.
+---@param stateNum number One of M.STATES (e.g. idle, pulling, casting, or resume_doHeal etc.).
 ---@param payload table|nil Optional: { deadline = number?, phase = string?, priority = number?, ... }
-function M.setRunState(name, payload)
+function M.setRunState(stateNum, payload)
+    if type(stateNum) ~= 'number' or not ALLOWED_STATE_NUMS[stateNum] then return end
+    if BUSY_STATE_NUMS[stateNum] or stateNum == M.STATES.melee then
+        if not M.canStartBusyState(stateNum) then return end
+    end
     local rc = M.getRunconfig()
-    rc.runState = name or 'idle'
+    rc.runState = stateNum
     rc.runStatePayload = payload
     if payload then
         rc.runStateDeadline = payload.deadline
@@ -193,19 +299,29 @@ end
 
 ---Clear run state back to idle.
 function M.clearRunState()
-    M.setRunState('idle', nil)
+    M.setRunState(M.STATES.idle, nil)
 end
 
----@return string Current runState (e.g. 'idle', 'pulling').
+---@return number Current runState (one of M.STATES).
 function M.getRunState()
-    return M.getRunconfig().runState or 'idle'
+    local rc = M.getRunconfig()
+    local s = rc.runState
+    if type(s) == 'number' and ALLOWED_STATE_NUMS[s] then return s end
+    return M.STATES.idle
+end
+
+---Return display name for current run state (from numeric map only; no string comparison of state).
+---@return string
+function M.getRunStateName()
+    local s = M.getRunState()
+    return STATE_NUM_TO_NAME[s] or 'idle'
 end
 
 ---True when runState is a "busy" state. Main loop uses isBusy() and payload.priority to run only hooks with hook.priority <= payload.priority.
 ---@return boolean
 function M.isBusy()
     local s = M.getRunState()
-    return s ~= 'idle' and BUSY_STATES[s] == true
+    return s ~= M.STATES.idle and BUSY_STATE_NUMS[s] == true
 end
 
 ---Get optional payload for current state (deadline, phase, or custom fields).

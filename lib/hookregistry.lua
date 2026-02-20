@@ -11,6 +11,7 @@ local _hooks = {}
 local _hookFns = {} -- name -> function (implementations registered by modules)
 local _sortedNormal = nil
 local _sortedRunWhenPaused = nil
+local _sortedRunWhenBusy = nil
 
 local function _rebuildSorted()
     local function byPriorityThenName(a, b)
@@ -19,17 +20,23 @@ local function _rebuildSorted()
     end
     local runWhenPaused = {}
     local normal = {}
+    local runWhenBusy = {}
     for _, h in ipairs(_hooks) do
         if h.runWhenPaused then
             runWhenPaused[#runWhenPaused + 1] = h
         else
             normal[#normal + 1] = h
         end
+        if h.runWhenBusy then
+            runWhenBusy[#runWhenBusy + 1] = h
+        end
     end
     table.sort(runWhenPaused, byPriorityThenName)
     table.sort(normal, byPriorityThenName)
+    table.sort(runWhenBusy, byPriorityThenName)
     _sortedRunWhenPaused = runWhenPaused
     _sortedNormal = normal
+    _sortedRunWhenBusy = runWhenBusy
 end
 
 local hookregistry = {}
@@ -51,21 +58,23 @@ function hookregistry.registerAllFromConfig()
             fn = _hookFns[entry.name]
         end
         if fn then
-            hookregistry.registerMainloopHook(entry.name, fn, entry.priority, entry.runWhenPaused, entry.runWhenDead)
+            hookregistry.registerMainloopHook(entry.name, fn, entry.priority, entry.runWhenPaused, entry.runWhenDead, entry.runWhenBusy)
         end
     end
 end
 
-function hookregistry.registerMainloopHook(name, fn, priority, runWhenPaused, runWhenDead)
+function hookregistry.registerMainloopHook(name, fn, priority, runWhenPaused, runWhenDead, runWhenBusy)
     _hooks[#_hooks + 1] = {
         name = name,
         fn = fn,
         priority = priority or 500,
         runWhenPaused = runWhenPaused == true,
         runWhenDead = runWhenDead == true,
+        runWhenBusy = runWhenBusy == true,
     }
     _sortedNormal = nil
     _sortedRunWhenPaused = nil
+    _sortedRunWhenBusy = nil
 end
 
 function hookregistry.runRunWhenPausedHooks()
@@ -82,7 +91,7 @@ function hookregistry.runNormalHooks()
     local state = require('lib.state')
     -- Gate on actual game state so only runWhenDead hooks run when dead/hover (avoids running combat hooks the tick we die).
     local charDeadOrHover = (mq.TLO.Me.State() == 'DEAD') or (mq.TLO.Me.State() == 'HOVER' and mq.TLO.Me.Hovering())
-    if charDeadOrHover or state.getRunState() == 'dead' then
+    if charDeadOrHover or state.getRunState() == state.STATES.dead then
         for _, h in ipairs(list) do
             if h.runWhenDead then
                 h.fn(h.name)
@@ -99,6 +108,14 @@ function hookregistry.runNormalHooks()
     end
     for _, h in ipairs(list) do
         if maxPriority == nil or h.priority <= maxPriority then
+            h.fn(h.name)
+        end
+    end
+    -- When busy (e.g. casting), run runWhenBusy hooks so movement (camp return, follow) still runs.
+    if state.isBusy() then
+        if _sortedRunWhenBusy == nil then _rebuildSorted() end
+        local busyList = _sortedRunWhenBusy or {}
+        for _, h in ipairs(busyList) do
             h.fn(h.name)
         end
     end

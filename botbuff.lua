@@ -318,7 +318,7 @@ function botbuff.getHookFn(name)
         return function(hookName)
             local myconfig = botconfig.config
             if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
-            if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Buff Check' end
+            if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Buff Check' end
             botbuff.BuffCheck(bothooks.getPriority(hookName))
         end
     end

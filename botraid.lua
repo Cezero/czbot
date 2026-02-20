@@ -68,9 +68,9 @@ function botraid.getHookFn(name)
         return function(hookName)
             if not myconfig.settings.doraid then return end
             if botraid.RaidCheck() then
-                state.setRunState('raid_mechanic', { priority = bothooks.getPriority('doRaid') })
+                state.setRunState(state.STATES.raid_mechanic, { priority = bothooks.getPriority('doRaid') })
             else
-                state.setRunState('idle')
+                state.setRunState(state.STATES.idle)
             end
         end
     end

@@ -68,7 +68,9 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
             return true
         end
         mq.cmd('/squelch /keypress back hold')
-        state.setRunState('unstuck', { phase = 'back_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance, priority = bothooks.getPriority('doMiscTimer') })
+        if state.canStartBusyState(state.STATES.unstuck) then
+            state.setRunState(state.STATES.unstuck, { phase = 'back_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance, priority = bothooks.getPriority('doMiscTimer') })
+        end
     elseif p.phase == 'back_wait' then
         mq.cmd('/squelch /keypress back')
         mq.cmdf('/squelch /nav id %s log=off', followid)
@@ -83,7 +85,9 @@ end
 local function tryPathExistsUnstuck(followid)
     if not mq.TLO.Navigation.PathExists('id ' .. followid)() then return false end
     mq.cmdf('/nav id %s los=on dist=15 log=off', followid)
-    state.setRunState('unstuck', { phase = 'nav_wait5', deadline = mq.gettime() + 5000, followid = followid, priority = bothooks.getPriority('doMiscTimer') })
+    if state.canStartBusyState(state.STATES.unstuck) then
+        state.setRunState(state.STATES.unstuck, { phase = 'nav_wait5', deadline = mq.gettime() + 5000, followid = followid, priority = bothooks.getPriority('doMiscTimer') })
+    end
     return true
 end
 
@@ -117,7 +121,9 @@ local function doWiggleUnstuck(followid, stuckdistance)
     if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then
         mq.cmdf('/squelch /multiline ; /face fast heading %s ; /stand ; /autosize sizeself %s ; /keypress forward hold', heading, size)
     end
-    state.setRunState('unstuck', { phase = 'wiggle_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance, priority = bothooks.getPriority('doMiscTimer') })
+    if state.canStartBusyState(state.STATES.unstuck) then
+        state.setRunState(state.STATES.unstuck, { phase = 'wiggle_wait', deadline = mq.gettime() + 2000, followid = followid, stuckdistance = stuckdistance, priority = bothooks.getPriority('doMiscTimer') })
+    end
     if idx >= 9 then rc.unstuckWiggleIndex = nil end
 end
 
@@ -128,7 +134,9 @@ end
 local function tickEngageReturnDelay400(p)
     local now = mq.gettime()
     if now < (p.deadline or 0) then return end
-    state.setRunState('engage_return_follow', { phase = 'nav_wait', deadline = now + 10000, priority = bothooks.getPriority('doMiscTimer') })
+    if state.canStartBusyState(state.STATES.engage_return_follow) then
+        state.setRunState(state.STATES.engage_return_follow, { phase = 'nav_wait', deadline = now + 10000, priority = bothooks.getPriority('doMiscTimer') })
+    end
 end
 
 local function tickEngageReturnNavWait(p)
@@ -202,7 +210,9 @@ end
 local function makeCampReturn()
     doLeashResetCombat()
     doNavToCamp()
-    state.setRunState('camp_return', { deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMiscTimer') })
+    if state.canStartBusyState(state.STATES.camp_return) then
+        state.setRunState(state.STATES.camp_return, { deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMiscTimer') })
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -212,7 +222,7 @@ end
 local DragDist = 1500
 
 local function tickSumcorpsePending()
-    if state.getRunState() ~= 'sumcorpse_pending' then return false end
+    if state.getRunState() ~= state.STATES.sumcorpse_pending then return false end
     local p = state.getRunStatePayload()
     if p and p.corpseID then
         targeting.TargetAndWait(p.corpseID, 500)
@@ -231,7 +241,9 @@ local function tickDragging(payload)
         mq.cmd('/hidec alwaysnpc')
         mq.cmd('/multiline ; /attack off ; /stick off')
         targeting.TargetAndWait(cid, 500)
-        state.setRunState('dragging', { phase = 'sneak', corpseID = cid, priority = bothooks.getPriority('doMiscTimer') })
+        if state.canStartBusyState(state.STATES.dragging) then
+            state.setRunState(state.STATES.dragging, { phase = 'sneak', corpseID = cid, priority = bothooks.getPriority('doMiscTimer') })
+        end
         return true
     end
     if payload.phase == 'sneak' then
@@ -241,7 +253,9 @@ local function tickDragging(payload)
             return true
         end
         mq.cmdf('/nav id %s', cid)
-        state.setRunState('dragging', { phase = 'navigating', corpseID = cid, priority = bothooks.getPriority('doMiscTimer') })
+        if state.canStartBusyState(state.STATES.dragging) then
+            state.setRunState(state.STATES.dragging, { phase = 'navigating', corpseID = cid, priority = bothooks.getPriority('doMiscTimer') })
+        end
         return true
     end
     if payload.phase == 'navigating' then
@@ -285,7 +299,9 @@ local function startDrag(corpseId, justDidSumcorpse)
     end
     if corpseId and mq.TLO.Navigation.PathExists('id ' .. corpseId)() then
         mq.cmd('/multiline ; /target clear ; /hidec all')
-        state.setRunState('dragging', { phase = 'init', corpseID = corpseId, deadline = mq.gettime() + 2000, priority = bothooks.getPriority('doMiscTimer') })
+        if state.canStartBusyState(state.STATES.dragging) then
+            state.setRunState(state.STATES.dragging, { phase = 'init', corpseID = corpseId, deadline = mq.gettime() + 2000, priority = bothooks.getPriority('doMiscTimer') })
+        end
     end
 end
 
@@ -311,7 +327,7 @@ function botmove.UnStuck()
     local acleash = myconfig.settings.acleash
     if stuckdistance < acleash then return false end
 
-    if state.getRunState() == 'unstuck' then
+    if state.getRunState() == state.STATES.unstuck then
         local p = state.getRunStatePayload()
         if tickUnstuckPhase(p, followid, stuckdistance) then return false end
     end
@@ -333,11 +349,13 @@ function botmove.StartReturnToFollowAfterEngage()
     if followdistance < myconfig.settings.followdistance or not followid or followtype == 'CORPSE' then return end
     mq.cmd('/multiline ; /stick off ; /squelch /attack off ; /target self')
     botmove.FollowCall()
-    state.setRunState('engage_return_follow', { phase = 'delay_400', deadline = mq.gettime() + 400, priority = bothooks.getPriority('doMiscTimer') })
+    if state.canStartBusyState(state.STATES.engage_return_follow) then
+        state.setRunState(state.STATES.engage_return_follow, { phase = 'delay_400', deadline = mq.gettime() + 400, priority = bothooks.getPriority('doMiscTimer') })
+    end
 end
 
 function botmove.TickReturnToFollowAfterEngage()
-    if state.getRunState() ~= 'engage_return_follow' then return end
+    if state.getRunState() ~= state.STATES.engage_return_follow then return end
     local p = state.getRunStatePayload()
     if not p then state.clearRunState() return end
     if p.phase == 'delay_400' then
@@ -367,7 +385,7 @@ function botmove.MakeCampLeashCheck()
     if not state.getRunconfig().campstatus then return end
     if state.getRunconfig().engageTargetId then return end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
-    if state.getRunState() == 'pulling' then return end
+    if state.getRunState() == state.STATES.pulling then return end
     local rc = state.getRunconfig()
     if campDistanceOk(rc) and campLOSOk(rc) then return end
     print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
@@ -410,7 +428,7 @@ end
 function botmove.DragCheck()
     local just_did_sumcorpse = tickSumcorpsePending()
 
-    if state.getRunState() == 'dragging' then
+    if state.getRunState() == state.STATES.dragging then
         local payload = state.getRunStatePayload()
         if tickDragging(payload) then return end
     end

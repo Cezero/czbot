@@ -376,7 +376,7 @@ function botheal.getHookFn(name)
         return function(hookName)
             local myconfig = botconfig.config
             if not myconfig.settings.doheal or not (myconfig.heal.spells and #myconfig.heal.spells > 0) then return end
-            if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Heal Check' end
+            if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Heal Check' end
             botheal.HealCheck(bothooks.getPriority(hookName))
         end
     end

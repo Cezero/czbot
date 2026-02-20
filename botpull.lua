@@ -302,6 +302,7 @@ end
 function botpull.StartPull()
     local rc = state.getRunconfig()
     if not canStartPull(rc) then return end
+    if not state.canStartBusyState(state.STATES.pulling) then return end
 
     ensureCampAndAnchor(rc)
     local apmoblist = spawnutils.buildPullMobList(rc)
@@ -324,7 +325,7 @@ function botpull.StartPull()
     rc.pullPhase = nil
     rc.pullDeadline = nil
     rc.pullNavStartHP = mq.TLO.Me.PctHPs()
-    state.setRunState('pulling', { priority = bothooks.getPriority('doPull') })
+    state.setRunState(state.STATES.pulling, { priority = bothooks.getPriority('doPull') })
     rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawn.ID())
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         bardtwist.EnsureTwistForMode('pull')
@@ -723,9 +724,9 @@ function botpull.getHookFn(name)
         return function(hookName)
             if not state.getRunconfig().dopull then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
-            if state.getRunState() == 'raid_mechanic' then return end
+            if state.getRunState() == state.STATES.raid_mechanic then return end
             local rc = state.getRunconfig()
-            if state.getRunState() == 'pulling' then
+            if state.getRunState() == state.STATES.pulling then
                 botpull.PullTick()
                 return
             end

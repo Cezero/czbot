@@ -74,6 +74,25 @@ local DO_FLAGS = {
     { key = 'dosit', label = 'Sit' },
 }
 
+local STATE_NUM_TO_LABEL = {
+    [state.STATES.dead] = 'Dead',
+    [state.STATES.pulling] = 'Pulling',
+    [state.STATES.camp_return] = 'Returning to camp',
+    [state.STATES.casting] = 'Casting',
+    [state.STATES.melee] = 'Melee',
+    [state.STATES.engage_return_follow] = 'Returning to follow',
+    [state.STATES.chchain] = 'CH chain',
+    [state.STATES.dragging] = 'Dragging corpse',
+    [state.STATES.unstuck] = 'Unstuck',
+    [state.STATES.raid_mechanic] = 'Raid mechanic',
+    [state.STATES.sumcorpse_pending] = 'Sum corpse',
+    [state.STATES.resume_doHeal] = 'Buffs/Cures',
+    [state.STATES.resume_doDebuff] = 'Buffs/Cures',
+    [state.STATES.resume_doBuff] = 'Buffs/Cures',
+    [state.STATES.resume_doCure] = 'Buffs/Cures',
+    [state.STATES.resume_priorityCure] = 'Buffs/Cures',
+}
+
 local function getStatusLine()
     local rc = state.getRunconfig()
     if rc.pullHealerManaWait and rc.pullHealerManaWait.name then
@@ -81,20 +100,14 @@ local function getStatusLine()
     end
     if rc.statusMessage and rc.statusMessage ~= '' then return rc.statusMessage end
     local runState = state.getRunState()
-    if runState == 'pulling' then return 'Pulling' end
-    if runState == 'dragging' then
-        local p = state.getRunStatePayload()
-        return p and p.phase and ('Dragging corpse (' .. p.phase .. ')') or 'Dragging corpse'
+    local label = STATE_NUM_TO_LABEL[runState]
+    if label then
+        if runState == state.STATES.dragging then
+            local p = state.getRunStatePayload()
+            if p and p.phase then return 'Dragging corpse (' .. p.phase .. ')' end
+        end
+        return label
     end
-    if runState == 'camp_return' then return 'Returning to camp' end
-    if runState == 'casting' then return 'Casting' end
-    if runState == 'melee' then return 'Melee' end
-    if runState == 'engage_return_follow' then return 'Returning to follow' end
-    if runState == 'zone_changing' then return 'Zone changing' end
-    if runState == 'chchain' then return 'CH chain' end
-    if runState == 'load_raid' then return 'Loading raid' end
-    if runState == 'buffs_populate_wait' or runState == 'buffs_resume' or runState == 'cures_resume' or runState:match('_resume') then return
-    'Buffs/Cures' end
     if rc.campstatus then return 'Idle at camp' end
     if rc.followid and rc.followid > 0 then return 'Following' end
     return 'Idle'

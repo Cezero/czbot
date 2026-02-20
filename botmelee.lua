@@ -148,17 +148,21 @@ local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
 
-    if state.getRunState() == 'melee' then
+    if state.getRunState() == state.STATES.melee then
         local p = state.getRunStatePayload()
         if p and p.phase == 'moving_closer' then
             local targetDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Target.X(), mq.TLO.Target.Y())
             local maxMeleeTo = mq.TLO.Target.MaxMeleeTo()
             if targetDistSq and maxMeleeTo and targetDistSq < (maxMeleeTo * maxMeleeTo) then
-                state.setRunState('melee', { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+                if state.canStartBusyState(state.STATES.melee) then
+                    state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+                end
                 return
             end
             if p.deadline and mq.gettime() >= p.deadline then
-                state.setRunState('melee', { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+                if state.canStartBusyState(state.STATES.melee) then
+                    state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+                end
                 return
             end
             return
@@ -183,7 +187,9 @@ local function engageTarget()
     end
 
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
-        state.setRunState('melee', { phase = 'moving_closer', deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMelee') })
+        if state.canStartBusyState(state.STATES.melee) then
+            state.setRunState(state.STATES.melee, { phase = 'moving_closer', deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMelee') })
+        end
     end
 end
 
@@ -191,7 +197,7 @@ end
 local function disengageCombat()
     state.getRunconfig().statusMessage = ''
     combat.ResetCombatState()
-    if state.getRunState() == 'melee' then state.clearRunState() end
+    if state.getRunState() == state.STATES.melee then state.clearRunState() end
 end
 
 -- Resolve assistName (MA) and mainTankName (MT). MT picks from MobList (puller priority); MA bot picks named then MT target; offtank/DPS follow MA.
@@ -260,26 +266,26 @@ end
 function botmelee.getHookFn(name)
     if name == 'doMelee' then
         return function(hookName)
-            if state.getRunState() == 'engage_return_follow' then
+            if state.getRunState() == state.STATES.engage_return_follow then
                 botmove.TickReturnToFollowAfterEngage()
                 return
             end
-            if state.getRunState() == 'pulling' then return end
+            if state.getRunState() == state.STATES.pulling then return end
             if not myconfig.settings.domelee then
-                if state.getRunState() == 'melee' then state.clearRunState() end
+                if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 state.getRunconfig().engageTargetId = nil
                 state.getRunconfig().statusMessage = ''
                 return
             end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if not state.getRunconfig().MobList[1] then
-                if state.getRunState() == 'melee' then state.clearRunState() end
+                if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 state.getRunconfig().engageTargetId = nil
                 state.getRunconfig().statusMessage = ''
                 return
             end
-            local payload = (state.getRunState() == 'melee') and state.getRunStatePayload() or nil
-            state.setRunState('melee', payload and payload or { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+            local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
+            state.setRunState(state.STATES.melee, payload and payload or { phase = 'idle', priority = bothooks.getPriority('doMelee') })
             if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then
                 botmelee.AdvCombat()
                 return

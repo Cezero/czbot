@@ -61,7 +61,7 @@ function chchain.OnGo(line, arg1)
         else
             mq.cmdf('/rs Tank %s is not in zone or dead, skipping', rc.chchainCurtank)
             -- Defer /rs <<Go>> until chchainpause expires; chchainTick will do it.
-            state.setRunState('chchain', { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
+            state.setRunState(state.STATES.chchain, { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
             return
         end
     end
@@ -74,7 +74,7 @@ function chchain.OnGo(line, arg1)
     end
     if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < 400 then
         mq.cmdf('/rs SKIP ME (out of mana)')
-        state.setRunState('chchain', { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
+        state.setRunState(state.STATES.chchain, { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
         return
     end
     if not spellutils.DistanceCheck('complete heal', 0, tankid) then
@@ -83,13 +83,13 @@ function chchain.OnGo(line, arg1)
     end
     mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', rc.chchainTank, rc.chchainPause,
         mq.TLO.Me.PctMana())
-    state.setRunState('chchain', { deadline = chtimer, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
+    state.setRunState(state.STATES.chchain, { deadline = chtimer, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
 end
 
 function chchain.getHookFn(name)
     if name == 'chchainTick' then
         return function(hookName)
-            if state.getRunState() ~= 'chchain' then return end
+            if state.getRunState() ~= state.STATES.chchain then return end
             local p = state.getRunStatePayload()
             if not p or not p.chnextclr then state.clearRunState() return end
             if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then

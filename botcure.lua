@@ -280,7 +280,7 @@ function botcure.getHookFn(name)
             if count <= 0 then return end
             local priorityIndices = spellutils.getSpellIndicesForPhase(count, 'priority', CureClass)
             if not priorityIndices or #priorityIndices == 0 then return end
-            if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Cure Check' end
+            if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Cure Check' end
             botcure.CureCheck(bothooks.getPriority(hookName), CURE_PHASE_ORDER_PRIORITY, 'priorityCure')
         end
     end
@@ -288,7 +288,7 @@ function botcure.getHookFn(name)
         return function(hookName)
             local myconfig = botconfig.config
             if not myconfig.settings.docure or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
-            if state.getRunState() == 'idle' then state.getRunconfig().statusMessage = 'Cure Check' end
+            if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Cure Check' end
             botcure.CureCheck(bothooks.getPriority(hookName), CURE_PHASE_ORDER, 'doCure')
         end
     end
