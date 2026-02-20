@@ -18,33 +18,32 @@ local bothooks = require('lib.bothooks')
 local botlogic = {}
 local myconfig = botconfig.config
 
--- TODO: CharState is a large per-tick handler; consider breaking into smaller functions (e.g. sit, mount, dead/hover, pet, etc.).
-local function CharState(...)
-    local args = { ... }
-    local tarname = mq.TLO.Target.Name()
-    if args[1] == 'startup' then
-        if mq.TLO.Me.Hovering() then
-            printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
-            state.getRunconfig().terminate = true
-            return
-        end
-        if (mq.TLO.Me.Moving()) then
-            mq.cmd('/multiline ; /nav stop log=off; /stick off)')
-        end
-        if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
+-- CharState: per-tick character state. Split into sub-handlers for clarity and testability.
+
+local function charState_StartupIfRequested(args)
+    if args[1] ~= 'startup' then return end
+    if mq.TLO.Me.Hovering() then
+        printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
+        state.getRunconfig().terminate = true
+        return
     end
-    if mq.TLO.Window('LootWnd').Open() then
-        mq.cmd('/clean')
+    if mq.TLO.Me.Moving() then
+        mq.cmd('/multiline ; /nav stop log=off; /stick off)')
     end
-    if mq.TLO.Me.Ducking() then
-        mq.cmd('/keypress duck')
-    end
+    if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
+end
+
+local function charState_Always()
+    if mq.TLO.Window('LootWnd').Open() then mq.cmd('/clean') end
+    if mq.TLO.Me.Ducking() then mq.cmd('/keypress duck') end
+    -- Camp return: clear when not moving or deadline passed
     if state.getRunState() == state.STATES.camp_return then
-        if not mq.TLO.Me.Moving() or (state.getRunStatePayload() and state.getRunStatePayload().deadline and mq.gettime() >= state.getRunStatePayload().deadline) then
+        local p = state.getRunStatePayload()
+        if not mq.TLO.Me.Moving() or (p and p.deadline and mq.gettime() >= p.deadline) then
             state.clearRunState()
         end
     end
-    -- Clear stuck casting: effectively idle (no mobs, not casting) or deadline passed with no active cast (transition to idle when casting appears stuck).
+    -- Clear stuck casting: effectively idle or deadline passed with no active cast
     if state.getRunState() == state.STATES.casting then
         local castTimeLeft = mq.TLO.Me.CastTimeLeft() or 0
         local effectivelyIdle = state.getMobCount() == 0 and not mq.TLO.Me.Casting() and castTimeLeft == 0
@@ -53,104 +52,107 @@ local function CharState(...)
             spellutils.clearCastingStateOrResume()
         end
     end
-    -- Stand when follow is on and target is beyond follow distance (so follow logic can run)
-    do
-        local rc = state.getRunconfig()
-        if rc.followid and rc.followid > 0 and mq.TLO.Me.Sitting() then
-            local followSpawn = mq.TLO.Spawn(rc.followid)
-            local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), followSpawn.X(), followSpawn.Y())
-            if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then
-                mq.cmd('/stand') end
+
+    local rc = state.getRunconfig()
+    local mustStand = false
+    local wantToSit = false
+    -- Stand if follow on and target beyond follow distance
+    if rc.followid and rc.followid > 0 then
+        local followSpawn = mq.TLO.Spawn(rc.followid)
+        local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), followSpawn.X(), followSpawn.Y())
+        if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then
+            mustStand = true
         end
     end
-    -- Stand when seated (not on mount), not casting, and full mana/endurance above sit thresholds
-    if botconfig.config.settings.dosit and mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and state.getRunState() ~= state.STATES.casting and mq.TLO.Me.CastTimeLeft() == 0 then
-        local sitmana = tonumber(botconfig.config.settings.sitmana) or 90
-        local sitendur = tonumber(botconfig.config.settings.sitendur) or 90
-        local fullMana = mq.TLO.Me.MaxMana() == 0 or mq.TLO.Me.PctMana() > sitmana
-        local fullEndur = mq.TLO.Me.PctEndurance() > sitendur
-        if fullMana and fullEndur then mq.cmd('/stand') end
-    end
-    if botconfig.config.settings.dosit and state.getRunState() ~= state.STATES.casting and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
-        local rc = state.getRunconfig()
+    -- Stand if < 40% HP and mobs in camp
+    if mq.TLO.Me.PctHPs() < 40 and state.getMobCount() > 0 then mustStand = true end
+    -- Sit when enabled and not casting, not moving, not combat, and mana/endurance below thresholds
+    if botconfig.config.settings.dosit and state.getRunState() ~= state.STATES.casting and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
         if state.getMobCount() == 0 then rc.sitTimer = nil end
-        local skipSitForFollow = false
-        if rc.followid and rc.followid > 0 then
-            local followSpawn = mq.TLO.Spawn(rc.followid)
-            local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), followSpawn.X(), followSpawn.Y())
-            if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then skipSitForFollow = true end
-        end
         local sitBlockedByHit = rc.sitTimer and mq.gettime() < rc.sitTimer and state.getMobCount() > 0
-        if not skipSitForFollow and not sitBlockedByHit then
-            local sitcheck = true
+        if not mustStand and not sitBlockedByHit then
             if (tonumber(botconfig.config.settings.sitmana) >= mq.TLO.Me.PctMana() and mq.TLO.Me.MaxMana() > 0) or tonumber(botconfig.config.settings.sitendur) >= mq.TLO.Me.PctEndurance() then
-                if mq.TLO.Me.PctHPs() < 40 and state.getMobCount() > 0 then sitcheck = false end
-                if sitcheck then mq.cmd('/squelch /sit on') end
+                wantToSit = true
             end
         end
     end
-    do
-        local rc = state.getRunconfig()
-        if mq.TLO.Cursor.ID() and not rc.OutOfSpace then
-            if mq.TLO.Me.FreeInventory() == 0 then
-                printf('\ayCZBot:\axI\'m out of inventory space!')
-                rc.OutOfSpace = true
-            else
-                mq.cmd('/autoinv')
-                rc.OutOfSpace = false
-            end
-        elseif not mq.TLO.Cursor.ID() and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0 then
+    -- if sitting and must stand or not want to sit, stand
+    if mq.TLO.Me.Sitting() and (mustStand or not wantToSit) then
+        mq.cmd('/stand')
+    end
+    -- if not sitting and want to sit, sit
+    if not mq.TLO.Me.Sitting() and wantToSit then
+        mq.cmd('/squelch /sit on')
+    end
+
+    -- Cursor / inventory: auto-inv or set OutOfSpace
+    if mq.TLO.Cursor.ID() and not rc.OutOfSpace then
+        if mq.TLO.Me.FreeInventory() == 0 then
+            printf('\ayCZBot:\axI\'m out of inventory space!')
+            rc.OutOfSpace = true
+        else
+            mq.cmd('/autoinv')
             rc.OutOfSpace = false
         end
+    elseif not mq.TLO.Cursor.ID() and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0 then
+        rc.OutOfSpace = false
     end
     if botconfig.config.settings.domount and botconfig.config.settings.mountcast then spellutils.MountCheck() end
-    if mq.TLO.Me.State() == 'DEAD' or (mq.TLO.Me.State() == 'HOVER' and mq.TLO.Me.Hovering()) then
-        state.clearRunState()
-        state.getRunconfig().CurSpell = {}
-        state.getRunconfig().statusMessage = ''
-        state.setRunState(state.STATES.dead, nil)
-        if not state.getRunconfig().HoverEchoTimer or state.getRunconfig().HoverEchoTimer == 0 then
-            state.getRunconfig().HoverEchoTimer =
-                mq.gettime() + 300000
-        end
-        if state.getRunconfig().HoverTimer < mq.gettime() then
-            botevents.Event_Slain()
-        end
-        return
+end
+
+--- Returns true if dead/hover; caller should return. Sets dead state and HoverTimer/HoverEchoTimer, may call Event_Slain.
+local function charState_DeadOrHover()
+    if mq.TLO.Me.State() ~= 'DEAD' and (mq.TLO.Me.State() ~= 'HOVER' or not mq.TLO.Me.Hovering()) then return false end
+    state.clearRunState()
+    state.getRunconfig().CurSpell = {}
+    state.getRunconfig().statusMessage = ''
+    state.setRunState(state.STATES.dead, nil)
+    if not state.getRunconfig().HoverEchoTimer or state.getRunconfig().HoverEchoTimer == 0 then
+        state.getRunconfig().HoverEchoTimer = mq.gettime() + 300000
     end
+    if state.getRunconfig().HoverTimer < mq.gettime() then
+        botevents.Event_Slain()
+    end
+    return true
+end
+
+local function charState_PostDead()
     if state.getRunState() == state.STATES.dead then
         state.clearRunState()
     end
+    local tarname = mq.TLO.Target.Name()
     if tarname and string.find(tarname, 'corpse') then
         mq.cmd('/squelch /multiline ; /attack off ; /target clear ; /stick off')
     end
-    if mq.TLO.Me.State() == 'FEIGN' then
-        mq.cmd('/stand')
-    end
-    if not state.getRunconfig().engageTargetId or mq.TLO.Target.ID() ~= state.getRunconfig().engageTargetId then
-        if mq.TLO.Me.Combat() then
-            mq.cmd('/attack off')
-        end
-        if ((not state.getRunconfig().engageTargetId or (state.getRunconfig().engageTargetId and mq.TLO.Me.Pet.Target.ID() ~= state.getRunconfig().engageTargetId)) and mq.TLO.Me.Pet.Aggressive()) then
+    if mq.TLO.Me.State() == 'FEIGN' then mq.cmd('/stand') end
+    local rc = state.getRunconfig()
+    if not rc.engageTargetId or mq.TLO.Target.ID() ~= rc.engageTargetId then
+        if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
+        if (not rc.engageTargetId or (rc.engageTargetId and mq.TLO.Me.Pet.Target.ID() ~= rc.engageTargetId)) and mq.TLO.Me.Pet.Aggressive() then
             mq.cmd('/squelch /pet back off')
             mq.cmd('/squelch /pet follow')
         end
     end
-    if not (state.getRunconfig().MobList[1] and state.getRunconfig().engageTargetId) then
-        state.getRunconfig().engageTargetId = nil
+    if not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
+        rc.engageTargetId = nil
     end
-    if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() then
-        if mq.TLO.GMCheck() == 'TRUE' then
-            botevents.Event_GMDetected()
+    if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and mq.TLO.GMCheck() == 'TRUE' then
+        botevents.Event_GMDetected()
+    end
+    if mq.TLO.Me.Pet.ID() then
+        if not rc.MyPetID or rc.MyPetID ~= mq.TLO.Me.Pet.ID() then
+            rc.MyPetID = mq.TLO.Me.Pet.ID()
+            mq.cmd('/pet leader')
         end
     end
-    if mq.TLO.Me.Pet.ID() and not state.getRunconfig().MyPetID then
-        state.getRunconfig().MyPetID = mq.TLO.Me.Pet.ID()
-        mq.cmd('/pet leader')
-    elseif mq.TLO.Me.Pet.ID() and state.getRunconfig().MyPetID ~= mq.TLO.Me.Pet.ID() then
-        state.getRunconfig().MyPetID = mq.TLO.Me.Pet.ID()
-        mq.cmd('/pet leader')
-    end
+end
+
+local function CharState(...)
+    local args = { ... }
+    charState_StartupIfRequested(args)
+    charState_Always()
+    if charState_DeadOrHover() then return end
+    charState_PostDead()
 end
 
 -- State for doMiscTimer (runs every 1s): throttle and inactive-click timer.
@@ -172,7 +174,7 @@ local function _miscDrag()
     botmove.DragCheck()
 end
 
--- Movement only: camp return and follow. Runs in runWhenBusy pass so pure casters get camp/follow even when stuck in casting.
+-- Movement only: camp return and follow. Runs in runWhenBusy pass so pure casters get camp/follow even when stuck in casting. Throttled 1s.
 local function _runDoMovementCheck()
     if _movementLastRun > mq.gettime() then return end
     botmove.FollowAndStuckCheck()
@@ -180,10 +182,10 @@ local function _runDoMovementCheck()
     _movementLastRun = mq.gettime() + 1000
 end
 
--- Misc only (inactive click, drag). Runs only when priority allows (not when casting). Movement is in doMovementCheck.
+-- Misc only: inactive click (anti-afk, random 60–90s interval) and drag. Runs only when priority allows (not when casting). Throttled 1s.
 local function _runDoMiscTimer()
     if _miscLastRun > mq.gettime() then return end
-    _miscInactiveClick()
+    _miscInactiveClick() -- anti-afk, randomized interval
     _miscDrag()
     _miscLastRun = mq.gettime() + 1000
 end
@@ -196,6 +198,7 @@ local function _registerBuiltinHooks()
         end
     end)
 
+    -- Drains MQ event queue so chat/events are processed every tick.
     hookregistry.registerHookFn('doEvents', function(hookName)
         mq.doevents()
     end)

@@ -9,9 +9,13 @@ local botraid = {}
 local current_zone_shortname = nil
 local current_zone_module = nil
 
+-- Raid state: zone modules (e.g. raid/sebilis.lua) set global raidsactive; optionally use runconfig.raidCtx.raidsactive.
 function botraid.LoadRaidConfig()
     raidsactive = false
     raidtimer = 0
+    local rc = state.getRunconfig()
+    if not rc.raidCtx then rc.raidCtx = {} end
+    rc.raidCtx.raidsactive = false
 end
 
 -- TODO: implement in thenest or shared when finalized.
@@ -48,7 +52,7 @@ function botraid.RaidCheck()
         end
     end
 
-    -- Hatchet/DoDH block: only active when a DoDH/unknown-style module sets hatchemote and related globals (e.g. raid/unknown.lua required manually).
+    -- Hatchet/DoDH: raid/unknown.lua (or similar) sets hatchemote and Hatchet* globals when required.
     if hatchemote and mq.TLO.SpawnCount("Hatchet npc radius 5000 zradius 5000") then
         if type(HatchetKite) == 'function' and hatchetkite then HatchetKite() end
         if type(HatchetSafe) == 'function' and hatchetsafe then HatchetSafe() end
@@ -58,9 +62,12 @@ function botraid.RaidCheck()
         return true
     end
 
-    if raidsactive then
+    local rc = state.getRunconfig()
+    local raidsActive = (rc.raidCtx and rc.raidCtx.raidsactive) or raidsactive
+    if raidsActive then
         return true
     end
+    return false
 end
 
 function botraid.getHookFn(name)

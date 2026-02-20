@@ -106,6 +106,7 @@ local function tryAutoSizeUnstuck(followid, stuckdistance)
     return false
 end
 
+-- Unstuck wiggle: last step uses random heading/size (obstacle avoidance; movement needed is unknown).
 local function doWiggleUnstuck(followid, stuckdistance)
     local rc = state.getRunconfig()
     local stuckdir = math.random(0, 360)
@@ -367,6 +368,7 @@ function botmove.TickReturnToFollowAfterEngage()
     end
 end
 
+-- Follow nav + stuck detection and unstuck state machine. Called from doMovementCheck (runWhenBusy).
 function botmove.FollowAndStuckCheck()
     botmove.TickReturnToFollowAfterEngage()
     if not (state.getRunconfig().followid and state.getRunconfig().followid > 0) then return end
@@ -381,6 +383,7 @@ function botmove.FollowAndStuckCheck()
     updateStuckTimerWithinLeash(rc)
 end
 
+-- Camp return and leash. Called from doMovementCheck (runWhenBusy).
 function botmove.MakeCampLeashCheck()
     if not state.getRunconfig().campstatus then return end
     if state.getRunconfig().engageTargetId then return end

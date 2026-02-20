@@ -122,7 +122,7 @@ local function CureEval(index)
     local entry = botconfig.getSpellEntry('cure', index)
     local spell, _, spelltartype = spellutils.GetSpellInfo(entry)
     if not spell then return nil, nil end
-    local bots = spellutils.GetBotListShuffled()
+    local bots = spellutils.GetBotListOrdered()
     local botcount = charinfo.GetPeerCnt()
     local tank, tankid = spellutils.GetTankInfo(false)
     local cureindex = CureClass[index]
@@ -184,6 +184,13 @@ end
 
 local CURE_PHASE_ORDER = { 'self', 'tank', 'groupcure', 'groupmember', 'pc' }
 local CURE_PHASE_ORDER_PRIORITY = { 'priority' }
+
+--- Single place for cure context: tank, tankid, class-ordered bots, botcount. Both priorityCure and doCure use this.
+local function cureBuildContext()
+    local tank, tankid = spellutils.GetTankInfo(false)
+    local bots = spellutils.GetBotListOrdered()
+    return { tank = tank, tankid = tankid, bots = bots, botcount = #bots }
+end
 
 local function cureGetTargetsForPhase(phase, context)
     if phase == 'priority' then
@@ -247,9 +254,7 @@ function botcure.CureCheck(runPriority, phaseOrder, hookName)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     local count = botconfig.getSpellCount('cure')
     if count <= 0 then return false end
-    local tank, tankid = spellutils.GetTankInfo(false)
-    local bots = spellutils.GetBotListShuffled()
-    local ctx = { tank = tank, tankid = tankid, bots = bots }
+    local ctx = cureBuildContext()
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,

@@ -17,6 +17,11 @@ local PULLEDMOB_NO_CLOSER_MS = 10000
 local RETURNING_AFTER_ABORT_WAIT_MS = 5000
 local PULL_RETURN_EXTRA_WAIT_MS = 5000
 
+-- Pull state machine. rc fields: pullState, pullAPTargetID, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
+-- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullHealerManaWait, pullRangedStoredItem;
+-- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
+botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat' }
+
 --- Returns effective pull range in units for the given pull spell entry.
 local function getPullRange(entry)
     if not entry then return 50 end
@@ -75,6 +80,15 @@ local function clearPullState(reason)
     rc.pullReturnTimer = nil
     rc.pullPhase = nil
     rc.pullDeadline = nil
+    rc.pullNavStartHP = nil
+    rc.pullAggroingStartTime = nil
+    rc.pullAtCampSince = nil
+    rc.pullHealerManaWait = nil
+    rc.pullRangedStoredItem = nil
+    rc.pulledmob = nil
+    rc.pullreturntimer = nil
+    rc.pulledmobLastDistSq = nil
+    rc.pulledmobLastCloserTime = nil
     if reason == 'waiting_combat: AP in camp or timer' or reason == 'returning: warp' then
         rc.statusMessage = ''
     elseif reason and reason ~= '' then
@@ -82,12 +96,6 @@ local function clearPullState(reason)
     else
         rc.statusMessage = ''
     end
-    rc.pullHealerManaWait = nil
-    rc.pulledmobLastDistSq = nil
-    rc.pulledmobLastCloserTime = nil
-    rc.pullNavStartHP = nil
-    rc.pullAggroingStartTime = nil
-    rc.pullAtCampSince = nil
     state.clearRunState()
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         bardtwist.EnsureTwistForMode('combat')
@@ -245,7 +253,22 @@ local function canStartPull(rc)
     return true
 end
 
-
+-- True when we are not in a pull state and chain-pull conditions say we should start a pull (and canStartPull passes).
+local function shouldStartPull(rc)
+    if state.getRunState() == state.STATES.pulling then return false end
+    if not canStartPull(rc) then return false end
+    local mobCount = state.getMobCount()
+    local engageId = rc.engageTargetId
+    if (mobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0) and engageId and mq.TLO.Spawn(engageId).PctHPs() then
+        local tempcnt = myconfig.pull.chainpullcnt == 0 and 1 or myconfig.pull.chainpullcnt
+        if tonumber(mq.TLO.Spawn(engageId).PctHPs()) <= myconfig.pull.chainpullhp and mobCount <= tempcnt then
+            return true
+        end
+    end
+    if mobCount < myconfig.pull.chainpullcnt then return true end
+    if mobCount == 0 and not engageId then return true end
+    return false
+end
 
 -- Camp/hunter setup and mapfilter; no mq.delay.
 local function ensureCampAndAnchor(rc)
@@ -264,39 +287,32 @@ local function ensureCampAndAnchor(rc)
     end
 end
 
--- Pick one spawn from list (closest by path length; priority list if usepriority).
+-- Pick one spawn: if usepriority, filter to PriorityList first; then choose closest by path length.
 local function selectPullTarget(apmoblist, rc)
     if not apmoblist or not apmoblist[1] then return nil end
-    local pathlengthlist = {}
-    for _, v in ipairs(apmoblist) do
-        pathlengthlist[v.ID()] = mq.TLO.Navigation.PathLength('id ' .. v.ID())()
+    local candidates = apmoblist
+    if myconfig.pull.usepriority and rc.PriorityList and #rc.PriorityList > 0 then
+        local prioritySet = {}
+        for _, n in ipairs(rc.PriorityList) do prioritySet[n] = true end
+        local filtered = {}
+        for _, v in ipairs(apmoblist) do
+            if prioritySet[v.CleanName()] then filtered[#filtered + 1] = v end
+        end
+        if #filtered > 0 then candidates = filtered end
     end
     local pulltar, pulltardist = nil, nil
-    for k, v in pairs(pathlengthlist) do
-        if v and v > 0 and (not pulltardist or pulltardist >= v) then
-            pulltardist = v
-            pulltar = k
+    for _, v in ipairs(candidates) do
+        local pl = mq.TLO.Navigation.PathLength('id ' .. v.ID())()
+        if pl and pl > 0 and (not pulltardist or pulltardist >= pl) then
+            pulltardist = pl
+            pulltar = v.ID()
         end
     end
-    if not pulltar then return nil end
-    local pullindex = nil
-    for k, v in ipairs(apmoblist) do
-        if v.ID() == pulltar then
-            pullindex = k
-            break
-        end
+    if not pulltar then return candidates[1] end
+    for _, v in ipairs(candidates) do
+        if v.ID() == pulltar then return v end
     end
-    if not pullindex then return nil end
-    local chosen = apmoblist[pullindex]
-    if myconfig.pull.usepriority and rc.PriorityList and #rc.PriorityList > 0 then
-        for _, v in ipairs(apmoblist) do
-            local name = v.CleanName()
-            for _, n in ipairs(rc.PriorityList) do
-                if n == name then return v end
-            end
-        end
-    end
-    return chosen
+    return candidates[1]
 end
 
 function botpull.StartPull()
@@ -730,21 +746,7 @@ function botpull.getHookFn(name)
                 botpull.PullTick()
                 return
             end
-            if state.getMobCount() <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0 then
-                if mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs() then
-                    local tempcnt = myconfig.pull.chainpullcnt == 0 and (myconfig.pull.chainpullcnt + 1) or
-                        myconfig.pull.chainpullcnt
-                    if (tonumber(mq.TLO.Spawn(state.getRunconfig().engageTargetId).PctHPs()) <= myconfig.pull.chainpullhp) and state.getMobCount() <= tempcnt then
-                        botpull.StartPull()
-                    end
-                end
-            end
-            if (state.getMobCount() < myconfig.pull.chainpullcnt) then
-                botpull.StartPull()
-            end
-            if (state.getMobCount() == 0) and not state.getRunconfig().engageTargetId then
-                botpull.StartPull()
-            end
+            if shouldStartPull(rc) then botpull.StartPull() end
         end
     end
     return nil

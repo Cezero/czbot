@@ -1,11 +1,9 @@
 local mq = require('mq')
 local botconfig = require('lib.config')
-local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
 local spellstates = require('lib.spellstates')
 local state = require('lib.state')
 local utils = require('lib.utils')
-local charinfo = require('mqcharinfo')
 local bothooks = require('lib.bothooks')
 local charm = require('lib.charm')
 local castutils = require('lib.castutils')
@@ -13,6 +11,7 @@ local castutils = require('lib.castutils')
 local botdebuff = {}
 local DebuffBands = {}
 local bardtwist = require('lib.bardtwist')
+local botmelee = require('botmelee')
 
 local function defaultDebuffEntry()
     return botconfig.getDefaultSpellEntry('debuff')
@@ -557,6 +556,26 @@ local function debuffGetSpellIndices(phase, count, ctx)
     return nonNuke
 end
 
+--- Single place for debuff hook context: tanktar, charmRecasts, debuffCount, mobList, notanktarDebuffTimers, mobcountstart. Depends on engageTargetId/MobList (doDebuff runs after AddSpawnCheck and doMelee).
+local function debuffBuildContext(rc)
+    rc = rc or state.getRunconfig()
+    local count = botconfig.getSpellCount('debuff')
+    local _, _, tanktar = spellutils.GetTankInfo(true)
+    local charmRecasts = {}
+    for i = 1, count do
+        local id, hit = charm.GetRecastRequestForIndex(i)
+        if id then charmRecasts[i] = { id = id, targethit = hit or 'charmtar' } end
+    end
+    return {
+        tanktar = tanktar,
+        charmRecasts = charmRecasts,
+        debuffCount = count,
+        mobList = rc.MobList or {},
+        notanktarDebuffTimers = rc.notanktarDebuffTimers,
+        mobcountstart = state.getMobCount(),
+    }
+end
+
 function botdebuff.DebuffCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     ---@type RunConfig
@@ -566,28 +585,14 @@ function botdebuff.DebuffCheck(runPriority)
         return false
     end
     if state.getMobCount() <= 0 then return false end
-    local mobcountstart = state.getMobCount()
-    local botmelee = require('botmelee')
     if rc.MobList and rc.MobList[1] then
         local tank, _, tanktar = spellutils.GetTankInfo(true)
         if tanktar and tanktar > 0 and mq.TLO.Pet.Target.ID() ~= tanktar and not mq.TLO.Me.Pet.Combat() then botmelee
                 .AdvCombat() end
     end
-    local count = botconfig.getSpellCount('debuff')
+    local ctx = debuffBuildContext(rc)
+    local count = ctx.debuffCount
     if count <= 0 then return false end
-    local _, _, tanktar = spellutils.GetTankInfo(true)
-    local charmRecasts = {}
-    for i = 1, count do
-        local id, hit = charm.GetRecastRequestForIndex(i)
-        if id then charmRecasts[i] = { id = id, targethit = hit or 'charmtar' } end
-    end
-    local ctx = {
-        tanktar = tanktar,
-        charmRecasts = charmRecasts,
-        debuffCount = count,
-        mobList = state.getRunconfig().MobList or {},
-        notanktarDebuffTimers = rc.notanktarDebuffTimers,
-    }
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
@@ -596,7 +601,7 @@ function botdebuff.DebuffCheck(runPriority)
         customCastFn = DebuffCheckBardNotanktarCast,
         entryValid = DebuffEntryValid,
         afterCast = function(i, EvalID, targethit)
-            return DebuffCheckAfterCast(i, EvalID, targethit, mobcountstart)
+            return DebuffCheckAfterCast(i, EvalID, targethit, ctx.mobcountstart)
         end,
     }
     local function getSpellIndices(phase)

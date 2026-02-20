@@ -46,7 +46,8 @@ function spawnutils.FTECheck(spawnId, rc)
             if k == spawnId then return true end
         end
     end
-    if spawnId and rc.FTEList and rc.FTEList[spawnId] and (rc.FTEList[spawnId].timer + 60000) > mq.gettime() + 60000 then
+    -- Within 60s of our FTE tag: treat as FTE (exclude from camp list).
+    if spawnId and rc.FTEList and rc.FTEList[spawnId] and mq.gettime() < (rc.FTEList[spawnId].timer + 60000) then
         return true
     end
     return false
@@ -208,7 +209,8 @@ function spawnutils.selectNthAdd(mobList, excludeId, n)
     return nil
 end
 
-local function validateAcmTarget(rc)
+function spawnutils.validateAcmTarget(rc)
+    rc = rc or state.getRunconfig()
     if rc.engageTargetId then
         if not mq.TLO.Spawn(rc.engageTargetId).ID() or mq.TLO.Spawn(rc.engageTargetId).Type() == 'Corpse' then
             rc.engageTargetId = nil
@@ -220,23 +222,33 @@ local function validateAcmTarget(rc)
     return true
 end
 
-function spawnutils.AddSpawnCheck()
-    local rc = state.getRunconfig()
-    if not validateAcmTarget(rc) then return end
+--- Build camp mob list and assign rc.MobList. Single source of truth for "mobs in camp"; replaced each tick.
+function spawnutils.buildAndSetCampMobList(rc)
+    rc = rc or state.getRunconfig()
     local list = spawnutils.buildCampMobList(rc)
     rc.MobList = list
-    local killtarpresent = false
+end
+
+--- If global KillTarget is set and valid, add that spawn to rc.MobList when not already present.
+function spawnutils.mergeKillTargetIntoMobList(rc)
+    rc = rc or state.getRunconfig()
     local KillTarget = rawget(_G, 'KillTarget')
-    if KillTarget and (mq.TLO.Spawn(KillTarget).Type() == 'Corpse' or not mq.TLO.Spawn(KillTarget).ID()) then
+    if not KillTarget then return end
+    if mq.TLO.Spawn(KillTarget).Type() == 'Corpse' or not mq.TLO.Spawn(KillTarget).ID() then
         _G.KillTarget = nil
-        KillTarget = nil
+        return
     end
     for _, v in ipairs(rc.MobList) do
-        if v.ID() == KillTarget then killtarpresent = true end
+        if v.ID() == KillTarget then return end
     end
-    if not killtarpresent and KillTarget then
-        table.insert(rc.MobList, mq.TLO.Spawn(KillTarget))
-    end
+    table.insert(rc.MobList, mq.TLO.Spawn(KillTarget))
+end
+
+function spawnutils.AddSpawnCheck()
+    local rc = state.getRunconfig()
+    if not spawnutils.validateAcmTarget(rc) then return end
+    spawnutils.buildAndSetCampMobList(rc)
+    spawnutils.mergeKillTargetIntoMobList(rc)
 end
 
 function spawnutils.getHookFn(name)

@@ -54,14 +54,15 @@ local function selectTankTarget(mainTankName)
     for _, spawn in ipairs(losList) do
         if targeting.TargetAndWaitBuffsPopulated(spawn.ID(), 1000) then
             if not mq.TLO.Target.Mezzed() then
-                return spawn, (spawn.ID() == rc.engageTargetId)
+                return spawn.ID(), (spawn.ID() == rc.engageTargetId)
             end
         end
     end
-    return losList[1], (losList[1].ID() == rc.engageTargetId)
+    local first = losList[1]
+    return first and first.ID() or nil, (first and first.ID() == rc.engageTargetId)
 end
 
--- Offtank: if MT target == MA target pick add (Nth other mob); if MT target != MA target tank MA's target (agro/taunt).
+-- Offtank: if MT target == MA target pick add (Nth other mob); else tank MA's target. Returns chosen id or nil.
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     local rc = state.getRunconfig()
     local maInfo = charinfo.GetInfo(assistName)
@@ -75,7 +76,6 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
         mtTarId = botmelee.GetPCTarget(mainTankName)
     end
     if mtTarId == maTarId then
-        -- Same target: pick an add (Nth mob in MobList that is not that target).
         local otoffset = myconfig.melee.otoffset or 0
         local nthSpawn = spawnutils.selectNthAdd(rc.MobList, maTarId, otoffset + 1)
         if nthSpawn then
@@ -83,35 +83,34 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
             if actarid ~= mq.TLO.Target.ID() then
                 printf('\ayCZBot:\ax\arOff-tanking\ax a \ag%s id %s', nthSpawn.CleanName(), actarid)
             end
-            rc.engageTargetId = actarid
-        elseif maInfo and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) and maTarId and maTarId > 0 then
-            rc.engageTargetId = maTarId
+            return actarid
         end
-    else
-        -- Different targets: offtank tanks the MA's target (agro/taunt).
-        if maTarId and maTarId > 0 then
-            rc.engageTargetId = maTarId
+        if maInfo and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) and maTarId and maTarId > 0 then
+            return maTarId
         end
+    elseif maTarId and maTarId > 0 then
+        return maTarId
     end
+    return nil
 end
 
--- DPS: sync engageTargetId to MA's target when MA is engaging.
+-- DPS: return MA's target when MA is engaging and in MobList at assistpct; else GetPCTarget. Returns id or nil.
 local function resolveMeleeAssistTarget(assistName, assistpct)
     local rc = state.getRunconfig()
     local maInfo = charinfo.GetInfo(assistName)
     local maTarId = maInfo and maInfo.Target and maInfo.Target.ID or nil
-    if maInfo and maInfo.ID and (rc.engageTargetId ~= maTarId) then rc.engageTargetId = nil end
-    for _, v in ipairs(rc.MobList) do
-        if v.ID() == maTarId and maInfo and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) then
-            rc.engageTargetId = maTarId
+    if maInfo and maInfo.ID then
+        for _, v in ipairs(rc.MobList) do
+            if v.ID() == maTarId and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) then
+                return maTarId
+            end
         end
+        return nil
     end
-    if not (maInfo and maInfo.ID) then
-        rc.engageTargetId = botmelee.GetPCTarget(assistName)
-    end
+    return botmelee.GetPCTarget(assistName)
 end
 
--- MA bot only: choose target from MobList with priority (1) named, (2) MT's target. Sets engageTargetId.
+-- MA bot only: choose target from MobList (1) named, (2) MT's target. Returns chosen id or nil.
 local function selectMATarget(mainTankName)
     local rc = state.getRunconfig()
     local mtTarId = nil
@@ -136,11 +135,9 @@ local function selectMATarget(mainTankName)
             if mtTarId and v.ID() == mtTarId then mtTarSpawn = v end
         end
     end
-    if namedSpawn then
-        rc.engageTargetId = namedSpawn.ID()
-    elseif mtTarSpawn then
-        rc.engageTargetId = mtTarSpawn.ID()
-    end
+    if namedSpawn then return namedSpawn.ID() end
+    if mtTarSpawn then return mtTarSpawn.ID() end
+    return nil
 end
 
 -- When engageTargetId is set: pet attack, target (blocking TargetAndWait), stand, attack on, stick. Uses melee phase moving_closer.
@@ -200,7 +197,7 @@ local function disengageCombat()
     if state.getRunState() == state.STATES.melee then state.clearRunState() end
 end
 
--- Resolve assistName (MA) and mainTankName (MT). MT picks from MobList (puller priority); MA bot picks named then MT target; offtank/DPS follow MA.
+-- Resolve engageTargetId from role (MT/MA/OT/DPS), then engage or disengage. Only sets melee busy state via canStartBusyState.
 function botmelee.AdvCombat()
     local assistName = tankrole.GetAssistTargetName()
     local mainTankName = tankrole.GetMainTankName()
@@ -211,24 +208,23 @@ function botmelee.AdvCombat()
         clearTankCombatState()
     end
 
+    local id = nil
+    local engageTargetRefound = false
     if tankrole.AmIMainTank() then
-        local mtPick, engageTargetRefound = selectTankTarget(mainTankName)
-        if mtPick and mtPick.ID() then
-            rc.engageTargetId = mtPick.ID()
-        end
+        id, engageTargetRefound = selectTankTarget(mainTankName)
         if engageTargetRefound then
             botmove.StartReturnToFollowAfterEngage()
         end
     elseif tankrole.AmIMainAssist() then
-        selectMATarget(mainTankName)
+        id = selectMATarget(mainTankName)
     else
         if myconfig.melee.offtank and assistName and mainTankName then
-            resolveOfftankTarget(assistName, mainTankName, assistpct)
-        end
-        if not myconfig.melee.offtank and assistName then
-            resolveMeleeAssistTarget(assistName, assistpct)
+            id = resolveOfftankTarget(assistName, mainTankName, assistpct)
+        elseif assistName then
+            id = resolveMeleeAssistTarget(assistName, assistpct)
         end
     end
+    rc.engageTargetId = id
 
     if rc.engageTargetId then
         local name = mq.TLO.Spawn(rc.engageTargetId).CleanName() or tostring(rc.engageTargetId)

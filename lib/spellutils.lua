@@ -267,7 +267,49 @@ function spellutils.SpawnDetrimentalsForCure(spawnId, cureTypeList)
     return false
 end
 
--- Returns table of bot names from charinfo.GetPeers(), Fisher-Yates shuffled.
+-- Default class order for bot list: healers, tanks, casters, DPS. Used when config does not override.
+-- Config: botconfig.getCommon().botListClassOrder = { 'clr', 'shm', 'dru', ... } (lowercase class short names).
+spellutils.DEFAULT_BOTLIST_CLASS_ORDER = { 'clr', 'shm', 'dru', 'war', 'shd', 'pal', 'enc', 'wiz', 'mag', 'nec', 'brd', 'mnk', 'rog', 'bst', 'rng', 'bzk' }
+
+local function _getBotListClassPriority()
+    local order = spellutils.DEFAULT_BOTLIST_CLASS_ORDER
+    local common = botconfig.getCommon()
+    if common and common.botListClassOrder and type(common.botListClassOrder) == 'table' and #common.botListClassOrder > 0 then
+        order = common.botListClassOrder
+    end
+    local priority = {}
+    for i, cls in ipairs(order) do
+        priority[string.lower(tostring(cls))] = i
+    end
+    return priority
+end
+
+--- Returns priority number for a class short name (lower = earlier in rez/target order). Unknown class returns 9999.
+function spellutils.GetClassOrderPriority(classShortName)
+    local priority = _getBotListClassPriority()
+    return priority[string.lower(tostring(classShortName or ''))] or 9999
+end
+
+--- Returns table of bot names from charinfo.GetPeers(), sorted by class order (healers first, then tanks, casters, DPS).
+--- Order is configurable via botconfig.getCommon().botListClassOrder (array of lowercase class short names).
+function spellutils.GetBotListOrdered()
+    local bots = charinfo.GetPeers()
+    if not bots or #bots == 0 then return bots end
+    local priority = _getBotListClassPriority()
+    table.sort(bots, function(a, b)
+        local acls = mq.TLO.Spawn('pc =' .. a).Class.ShortName()
+        local bcls = mq.TLO.Spawn('pc =' .. b).Class.ShortName()
+        acls = acls and string.lower(acls) or ''
+        bcls = bcls and string.lower(bcls) or ''
+        local ap = priority[acls] or 9999
+        local bp = priority[bcls] or 9999
+        if ap ~= bp then return ap < bp end
+        return (a or '') < (b or '')
+    end)
+    return bots
+end
+
+-- Returns table of bot names from charinfo.GetPeers(), Fisher-Yates shuffled. Prefer GetBotListOrdered for deterministic targeting.
 function spellutils.GetBotListShuffled()
     local bots = charinfo.GetPeers()
     for i = #bots, 2, -1 do

@@ -172,6 +172,14 @@ end
 
 local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
 
+--- Single place for buff context: tank, tankid, class-ordered bots, botcount, buffCount. Used by BuffCheck and getTargets/needsSpell.
+local function buffBuildContext()
+    local tank, tankid = spellutils.GetTankInfo(false)
+    local bots = spellutils.GetBotListOrdered()
+    local count = botconfig.getSpellCount('buff')
+    return { tank = tank, tankid = tankid, bots = bots, botcount = #bots, buffCount = count }
+end
+
 local function filterCorpses(targets)
     if not targets or #targets == 0 then return targets end
     local out = {}
@@ -287,11 +295,9 @@ function botbuff.BuffCheck(runPriority)
     if mq.TLO.Me.Class.ShortName() == 'BRD' and myconfig.settings.dobuff then
         bardtwist.EnsureDefaultTwistRunning()
     end
-    local count = botconfig.getSpellCount('buff')
+    local ctx = buffBuildContext()
+    local count = ctx.buffCount
     if count <= 0 then return false end
-    local tank, tankid = spellutils.GetTankInfo(false)
-    local bots = spellutils.GetBotListShuffled()
-    local ctx = { tank = tank, tankid = tankid, bots = bots, botcount = #bots, buffCount = count }
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,

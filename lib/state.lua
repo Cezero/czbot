@@ -49,6 +49,9 @@
 ---@field pullReturnTimer number|nil
 ---@field pullPhase string|nil
 ---@field pullDeadline number|nil
+---@field pullAggroingStartTime number|nil mq.gettime() when entered aggroing state (for timeout)
+---@field pullAtCampSince number|nil mq.gettime() when we reached camp in returning_after_abort (for wait before next pull)
+---@field pullRangedStoredItem string|nil item name swapped out of Ranged slot during pull (restored on return)
 ---@field stucktimer number|nil
 ---@field unstuckWiggleIndex number|nil current step (1–9) in unstuck wiggle sequence; nil when not wiggling or after sequence
 ---@field mobprobtimer number
@@ -249,6 +252,9 @@ function M.resetRunconfig()
         pullReturnTimer = nil,
         pullPhase = nil,
         pullDeadline = nil,
+        pullAggroingStartTime = nil,
+        pullAtCampSince = nil,
+        pullRangedStoredItem = nil,
         stucktimer = 0,
         unstuckWiggleIndex = nil,
         mobprobtimer = 0,
@@ -272,6 +278,7 @@ function M.resetRunconfig()
         nukeResistDisabledRecent = nil,
         nukeFlavorsAllowed = nil,
         nukeFlavorsAutoDisabled = nil,
+        raidCtx = nil, -- optional: { raidsactive = boolean }; zone raid modules may set global raidsactive instead
     }
     return M._runconfig
 end

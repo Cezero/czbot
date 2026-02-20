@@ -55,7 +55,7 @@ local function HPEvalContext(index)
     local gem = entry.gem
     local tank, tankid = spellutils.GetTankInfo(false)
     local botcount = charinfo.GetPeerCnt()
-    local bots = spellutils.GetBotListShuffled()
+    local bots = spellutils.GetBotListOrdered()
     local botstr = table.concat(charinfo.GetPeers(), " ")
     local tanknbid = tank and string.find(botstr, tank)
     local spell, spellrange = spellutils.GetSpellInfo(entry)
@@ -77,46 +77,68 @@ local function HPEvalContext(index)
     }
 end
 
-local function CorpseRezIdForFilter(index, ctx, filter)
+--- Single place for heal hook context: tank, class-ordered bots, spell/range for index 1. Built once and passed through RunPhaseFirstSpellCheck.
+local function healBuildContext()
+    return HPEvalContext(1)
+end
+
+-- Build list of matching corpses with class priority for rez order (healers first: clr, shm, dru, etc.).
+local function _corpseRezCandidates(ctx, filter)
     local myconfig = botconfig.config
     local corpsecount = mq.TLO.SpawnCount('pccorpse radius ' .. myconfig.settings.acleash)()
-    if not corpsecount or corpsecount == 0 then return nil end
+    if not corpsecount or corpsecount == 0 then return {} end
     local corpsedist = myconfig.settings.acleash
-    local thresh = AHThreshold[index]
-    local matches = 0
+    local candidates = {}
     for i = 1, corpsecount do
-        local nearcorpse = mq.TLO.NearestSpawn(i, 'pccorpse radius ' .. corpsedist).CleanName()
+        local spawn = mq.TLO.NearestSpawn(i, 'pccorpse radius ' .. corpsedist)
+        local nearcorpse = spawn.CleanName()
         if nearcorpse then nearcorpse = string.gsub(nearcorpse, "'s corpse", "") end
-        local rezid = mq.TLO.NearestSpawn(i, 'pccorpse radius ' .. corpsedist).ID()
-        local match = false
+        local rezid = spawn.ID()
+        local match, class = false, nil
         if filter == 'all' then
             match = true
-        elseif filter == 'bots' and ctx.botcount then
-            for k = 1, ctx.botcount do
-                local peer = charinfo.GetInfo(ctx.bots[k])
-                if peer and peer.Name == nearcorpse then
+        elseif filter == 'bots' and ctx.bots then
+            for k = 1, #ctx.bots do
+                local botname = ctx.bots[k]
+                if botname == nearcorpse then
                     match = true
+                    local peer = charinfo.GetInfo(botname)
+                    if peer and peer.Class then
+                        class = (type(peer.Class) == 'string') and peer.Class or (peer.Class.ShortName and peer.Class.ShortName())
+                    end
                     break
                 end
             end
         elseif filter == 'raid' and mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0 then
             for k = 1, mq.TLO.Raid.Members() do
-                local raidname = mq.TLO.Raid.Member(k).Name()
-                if raidname == nearcorpse then
+                if mq.TLO.Raid.Member(k).Name() == nearcorpse then
                     match = true
+                    class = mq.TLO.Raid.Member(k).Class.ShortName()
                     break
                 end
             end
         end
-        if match then
-            if myconfig.heal.rezoffset > 0 and matches < myconfig.heal.rezoffset and corpsecount > myconfig.heal.rezoffset then
-                matches = matches + 1
-            else
-                return rezid
-            end
+        if match and rezid then
+            local priority = spellutils.GetClassOrderPriority(class)
+            candidates[#candidates + 1] = { rezid = rezid, priority = priority }
         end
     end
-    return nil
+    table.sort(candidates, function(a, b) return (a.priority or 9999) < (b.priority or 9999) end)
+    return candidates
+end
+
+local function CorpseRezIdForFilter(ctx, filter)
+    local myconfig = botconfig.config
+    local candidates = _corpseRezCandidates(ctx, filter)
+    if #candidates == 0 then return nil end
+    local corpsecount = #candidates
+    local rezoffset = myconfig.heal.rezoffset or 0
+    local skip = 0
+    if rezoffset > 0 and corpsecount > rezoffset then skip = rezoffset end
+    for i = skip + 1, #candidates do
+        return candidates[i].rezid
+    end
+    return candidates[1].rezid
 end
 
 local function HPEvalCorpse(index, ctx)
@@ -124,17 +146,11 @@ local function HPEvalCorpse(index, ctx)
     if not AHThreshold[index].cbt and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then
         return nil, nil
     end
-    if AHThreshold[index].all then
-        local rezid = CorpseRezIdForFilter(index, ctx, 'all')
-        if rezid then return rezid, 'corpse' end
-    end
-    if AHThreshold[index].bots then
-        local rezid = CorpseRezIdForFilter(index, ctx, 'bots')
-        if rezid then return rezid, 'corpse' end
-    end
-    if AHThreshold[index].raid then
-        local rezid = CorpseRezIdForFilter(index, ctx, 'raid')
-        if rezid then return rezid, 'corpse' end
+    for _, filter in ipairs({ 'all', 'bots', 'raid' }) do
+        if AHThreshold[index][filter] then
+            local rezid = CorpseRezIdForFilter(ctx, filter)
+            if rezid then return rezid, 'corpse' end
+        end
     end
     return nil, nil
 end
@@ -347,7 +363,7 @@ end
 function botheal.HealCheck(runPriority)
     local count = botconfig.getSpellCount('heal')
     if count <= 0 then return false end
-    local ctx = HPEvalContext(1)
+    local ctx = healBuildContext()
     if not ctx then return false end
     local options = {
         runPriority = runPriority,

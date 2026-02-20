@@ -1,4 +1,5 @@
 -- CHChain (Complete Heal chain) logic. State in state.getRunconfig(): doChchain, chchainCurtank, chchainPause, chchainTank, chchainTanklist, chnextClr.
+-- State diagram: OnGo (Go >>me<<) sets runState chchain with deadline; chchainTick either clears (pass Go) or re-sets state (fizzle/skip).
 
 local mq = require('mq')
 local state = require('lib.state')
@@ -35,6 +36,12 @@ local function event_CHChainPause(line, arg1, argN)
     if arg1 and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'pause', arg1) end
 end
 
+--- Deadline for current chchain round: chchainPause (tenths of sec) * 100 ms + now.
+function chchain.getDeadline(rc)
+    rc = rc or state.getRunconfig()
+    return (rc.chchainPause or 0) * 100 + mq.gettime()
+end
+
 function chchain.registerEvents()
     mq.event('CHChain', "#*#Go #1#>>#*#", event_CHChain)
     mq.event('CHChainStop', "#*#chchain stop#*#", event_CHChainStop)
@@ -50,7 +57,7 @@ function chchain.OnGo(line, arg1)
     if not myName or string.lower(arg1) ~= string.lower(myName) then return false end
     if not rc.doChchain then return false end
     rc.chchainCurtank = 1
-    local chtimer = (rc.chchainPause * 100) + mq.gettime()
+    local chtimer = chchain.getDeadline(rc)
     local tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
     if not tankid or tankid == 0 or mq.TLO.Spawn(tankid).Type() == 'Corpse' then
         rc.chchainCurtank = rc.chchainCurtank + 1
@@ -61,7 +68,7 @@ function chchain.OnGo(line, arg1)
         else
             mq.cmdf('/rs Tank %s is not in zone or dead, skipping', rc.chchainCurtank)
             -- Defer /rs <<Go>> until chchainpause expires; chchainTick will do it.
-            state.setRunState(state.STATES.chchain, { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
+            state.setRunState(state.STATES.chchain, { deadline = chchain.getDeadline(rc), chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
             return
         end
     end
@@ -86,30 +93,35 @@ function chchain.OnGo(line, arg1)
     state.setRunState(state.STATES.chchain, { deadline = chtimer, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
 end
 
+--- One tick of chchain state: fizzle handling, target-died interrupt, deadline (pass Go), sit when not casting.
+function chchain.Tick()
+    local p = state.getRunStatePayload()
+    if not p or not p.chnextclr then state.clearRunState() return end
+    if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then
+        mq.cmdf('/casting "Complete Heal" 5')
+        return
+    end
+    if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
+        mq.cmdf('/multiline ; /rs CHChain: Target died, interrupting cast ; /interrupt')
+        mq.cmdf('/rs <<Go %s>>', p.chnextclr)
+        state.clearRunState()
+        return
+    end
+    if mq.gettime() >= (p.deadline or 0) then
+        mq.cmdf('/rs <<Go %s>>', p.chnextclr)
+        state.clearRunState()
+        return
+    end
+    if not mq.TLO.Me.Sitting() and not mq.TLO.Me.CastTimeLeft() then
+        mq.cmd('/sit on')
+    end
+end
+
 function chchain.getHookFn(name)
     if name == 'chchainTick' then
         return function(hookName)
             if state.getRunState() ~= state.STATES.chchain then return end
-            local p = state.getRunStatePayload()
-            if not p or not p.chnextclr then state.clearRunState() return end
-            if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then
-                mq.cmdf('/casting "Complete Heal" 5')
-                return
-            end
-            if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
-                mq.cmdf('/multiline ; /rs CHChain: Target died, interrupting cast ; /interrupt')
-                mq.cmdf('/rs <<Go %s>>', p.chnextclr)
-                state.clearRunState()
-                return
-            end
-            if mq.gettime() >= (p.deadline or 0) then
-                mq.cmdf('/rs <<Go %s>>', p.chnextclr)
-                state.clearRunState()
-                return
-            end
-            if not mq.TLO.Me.Sitting() and not mq.TLO.Me.CastTimeLeft() then
-                mq.cmd('/sit on')
-            end
+            chchain.Tick()
         end
     end
     return nil
