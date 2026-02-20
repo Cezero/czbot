@@ -36,7 +36,10 @@ function spellutils.RecordDontStackDebuffFromTarget(targetSpawnId, ourSpell, cat
     if not targetSpawnId or not ourSpell or not categoryTag then return end
     local spellRef = mq.TLO.Target[categoryTag]
     if not spellRef then return end
-    local durationSec = tonumber(spellRef.MyDuration and spellRef.MyDuration() or 0) or 0
+    local durationSec = 0
+    if spellRef.MyDuration then
+        durationSec = tonumber(spellRef.MyDuration.TotalSeconds()) or 0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
+    end
     if durationSec <= 0 then return end
     local expire = mq.gettime() + durationSec * 1000
     spellstates.DebuffListUpdate(targetSpawnId, ourSpell, expire)
@@ -361,9 +364,11 @@ function spellutils.GetSpellEntity(entry)
 end
 
 -- Return duration in seconds for the entry's spell (handles item). Returns 0 if none or invalid.
+-- MyDuration() returns ticks (1 tick = 6 sec); use MyDuration.TotalSeconds() for seconds.
 function spellutils.GetSpellDurationSec(entry)
     local e = spellutils.GetSpellEntity(entry)
-    return tonumber(e and e.MyDuration()) or 0
+    if not e or not e.MyDuration then return 0 end
+    return tonumber(e.MyDuration.TotalSeconds()) or 0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
 end
 
 -- Returns true if the debuff entry is a nuke (no duration / direct damage). Used for rotation and flavor filtering.
@@ -527,7 +532,7 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
         if spellutils.IsNukeSpell(entry) then
             rc.lastNukeIndex = index
         end
-        if (mq.TLO.Spell(spell).MyDuration() and tonumber(mq.TLO.Spell(spell).MyDuration()) > 0) then
+        if spellutils.GetSpellDurationSec(entry) > 0 then
             if mq.TLO.Target.Buff(spell).ID() or mq.TLO.Me.Class.ShortName() == 'BRD' and not rc.MissedNote then
                 local myduration = mq.TLO.Spell(spell).MyDuration.TotalSeconds() * 1000 + mq.gettime()
                 if not rc.CurSpell.resisted then

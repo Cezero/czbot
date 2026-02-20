@@ -141,6 +141,8 @@ Optional **config.bard**:
 
 - **mez_remez_sec** — Seconds before the notanktar debuff duration ends to re-apply (e.g. re-mez). Default **6** if omitted. Applies to any notanktar debuff with a duration (e.g. mez). When the timer expires, the bot will target that add again and run the twist-once flow.
 
+The re-apply timer is set **whenever** the notanktar twist-once wait ends (when the bot stops waiting for the song to finish), even if song start was not detected (e.g. so adds still get re-mezzed). Only the “target is mezzed” debuff state is skipped when the song was never seen. When the mez spell has no duration in spell data, re-apply uses a fixed **12 second** interval so adds stay mezzed until the MA engages them.
+
 ---
 
 ## Mez and melee (known limitation)

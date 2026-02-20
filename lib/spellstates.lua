@@ -26,8 +26,12 @@ end
 
 function spellstates.DebuffListUpdate(spawnID, spell, duration)
     local spellid = mq.TLO.Spell(spell).ID() or mq.TLO.FindItem(spell).Spell.ID()
-    local spelldur = tonumber(mq.TLO.Spell(spellid).MyDuration()) or 0
-    if spelldur < 1 or not spellid or not duration then return false end
+    local sp = mq.TLO.Spell(spellid)
+    local sec = 0
+    if sp and sp.MyDuration then
+        sec = tonumber(sp.MyDuration.TotalSeconds()) or 0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
+    end
+    if sec < 1 or not spellid or not duration then return false end
     if not DebuffList[spawnID] then DebuffList[spawnID] = {} end
     DebuffList[spawnID][spellid] = duration
     return true

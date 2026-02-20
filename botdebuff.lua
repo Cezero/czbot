@@ -66,7 +66,7 @@ local function DebuffEvalBuildContext(index)
         if spellrange == 0 and spelltartype == 'PB AE' then
             spellrange = spellEntity.AERange()
         end
-        spelldur = spellEntity.MyDuration()
+        spelldur = tonumber(spellEntity.MyDuration.TotalSeconds()) or 0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
         if spellEntity.Category() == 'Pet' then myrange = myconfig.settings.acleash end
         if spellutils.IsTargetedAESpell(entry) then
             local ar = spellEntity.AERange()
@@ -414,18 +414,21 @@ local function DebuffCheckHandleBardNotanktarWait(rc)
     end
     rc.bardNotanktarWait = nil
     state.clearRunState()
-    -- Only run post-cast (timers, DebuffListUpdate) if we ever saw the song actually start; otherwise twist may not have started yet and we would mark target mezzed without singing.
-    if not w.singingStarted then
-        return true
-    end
     local duration_sec = spellutils.GetSpellDurationSec(w.entry)
-    local duration_end = duration_sec > 0 and (mq.gettime() + duration_sec * 1000) or nil
-    if duration_end then
-        spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, duration_end)
-        local bardCfg = botconfig.config.bard
-        local mezSec = (bardCfg and type(bardCfg.mez_remez_sec) == 'number' and bardCfg.mez_remez_sec) or 6
-        if not rc.notanktarDebuffTimers then rc.notanktarDebuffTimers = {} end
+    local bardCfg = botconfig.config.bard
+    local mezSec = (bardCfg and type(bardCfg.mez_remez_sec) == 'number' and bardCfg.mez_remez_sec) or 6
+    -- Always set re-apply timer when we leave the wait so re-mez runs even if song start was not detected.
+    if not rc.notanktarDebuffTimers then rc.notanktarDebuffTimers = {} end
+    if duration_sec > 0 then
         rc.notanktarDebuffTimers[w.EvalID] = mq.gettime() + (duration_sec - mezSec) * 1000
+    else
+        -- No duration in spell data: re-apply on a fixed interval (12s) so adds stay mezzed.
+        rc.notanktarDebuffTimers[w.EvalID] = mq.gettime() + 12 * 1000
+    end
+    -- Only mark target as mezzed if we saw the song start; otherwise we might not have sung.
+    if w.singingStarted and duration_sec > 0 then
+        local duration_end = mq.gettime() + duration_sec * 1000
+        spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, duration_end)
     end
     local _, _, tanktar = spellutils.GetTankInfo(true)
     if tanktar and tanktar > 0 then mq.cmdf('/tar id %s', tanktar) end
