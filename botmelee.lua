@@ -212,6 +212,15 @@ function botmelee.AdvCombat()
     local engageTargetRefound = false
     if tankrole.AmIMainTank() then
         id, engageTargetRefound = selectTankTarget(mainTankName)
+        -- When MT is in combat, selectTankTarget returns nil; preserve engageTargetId so we don't call disengageCombat and clear target.
+        if id == nil and mq.TLO.Me.Combat() and rc.engageTargetId and rc.MobList then
+            for _, v in ipairs(rc.MobList) do
+                if v.ID() == rc.engageTargetId then
+                    id = rc.engageTargetId
+                    break
+                end
+            end
+        end
         if engageTargetRefound then
             botmove.StartReturnToFollowAfterEngage()
         end

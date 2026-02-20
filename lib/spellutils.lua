@@ -633,7 +633,8 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     -- MQ2Cast completion: poll Cast.Status and Cast.Result; do not use CastTimeLeft.
     if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.viaMQ2Cast then
-        if rc.CurSpell.target and mq.TLO.Target.ID() ~= rc.CurSpell.target then
+        -- Self cast: MT keeps mob targeted; do not require Target.ID() == CurSpell.target.
+        if rc.CurSpell.target and rc.CurSpell.target ~= mq.TLO.Me.ID() and mq.TLO.Target.ID() ~= rc.CurSpell.target then
             spellutils.clearCastingStateOrResume()
             return false
         end
@@ -662,7 +663,8 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' and not rc.CurSpell.viaMQ2Cast then
-        if rc.CurSpell.target and mq.TLO.Target.ID() ~= rc.CurSpell.target then
+        -- Self cast: MT keeps mob targeted; do not require Target.ID() == CurSpell.target.
+        if rc.CurSpell.target and rc.CurSpell.target ~= mq.TLO.Me.ID() and mq.TLO.Target.ID() ~= rc.CurSpell.target then
             spellutils.clearCastingStateOrResume()
             return false
         end
