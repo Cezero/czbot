@@ -207,6 +207,15 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.Type and sp.Type() == 'Corpse' then return false end
     end
+    -- Caster's own buffs: Me.BuffsPopulated() is valid without targeting self; avoid /tar so MT keeps mob targeted.
+    if spawnId == mq.TLO.Me.ID() then
+        if mq.TLO.Me.BuffsPopulated() then return true end
+        state.getRunconfig().statusMessage = string.format('Waiting for target buffs (id %s)', spawnId)
+        mq.delay(1000, function() return mq.TLO.Me.BuffsPopulated() == true end)
+        local ok = mq.TLO.Me.BuffsPopulated()
+        if not ok then state.getRunconfig().statusMessage = '' end
+        return ok
+    end
     if mq.TLO.Target.ID() == spawnId then
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.BuffsPopulated and sp.BuffsPopulated() then return true end
@@ -1174,7 +1183,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
     local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
-    if not useMQ2Cast and mq.TLO.Target.ID() ~= EvalID then
+    local mtSelfCastInCombat = (EvalID == meId and mq.TLO.Me.Combat())
+    if mtSelfCastInCombat then
+        local _, tankid = spellutils.GetTankInfo(true)
+        if tankid ~= meId then mtSelfCastInCombat = false end
+    end
+    if not useMQ2Cast and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat then
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
