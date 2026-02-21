@@ -104,7 +104,7 @@ local function _corpseRezCandidates(ctx, filter)
                     match = true
                     local peer = charinfo.GetInfo(botname)
                     if peer and peer.Class then
-                        class = (type(peer.Class) == 'string') and peer.Class or (peer.Class.ShortName and peer.Class.ShortName())
+                        class = peer.Class.ShortName
                     end
                     break
                 end
