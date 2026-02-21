@@ -13,6 +13,8 @@ local spellutils = {}
 local _deps = {}
 
 local CASTING_STUCK_MS = 20000
+--- Delay (ms) after /casting when spell must be memorized, so MQ2Cast can set state before next tick and charState won't stand for hysteresis.
+local CASTING_MEMORIZE_DELAY_MS = 200
 --- When buff remaining time on target is below this (ms), do not interrupt with "buff already present" (allow refresh cast to complete). Should match botbuff's refresh window (e.g. 24s for self).
 local BUFF_REFRESH_THRESHOLD_MS = 24000
 
@@ -1214,11 +1216,13 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     if useMQ2Cast then
         local castSpellId = spellutils.GetSpellId(entry)
         local cmd = spellutils.BuildMQ2CastCommand(entry, EvalID, sub)
+        local needDelay = (type(gem) == 'number' and not mq.TLO.Me.SpellReady(spell)())
         rc.CurSpell.viaMQ2Cast = true
         rc.CurSpell.spellid = castSpellId
         mq.cmd(cmd)
         rc.CurSpell.phase = 'casting'
         state.setRunState(state.STATES.casting, { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        if needDelay then mq.delay(CASTING_MEMORIZE_DELAY_MS) end
         return true
     end
     spellutils.ExecuteNativeCast(gem, spell, sub, index)
