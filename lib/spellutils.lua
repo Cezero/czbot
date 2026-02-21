@@ -1203,8 +1203,13 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     if entry.announce then
         printf("\ayCZBot:\axCasting \ag%s\ax on >\ay%s\ax<", spell, targetname)
     end
+    -- Stand to cast only when not about to memorize: standing interrupts MQ2Cast memorization.
     if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and (not rc.CurSpell or rc.CurSpell.phase ~= 'casting') then
-        mq.cmd('/stand')
+        local standToCast = true
+        if useMQ2Cast and type(gem) == 'number' and not mq.TLO.Me.SpellReady(spell)() then
+            standToCast = false
+        end
+        if standToCast then mq.cmd('/stand') end
     end
     if useMQ2Cast then
         local castSpellId = spellutils.GetSpellId(entry)
