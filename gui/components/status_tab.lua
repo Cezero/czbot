@@ -291,7 +291,7 @@ function M.draw()
         local sitmanaVal = botconfig.config.settings.sitmana or 90
         local sitmanaNew, sitmanaCh = inputs.boundedInt('sit_mana_pct', sitmanaVal, 0, 100, 5, '##sit_mana_pct')
         if sitmanaCh then botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders() end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('If Sit is on, sit when mana is at or below this %%.') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('If Sit is on, sit when mana is below this %%; stand when above this %% + 3 (hysteresis).') end
         ImGui.SameLine()
         ImGui.TextColored(WHITE, '%s', 'Sit Endurance %: ')
         ImGui.SameLine(0, 2)
@@ -299,7 +299,7 @@ function M.draw()
         local sitendurVal = botconfig.config.settings.sitendur or 90
         local sitendurNew, sitendurCh = inputs.boundedInt('sit_endur_pct', sitendurVal, 0, 100, 5, '##sit_endur_pct')
         if sitendurCh then botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders() end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('If Sit is on, sit when endurance is at or below this %%.') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip('If Sit is on, sit when endurance is below this %%; stand when above this %% + 3 (hysteresis).') end
         -- Mount: type dropdown + click-to-edit name (spellbook/item validation)
         ImGui.Spacing()
         ImGui.TextColored(WHITE, '%s', 'Mount: ')

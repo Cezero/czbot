@@ -18,6 +18,8 @@ local bothooks = require('lib.bothooks')
 local botlogic = {}
 local myconfig = botconfig.config
 
+local SIT_HYSTERESIS_PCT = 3
+
 -- CharState: per-tick character state. Split into sub-handlers for clarity and testability.
 
 local function charState_StartupIfRequested(args)
@@ -68,18 +70,22 @@ local function charState_Always()
     end
     -- Stand if < 40% HP and mobs in camp
     if mq.TLO.Me.PctHPs() < 40 and state.getMobCount() > 0 then mustStand = true end
-    -- Sit when enabled and not casting, not moving, not combat, and mana/endurance below thresholds
+    local aboveSitHysteresis = true -- when dosit off, allow stand
+    -- Sit when enabled and not casting, not moving, not combat, and mana/endurance below thresholds (strict <); stand only when above threshold + hysteresis.
     if botconfig.config.settings.dosit and state.getRunState() ~= state.STATES.casting and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
         if state.getMobCount() == 0 then rc.sitTimer = nil end
         local sitBlockedByHit = rc.sitTimer and mq.gettime() < rc.sitTimer and state.getMobCount() > 0
+        local sitmana = tonumber(botconfig.config.settings.sitmana)
+        local sitendur = tonumber(botconfig.config.settings.sitendur)
         if not mustStand and not sitBlockedByHit then
-            if (tonumber(botconfig.config.settings.sitmana) >= mq.TLO.Me.PctMana() and mq.TLO.Me.MaxMana() > 0) or tonumber(botconfig.config.settings.sitendur) >= mq.TLO.Me.PctEndurance() then
+            if (mq.TLO.Me.PctMana() < sitmana and mq.TLO.Me.MaxMana() > 0) or mq.TLO.Me.PctEndurance() < sitendur then
                 wantToSit = true
             end
         end
+        aboveSitHysteresis = (mq.TLO.Me.MaxMana() == 0 or mq.TLO.Me.PctMana() > sitmana + SIT_HYSTERESIS_PCT) and (mq.TLO.Me.PctEndurance() > sitendur + SIT_HYSTERESIS_PCT)
     end
-    -- if sitting and must stand or (not want to sit and not casting), stand. Do not stand for mana>sitmana while casting/memorizing.
-    if mq.TLO.Me.Sitting() and (mustStand or (not wantToSit and state.getRunState() ~= state.STATES.casting)) then
+    -- if sitting and must stand or (above hysteresis and not casting), stand. Do not stand for mana while casting/memorizing.
+    if mq.TLO.Me.Sitting() and (mustStand or (aboveSitHysteresis and state.getRunState() ~= state.STATES.casting)) then
         mq.cmd('/stand')
     end
     -- if not sitting and want to sit, sit
