@@ -277,7 +277,7 @@ local function healGetTargetsForPhase(phase, context)
             if AHThreshold[idx] and AHThreshold[idx].corpse then
                 local filter = AHThreshold[idx].all and 'all' or AHThreshold[idx].bots and 'bots' or
                 AHThreshold[idx].raid and 'raid' or 'all'
-                local rezid = CorpseRezIdForFilter(idx, context, filter)
+                local rezid = CorpseRezIdForFilter(context, filter)
                 if rezid then return { { id = rezid, targethit = 'corpse' } } end
             end
         end
