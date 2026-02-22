@@ -48,22 +48,30 @@ end
 -- UnStuck phase handlers
 -- ---------------------------------------------------------------------------
 
+local UNSTUCK_EXIT_COOLDOWN_MS = 60000
+
 local function tickUnstuckPhase(p, followid, stuckdistance)
-    if not p or p.followid ~= followid then state.clearRunState() return true end
+    local rc = state.getRunconfig()
+    if not p or p.followid ~= followid then
+        rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
+        state.clearRunState()
+        return true
+    end
     if mq.gettime() < (p.deadline or 0) then return true end
     local nowdist = mq.TLO.Spawn(followid).Distance3D()
     if p.phase == 'nav_wait5' then
         if nowdist and stuckdistance >= nowdist + 10 then
-            state.getRunconfig().stucktimer = mq.gettime() + 60000
+            rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
             state.clearRunState()
             return true
         end
+        rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
         state.clearRunState()
     elseif p.phase == 'wiggle_wait' then
         mq.cmd('/squelch /keypress forward')
         mq.cmdf('/squelch /nav id %s log=off', followid)
         if nowdist and stuckdistance >= nowdist + 10 then
-            state.getRunconfig().stucktimer = mq.gettime() + 60000
+            rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
             state.clearRunState()
             return true
         end
@@ -74,9 +82,7 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
     elseif p.phase == 'back_wait' then
         mq.cmd('/squelch /keypress back')
         mq.cmdf('/squelch /nav id %s log=off', followid)
-        if p.stuckdistance and nowdist and p.stuckdistance >= nowdist + 10 then
-            state.getRunconfig().stucktimer = mq.gettime() + 60000
-        end
+        rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
         state.clearRunState()
     end
     return true

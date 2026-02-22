@@ -33,7 +33,7 @@ See [hook-dopull](hook-dopull.md) for when doPull decides to call StartPull (cha
 
 ## Unstuck (doMiscTimer → FollowAndStuckCheck → UnStuck)
 
-runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, wiggle_wait, back_wait. Cleared by `tickUnstuckPhase` when distance improves or deadline.
+runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, wiggle_wait, back_wait. Cleared by `tickUnstuckPhase` when distance improves or deadline. Whenever unstuck is cleared (any exit path), **stucktimer** is set to now + 60s so the next UnStuck attempt is delayed; this gives the bot an idle window to cast and move normally before trying unstuck again.
 
 ```mermaid
 stateDiagram-v2
@@ -51,7 +51,7 @@ stateDiagram-v2
 ```
 
 - **UnStuck:** Only runs when followid is set and distance >= acleash. If already in unstuck, tickUnstuckPhase runs. Then try PathExists → nav to followid, set unstuck phase nav_wait5 (5s). Else try AutoSize (if loaded) to shrink and recheck distance. Else doWiggleUnstuck: random heading/size, set phase wiggle_wait (2s).
-- **tickUnstuckPhase:** nav_wait5: when deadline, if distance improved set stucktimer and clear; else clear. wiggle_wait: when deadline, /nav to followid, then set back_wait (2s). back_wait: when deadline, keypress back release, /nav; if distance improved set stucktimer; clear.
+- **tickUnstuckPhase:** nav_wait5: when deadline, if distance improved set stucktimer and clear; else set stucktimer cooldown and clear. wiggle_wait: when deadline, /nav to followid, then set back_wait (2s). back_wait: when deadline, keypress back release, /nav; set stucktimer cooldown (60s) and clear. All clear paths set stucktimer so the next UnStuck is delayed.
 
 ---
 
