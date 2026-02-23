@@ -479,7 +479,7 @@ local function pullHasLoS(spawn)
 end
 
 -- Returns true when the pull target's current target is the player (confirmed agro). Nil-safe.
--- Uses spawn.Target when available; fallback to Me.TargetOfTarget when we have the pull mob targeted.
+-- Requires the puller to have the pull mob targeted so Me.TargetOfTarget is valid.
 local function pullMobHasAgroOnMe(spawn)
     local meId = mq.TLO.Me.ID()
     if not meId then return false end
@@ -530,6 +530,12 @@ local function tickAggroing(rc, spawn)
         else
             return
         end
+    end
+
+    -- Ensure puller has the pull mob targeted so Me.TargetOfTarget (aggro check) works.
+    if mq.TLO.Target.ID() ~= rc.pullAPTargetID then
+        mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
+        mq.delay(50)
     end
 
     -- Aggroing timeout: no agro after 15s -> abort and return to camp
