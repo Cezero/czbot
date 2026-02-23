@@ -502,13 +502,16 @@ local function tickAggroing(rc, spawn)
         clearPullState('aggroing: EngageCheck (mob engaged by other)')
         return
     end
+    local isBardSongPull = mq.TLO.Me.Class.ShortName() == 'BRD' and bardtwist.GetEngageGem()
     if rc.pullPhase == 'aggro_wait_target' then
         if mq.gettime() >= (rc.pullDeadline or 0) then
             clearPullState('aggroing: aggro_wait_target timeout')
             return
         end
         if not pullHasLoS(spawn) then
-            mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(rc.pullAPTargetID))
+            if not isBardSongPull then
+                mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(rc.pullAPTargetID))
+            end
             return
         end
         if mq.TLO.Target.ID() ~= rc.pullAPTargetID then
@@ -560,7 +563,9 @@ local function tickAggroing(rc, spawn)
 
     -- Require LoS before any agro (targeting/melee/cast); nav closer if blocked (spawn + coordinate check for walls/tents)
     if not pullHasLoS(spawn) then
-        mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(spawn.ID()))
+        if not isBardSongPull then
+            mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(spawn.ID()))
+        end
         return
     end
 
@@ -650,7 +655,7 @@ local function tickAggroing(rc, spawn)
         return
     end
 
-    if not spawn.Aggressive() and mq.TLO.Target.ID() == spawn.ID() and (not mq.TLO.Stick.Active() or not pullHasLoS(spawn)) then
+    if not isBardSongPull and not spawn.Aggressive() and mq.TLO.Target.ID() == spawn.ID() and (not mq.TLO.Stick.Active() or not pullHasLoS(spawn)) then
         mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(spawn.ID()))
     end
 end

@@ -116,7 +116,7 @@ Before any single cast (cure, debuff, or item/alt buff), the bot stops twist. Wh
 When the bard is the puller:
 
 - **When pull starts:** The bot sets the **pull** twist (buffs with **pull** in bands, e.g. Selo's).
-- **When in range to aggro:** If **pull.spell** has a numeric **gem** (1–12), the bot runs `/twist once <gem>`. MQ2Twist sings that song once then reverts to the previous twist (pull twist) for the return run.
+- **When in range to aggro:** If **pull.spell** has a numeric **gem** (1–12), the bot runs `/twist once <gem>`. MQ2Twist sings that song once then reverts to the previous twist (pull twist) for the return run. The bard **stays stationary** at pull range (no moving toward the mob) until the song gets aggro or timeout; then the bot returns to camp.
 - **When pull state clears:** The bot switches to the **combat** twist.
 
 Configure in **pull.spell** (same block as the pull method): set **gem** to the spell gem (1–12) and **spell** to the agro song name. The bot uses this directly for twist-on-pull; there are no separate engage_gem/engage_spell options.

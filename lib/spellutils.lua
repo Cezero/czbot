@@ -26,8 +26,11 @@ end
 function spellutils.TargetHasDebuffCategory(categories)
     if not categories or #categories == 0 then return nil end
     for _, tag in ipairs(categories) do
-        if botconfig.DEBUFF_DONTSTACK_ALLOWED[tag] and mq.TLO.Target[tag] and mq.TLO.Target[tag].ID and mq.TLO.Target[tag].ID() and mq.TLO.Target[tag].ID() > 0 then
-            return tag
+        if botconfig.DEBUFF_DONTSTACK_ALLOWED[tag] and mq.TLO.Target[tag] and mq.TLO.Target[tag].ID then
+            local id = mq.TLO.Target[tag].ID()
+            if id and id > 0 then
+                return tag
+            end
         end
     end
     return nil
