@@ -284,21 +284,46 @@ local function cmd_leash(args)
     end
 end
 
--- Engage MA's target.
+-- Engage MA's target, or (if name given) that player's target for this engagement only.
 local function cmd_attack(args)
     local tankrole = require('lib.tankrole')
-    local assistName = tankrole.GetAssistTargetName()
+    local assistName
+    local overrideName -- used for messages when args[2] was a specific player name
+    if args[2] and args[2]:match('%S') then
+        local raw = args[2]
+        local normalized = (raw == 'automatic') and 'automatic' or (raw:sub(1, 1):upper() .. raw:sub(2))
+        if normalized == 'automatic' then
+            assistName = tankrole.GetAssistTargetName()
+        else
+            assistName = normalized
+            overrideName = normalized
+        end
+    else
+        assistName = tankrole.GetAssistTargetName()
+    end
     if not assistName then
         printf('\ayCZBot:\ax\ar No Main Assist set, cannot engage')
         return
     end
     local maInfo = charinfo.GetInfo(assistName)
-    local KillTarget = maInfo and maInfo.Target and maInfo.Target.ID or nil
+    if not maInfo then
+        printf('\ayCZBot:\ax\ar Could not find %s\ax', assistName)
+        return
+    end
+    local KillTarget = maInfo.Target and maInfo.Target.ID or nil
     state.getRunconfig().engageTargetId = KillTarget
     if KillTarget then
-        printf('\ayCZBot:\ax\arEngaging\ax \ay%s\ax now', mq.TLO.Spawn(KillTarget).CleanName())
+        local msg = string.format('\ayCZBot:\ax\arEngaging\ax \ay%s\ax now', mq.TLO.Spawn(KillTarget).CleanName())
+        if overrideName then
+            msg = msg .. string.format(' \at(assist: %s)\ax', overrideName)
+        end
+        printf('%s', msg)
     else
-        printf('\ayCZBot:\ax\ar Main Assist has no target, cannot engage')
+        if overrideName then
+            printf('\ayCZBot:\ax\ar %s has no target, cannot engage\ax', overrideName)
+        else
+            printf('\ayCZBot:\ax\ar Main Assist has no target, cannot engage')
+        end
     end
 end
 

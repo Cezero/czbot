@@ -51,7 +51,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 
 | Command          | Arguments               | Purpose                                                                                                           |
 | ---------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **attack**       | —                       | Engage the Main Assist’s target.                                                                                  |
+| **attack**       | optional `<name>`       | Engage the Main Assist’s target; if name is given, engage that player's target for this engagement only.           |
 | **abort**        | optional `off`          | Abort: stop cast, clear target, turn off melee/debuff; return to camp. Use `abort off` to re-enable melee/debuff. |
 | **tank**         | `<name>` or `automatic` | Set Main Tank.                                                                                                    |
 | **assist**       | `<name>` or `automatic` | Set Main Assist.                                                                                                  |

@@ -17,6 +17,13 @@ local CorpseID = nil
 
 local function refreshFollowId()
     local rc = state.getRunconfig()
+    if not rc.followid or rc.followid == 0 then
+        if rc.followname and rc.followname ~= '' then
+            local id = mq.TLO.Spawn('=' .. rc.followname).ID()
+            if id then rc.followid = id end
+        end
+        if not rc.followid or rc.followid == 0 then return end
+    end
     if not mq.TLO.Spawn('id ' .. rc.followid).ID() or mq.TLO.Spawn('id ' .. rc.followid).Type() == 'Corpse' then
         local id = mq.TLO.Spawn('=' .. rc.followname).ID()
         if id then rc.followid = id end
@@ -332,6 +339,7 @@ function botmove.FollowCall()
     if not rc.stucktimer then rc.stucktimer = 0 end
     if rc.stucktimer <= mq.gettime() then botmove.UnStuck() end
     refreshFollowId()
+    if not rc.followid or rc.followid == 0 then return end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
     doFollowNav()
 end
@@ -360,6 +368,7 @@ end
 
 function botmove.StartReturnToFollowAfterEngage()
     local rc = state.getRunconfig()
+    if not rc.followid or rc.followid == 0 then return end
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
     local followdistance = mq.TLO.Spawn(rc.followid).Distance() or 0
