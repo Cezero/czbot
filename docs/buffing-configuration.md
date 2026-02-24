@@ -6,8 +6,7 @@ This document explains how to configure the bot’s **buffing** behavior: which 
 
 - **Master switch:** Buffing runs only when **`settings.dobuff`** is `true`. Default is `false`.
 - **Evaluation order:** The buff loop evaluates **phases** in order (see [Buff bands](#buff-bands)): self → byname → tank → groupbuff → groupmember → pc → mypet → pet. For each phase it considers each target and checks **all** buff spells that have that phase in their bands before moving to the next phase. **pc** = all peers (any character known via charinfo), not limited to group members. **groupmember** = in-group only (including non-bot group members, via Group TLO). The only out-of-group non-bot PC we buff is the **explicitly configured tank** (TankName).
-- **When buffs run:** Each spell entry can be marked for **idle** only, **combat** only, or both (by band tokens **idle** and **cbt**). With no mobs in camp, idle-only and combat buffs can run; with mobs, only combat buffs run.
-- **Combat:** By default, no buffs are cast when mobs are in camp. To allow a specific buff during combat, add **cbt** to that spell's band.
+- **When buffs run:** Buffs are always allowed when there are no mobs in camp. Spell-level **inCombat** controls whether a buff can be cast when mobs are in camp: when `true`, the buff runs in both idle and combat; when `false` or unset, the buff runs only when idle. **Bards** also have spell-level **inIdle**, which controls whether the buff is in the **idle twist list**; the **combat twist list** uses **inCombat**. The two twist lists are independent (see [Bard configuration](bard-configuration.md)).
 
 ---
 
@@ -32,6 +31,8 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 | **minmana** | Minimum mana (absolute) to cast. |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **bands** | Who receives the buff. See [Buff bands](#buff-bands) below. |
+| **inCombat** | Optional. When `true`, this buff can be cast when mobs are in camp. Default is `false`. |
+| **inIdle** | Optional. **Bard only.** When `true` (default), this buff is included in the idle twist list. When `false`, it is not twisted when idle. Ignored for non-bards. GUI shows "In idle" only for Bards. |
 | **spellicon** | Optional. Buff icon ID. If set (non-zero), the bot skips a target who already has that buff icon (avoids overwriting). |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
@@ -39,7 +40,7 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 
 Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). No min/max for buffs.
 
-- **targetphase** tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc** (other PCs by class), **mypet**, **pet**, **byname**; **cbt** / **idle** control when the spell can run (combat vs no mobs in camp). **bots** in config is accepted for backward compatibility and treated as **pc**.
+- **targetphase** tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc** (other PCs by class), **mypet**, **pet**, **byname**. Do **not** put **cbt** or **idle** in targetphase — use spell-level **inCombat** and **inIdle** (Bard only) instead. **bots** in config is accepted for backward compatibility and treated as **pc**.
 - **validtargets**: Class shorts (e.g. `war`, `clr`, …) or `all`. Restricts which classes get the buff for **groupmember** and **pc** phases. Absent = all classes.
 - **Pet summon:** Pet summon spells are **auto-detected** (spell Category Pet or SPA 33/103). For a summon, add a buff entry with **self** in targetphase; the bot only casts it when it has no pet. The token **petspell** in targetphase is deprecated (not a phase); if present it still sets the pet-summon flag for backward compatibility. See [Pets configuration](pets-configuration.md).
 - **name** — Buff specific characters by name (list their names in **validtargets** when using **byname** in targetphase).
@@ -105,4 +106,4 @@ buff = {
 ## Behavior summary
 
 - **Spellicon:** When **spellicon** is set, the bot checks whether the candidate target already has that buff (by icon). If they do, the target is skipped so the same buff is not recast unnecessarily.
-- **Combat vs idle:** Entries with **cbt** in bands run when there are mobs in the camp list; entries with **idle** run when there are none. Entries with both or neither can run in either case (subject to other checks).
+- **Combat vs idle:** Buffs are always allowed when there are no mobs in camp. Set **inCombat** `true` on a spell entry to allow that buff when mobs are in camp. **inIdle** (Bard only) controls whether the buff is in the idle twist list; see [Bard configuration](bard-configuration.md).

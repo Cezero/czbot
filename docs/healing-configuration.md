@@ -43,13 +43,14 @@ Each entry in **`heal.spells`** can have:
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **tarcnt** | Optional. Only used for **group/AE heals**: minimum number of group members in the HP band (and in range) required to trigger the spell. When omitted, group heals fire when at least 1 member is in band. Not used for single-target heals. |
 | **bands** | Who and at what HP % this spell applies. Each band has **targetphase** (phase stages) and **validtargets** (within-phase types). See [Heal bands](#heal-bands) below. |
+| **inCombat** | Optional. When `true` and the spell has **corpse** in a band, rez is allowed when mobs are in camp. Default is `false`. |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip this spell for this evaluation; **string** — Lua script run with `mq` and `EvalID` (current target spawn ID) in scope; return a truthy value to allow the cast, otherwise the spell is skipped (e.g. only cast when target HP > X%, or only when not in a certain zone). |
 
 ### Heal bands
 
 Bands define **who** can receive the spell and **at what HP %**. Each band has two distinct concepts:
 
-- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`; optionally `cbt` for corpse (allow rez in combat). Do **not** put `all`, `bots`, or `raid` in targetphase — those go in **validtargets** for the corpse phase.
+- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`. Do **not** put `all`, `bots`, or `raid` in targetphase — those go in **validtargets** for the corpse phase. Spell-level **inCombat** (see [Special tokens](#special-tokens-targetphase)) controls whether corpse rez is allowed in combat; do not put `cbt` in targetphase.
 - **validtargets:** Within a phase stage, which target types to consider. For **corpse** phase use `all`, `bots`, or `raid` (which corpses to rez). For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `validtargets = { 'all' }`. **Tank** and **self** need no validtargets.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For corpse-related targets the effective max is 200 (special).
 
@@ -78,7 +79,7 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 - **Selection:** For each phase, each target is checked against all heal spells that have that phase; first spell (in config order) that the target needs is cast. Within pc/groupmember, targets are in iteration order (not lowest HP).
 
 **Special tokens (targetphase):**
-- **cbt** (combat) — When in targetphase with **corpse**, the bot may rez even when there are mobs in the camp list. Without **cbt**, corpse rez is only considered when there are no mobs in camp (safe rez only).
+- **inCombat** (spell-level, not in targetphase) — When the spell has **corpse** in a band, set **inCombat** `true` on the spell entry to allow rez when there are mobs in the camp list. When `false` or unset, corpse rez is only considered when there are no mobs in camp (safe rez only). The GUI shows "Allow rez in combat" only when at least one band includes **corpse**.
 - **xtgt** (extended target) — When in targetphase and **heal.xttargets** is set, the spell can target extended target (XTarget) slots; the band’s min/max apply to the XTarget’s HP.
 
 **Heal over time (HoT)**

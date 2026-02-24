@@ -7,7 +7,7 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 | Section  | What "target" means | Count gate | Bands (main idea) |
 | -------- | ------------------- | ---------- | ----------------- |
 | **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (phase stages) + **validtargets** (within-phase types) + min/max HP % |
-| **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **cbt** / **idle** control when spell can run |
+| **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **inCombat** (and Bard **inIdle**) control when spell can run |
 | **debuff** | Mobs in camp (MA target + adds) | **tarcnt** = min mobs in camp to consider spell | **targetphase** only (tanktar, notanktar, named) + min/max HP % |
 | **cure**  | Self, tank, group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **priority** in targetphase runs an earlier pass when any cure spell has it (no top-level setting). **groupmember**, **groupcure**, **pc** |
 
@@ -27,7 +27,7 @@ Heal spells use the phase-first pattern above. The **phase order** is the evalua
 
 The heal phase order is:
 
-1. **corpse** (rez) — Corpses in range; subject to rezoffset and **validtargets** for corpse (`all`, `bots`, `raid`); **cbt** in targetphase allows rez in combat.
+1. **corpse** (rez) — Corpses in range; subject to rezoffset and **validtargets** for corpse (`all`, `bots`, `raid`). Spell-level **inCombat** allows rez in combat when set on the spell entry.
 2. **self** — Yourself.
 3. **groupheal** (group/AE) — Group heal; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
 4. **tank** — The resolved Main Tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
@@ -45,7 +45,7 @@ For a given target, the first heal spell (in config order) that has that phase i
 
 ### Bands
 
-Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, pc, groupmember, mypet, pet, xtgt; optionally cbt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; `all`, `bots`, or `raid` for corpse). **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
+Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, pc, groupmember, mypet, pet, xtgt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; `all`, `bots`, or `raid` for corpse). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
 
 ---
 
@@ -98,7 +98,7 @@ Each band’s **min** / **max** define mob HP %. For debuff, all bands for that 
 
 ## Buff targeting
 
-Buff spells choose a target in a fixed order. Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). **cbt** and **idle** in targetphase control **when** the spell can run (combat vs no mobs in camp), not who is targeted.
+Buff spells choose a target in a fixed order. Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). Spell-level **inCombat** controls whether the buff can run when mobs are in camp; **inIdle** (Bard only) controls whether the buff is in the idle twist list. These are not targetphase tokens.
 
 ### Evaluation order
 
@@ -117,7 +117,7 @@ For **BRD**, only **self** is tried after the initial self check (no tank/groupb
 
 ### Bands
 
-Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**, **byname**, **cbt**, **idle**. (**petspell** is deprecated: spell-type flag only, not a phase; pet summon is auto-detected.) validtargets: class shorts or **all** (for **groupmember** and **pc**); or character names (for **byname**). **cbt** / **idle** = when the spell can run. **tarcnt** optional for **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
+Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**, **byname**. (**petspell** is deprecated: spell-type flag only, not a phase; pet summon is auto-detected.) validtargets: class shorts or **all** (for **groupmember** and **pc**); or character names (for **byname**). Spell-level **inCombat** and **inIdle** (Bard only) control when the spell can run / which twist list it is in; do not put **cbt** or **idle** in targetphase. **tarcnt** optional for **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
 
 ---
 

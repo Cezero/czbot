@@ -307,9 +307,7 @@ function botbuff.BuffCheck(runPriority)
             local gem = entry.gem
             if entry.enabled == false then return false end
             if not ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') then return false end
-            local cbtspell = BuffClass[i] and BuffClass[i].cbt
-            local idlespell = BuffClass[i] and BuffClass[i].idle
-            return (not hasMob and (not cbtspell or idlespell)) or (hasMob and cbtspell)
+            return (not hasMob) or (hasMob and (BuffClass[i] and BuffClass[i].inCombat == true))
         end,
     }
     local function getSpellIndices(phase, _target)

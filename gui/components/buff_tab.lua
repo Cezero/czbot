@@ -1,5 +1,6 @@
 -- Buff tab: dedicated panel for buff config (one spell_entry per buff).
 
+local mq = require('mq')
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spell_entry = require('gui.widgets.spell_entry')
@@ -26,8 +27,6 @@ local TARGETPHASE_OPTIONS_BUFF = {
     { key = 'pc',          label = 'PC',       tooltip = 'Buff other PCs/bots (class filter below).' },
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Buff your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Buff other group pets.' },
-    { key = 'idle',        label = 'Idle',     tooltip = 'Allow when no mobs in camp.' },
-    { key = 'cbt',         label = 'Cbt',      tooltip = 'Allow when mobs in camp.' },
     { key = 'groupbuff',   label = 'Grp Buff', tooltip = 'Group AE buff.' },
 }
 
@@ -85,6 +84,33 @@ local function buffCustomSection(entry, idPrefix, onChanged)
     if tcCh then
         entry.tarcnt = newTc
         if onChanged then onChanged() end
+    end
+    ImGui.Spacing()
+    -- In combat: allow this buff when mobs are in camp
+    ImGui.Text('Allow in combat')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Allow this buff to be cast when mobs are in camp.')
+    end
+    ImGui.SameLine()
+    local inCbt = entry.inCombat == true
+    local inCbtVal, inCbtPressed = ImGui.Checkbox('##' .. idPrefix .. '_inCombat', inCbt)
+    if inCbtPressed then
+        entry.inCombat = inCbtVal
+        if onChanged then onChanged() end
+    end
+    -- In idle (Bard only): include in twist when no mobs in camp
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        ImGui.Text('In idle')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Include in twist when no mobs in camp (Bard only).')
+        end
+        ImGui.SameLine()
+        local inIdle = entry.inIdle ~= false
+        local inIdleVal, inIdlePressed = ImGui.Checkbox('##' .. idPrefix .. '_inIdle', inIdle)
+        if inIdlePressed then
+            entry.inIdle = inIdleVal
+            if onChanged then onChanged() end
+        end
     end
 end
 

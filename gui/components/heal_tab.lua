@@ -19,7 +19,7 @@ local PRIMARY_OPTIONS = {
     { value = 'script',  label = 'Script' },
 }
 
--- Order matches botheal HEAL_PHASE_ORDER; cbt is optional (allow rez in combat with corpse).
+-- Order matches botheal HEAL_PHASE_ORDER.
 local TARGETPHASE_OPTIONS_HEAL = {
     { key = 'corpse',      label = 'Corpse',   tooltip = 'Resurrect PC corpses.' },
     { key = 'self',        label = 'Self',     tooltip = 'Heal self.' },
@@ -30,8 +30,21 @@ local TARGETPHASE_OPTIONS_HEAL = {
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Heal your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Heal other group pets.' },
     { key = 'xtgt',        label = 'XTarget',  tooltip = 'Heal extended targets.' },
-    { key = 'cbt',         label = 'Cbt',      tooltip = 'With Corpse: allow rez in combat (MobList present).' },
 }
+
+local function bandHasPhase(entry, phase)
+    local bands = entry and entry.bands
+    if not bands or type(bands) ~= 'table' then return false end
+    for _, band in ipairs(bands) do
+        local tp = band.targetphase
+        if type(tp) == 'table' then
+            for _, p in ipairs(tp) do
+                if p == phase then return true end
+            end
+        end
+    end
+    return false
+end
 
 -- Corpse-phase target options (who to rez).
 local VALIDTARGETS_OPTIONS_CORPSE = {
@@ -114,6 +127,21 @@ local function healCustomSection(entry, idPrefix, onChanged)
     if tcCh then
         entry.tarcnt = newTc
         if onChanged then onChanged() end
+    end
+    -- In combat (rez only): show only when corpse is in a band
+    if bandHasPhase(entry, 'corpse') then
+        ImGui.Spacing()
+        ImGui.Text('Allow rez in combat')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('When checked, this rez can be cast when mobs are in camp.')
+        end
+        ImGui.SameLine()
+        local inCbt = entry.inCombat == true
+        local inCbtVal, inCbtPressed = ImGui.Checkbox('##' .. idPrefix .. '_inCombat', inCbt)
+        if inCbtPressed then
+            entry.inCombat = inCbtVal
+            if onChanged then onChanged() end
+        end
     end
 end
 

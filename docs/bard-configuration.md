@@ -5,7 +5,7 @@ This document explains the nuances and considerations when configuring a **bard 
 ## Overview
 
 - **Default twist (MQ2Twist):** Self buffs with numeric gems are sustained via a continuous twist derived from your buff config. The bot runs **noncombat** (idle), **combat**, or **pull** twist depending on state; when it needs to cast something else (mez, cure, single spell), it stops twist, casts, then resumes.
-- **Buff targeting:** For bards, only the **self** phase is used for buffs; the buff hook does **not** schedule single casts for self — the twist handles all self buffs. Use **self**, **cbt**, **idle**, and **pull** in your buff bands as needed (see below).
+- **Buff targeting:** For bards, only the **self** phase is used for buffs; the buff hook does **not** schedule single casts for self — the twist handles all self buffs. Use spell-level **inCombat** and **inIdle** to control which twist list each buff is in; use **pull** in bands for the pull twist (see below).
 - **Interrupts:** The bot does not interrupt bard casts (buff, debuff, cure). No configuration required.
 - **Movement and casting:** Bards can move, use nav, and stick while "casting"; the bot does not force a stop before casting.
 - **Melee:** Before casting, if **domelee** is on and the bard is not in combat, the bot re-engages melee. Set **settings.domelee** if the bard should melee when not casting.
@@ -19,8 +19,8 @@ When **MQ2Twist** is loaded and you are a bard, the bot maintains a default twis
 
 | Mode       | When used                             | Contents                                                                                                   |
 | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **idle**   | No mobs in camp                       | All buffs with **self** and numeric gem (config order).                                                    |
-| **combat** | Mobs in camp, assisting (not pulling) | Buffs with **cbt** (config order) then all debuff entries with **tanktar** and numeric gem (config order). |
+| **idle**   | No mobs in camp                       | All buffs with **inIdle** checked (config order).                                                          |
+| **combat** | Mobs in camp, assisting (not pulling) | Buffs with **inCombat** checked (config order) then all debuff entries with **tanktar** and numeric gem (config order). |
 | **pull**   | Pull state (navigating / returning)   | Buffs with **self** and **pull** (e.g. Selo's) in bands.                                                   |
 
 - The bot only issues `/twist` when the desired list differs from the current list or twist is stopped, so it does not restart the sequence every tick.
@@ -32,30 +32,29 @@ For full targeting and band details, see [Spell targeting and bands](spell-targe
 
 ## Buff targeting and bands
 
-For **BRD**, only **self** is evaluated for buffs; tank, groupbuff, groupmember, pc, mypet, and pet are **never** tried. The buff hook does **not** schedule a cast for self — the default twist (above) sustains all self buffs. Put **self**, **cbt**, **idle**, and optionally **pull** in your buff bands:
+For **BRD**, only **self** is evaluated for buffs; tank, groupbuff, groupmember, pc, mypet, and pet are **never** tried. The buff hook does **not** schedule a cast for self — the default twist (above) sustains all self buffs. Use spell-level **inCombat** and **inIdle** to control which twist list each buff is in; the two lists are **independent** (a song can be idle-only, combat-only, or both). Put **self** and optionally **pull** in your buff bands:
 
-- **self** — Included in the twist (idle list uses all self; combat uses **cbt**; pull uses **pull**).
-- **cbt** — Buff is included in the **combat** twist. Because the idle twist uses all buffs with **self**, a **cbt** buff (with **self**) is also in the **idle** twist. Add **pull** in the same band if it should also run in the pull twist.
-- **idle** — Buff is in the **noncombat (idle)** twist only.
+- **inIdle** (spell-level) — When `true` (default), this buff is in the **idle** twist list. When `false`, it is not twisted when no mobs are in camp. GUI shows "In idle" only for Bards.
+- **inCombat** (spell-level) — When `true`, this buff is in the **combat** twist list. When `false` (default), it is not twisted when mobs are in camp.
 - **pull** — Buff is in the **pull** twist (e.g. Selo's). Only self buffs with a numeric gem; include **self** and **pull** in the same band.
 
 ### Example buff block (minimal)
 
-Order of entries = order in the twist. Only **self** + numeric **gem** matter for bards.
+Order of entries = order in the twist. Use **inCombat** and **inIdle** (spell-level) to control which list each song is in.
 
 ```lua
 buff = {
   spells = {
-    { gem = 1, spell = 'Selo\'s Sonata',     bands = { { targetphase = { 'self', 'pull' } } } },
-    { gem = 2, spell = 'Kelin\'s Lucid Lament', bands = { { targetphase = { 'self', 'cbt' } } } },
-    { gem = 3, spell = 'Psalm of Veeshan',   bands = { { targetphase = { 'self', 'idle' } } } },
+    { gem = 1, spell = 'Selo\'s Sonata',     inCombat = false, inIdle = true,  bands = { { targetphase = { 'self', 'pull' } } } },
+    { gem = 2, spell = 'Kelin\'s Lucid Lament', inCombat = true,  inIdle = true,  bands = { { targetphase = { 'self' } } } },
+    { gem = 3, spell = 'Psalm of Veeshan',   inCombat = false, inIdle = true,  bands = { { targetphase = { 'self' } } } },
   }
 }
 ```
 
-- Gem 1: in **pull** twist (e.g. while pulling) and in **idle** (all self buffs). Not in combat unless you also add **cbt**.
-- Gem 2: in **combat** twist (and idle, because all self are in idle list).
-- Gem 3: **idle** only (e.g. out-of-combat regen); not in combat twist.
+- Gem 1: in **pull** twist (self + pull in bands) and in **idle** twist (inIdle true). Not in combat (inCombat false).
+- Gem 2: in **combat** and **idle** twist (inCombat and inIdle both true).
+- Gem 3: **idle** only (inIdle true, inCombat false); e.g. out-of-combat regen.
 
 ### Example debuff block (minimal)
 

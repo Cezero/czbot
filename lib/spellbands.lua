@@ -35,10 +35,11 @@ function spellbands.applyBands(section, entry, index)
                 local validTgts = band.validtargets
                 for _, p in ipairs(targetPhase) do
                     if type(p) == 'string' and p ~= '' then
-                        rt[p] = { min = minVal, max = maxVal }
                         if p == 'cbt' then
-                            rt[p].max = DEBUFF_SPECIAL_MAX
-                        elseif p == 'corpse' then
+                            rt.inCombat = true -- legacy; entry.inCombat overrides after loop
+                        else
+                            rt[p] = { min = minVal, max = maxVal }
+                            if p == 'corpse' then
                             rt[p].max = DEBUFF_SPECIAL_MAX
                             if type(validTgts) == 'table' and #validTgts > 0 then
                                 for _, v in ipairs(validTgts) do
@@ -58,10 +59,12 @@ function spellbands.applyBands(section, entry, index)
                         elseif (p == 'pc' or p == 'groupmember') and (not validTgts or (type(validTgts) == 'table' and #validTgts == 0)) then
                             classesAll = true
                         end
+                        end
                     end
                 end
             end
         end
+        if entry.inCombat ~= nil then rt.inCombat = (entry.inCombat == true) end
         if classesAll then rt.classes = 'all' else rt.classes = classesSet end
         return rt
     end
@@ -80,6 +83,10 @@ function spellbands.applyBands(section, entry, index)
                     if type(p) == 'string' and p ~= '' then
                         if p == 'petspell' then
                             rt.petspell = true
+                        elseif p == 'cbt' then
+                            rt.inCombat = true -- legacy; entry.inCombat overrides after loop
+                        elseif p == 'idle' then
+                            rt.inIdle = true -- legacy; entry.inIdle overrides after loop
                         else
                             rt[p] = true
                             if p == 'byname' then hasByname = true; rt.name = true end
@@ -108,6 +115,8 @@ function spellbands.applyBands(section, entry, index)
         else
             rt.classes = classesSet
         end
+        if entry.inCombat ~= nil then rt.inCombat = (entry.inCombat == true) end
+        if entry.inIdle ~= nil then rt.inIdle = (entry.inIdle == true) end
         return rt
     end
 

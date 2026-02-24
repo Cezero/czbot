@@ -67,7 +67,7 @@ function bardtwist.IsBard()
     return mq.TLO.Me.Class.ShortName() == 'BRD'
 end
 
---- All buffs with self and numeric gem (enabled). Config order.
+--- Idle twist list: buffs where inIdle is true (or legacy idle/self in bands). Config order.
 function bardtwist.BuildNoncombatTwistList()
     if not bardtwist.IsBard() then return {} end
     local spells = botconfig.config.buff and botconfig.config.buff.spells
@@ -76,7 +76,8 @@ function bardtwist.BuildNoncombatTwistList()
     for i = 1, #spells do
         local entry = spells[i]
         if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
-            if buffHasPhase(entry, 'self') then
+            local inIdle = (entry.inIdle == true) or (entry.inIdle == nil and (buffHasPhase(entry, 'idle') or buffHasPhase(entry, 'self')))
+            if inIdle then
                 out[#out + 1] = entry.gem
             end
         end
@@ -84,7 +85,7 @@ function bardtwist.BuildNoncombatTwistList()
     return out
 end
 
---- Buffs with cbt then debuffs with tanktar (numeric gem, enabled). Config order.
+--- Combat twist list: buffs where inCombat is true (or legacy cbt in bands), then debuffs with tanktar. Config order.
 function bardtwist.BuildCombatTwistList()
     if not bardtwist.IsBard() then return {} end
     local out = {}
@@ -93,7 +94,8 @@ function bardtwist.BuildCombatTwistList()
         for i = 1, #buffs do
             local entry = buffs[i]
             if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
-                if buffHasPhase(entry, 'cbt') then
+                local inCombat = (entry.inCombat == true) or buffHasPhase(entry, 'cbt')
+                if inCombat then
                     out[#out + 1] = entry.gem
                 end
             end

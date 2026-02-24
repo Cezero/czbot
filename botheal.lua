@@ -143,7 +143,7 @@ end
 
 local function HPEvalCorpse(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].corpse then return nil, nil end
-    if not AHThreshold[index].cbt and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then
+    if not AHThreshold[index].inCombat and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then
         return nil, nil
     end
     for _, filter in ipairs({ 'all', 'bots', 'raid' }) do
