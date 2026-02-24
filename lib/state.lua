@@ -371,7 +371,8 @@ function M.czpause(...)
         _G.MasterPause = true
         print('Pausing CZBot')
     else
-        if _G.MasterPause == false then
+        -- Treat nil as not paused (e.g. before first use)
+        if _G.MasterPause ~= true then
             _G.MasterPause = true
             print('Pausing CZBot')
         else

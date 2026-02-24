@@ -167,7 +167,11 @@ local function campLOSOk(rc)
     if not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then
         return false
     end
-    return mq.TLO.LineOfSight(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ',' .. mq.TLO.Me.Z() .. ':' .. rc.makecamp.x .. ',' .. rc.makecamp.y .. ',' .. rc.makecamp.z)()
+    local meX, meY, meZ = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+    if not meX or not meY or not meZ then
+        return false
+    end
+    return mq.TLO.LineOfSight(meX .. ',' .. meY .. ',' .. meZ .. ':' .. rc.makecamp.x .. ',' .. rc.makecamp.y .. ',' .. rc.makecamp.z)()
 end
 
 local function doLeashResetCombat()
