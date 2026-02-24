@@ -13,6 +13,7 @@ local inputs = require('gui.widgets.inputs')
 local combos = require('gui.widgets.combos')
 local labeled_grid = require('gui.widgets.labeled_grid')
 local modals = require('gui.widgets.modals')
+local commands = require('lib.commands')
 
 local M = {}
 
@@ -117,13 +118,25 @@ function M.draw()
     ImGui.TextColored(YELLOW, '%s', getStatusLine())
     ImGui.SameLine()
     local style = ImGui.GetStyle()
+    local pauseLabelW = (select(1, ImGui.CalcTextSize('Pause')) or 0)
+    local pauseIconW = (select(1, ImGui.CalcTextSize(Icons.FA_PAUSE_CIRCLE)) or 0) + style.FramePadding.x * 2
     local exitLabelW = (select(1, ImGui.CalcTextSize('Exit')) or 0)
     local exitIconW = (select(1, ImGui.CalcTextSize(Icons.FA_POWER_OFF)) or 0) + style.FramePadding.x * 2
-    local exitTotalW = exitLabelW + style.ItemSpacing.x + exitIconW
+    local buttonsTotalW = pauseLabelW + style.ItemSpacing.x + pauseIconW + style.ItemSpacing.x + exitLabelW + style.ItemSpacing.x + exitIconW
     local avail = ImGui.GetContentRegionAvail()
     if avail > 0 then
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - exitTotalW)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - buttonsTotalW)
     end
+    ImGui.Text('%s', 'Pause')
+    ImGui.SameLine()
+    ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+    ImGui.PushStyleColor(ImGuiCol.Text, YELLOW)
+    if ImGui.SmallButton(Icons.FA_PAUSE_CIRCLE .. '##pause') then
+        commands.czpause()
+    end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Pause/Unpause CZBot') end
+    ImGui.PopStyleColor(2)
+    ImGui.SameLine()
     ImGui.Text('%s', 'Exit')
     ImGui.SameLine()
     ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
