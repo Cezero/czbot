@@ -107,7 +107,7 @@ function castutils.evalGroupAECount(entry, targethit, index, bandTable, phaseKey
 end
 
 -- Shared get-targets helpers for buff/cure/heal GetTargetsForPhase.
--- opts for getTargetsGroupMember: botsFirst (add bots in group first), excludeBotsFromGroup (in group loop skip names that have charinfo).
+-- opts for getTargetsGroupMember: botsFirst (add bots in group first), excludeBotsFromGroup (in group loop skip names that have charinfo), excludeSelfAndTank (heal/buff: skip tank in group loop).
 local function addPcEntries(out, names, count, filterFn)
     if not names then return end
     count = count or #names
@@ -159,6 +159,8 @@ function castutils.getTargetsGroupMember(context, opts)
                 if grpid and grpid > 0 and grpclass then
                     if opts.excludeBotsFromGroup and charinfo.GetInfo(grpname) then
                         -- skip (already added in botsFirst or is a bot)
+                    elseif opts.excludeSelfAndTank and context and context.tankid and grpid == context.tankid then
+                        -- skip tank (heal/buff: tank only in tank phase)
                     else
                         out[#out + 1] = { id = grpid, targethit = grpclass:lower() }
                     end
@@ -169,11 +171,15 @@ function castutils.getTargetsGroupMember(context, opts)
     return out
 end
 
-function castutils.getTargetsPc(context)
+function castutils.getTargetsPc(context, opts)
     local out = {}
     local bots = context.bots
     if not bots then return out end
-    addPcEntries(out, bots, context.botcount, nil)
+    local filterFn = nil
+    if opts and opts.excludeTank and context and context.tank then
+        filterFn = function(name) return name ~= context.tank end
+    end
+    addPcEntries(out, bots, context.botcount, filterFn)
     return out
 end
 

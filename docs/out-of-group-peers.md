@@ -30,7 +30,7 @@ All of this works for peers who are outside the bot’s group, as long as the re
 
 ## Configuration knobs
 
-- **Heal bands:** Put **`groupmember`** in **targetphase** to restrict single-target heals to **characters in the bot’s (EQ) group**. Put **`pc`** in **targetphase** to also heal any peer in range (including out-of-group) when their HP is in the band.
+- **Heal bands:** Put **`groupmember`** in **targetphase** to restrict single-target heals to **characters in the bot’s (EQ) group**. Put **`pc`** in **targetphase** to also heal any peer in range (including out-of-group) when their HP is in the band. For heal (and buff), the groupmember-phase target list excludes self and the configured main tank; the pc-phase target list excludes the configured main tank (so the tank is only healed/buffed in the tank phase). Cure behavior is unchanged.
 - **Cure bands:** Put **`groupmember`** in **targetphase** to cure in-group only (peers then non-peer group members by class). Put **`groupcure`** for group AE cure. Put **`pc`** to also cure any peer in range (out-of-group). The only out-of-group non-bot we cure is the explicitly configured tank.
 
 For full details on bands and options, use the linked configuration documents above.

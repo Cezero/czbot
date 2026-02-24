@@ -256,8 +256,8 @@ local function healGetTargetsForPhase(phase, context)
     if phase == 'self' then return castutils.getTargetsSelf() end
     if phase == 'tank' then return castutils.getTargetsTank(context) end
     if phase == 'groupheal' then return castutils.getTargetsGroupCaster('groupheal') end
-    if phase == 'groupmember' then return castutils.getTargetsGroupMember(context, {}) end
-    if phase == 'pc' then return castutils.getTargetsPc(context) end
+    if phase == 'groupmember' then return castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true }) end
+    if phase == 'pc' then return castutils.getTargetsPc(context, { excludeTank = true }) end
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then return castutils.getTargetsPet(context) end
     if phase == 'xtgt' and XTList then

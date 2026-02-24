@@ -196,8 +196,8 @@ local function buffGetTargetsForPhase(phase, context)
     if phase == 'self' then return castutils.getTargetsSelf() end
     if phase == 'tank' then return filterCorpses(castutils.getTargetsTank(context)) end
     if phase == 'groupbuff' then return castutils.getTargetsGroupCaster('groupbuff') end
-    if phase == 'groupmember' then return filterCorpses(castutils.getTargetsGroupMember(context, {})) end
-    if phase == 'pc' then return filterCorpses(castutils.getTargetsPc(context)) end
+    if phase == 'groupmember' then return filterCorpses(castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true })) end
+    if phase == 'pc' then return filterCorpses(castutils.getTargetsPc(context, { excludeTank = true })) end
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then return castutils.getTargetsPet(context) end
     if phase == 'byname' and context.buffCount then
