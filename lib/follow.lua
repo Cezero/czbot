@@ -17,7 +17,8 @@ function follow.StartFollow(name)
     local spawn = name and mq.TLO.Spawn('=' .. name)
     if not spawn then return end
     local rc = state.getRunconfig()
-    if rc.campstatus then botmove.MakeCamp('off') end
+    local campSet = rc.campstatus or (rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z))
+    if campSet then botmove.MakeCamp('off') end
     local followId = spawn.ID()
     if not followId then return end
     rc.followid = followId

@@ -164,6 +164,9 @@ local function campDistanceOk(rc)
 end
 
 local function campLOSOk(rc)
+    if not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then
+        return false
+    end
     return mq.TLO.LineOfSight(mq.TLO.Me.X() .. ',' .. mq.TLO.Me.Y() .. ',' .. mq.TLO.Me.Z() .. ':' .. rc.makecamp.x .. ',' .. rc.makecamp.y .. ',' .. rc.makecamp.z)()
 end
 
@@ -204,6 +207,9 @@ local function makeCampOn()
     end
     setCampHere()
     state.getRunconfig().campstatus = true
+    local rc = state.getRunconfig()
+    rc.followid = nil
+    rc.followname = nil
     printf('\ayCZBot:\axhanging out using mq2nav')
     return true
 end
@@ -396,6 +402,7 @@ function botmove.MakeCampLeashCheck()
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     if state.getRunState() == state.STATES.pulling then return end
     local rc = state.getRunconfig()
+    if not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then return end
     if campDistanceOk(rc) and campLOSOk(rc) then return end
     print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
     doLeashResetCombat()

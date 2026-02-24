@@ -173,6 +173,23 @@ function M.draw()
             local startX = ImGui.GetCursorPosX()
             ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
             ImGui.Text('%s', followLabel)
+            ImGui.SameLine()
+            if rc.followid and rc.followid > 0 then
+                local stopIcon = Icons.FA_STOP_CIRCLE
+                local stopIconW = (select(1, ImGui.CalcTextSize(stopIcon)) or 0) + style.FramePadding.x * 2
+                local followAvail = select(1, ImGui.GetContentRegionAvail())
+                if followAvail > 0 then
+                    ImGui.SetCursorPosX(ImGui.GetCursorPosX() + followAvail - stopIconW)
+                end
+                ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+                ImGui.PushStyleColor(ImGuiCol.Text, RED)
+                if ImGui.SmallButton(stopIcon .. '##follow_stop') then
+                    rc.followid = nil
+                    rc.followname = nil
+                end
+                if ImGui.IsItemHovered() then ImGui.SetTooltip('Stop following') end
+                ImGui.PopStyleColor(2)
+            end
             ImGui.Spacing()
             ImGui.TextColored(WHITE, '%s', 'Following: ')
             ImGui.SameLine(0, 2)
@@ -387,10 +404,10 @@ function M.draw()
                             for k in pairs(applicable) do rc.nukeFlavorsAllowed[k] = true end
                         end
                         if isChecked then
-                            rc.nukeFlavorsAllowed[key] = nil
-                        else
                             rc.nukeFlavorsAllowed[key] = true
                             if rc.nukeFlavorsAutoDisabled then rc.nukeFlavorsAutoDisabled[key] = nil end
+                        else
+                            rc.nukeFlavorsAllowed[key] = nil
                         end
                         rc.nukeResistDisabledRecent = nil
                         botconfig.saveNukeFlavorsToCommon()
