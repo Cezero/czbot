@@ -117,7 +117,12 @@ function M.draw()
     ImGui.TextColored(YELLOW, '%s', getStatusLine())
     ImGui.SameLine()
     local style = ImGui.GetStyle()
-    local pauseLabelW = (select(1, ImGui.CalcTextSize('Pause')) or 0)
+    local isPaused = (_G.MasterPause == true)
+    local pauseLabel = isPaused and 'Unpause' or 'Pause'
+    local pauseLabelW = math.max(
+        (select(1, ImGui.CalcTextSize('Pause')) or 0),
+        (select(1, ImGui.CalcTextSize('Unpause')) or 0)
+    )
     local pauseIconW = (select(1, ImGui.CalcTextSize(Icons.FA_PAUSE_CIRCLE)) or 0) + style.FramePadding.x * 2
     local exitLabelW = (select(1, ImGui.CalcTextSize('Exit')) or 0)
     local exitIconW = (select(1, ImGui.CalcTextSize(Icons.FA_POWER_OFF)) or 0) + style.FramePadding.x * 2
@@ -126,14 +131,14 @@ function M.draw()
     if avail > 0 then
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - buttonsTotalW)
     end
-    ImGui.Text('%s', 'Pause')
+    ImGui.Text('%s', pauseLabel)
     ImGui.SameLine()
     ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
     ImGui.PushStyleColor(ImGuiCol.Text, YELLOW)
     if ImGui.SmallButton(Icons.FA_PAUSE_CIRCLE .. '##pause') then
         state.czpause()
     end
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('Pause/Unpause CZBot') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip(isPaused and 'Unpause CZBot' or 'Pause CZBot') end
     ImGui.PopStyleColor(2)
     ImGui.SameLine()
     ImGui.Text('%s', 'Exit')
