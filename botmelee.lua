@@ -64,6 +64,7 @@ end
 
 -- Offtank: if MT target == MA target pick add (Nth other mob); else tank MA's target. Returns chosen id or nil.
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
+    if not mainTankName or mainTankName == '' then return nil end
     local rc = state.getRunconfig()
     local maInfo = charinfo.GetInfo(assistName)
     local maTarId = (maInfo and maInfo.ID and maInfo.Target) and maInfo.Target.ID or nil
@@ -112,6 +113,7 @@ end
 
 -- MA bot only: choose target from MobList (1) named, (2) MT's target. Returns chosen id or nil.
 local function selectMATarget(mainTankName)
+    if not mainTankName or mainTankName == '' then return nil end
     local rc = state.getRunconfig()
     local mtTarId = nil
     local mtInfo = charinfo.GetInfo(mainTankName)
