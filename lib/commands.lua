@@ -138,6 +138,7 @@ local function cmd_makecamp(args, str)
     if state.getRunconfig().followid or state.getRunconfig().followname then
         state.getRunconfig().followid = nil
         state.getRunconfig().followname = nil
+        state.getRunconfig().travelMode = false
     end
 end
 
@@ -156,9 +157,25 @@ local function cmd_stop(args)
     if state.getRunconfig().followid or state.getRunconfig().followname then
         state.getRunconfig().followid = nil
         state.getRunconfig().followname = nil
+        state.getRunconfig().travelMode = false
     end
     if state.getRunconfig().campstatus then botmove.MakeCamp('off') end
     printf('\ayCZBot:\ax\arDisabling makecamp and follow')
+end
+
+local function cmd_travel(args, str)
+    local rc = state.getRunconfig()
+    local targetName
+    if args[2] == nil then
+        targetName = rc.TankName
+    else
+        targetName = args[2]
+    end
+    if targetName then
+        follow.StartFollow(targetName)
+        rc.travelMode = true
+        printf('\ayCZBot:\ax\auTravel mode ON, following %s', targetName)
+    end
 end
 
 local function tableContains(list, name)
@@ -775,6 +792,7 @@ local handlers = {
     show = cmd_ui,
     makecamp = cmd_makecamp,
     follow = cmd_follow,
+    travel = cmd_travel,
     stop = cmd_stop,
     exclude = cmd_exclude,
     xarc = cmd_xarc,
@@ -822,6 +840,10 @@ end
 
 function M.Follow(tankName)
     if tankName then cmd_follow({ 'follow', tankName }, '') end
+end
+
+function M.Travel(tankName)
+    if tankName then cmd_travel({ 'travel', tankName }, '') end
 end
 
 function M.Parse(...)

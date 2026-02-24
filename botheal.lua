@@ -380,7 +380,7 @@ function botheal.HealCheck(runPriority)
             return true
         end,
     }
-    local function getSpellIndices(phase)
+    local function getSpellIndices(phase, _target)
         return spellutils.getSpellIndicesForPhase(count, phase, healBandHasPhase)
     end
     return spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER, healGetTargetsForPhase, getSpellIndices,
@@ -391,7 +391,8 @@ function botheal.getHookFn(name)
     if name == 'doHeal' then
         return function(hookName)
             local myconfig = botconfig.config
-            if not myconfig.settings.doheal or not (myconfig.heal.spells and #myconfig.heal.spells > 0) then return end
+            if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
+            if not (myconfig.settings.doheal or state.isTravelAttackOverriding()) or not (myconfig.heal.spells and #myconfig.heal.spells > 0) then return end
             if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Heal Check' end
             botheal.HealCheck(bothooks.getPriority(hookName))
         end

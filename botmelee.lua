@@ -273,12 +273,13 @@ end
 function botmelee.getHookFn(name)
     if name == 'doMelee' then
         return function(hookName)
+            if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             if state.getRunState() == state.STATES.engage_return_follow then
                 botmove.TickReturnToFollowAfterEngage()
                 return
             end
             if state.getRunState() == state.STATES.pulling then return end
-            if not myconfig.settings.domelee then
+            if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 state.getRunconfig().engageTargetId = nil
                 state.getRunconfig().statusMessage = ''

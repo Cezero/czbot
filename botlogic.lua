@@ -73,8 +73,8 @@ local function charState_Always()
     -- Stand if < 40% HP and mobs in camp
     if mq.TLO.Me.PctHPs() < 40 and state.getMobCount() > 0 then mustStand = true end
     local aboveSitHysteresis = true -- when dosit off, allow stand
-    -- Sit when enabled and not casting, not moving, not combat, and mana/endurance below thresholds (strict <); stand only when above threshold + hysteresis.
-    if botconfig.config.settings.dosit and state.getRunState() ~= state.STATES.casting and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
+    -- Sit when enabled and not casting, not moving, not combat, and mana/endurance below thresholds (strict <); stand only when above threshold + hysteresis. No sit in travel mode.
+    if botconfig.config.settings.dosit and not state.isTravelMode() and state.getRunState() ~= state.STATES.casting and not mq.TLO.Me.Moving() and mq.TLO.Me.CastTimeLeft() == 0 and not mq.TLO.Me.Combat() and not mq.TLO.Me.AutoFire() then
         if state.getMobCount() == 0 then rc.sitTimer = nil end
         local sitBlockedByHit = rc.sitTimer and mq.gettime() < rc.sitTimer and state.getMobCount() > 0
         local sitmana = tonumber(botconfig.config.settings.sitmana)
@@ -107,7 +107,7 @@ local function charState_Always()
     elseif not mq.TLO.Cursor.ID() and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0 then
         rc.OutOfSpace = false
     end
-    if botconfig.config.settings.domount and botconfig.config.settings.mountcast then spellutils.MountCheck() end
+    if botconfig.config.settings.domount and not state.isTravelMode() and botconfig.config.settings.mountcast then spellutils.MountCheck() end
 end
 
 --- Returns true if dead/hover; caller should return. Sets dead state and HoverTimer/HoverEchoTimer, may call Event_Slain.
@@ -257,6 +257,7 @@ function botlogic.StartUp(...)
     runconfig.AssistName = botconfig.config.settings.AssistName or runconfig.TankName
     if args[2] == 'makecamp' then commands.MakeCamp('on') end
     if args[2] == 'follow' and args[1] then commands.Follow(args[1]) end
+    if args[2] == 'travel' and args[1] then commands.Travel(args[1]) end
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')

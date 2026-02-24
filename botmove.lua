@@ -24,9 +24,14 @@ local function refreshFollowId()
         end
         if not rc.followid or rc.followid == 0 then return end
     end
+    -- After zone, spawn by old id is invalid; re-resolve from followname. Clear stale id if leader not in zone yet.
     if not mq.TLO.Spawn('id ' .. rc.followid).ID() or mq.TLO.Spawn('id ' .. rc.followid).Type() == 'Corpse' then
-        local id = mq.TLO.Spawn('=' .. rc.followname).ID()
-        if id then rc.followid = id end
+        local id = rc.followname and rc.followname ~= '' and mq.TLO.Spawn('=' .. rc.followname).ID()
+        if id then
+            rc.followid = id
+        else
+            rc.followid = nil
+        end
     end
 end
 
@@ -396,8 +401,11 @@ end
 -- Follow nav + stuck detection and unstuck state machine. Called from doMovementCheck (runWhenBusy).
 function botmove.FollowAndStuckCheck()
     botmove.TickReturnToFollowAfterEngage()
-    if not (state.getRunconfig().followid and state.getRunconfig().followid > 0) then return end
     local rc = state.getRunconfig()
+    if (rc.followid and rc.followid > 0) or (rc.followname and rc.followname ~= '') then
+        refreshFollowId()
+    end
+    if not (rc.followid and rc.followid > 0) then return end
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     if followid > 0 and followid ~= rc.followid then
         rc.followid = followid

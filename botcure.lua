@@ -269,7 +269,7 @@ function botcure.CureCheck(runPriority, phaseOrder, hookName)
             return (entry.enabled ~= false) and ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string')
         end,
     }
-    local function getSpellIndices(phase)
+    local function getSpellIndices(phase, _target)
         return spellutils.getSpellIndicesForPhase(count, phase, CureClass)
     end
     return spellutils.RunPhaseFirstSpellCheck('cure', hookName, phaseOrder, cureGetTargetsForPhase, getSpellIndices,
@@ -280,7 +280,8 @@ function botcure.getHookFn(name)
     if name == 'priorityCure' then
         return function(hookName)
             local myconfig = botconfig.config
-            if not myconfig.settings.docure or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
+            if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
+            if not (myconfig.settings.docure or state.isTravelAttackOverriding()) or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
             local count = botconfig.getSpellCount('cure')
             if count <= 0 then return end
             local priorityIndices = spellutils.getSpellIndicesForPhase(count, 'priority', CureClass)
@@ -292,7 +293,8 @@ function botcure.getHookFn(name)
     if name == 'doCure' then
         return function(hookName)
             local myconfig = botconfig.config
-            if not myconfig.settings.docure or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
+            if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
+            if not (myconfig.settings.docure or state.isTravelAttackOverriding()) or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
             if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Cure Check' end
             botcure.CureCheck(bothooks.getPriority(hookName), CURE_PHASE_ORDER, 'doCure')
         end

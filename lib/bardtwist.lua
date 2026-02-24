@@ -113,6 +113,38 @@ function bardtwist.BuildCombatTwistList()
     return out
 end
 
+--- Find first buff spell whose alias (string) contains the given token (exact match for one of the |‑separated values). Returns gem (1–12) or nil.
+local function buffGemByAlias(token)
+    if not token or token == '' then return nil end
+    local spells = botconfig.config.buff and botconfig.config.buff.spells
+    if not spells then return nil end
+    for i = 1, #spells do
+        local entry = spells[i]
+        if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
+            local alias = entry.alias
+            if type(alias) == 'string' and alias ~= '' then
+                for value in (alias):gmatch('[^|]+') do
+                    local v = value:match('^%s*(.-)%s*$') or value
+                    if v == token then
+                        return entry.gem
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+--- Travel twist: song with alias 'travel', else 'selos', else nothing. Config order; single gem.
+function bardtwist.BuildTravelTwistList()
+    if not bardtwist.IsBard() then return {} end
+    local gem = buffGemByAlias('travel')
+    if gem then return { gem } end
+    gem = buffGemByAlias('selos')
+    if gem then return { gem } end
+    return {}
+end
+
 --- Buffs with self and pull (numeric gem, enabled). Config order.
 function bardtwist.BuildPullTwistList()
     if not bardtwist.IsBard() then return {} end
@@ -132,6 +164,7 @@ end
 
 function bardtwist.GetCurrentTwistMode()
     if not bardtwist.IsBard() then return nil end
+    if state.isTravelMode() then return 'travel' end
     local rc = state.getRunconfig()
     if rc.pullState and rc.pullState ~= '' then return 'pull' end
     if rc.MobList and rc.MobList[1] then return 'combat' end
@@ -140,7 +173,9 @@ end
 
 --- Build list for mode and return as array of gem numbers (for comparison /twist command).
 function bardtwist.GetTwistListForMode(mode)
-    if mode == 'pull' then
+    if mode == 'travel' then
+        return bardtwist.BuildTravelTwistList()
+    elseif mode == 'pull' then
         return bardtwist.BuildPullTwistList()
     elseif mode == 'combat' then
         return bardtwist.BuildCombatTwistList()
@@ -156,12 +191,17 @@ function bardtwist.GetTwistListStringForMode(mode)
     return table.concat(list, ' ')
 end
 
---- Set twist list for mode. Only issue /twist when not twisting or list differs (avoid restart every tick).
+--- Set twist list for mode. Only issue /twist when not twisting or list differs (avoid restart every tick). For travel with no song, stop twist.
 function bardtwist.EnsureTwistForMode(mode)
     if not bardtwist.IsBard() then return end
     if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
-    if not desiredGems or #desiredGems == 0 then return end
+    if not desiredGems or #desiredGems == 0 then
+        if mode == 'travel' and mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
+            mq.cmd('/squelch /twist stop')
+        end
+        return
+    end
     local twisting = mq.TLO.Twist() and mq.TLO.Twist.Twisting()
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
     local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')

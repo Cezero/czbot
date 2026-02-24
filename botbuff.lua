@@ -312,7 +312,7 @@ function botbuff.BuffCheck(runPriority)
             return (not hasMob and (not cbtspell or idlespell)) or (hasMob and cbtspell)
         end,
     }
-    local function getSpellIndices(phase)
+    local function getSpellIndices(phase, _target)
         return spellutils.getSpellIndicesForPhase(count, phase, buffBandHasPhase)
     end
     return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, buffGetTargetsForPhase, getSpellIndices,
@@ -322,6 +322,7 @@ end
 function botbuff.getHookFn(name)
     if name == 'doBuff' then
         return function(hookName)
+            if state.isTravelMode() then return end
             local myconfig = botconfig.config
             if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
             if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Buff Check' end

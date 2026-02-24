@@ -4,12 +4,14 @@ local spellstates = {}
 -- Module-local state: spawn/target -> spell duration tracking and debuff delay/recast counters
 local DebuffList = {}
 local recastcntr = {}
+local concussionCounter = {}
 local DebuffDlyLst = {}
 local ReagentDlyLst = {}
 
 function spellstates.EnsureDebuffState()
     DebuffList = DebuffList or {}
     recastcntr = recastcntr or {}
+    concussionCounter = concussionCounter or {}
     DebuffDlyLst = DebuffDlyLst or {}
     ReagentDlyLst = ReagentDlyLst or {}
 end
@@ -74,8 +76,45 @@ function spellstates.ResetRecastCounter(spawnID, debuffIndex)
     end
 end
 
+function spellstates.GetConcussionCounter(spawnID)
+    if not concussionCounter[spawnID] then return 0 end
+    return concussionCounter[spawnID] or 0
+end
+
+function spellstates.IncrementConcussionCounter(spawnID)
+    if not concussionCounter[spawnID] then concussionCounter[spawnID] = 0 end
+    concussionCounter[spawnID] = concussionCounter[spawnID] + 1
+    return concussionCounter[spawnID]
+end
+
+function spellstates.ResetConcussionCounter(spawnID)
+    if concussionCounter[spawnID] then concussionCounter[spawnID] = nil end
+end
+
+--- Remove per-spawn debuff state for any spawn ID not in the current MobList (avoids spawn ID reuse bugs when mobs respawn).
+function spellstates.PruneDebuffStateNotInMobList(mobList)
+    local currentIds = {}
+    if mobList and #mobList > 0 then
+        for _, v in ipairs(mobList) do
+            local id = v.ID and v.ID() or v
+            if id then currentIds[id] = true end
+        end
+    end
+    for spawnID, _ in pairs(DebuffList) do
+        if not currentIds[spawnID] then DebuffList[spawnID] = nil end
+    end
+    for spawnID, _ in pairs(recastcntr) do
+        if not currentIds[spawnID] then recastcntr[spawnID] = nil end
+    end
+    for spawnID, _ in pairs(concussionCounter) do
+        if not currentIds[spawnID] then concussionCounter[spawnID] = nil end
+    end
+end
+
 function spellstates.ClearDebuffList()
     DebuffList = {}
+    recastcntr = {}
+    concussionCounter = {}
 end
 
 -- Cleans ADMobList (zone reset / debuff list clear); alias for ClearDebuffList.

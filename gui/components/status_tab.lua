@@ -109,7 +109,13 @@ local function getStatusLine()
         return label
     end
     if rc.campstatus then return 'Idle at camp' end
-    if rc.followid and rc.followid > 0 then return 'Following' end
+    if rc.followid and rc.followid > 0 then
+        if rc.travelMode then
+            local name = (rc.followname and rc.followname ~= '') and rc.followname or '—'
+            return 'Travel (following ' .. name .. ')'
+        end
+        return 'Following'
+    end
     return 'Idle'
 end
 
@@ -203,6 +209,7 @@ function M.draw()
                 if ImGui.SmallButton(stopIcon .. '##follow_stop') then
                     rc.followid = nil
                     rc.followname = nil
+                    rc.travelMode = false
                 end
                 if ImGui.IsItemHovered() then ImGui.SetTooltip('Stop following') end
                 ImGui.PopStyleColor(2)

@@ -12,18 +12,19 @@ local function hasKey(t, k)
 end
 
 --- Draw a checkbox grid with a label in the first column of the first row.
---- @param opts table id (string), label (string), labelTooltip (string|nil), options (array of { key, label, tooltip }), value (array of selected keys), onToggle(key, isChecked), columns (number|nil, default 5)
+--- @param opts table id (string), label (string), labelTooltip (string|nil), options (array of { key, label, tooltip }), value (array of selected keys), onToggle(key, isChecked), columns (number|nil, default 5), maxWidth (number|nil)
 function M.checkboxGrid(opts)
     opts = opts or {}
     local id = opts.id
     local options = opts.options or {}
     local value = opts.value or {}
     local columns = opts.columns or 5
+    local tableWidth = (type(opts.maxWidth) == 'number' and opts.maxWidth > 0) and opts.maxWidth or -1
     if not id or #options == 0 then return end
 
     local numRows = math.ceil(#options / columns)
     local tableColumns = 1 + columns
-    if ImGui.BeginTable(id .. '_table', tableColumns, ImGuiTableFlags.None, -1, 0) then
+    if ImGui.BeginTable(id .. '_table', tableColumns, ImGuiTableFlags.None, tableWidth, 0) then
         local labelText = opts.label or ''
         local labelW = select(1, ImGui.CalcTextSize(labelText))
         labelW = (labelW and labelW > 0) and (labelW + 8) or 80

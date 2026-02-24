@@ -364,8 +364,7 @@ function M.draw(spell, opts)
         -- Bands widget
         local targetphaseOptions = opts.targetphaseOptions or {}
         local validtargetsOptions = opts.validtargetsOptions or {}
-        local phasesColumns = opts.phasesColumns or 5
-        local targetsColumns = opts.targetsColumns or 5
+        local targetsColumns = opts.targetsColumns or 6
         local showBandMinMax = opts.showBandMinMax == true
         local showBandMinTarMaxtar = opts.showBandMinTarMaxtar == true
         if not spell.bands or #spell.bands == 0 then
@@ -376,8 +375,9 @@ function M.draw(spell, opts)
                 local band = spell.bands[bi]
                 if not band.targetphase then band.targetphase = {} end
                 if not band.validtargets then band.validtargets = {} end
-                -- Phases: labeled grid (5 per row by default)
-                labeled_grid.checkboxGrid({
+                -- Phases: 5 columns when one band or band 1; 4 columns when Delete is visible (bi > 1)
+                local phasesColumns = (bi > 1) and 4 or (opts.phasesColumns or 5)
+                local phaseGridOpts = {
                     id = id .. '_band' .. bi .. '_ph',
                     label = 'Phases:',
                     options = targetphaseOptions,
@@ -396,7 +396,13 @@ function M.draw(spell, opts)
                         end
                         if onChanged then onChanged() end
                     end,
-                })
+                }
+                if bi > 1 then
+                    local delW = select(1, ImGui.CalcTextSize('Delete')) + 24
+                    local avail = ImGui.GetContentRegionAvail()
+                    phaseGridOpts.maxWidth = (avail and avail > delW) and (avail - delW) or 0
+                end
+                labeled_grid.checkboxGrid(phaseGridOpts)
                 if bi > 1 then
                     local delW = select(1, ImGui.CalcTextSize('Delete')) + 24
                     local availDel = ImGui.GetContentRegionAvail()

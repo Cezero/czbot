@@ -77,6 +77,7 @@
 ---@field nukeResistDisabledRecent table|nil last N entries { flavor = string }; used to detect 3-in-a-row same flavor -> global auto-disable
 ---@field nukeFlavorsAllowed table|nil flavor -> true (allowed); nil = all allowed
 ---@field nukeFlavorsAutoDisabled table|nil flavor -> true (auto-disabled due to resist streak)
+---@field travelMode boolean|nil when true, only follow active; other bot logic disabled unless /cz attack override
 
 local M = {}
 
@@ -277,8 +278,23 @@ function M.resetRunconfig()
         nukeFlavorsAllowed = nil,
         nukeFlavorsAutoDisabled = nil,
         raidCtx = nil, -- optional: { raidsactive = boolean }; zone raid modules may set global raidsactive instead
+        travelMode = false,
     }
     return M._runconfig
+end
+
+---True when in travel mode (follow only; other bot logic disabled unless attack-overriding).
+---@return boolean
+function M.isTravelMode()
+    local rc = M.getRunconfig()
+    return rc.travelMode == true
+end
+
+---True when in travel mode and we have an active attack target (engageTargetId set); melee/heal/cure/debuff allowed, doBuff not.
+---@return boolean
+function M.isTravelAttackOverriding()
+    local rc = M.getRunconfig()
+    return rc.travelMode == true and rc.engageTargetId ~= nil
 end
 
 ---Set current run state and optional payload. Accepts number only; no string state support.

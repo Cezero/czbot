@@ -3,6 +3,7 @@
 
 local mq = require('mq')
 local botconfig = require('lib.config')
+local spellstates = require('lib.spellstates')
 local state = require('lib.state')
 local utils = require('lib.utils')
 
@@ -249,6 +250,7 @@ function spawnutils.AddSpawnCheck()
     if not spawnutils.validateAcmTarget(rc) then return end
     spawnutils.buildAndSetCampMobList(rc)
     spawnutils.mergeKillTargetIntoMobList(rc)
+    spellstates.PruneDebuffStateNotInMobList(rc.MobList)
 end
 
 function spawnutils.getHookFn(name)

@@ -504,6 +504,20 @@ function spellutils.IsPetSummonSpell(entry)
     return ok103 and has103
 end
 
+-- SPA 92 = Concussion / aggro reduction (MacroQuest spelleffects.h). Returns true if the spell for entry has the Concussion effect.
+-- Do not store mq.TLO.Spell() proxy; use direct chains (see HasReagents comment).
+function spellutils.IsConcussionSpell(entry)
+    if not entry or not entry.spell then return false end
+    if entry.gem == 'item' then
+        if not mq.TLO.FindItem(entry.spell)() then return false end
+        local ok, hasConc = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(92)() end)
+        return ok and hasConc
+    end
+    if not mq.TLO.Spell(entry.spell)() then return false end
+    local ok, hasConc = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(92)() end)
+    return ok and hasConc
+end
+
 -- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.
 function spellutils.GetTankInfo(includeTarget)
     local mainTankName = state.getRunconfig().TankName
@@ -554,6 +568,13 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
                     spellstates.DebuffListUpdate(EvalID, spellid, myduration)
                     spellstates.ResetRecastCounter(EvalID, index)
                 end
+            end
+        end
+        if not rc.CurSpell.resisted and EvalID then
+            if spellutils.IsConcussionSpell(entry) then
+                spellstates.ResetConcussionCounter(EvalID)
+            else
+                spellstates.IncrementConcussionCounter(EvalID)
             end
         end
     end
@@ -795,12 +816,12 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
         local phase = phaseOrder[phaseIdx]
         local targets = getTargetsFn(phase, context)
         if targets and #targets > 0 then
-            local spellIndices = getSpellIndicesFn(phase)
-            if spellIndices and #spellIndices > 0 then
-                local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
-                for targetIdx = targetStart, #targets do
-                    local target = targets[targetIdx]
-                    if target and target.id then
+            local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
+            for targetIdx = targetStart, #targets do
+                local target = targets[targetIdx]
+                if target and target.id then
+                    local spellIndices = getSpellIndicesFn(phase, target)
+                    if spellIndices and #spellIndices > 0 then
                         local spellStart = (phaseIdx == startPhaseIdx and targetIdx == targetStart) and startSpellIdx or
                             1
                         local fromSpellIndices = {}

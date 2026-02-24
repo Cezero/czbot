@@ -363,7 +363,7 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     local entry = botconfig.getSpellEntry('debuff', i)
     if not entry then return false end
     if not spellutils.CheckGemReadiness('debuff', i, entry) then return false end
-    if entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
+    if not spellutils.IsConcussionSpell(entry) and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false
     end
     charm.BeforeCast(EvalID, targethit)
@@ -474,7 +474,7 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
     return false
 end
 
-local function debuffGetSpellIndices(phase, count, ctx)
+local function debuffGetSpellIndices(phase, count, ctx, target)
     if phase == 'charm' then
         local out = {}
         for i = 1, count do
@@ -508,8 +508,7 @@ local function debuffGetSpellIndices(phase, count, ctx)
             local flavor = spellutils.GetNukeFlavor(entry)
             if nukeFlavorAllowed(rc, flavor) then nukeIndices[#nukeIndices + 1] = i end
         else
-            nonNuke[#nonNuke + 1] = i
-        end
+            nonNuke[#nonNuke + 1] = i end
     end
     if #nukeIndices == 0 then return nonNuke end
     local n = #nukeIndices
@@ -527,7 +526,33 @@ local function debuffGetSpellIndices(phase, count, ctx)
         rotated[#rotated + 1] = nukeIndices[((startPos - 1 + j) % n) + 1]
     end
     for _, i in ipairs(rotated) do nonNuke[#nonNuke + 1] = i end
-    return nonNuke
+    local fullBase = nonNuke
+    if (phase == 'tanktar' or phase == 'named') and target and target.id then
+        local concussionIndex, concussionRecast = nil, nil
+        for _, i in ipairs(fullBase) do
+            local entry = botconfig.getSpellEntry('debuff', i)
+            if entry and spellutils.IsConcussionSpell(entry) and (entry.recast or 0) > 0 then
+                concussionIndex = i
+                concussionRecast = entry.recast
+                break
+            end
+        end
+        if concussionIndex and concussionRecast then
+            local c = spellstates.GetConcussionCounter(target.id)
+            if c >= concussionRecast then
+                return { concussionIndex }
+            end
+            local out = {}
+            for _, i in ipairs(fullBase) do
+                local entry = botconfig.getSpellEntry('debuff', i)
+                if not entry or not spellutils.IsConcussionSpell(entry) or (entry.recast or 0) <= 0 then
+                    out[#out + 1] = i
+                end
+            end
+            return out
+        end
+    end
+    return fullBase
 end
 
 --- Single place for debuff hook context: tanktar, charmRecasts, debuffCount, mobList, mobcountstart. Depends on engageTargetId/MobList (doDebuff runs after AddSpawnCheck and doMelee).
@@ -577,8 +602,8 @@ function botdebuff.DebuffCheck(runPriority)
             return DebuffCheckAfterCast(i, EvalID, targethit, ctx.mobcountstart)
         end,
     }
-    local function getSpellIndices(phase)
-        return debuffGetSpellIndices(phase, count, ctx)
+    local function getSpellIndices(phase, target)
+        return debuffGetSpellIndices(phase, count, ctx, target)
     end
     return spellutils.RunPhaseFirstSpellCheck('debuff', 'doDebuff', DEBUFF_PHASE_ORDER, debuffGetTargetsForPhase,
         getSpellIndices, debuffTargetNeedsSpell, ctx, options)
@@ -587,9 +612,10 @@ end
 function botdebuff.getHookFn(name)
     if name == 'doDebuff' then
         return function(hookName)
+            if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local myconfig = botconfig.config
-            if not myconfig.settings.dodebuff or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) then return end
+            if not (myconfig.settings.dodebuff or state.isTravelAttackOverriding()) or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) then return end
             local rc = state.getRunconfig()
             if not rc.MobList[1] then
                 local p = state.getRunStatePayload()

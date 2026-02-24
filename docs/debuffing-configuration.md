@@ -32,7 +32,7 @@ All debuff options are under **`config.debuff.spells`**. Each spell entry can ha
 | **minmana** | Minimum mana (absolute) to cast. |
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **bands** | Which mobs and at what HP %. See [Debuff bands](#debuff-bands) below. |
-| **recast** | Optional. After this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. |
+| **recast** | Optional. For most debuffs: after this many resists on the **same** spawn, the bot disables this spell for that spawn for a duration. 0 = no limit. For **concussion** (aggro-reduce, SPA 92) debuffs, recast means “cast every N other debuffs” on the tank target (e.g. recast 2 → two nukes/debuffs, then concussion, repeat); autodetected when the spell has SPA 92 and recast &gt; 0. |
 | **delay** | Optional. Delay (ms) before the spell can be used again after cast (per-index/spell). |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 | **dontStack** | Optional. List of debuff **categories** (from MQ Target TLO). If the target already has any of these categories (e.g. from another character), the bot will not cast this spell on that target, and will interrupt the cast if that category appears on the target while casting. Allowed values (see code block below). Example: for a bard snare, set `dontStack = { 'Snared' }` so the bot does not overwrite a ranger's or druid's snare. |

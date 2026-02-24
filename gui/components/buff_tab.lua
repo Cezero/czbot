@@ -26,6 +26,9 @@ local TARGETPHASE_OPTIONS_BUFF = {
     { key = 'pc',          label = 'PC',       tooltip = 'Buff other PCs/bots (class filter below).' },
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Buff your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Buff other group pets.' },
+    { key = 'idle',        label = 'Idle',     tooltip = 'Allow when no mobs in camp.' },
+    { key = 'cbt',         label = 'Cbt',      tooltip = 'Allow when mobs in camp.' },
+    { key = 'groupbuff',   label = 'Grp Buff', tooltip = 'Group AE buff.' },
 }
 
 -- PC/groupmember target options (class filter). Keys match spellbands CLASS_TOKENS.

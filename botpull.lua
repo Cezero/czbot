@@ -749,6 +749,7 @@ end
 function botpull.getHookFn(name)
     if name == 'doPull' then
         return function(hookName)
+            if state.isTravelMode() then return end
             if not state.getRunconfig().dopull then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if state.getRunState() == state.STATES.raid_mechanic then return end
