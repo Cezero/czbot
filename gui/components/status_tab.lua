@@ -13,7 +13,6 @@ local inputs = require('gui.widgets.inputs')
 local combos = require('gui.widgets.combos')
 local labeled_grid = require('gui.widgets.labeled_grid')
 local modals = require('gui.widgets.modals')
-local commands = require('lib.commands')
 
 local M = {}
 
@@ -132,7 +131,7 @@ function M.draw()
     ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
     ImGui.PushStyleColor(ImGuiCol.Text, YELLOW)
     if ImGui.SmallButton(Icons.FA_PAUSE_CIRCLE .. '##pause') then
-        commands.czpause()
+        state.czpause()
     end
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Pause/Unpause CZBot') end
     ImGui.PopStyleColor(2)

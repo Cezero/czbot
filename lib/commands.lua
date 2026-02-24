@@ -814,24 +814,7 @@ function M.Parse(...)
     command_dispatcher.Dispatch(args[1], unpack(args, 2))
 end
 
-function M.czpause(...)
-    local args = { ... }
-    if args[1] and args[1] == 'off' then
-        MasterPause = false
-        mq.cmd('/echo Unpausing CZBot')
-    elseif args[1] and args[1] == 'on' then
-        MasterPause = true
-        mq.cmd('/echo Pausing CZBot')
-    else
-        if MasterPause == false then
-            MasterPause = true
-            mq.cmd('/echo Pausing CZBot')
-        else
-            MasterPause = false
-            mq.cmd('/echo Unpausing CZBot')
-        end
-    end
-end
+M.czpause = state.czpause
 
 --- Called to finish CHChain setup. setupArgs = { chchainlist, chchainpause, tanklist }.
 function M.chchainSetupContinuation(setupArgs)
