@@ -53,7 +53,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
     ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local recast = entry.recast or 0
-    local newRecast, recastCh = inputs.boundedInt(idPrefix .. '_recast', recast, 0, 999, 1, '##' .. idPrefix .. '_recast')
+    local newRecast, recastCh = inputs.boundedInt(idPrefix .. '_recast', recast, 0, 10, 1, '##' .. idPrefix .. '_recast')
     if recastCh then
         entry.recast = newRecast; if onChanged then onChanged() end
     end
