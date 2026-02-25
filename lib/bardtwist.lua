@@ -7,6 +7,7 @@ local botconfig = require('lib.config')
 local state = require('lib.state')
 
 local bardtwist = {}
+local twistOnceActive = false
 
 --- Parse entry.bands for a phase token (buff: self, cbt, pull).
 local function buffHasPhase(entry, phase)
@@ -207,6 +208,12 @@ function bardtwist.EnsureTwistForMode(mode)
     local twisting = mq.TLO.Twist() and mq.TLO.Twist.Twisting()
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
     local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+    if twistOnceActive then
+        if twistListsEqual(currentGems, desiredGems) then
+            twistOnceActive = false
+        end
+        return
+    end
     if twisting and twistListsEqual(currentGems, desiredGems) then return end
     mq.cmd('/squelch /twist ' .. table.concat(desiredGems, ' '))
 end
@@ -217,6 +224,7 @@ function bardtwist.EnsureDefaultTwistRunning()
 end
 
 function bardtwist.StopTwist()
+    twistOnceActive = false
     if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
         mq.cmd('/squelch /twist stop')
@@ -244,6 +252,7 @@ end
 function bardtwist.SetTwistOnce(gemList)
     if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     if not gemList or #gemList == 0 then return end
+    twistOnceActive = true
     mq.cmd('/squelch /twist once ' .. table.concat(gemList, ' '))
 end
 

@@ -377,6 +377,7 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
 end
 
 -- BRD notanktar twist-once: wait for cast to finish then post-cast (resist, DebuffListUpdate, timer, re-target MA). Returns true if handled.
+-- Uses a cast deadline so we don't clear the wait (and consider another add) until the song has had time to complete.
 local function DebuffCheckHandleBardNotanktarWait(rc)
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' or not rc.bardNotanktarWait then
         return false
@@ -386,6 +387,10 @@ local function DebuffCheckHandleBardNotanktarWait(rc)
         rc.bardNotanktarWait = nil
         state.clearRunState()
         return false
+    end
+    local now = mq.gettime()
+    if w.deadline and now < w.deadline then
+        return true
     end
     local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
     if stillSinging then
@@ -415,7 +420,9 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     if mq.TLO.Target.ID() ~= EvalID then mq.cmdf('/tar id %s', EvalID) end
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
-    rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry, singingStarted = false }
+    local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
+    local castTimeMs = (castTime and castTime > 0) and (castTime * 100) or 3000
+    rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry, singingStarted = false, deadline = mq.gettime() + castTimeMs }
     if state.canStartBusyState(state.STATES.casting) then
         state.setRunState(state.STATES.casting, { deadline = mq.gettime() + 20000, priority = bothooks.getPriority('doDebuff') })
     end
