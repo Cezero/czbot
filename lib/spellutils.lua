@@ -765,6 +765,9 @@ end
 --- phase: optional; when provided (e.g. heal), passed to targetNeedsSpellFn as fifth argument for per-phase logic.
 function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, targethit, context, options, targetNeedsSpellFn, phase)
     if not targetNeedsSpellFn or not spellIndices then return nil end
+    if sub == 'debuff' then
+        printf('Concussion debug: checkIfTargetNeedsSpells ENTRY sub=debuff targetId=%s targethit=%s #spellIndices=%s', tostring(targetId), tostring(targethit), tostring(spellIndices and #spellIndices or 0))
+    end
     options = options or {}
     local rc = state.getRunconfig()
     for _, spellIndex in ipairs(spellIndices) do
@@ -850,6 +853,9 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                             if si >= spellStart then fromSpellIndices[#fromSpellIndices + 1] = si end
                         end
                         if #fromSpellIndices > 0 then
+                            if sub == 'debuff' then
+                                printf('Concussion debug: RunPhaseFirstSpellCheck about to call checkIfTargetNeedsSpells targetId=%s phase=%s fromSpellIndices count=%s', tostring(target and target.id), tostring(phase), tostring(#fromSpellIndices))
+                            end
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                 fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn, phase)
                             if spellIndex and EvalID and targethit then
