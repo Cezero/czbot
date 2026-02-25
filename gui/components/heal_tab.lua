@@ -86,6 +86,25 @@ local function runConfigLoaders()
 end
 
 local function healCustomSection(entry, idPrefix, onChanged)
+    -- Heal resource: HP (band min/max) or Mana (Mana % min/max only)
+    ImGui.Text('Heal resource:')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('HP = target HP %% gate (band min/max). Mana = caster mana %% gate only (use Mana %% below; for e.g. Harvest).')
+    end
+    ImGui.SameLine()
+    local healRes = entry.healResource or 'hp'
+    if ImGui.BeginCombo('##' .. idPrefix .. '_healResource', healRes == 'mana' and 'Mana' or 'HP') then
+        if ImGui.Selectable('HP', healRes == 'hp') then
+            entry.healResource = 'hp'
+            if onChanged then onChanged() end
+        end
+        if ImGui.Selectable('Mana', healRes == 'mana') then
+            entry.healResource = 'mana'
+            if onChanged then onChanged() end
+        end
+        ImGui.EndCombo()
+    end
+    ImGui.SameLine()
     -- Mana % row: Min / Max (only cast when caster mana is within range)
     ImGui.Text('Mana %:')
     if ImGui.IsItemHovered() then

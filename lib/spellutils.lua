@@ -957,6 +957,7 @@ end
 
 function spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
     if sub ~= 'heal' or criteria == 'corpse' then return end
+    if criteria == 'self' and entry and entry.healResource == 'mana' then return end
     local th = AHThreshold and spell and AHThreshold[spell] and AHThreshold[spell][criteria]
     if not th or not targetSpawn.PctHPs() or targetSpawn.ID() ~= target then return end
     local maxVal = type(th) == 'table' and th.max or th
@@ -1185,8 +1186,13 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     end
     local spell = string.lower(entry.spell or '')
     local gem = entry.gem
-    local spawn = mq.TLO.Spawn(EvalID)
-    local targetname = (spawn and spawn.CleanName()) or 'Unknown'
+    local targetname
+    if targethit == 'self' or EvalID == meId then
+        targetname = mq.TLO.Me.CleanName() or 'Unknown'
+    else
+        local spawn = mq.TLO.Spawn(EvalID)
+        targetname = (spawn and spawn.CleanName()) or 'Unknown'
+    end
     local spellname = entry.spell or spell
     if not resuming then
         spellutils.SetCastStatusMessage(sub, targetname, spellname, (sub == 'debuff' or sub == 'ad') and entry or nil)

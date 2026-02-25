@@ -454,9 +454,8 @@ function M.draw(spell, opts)
                         end,
                     })
                 end
-                -- HP % / # Targets row
-
-                if showBandMinMax then
+                -- HP % / # Targets row (hidden when healResource == 'mana'; mana heals use Mana % min/max only)
+                if showBandMinMax and spell.healResource ~= 'mana' then
                     ImGui.Text('HP %:')
                     if ImGui.IsItemHovered() then ImGui.SetTooltip(
                         'Target HP %% range for this band (only use when target HP is within min-max).') end

@@ -156,6 +156,18 @@ local function HPEvalCorpse(index, ctx)
 end
 
 local function HPEvalSelf(index, ctx)
+    if ctx.entry.healResource == 'mana' then
+        local minmanapct = ctx.entry.minmanapct
+        local maxmanapct = ctx.entry.maxmanapct
+        if minmanapct == nil then minmanapct = 0 end
+        if maxmanapct == nil then maxmanapct = 100 end
+        local mymana = mq.TLO.Me.PctMana()
+        if not mymana or mymana < minmanapct or mymana > maxmanapct then return nil, nil end
+        if not AHThreshold[index] or not AHThreshold[index].self then return nil, nil end
+        local spellEntity = spellutils.GetSpellEntity(ctx.entry)
+        local id = (spellEntity and spellEntity.TargetType() == 'Self') and 1 or mq.TLO.Me.ID()
+        return id, 'self'
+    end
     local pct = mq.TLO.Me.PctHPs()
     local spellEntity = spellutils.GetSpellEntity(ctx.entry)
     local id = (spellEntity and spellEntity.TargetType() == 'Self') and 1 or mq.TLO.Me.ID()

@@ -146,6 +146,7 @@ end
 local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
+    if state.getRunconfig().bardNotanktarWait then return end
 
     if state.getRunState() == state.STATES.melee then
         local p = state.getRunStatePayload()

@@ -254,20 +254,30 @@ local function canStartPull(rc)
 end
 
 -- True when we are not in a pull state and chain-pull conditions say we should start a pull (and canStartPull passes).
+-- Only run canStartPull (and thus set pullHealerManaWait) when we might actually pull; when mob in camp and no chain pull, skip so status stays correct.
 local function shouldStartPull(rc)
     if state.getRunState() == state.STATES.pulling then return false end
-    if not canStartPull(rc) then return false end
     local mobCount = state.getMobCount()
     local engageId = rc.engageTargetId
-    if (mobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0) and engageId and mq.TLO.Spawn(engageId).PctHPs() then
+
+    local wantToPull = false
+    if mobCount == 0 and not engageId then
+        wantToPull = true
+    elseif mobCount < (myconfig.pull.chainpullcnt or 0) then
+        wantToPull = true
+    elseif (mobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0) and engageId and mq.TLO.Spawn(engageId).PctHPs() then
         local tempcnt = myconfig.pull.chainpullcnt == 0 and 1 or myconfig.pull.chainpullcnt
         if tonumber(mq.TLO.Spawn(engageId).PctHPs()) <= myconfig.pull.chainpullhp and mobCount <= tempcnt then
-            return true
+            wantToPull = true
         end
     end
-    if mobCount < myconfig.pull.chainpullcnt then return true end
-    if mobCount == 0 and not engageId then return true end
-    return false
+
+    if not wantToPull then
+        rc.pullHealerManaWait = nil
+        return false
+    end
+    if not canStartPull(rc) then return false end
+    return true
 end
 
 -- Camp/hunter setup and mapfilter; no mq.delay.
