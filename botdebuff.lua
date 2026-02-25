@@ -417,6 +417,9 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry or type(entry.gem) ~= 'number' then return false end
+    local spellName = entry.spell or ('gem' .. tostring(entry.gem))
+    local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
+    printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
     mq.cmd('/squelch /attack off')
     if mq.TLO.Target.ID() ~= EvalID then mq.cmdf('/tar id %s', EvalID) end
     bardtwist.EnsureTwistForMode('combat')
