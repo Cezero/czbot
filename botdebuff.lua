@@ -550,6 +550,8 @@ local function debuffGetSpellIndices(phase, count, ctx, target)
         end
         if concussionIndex and concussionRecast then
             local c = spellstates.GetConcussionCounter(target.id)
+            printf('Concussion counter for %s: %s', target.id, c)
+            printf('Concussion recast: %s', concussionRecast)
             if c >= concussionRecast then
                 return { concussionIndex }
             end

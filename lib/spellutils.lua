@@ -571,8 +571,10 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
             end
         end
         if spellutils.IsConcussionSpell(entry) then
+            printf('Resetting concussion counter for %s', EvalID)
             if EvalID then spellstates.ResetConcussionCounter(EvalID) end
         elseif not rc.CurSpell.resisted and EvalID then
+            printf('Incrementing concussion counter for %s', EvalID)
             spellstates.IncrementConcussionCounter(EvalID)
         end
     end

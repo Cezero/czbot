@@ -682,6 +682,7 @@ function M.LoadConfig()
     end
     M.Save(path)
     M.loadCommon()
+    M.loadNukeFlavorsFromZone()
 end
 
 return M
