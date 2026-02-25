@@ -74,7 +74,7 @@ function M.draw()
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local otoVal = melee.otoffset or 0
-        local otoNew, otoCh = inputs.boundedInt('combat_otoffset', otoVal, 0, 20, 1, '##combat_otoffset')
+        local otoNew, otoCh = inputs.boundedInt('combat_otoffset', otoVal, 0, 10, 1, '##combat_otoffset')
         if otoCh then melee.otoffset = otoNew; runConfigLoaders() end
     end
 
@@ -197,7 +197,7 @@ function M.draw()
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local mld = pull.maxLevelDiff or 6
-        local mldNew, mldCh = inputs.boundedInt('pull_maxleveldiff', mld, 4, 125, 1, '##pull_maxleveldiff')
+        local mldNew, mldCh = inputs.boundedInt('pull_maxleveldiff', mld, 1, 30, 1, '##pull_maxleveldiff')
         if mldCh then pull.maxLevelDiff = mldNew; runConfigLoaders() end
     else
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
@@ -229,7 +229,7 @@ function M.draw()
     ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local cpc = pull.chainpullcnt or 0
-    local cpcNew, cpcCh = inputs.boundedInt('pull_chainpullcnt', cpc, 0, 20, 1, '##pull_chainpullcnt')
+    local cpcNew, cpcCh = inputs.boundedInt('pull_chainpullcnt', cpc, 0, 10, 1, '##pull_chainpullcnt')
     if cpcCh then pull.chainpullcnt = cpcNew; runConfigLoaders() end
 
     -- Mana class (checkboxes) then Mana % on same line. ImGui.Checkbox returns (value, pressed).

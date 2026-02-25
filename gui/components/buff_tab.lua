@@ -80,7 +80,7 @@ local function buffCustomSection(entry, idPrefix, onChanged)
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local tc = entry.tarcnt
     if tc == nil then tc = 1 end
-    local newTc, tcCh = inputs.boundedInt(idPrefix .. '_tarcnt', tc, 1, 24, 1, '##' .. idPrefix .. '_tarcnt')
+    local newTc, tcCh = inputs.boundedInt(idPrefix .. '_tarcnt', tc, 1, 10, 1, '##' .. idPrefix .. '_tarcnt')
     if tcCh then
         entry.tarcnt = newTc
         if onChanged then onChanged() end

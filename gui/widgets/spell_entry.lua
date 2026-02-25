@@ -493,7 +493,7 @@ function M.draw(spell, opts)
                     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
                     local bmintar = band.mintar
                     if bmintar == nil then bmintar = 0 end
-                    local newMinT, minTCh = inputs.boundedInt(id .. '_band' .. bi .. '_mintar', bmintar, 0, 50, 1,
+                    local newMinT, minTCh = inputs.boundedInt(id .. '_band' .. bi .. '_mintar', bmintar, 0, 10, 1,
                         '##' .. id .. '_band' .. bi .. '_mintar')
                     if minTCh then
                         band.mintar = (newMinT == 0) and nil or newMinT; if onChanged then onChanged() end
@@ -504,7 +504,7 @@ function M.draw(spell, opts)
                     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
                     local bmaxtar = band.maxtar
                     if bmaxtar == nil then bmaxtar = 0 end
-                    local newMaxT, maxTCh = inputs.boundedInt(id .. '_band' .. bi .. '_maxtar', bmaxtar, 0, 50, 1,
+                    local newMaxT, maxTCh = inputs.boundedInt(id .. '_band' .. bi .. '_maxtar', bmaxtar, 0, 10, 1,
                         '##' .. id .. '_band' .. bi .. '_maxtar')
                     if maxTCh then
                         band.maxtar = (newMaxT == 0) and nil or newMaxT; if onChanged then onChanged() end
