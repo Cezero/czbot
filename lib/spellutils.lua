@@ -557,7 +557,7 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
         if entry.delay and entry.delay > 0 then
             spellstates.SetDebuffDelay(index, mq.gettime() + (entry.delay * 1000))
         end
-        if spellutils.IsNukeSpell(entry) then
+        if spellutils.IsNukeSpell(entry) and not spellutils.IsConcussionSpell(entry) then
             rc.lastNukeIndex = index
         end
         local durationSec = spellutils.GetSpellDurationSec(entry)
