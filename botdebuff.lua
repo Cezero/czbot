@@ -291,7 +291,10 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry then return nil, nil end
     local db = DebuffBands[spellIndex]
-    if not campCountOk(state.getMobCount(), db and db.mintar, db and db.maxtar) then return nil, nil end
+    if not campCountOk(state.getMobCount(), db and db.mintar, db and db.maxtar) then
+        if targethit == 'tanktar' then printf('Concussion debug: debuffTargetNeedsSpell spellIndex=%s targetId=%s -> campCountOk failed', spellIndex, tostring(targetId)) end
+        return nil, nil
+    end
     local rc = state.getRunconfig()
     if spellutils.IsNukeSpell(entry) and not spellutils.IsConcussionSpell(entry) then
         local flavor = spellutils.GetNukeFlavor(entry)
@@ -310,7 +313,7 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     end
     local ctx = DebuffEvalBuildContext(spellIndex)
     if not ctx then
-        if spellutils.IsConcussionSpell(entry) then printf('Concussion: DebuffEvalBuildContext returned nil for spellIndex %s', spellIndex) end
+        printf('Concussion debug: debuffTargetNeedsSpell spellIndex=%s targetId=%s targethit=%s -> ctx=nil (BuildContext failed)', spellIndex, tostring(targetId), tostring(targethit))
         return nil, nil
     end
     if targethit == 'tanktar' then
