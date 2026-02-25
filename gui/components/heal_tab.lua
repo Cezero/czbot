@@ -92,6 +92,7 @@ local function healCustomSection(entry, idPrefix, onChanged)
         ImGui.SetTooltip('HP = target HP %% gate (band min/max). Mana = caster mana %% gate only (use Mana %% below; for e.g. Harvest).')
     end
     ImGui.SameLine()
+    ImGui.SetNextItemWidth(60)
     local healRes = entry.healResource or 'hp'
     if ImGui.BeginCombo('##' .. idPrefix .. '_healResource', healRes == 'mana' and 'Mana' or 'HP') then
         if ImGui.Selectable('HP', healRes == 'hp') then
