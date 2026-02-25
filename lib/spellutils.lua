@@ -770,7 +770,14 @@ function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, target
     for _, spellIndex in ipairs(spellIndices) do
         if MasterPause then return nil end
         local spellNotInBook = rc.spellNotInBook and rc.spellNotInBook[sub] and rc.spellNotInBook[sub][spellIndex]
-        if not spellNotInBook and (not options.entryValid or options.entryValid(spellIndex)) then
+        local entryValid = not options.entryValid or options.entryValid(spellIndex)
+        if sub == 'debuff' then
+            local entry = botconfig.getSpellEntry(sub, spellIndex)
+            if entry and spellutils.IsConcussionSpell(entry) and (spellNotInBook or not entryValid) then
+                printf('Concussion: spellIndex=%s targetId=%s SKIPPED (spellNotInBook=%s entryValid=%s)', spellIndex, tostring(targetId), tostring(spellNotInBook), tostring(entryValid))
+            end
+        end
+        if not spellNotInBook and entryValid then
             local EvalID, hit = targetNeedsSpellFn(spellIndex, targetId, targethit, context, phase)
             if EvalID and hit then
                 local entry = (sub == 'debuff') and botconfig.getSpellEntry(sub, spellIndex) or nil
