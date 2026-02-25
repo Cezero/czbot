@@ -313,7 +313,7 @@ local function rejectIfAlreadyHoT(entry, id, hit)
     return id, hit
 end
 
-local function healTargetNeedsSpell(spellIndex, targetId, targethit, context)
+local function healTargetNeedsSpell(spellIndex, targetId, targethit, context, phase)
     local ctx = HPEvalContext(spellIndex)
     if not ctx then return nil, nil end
     if targethit == 'self' then
@@ -348,11 +348,12 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context)
     end
     if AHThreshold[spellIndex] then
         local th = AHThreshold[spellIndex]
+        local classesForPhase = (phase == 'pc' and th.pc_classes) or (phase == 'groupmember' and th.groupmember_classes) or th.classes
         local classOk = function(cls)
             if not cls then return false end
             local c = cls:lower()
-            if th.classes == 'all' then return true end
-            return th.classes and th.classes[c] == true
+            if classesForPhase == 'all' then return true end
+            return classesForPhase and classesForPhase[c] == true
         end
         local sp = mq.TLO.Spawn(targetId)
         if sp and sp.ID() == targetId and mq.TLO.Spawn(targetId).Type() == 'PC' then

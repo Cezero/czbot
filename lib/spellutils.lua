@@ -760,7 +760,8 @@ function spellutils.getSpellIndicesForPhase(count, phase, bandHasPhaseFnOrTable)
 end
 
 --- For one target, finds first spell in spellIndices that needs to be cast. Returns spellIndex, EvalID, targethit or nil.
-function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, targethit, context, options, targetNeedsSpellFn)
+--- phase: optional; when provided (e.g. heal), passed to targetNeedsSpellFn as fifth argument for per-phase logic.
+function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, targethit, context, options, targetNeedsSpellFn, phase)
     if not targetNeedsSpellFn or not spellIndices then return nil end
     options = options or {}
     local rc = state.getRunconfig()
@@ -768,7 +769,7 @@ function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, target
         if MasterPause then return nil end
         local spellNotInBook = rc.spellNotInBook and rc.spellNotInBook[sub] and rc.spellNotInBook[sub][spellIndex]
         if not spellNotInBook and (not options.entryValid or options.entryValid(spellIndex)) then
-            local EvalID, hit = targetNeedsSpellFn(spellIndex, targetId, targethit, context)
+            local EvalID, hit = targetNeedsSpellFn(spellIndex, targetId, targethit, context, phase)
             if EvalID and hit then
                 if (not options.beforeCast or options.beforeCast(spellIndex, EvalID, hit))
                     and (not options.immuneCheck or spellutils.ImmuneCheck(sub, spellIndex, EvalID))
@@ -828,7 +829,7 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                         end
                         if #fromSpellIndices > 0 then
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
-                                fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn)
+                                fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn, phase)
                             if spellIndex and EvalID and targethit then
                                 if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 and not spellutils.IsMemorizing() then
                                     mq.cmd('/stopcast')

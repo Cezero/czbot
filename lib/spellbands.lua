@@ -23,8 +23,8 @@ function spellbands.applyBands(section, entry, index)
 
     if section == 'heal' then
         local rt = {}
-        local classesAll = false
-        local classesSet = {}
+        local pcClassesAll, groupmemberClassesAll = false, false
+        local pcClassesSet, groupmemberClassesSet = {}, {}
         for _, band in ipairs(bands) do
             local targetPhase = band.targetphase
             if type(targetPhase) == 'table' then
@@ -50,14 +50,26 @@ function spellbands.applyBands(section, entry, index)
                             else
                                 rt.all = { min = minVal, max = DEBUFF_SPECIAL_MAX }
                             end
-                        elseif (p == 'pc' or p == 'groupmember') and type(validTgts) == 'table' then
-                            for _, c in ipairs(validTgts) do
-                                if type(c) == 'string' and c ~= '' then
-                                    if c == 'all' then classesAll = true else classesSet[c:lower()] = true end
+                        elseif p == 'pc' then
+                            if type(validTgts) == 'table' and #validTgts > 0 then
+                                for _, c in ipairs(validTgts) do
+                                    if type(c) == 'string' and c ~= '' then
+                                        if c == 'all' then pcClassesAll = true else pcClassesSet[c:lower()] = true end
+                                    end
                                 end
+                            else
+                                pcClassesAll = true
                             end
-                        elseif (p == 'pc' or p == 'groupmember') and (not validTgts or (type(validTgts) == 'table' and #validTgts == 0)) then
-                            classesAll = true
+                        elseif p == 'groupmember' then
+                            if type(validTgts) == 'table' and #validTgts > 0 then
+                                for _, c in ipairs(validTgts) do
+                                    if type(c) == 'string' and c ~= '' then
+                                        if c == 'all' then groupmemberClassesAll = true else groupmemberClassesSet[c:lower()] = true end
+                                    end
+                                end
+                            else
+                                groupmemberClassesAll = true
+                            end
                         end
                         end
                     end
@@ -65,7 +77,8 @@ function spellbands.applyBands(section, entry, index)
             end
         end
         if entry.inCombat ~= nil then rt.inCombat = (entry.inCombat == true) end
-        if classesAll then rt.classes = 'all' else rt.classes = classesSet end
+        rt.pc_classes = pcClassesAll and 'all' or pcClassesSet
+        rt.groupmember_classes = groupmemberClassesAll and 'all' or groupmemberClassesSet
         return rt
     end
 
