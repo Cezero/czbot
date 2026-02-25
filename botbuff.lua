@@ -59,7 +59,7 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
     if not BuffClass[index] then return nil, nil end
     if myclass ~= 'BRD' then
         local mypetid = mq.TLO.Me.Pet.ID()
-        if BuffClass[index].petspell and IconCheck(index, myid) and mypetid == 0 then
+        if BuffClass[index].petspell and IconCheck(index, myid) and mypetid == 0 and not (mq.TLO.Me.Buff(spell)() or mq.TLO.Me.Song(spell)()) then
             return myid, 'petspell'
         end
         if BuffClass[index].petspell and mypetid > 0 then
