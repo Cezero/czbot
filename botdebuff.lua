@@ -293,7 +293,7 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local db = DebuffBands[spellIndex]
     if not campCountOk(state.getMobCount(), db and db.mintar, db and db.maxtar) then return nil, nil end
     local rc = state.getRunconfig()
-    if spellutils.IsNukeSpell(entry) then
+    if spellutils.IsNukeSpell(entry) and not spellutils.IsConcussionSpell(entry) then
         local flavor = spellutils.GetNukeFlavor(entry)
         if not nukeFlavorAllowed(rc, flavor) then return nil, nil end
     end
@@ -550,9 +550,9 @@ local function debuffGetSpellIndices(phase, count, ctx, target)
         end
         if concussionIndex and concussionRecast then
             local c = spellstates.GetConcussionCounter(target.id)
-            printf('Concussion counter for %s: %s', target.id, c)
-            printf('Concussion recast: %s', concussionRecast)
+            printf('Concussion counter for %s: %s recast: %s', target.id, c, concussionRecast)
             if c >= concussionRecast then
+                printf('Concussion counter for %s: %s >= recast: %s, returning only concussion index', target.id, c, concussionRecast)
                 return { concussionIndex }
             end
             local out = {}
