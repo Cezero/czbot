@@ -315,9 +315,7 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     end
     if targethit == 'tanktar' then
         local id, hit = DebuffEvalTankTar(spellIndex, ctx)
-        if spellutils.IsConcussionSpell(entry) then
-            printf('Concussion: DebuffEvalTankTar spellIndex=%s targetId=%s -> id=%s hit=%s match=%s', spellIndex, targetId, tostring(id), tostring(hit), tostring(id == targetId))
-        end
+        printf('Concussion debug: debuff tanktar spellIndex=%s targetId=%s DebuffEvalTankTar -> id=%s hit=%s match=%s IsConcussionSpell=%s', spellIndex, targetId, tostring(id), tostring(hit), tostring(id == targetId), tostring(spellutils.IsConcussionSpell(entry)))
         if id == targetId then return id, hit end
         return nil, nil
     end
