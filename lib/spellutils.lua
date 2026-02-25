@@ -571,10 +571,8 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
             end
         end
         if spellutils.IsConcussionSpell(entry) then
-            printf('Resetting concussion counter for %s', EvalID)
             if EvalID then spellstates.ResetConcussionCounter(EvalID) end
         elseif not rc.CurSpell.resisted and EvalID then
-            printf('Incrementing concussion counter for %s', EvalID)
             spellstates.IncrementConcussionCounter(EvalID)
         end
     end
@@ -765,41 +763,19 @@ end
 --- phase: optional; when provided (e.g. heal), passed to targetNeedsSpellFn as fifth argument for per-phase logic.
 function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, targethit, context, options, targetNeedsSpellFn, phase)
     if not targetNeedsSpellFn or not spellIndices then return nil end
-    if sub == 'debuff' then
-        printf('Concussion debug: checkIfTargetNeedsSpells ENTRY sub=debuff targetId=%s targethit=%s #spellIndices=%s', tostring(targetId), tostring(targethit), tostring(spellIndices and #spellIndices or 0))
-    end
     options = options or {}
     local rc = state.getRunconfig()
     for _, spellIndex in ipairs(spellIndices) do
         if MasterPause then return nil end
         local spellNotInBook = rc.spellNotInBook and rc.spellNotInBook[sub] and rc.spellNotInBook[sub][spellIndex]
         local entryValid = not options.entryValid or options.entryValid(spellIndex)
-        if sub == 'debuff' then
-            local entry = botconfig.getSpellEntry(sub, spellIndex)
-            if entry and spellutils.IsConcussionSpell(entry) and (spellNotInBook or not entryValid) then
-                printf('Concussion: spellIndex=%s targetId=%s SKIPPED (spellNotInBook=%s entryValid=%s)', spellIndex, tostring(targetId), tostring(spellNotInBook), tostring(entryValid))
-            end
-        end
         if not spellNotInBook and entryValid then
             local EvalID, hit = targetNeedsSpellFn(spellIndex, targetId, targethit, context, phase)
             if EvalID and hit then
-                local entry = (sub == 'debuff') and botconfig.getSpellEntry(sub, spellIndex) or nil
-                local isConcussion = entry and spellutils.IsConcussionSpell(entry)
-                local okBefore = not options.beforeCast or options.beforeCast(spellIndex, EvalID, hit)
-                if not okBefore then
-                    if isConcussion then printf('Concussion: spellIndex=%s EvalID=%s blocked by beforeCast=false', spellIndex, tostring(EvalID)) end
-                else
-                    local okImmune = not options.immuneCheck or spellutils.ImmuneCheck(sub, spellIndex, EvalID)
-                    if not okImmune then
-                        if isConcussion then printf('Concussion: spellIndex=%s EvalID=%s blocked by immuneCheck=false', spellIndex, tostring(EvalID)) end
-                    else
-                        local okPreCond = spellutils.PreCondCheck(sub, spellIndex, EvalID)
-                        if not okPreCond then
-                            if isConcussion then printf('Concussion: spellIndex=%s EvalID=%s blocked by preCondCheck=false', spellIndex, tostring(EvalID)) end
-                        else
-                            return spellIndex, EvalID, hit
-                        end
-                    end
+                if (not options.beforeCast or options.beforeCast(spellIndex, EvalID, hit))
+                    and (not options.immuneCheck or spellutils.ImmuneCheck(sub, spellIndex, EvalID))
+                    and spellutils.PreCondCheck(sub, spellIndex, EvalID) then
+                    return spellIndex, EvalID, hit
                 end
             end
         end
@@ -853,9 +829,6 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                             if si >= spellStart then fromSpellIndices[#fromSpellIndices + 1] = si end
                         end
                         if #fromSpellIndices > 0 then
-                            if sub == 'debuff' then
-                                printf('Concussion debug: RunPhaseFirstSpellCheck about to call checkIfTargetNeedsSpells targetId=%s phase=%s fromSpellIndices count=%s', tostring(target and target.id), tostring(phase), tostring(#fromSpellIndices))
-                            end
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                 fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn, phase)
                             if spellIndex and EvalID and targethit then

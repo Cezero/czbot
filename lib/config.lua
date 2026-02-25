@@ -357,10 +357,10 @@ local function writeConfigToFile(config, filename)
                 if band.max ~= nil then
                     file:write(indent .. "    " .. formatKey('max') .. " = " .. tonumber(band.max) .. ",\n")
                 end
-                if band.mintar ~= nil then
+                if band.mintar ~= nil and band.mintar > 0 then
                     file:write(indent .. "    " .. formatKey('mintar') .. " = " .. tonumber(band.mintar) .. ",\n")
                 end
-                if band.maxtar ~= nil then
+                if band.maxtar ~= nil and band.maxtar > 0 then
                     file:write(indent .. "    " .. formatKey('maxtar') .. " = " .. tonumber(band.maxtar) .. ",\n")
                 end
                 file:write(indent .. "  },\n")

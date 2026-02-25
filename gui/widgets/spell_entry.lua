@@ -525,8 +525,9 @@ function M.draw(spell, opts)
                     for _, k in ipairs(first.validtargets or {}) do newBand.validtargets[#newBand.validtargets + 1] = k end
                     newBand.min = first.min
                     newBand.max = first.max
-                    newBand.mintar = first.mintar
-                    newBand.maxtar = first.maxtar
+                    -- Only copy mintar/maxtar when set to a positive value (0 = no limit, omit from band)
+                    newBand.mintar = (first.mintar and first.mintar > 0) and first.mintar or nil
+                    newBand.maxtar = (first.maxtar and first.maxtar > 0) and first.maxtar or nil
                 end
                 spell.bands[#spell.bands + 1] = newBand
                 if onChanged then onChanged() end
