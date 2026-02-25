@@ -773,10 +773,23 @@ function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, target
         if not spellNotInBook and (not options.entryValid or options.entryValid(spellIndex)) then
             local EvalID, hit = targetNeedsSpellFn(spellIndex, targetId, targethit, context, phase)
             if EvalID and hit then
-                if (not options.beforeCast or options.beforeCast(spellIndex, EvalID, hit))
-                    and (not options.immuneCheck or spellutils.ImmuneCheck(sub, spellIndex, EvalID))
-                    and spellutils.PreCondCheck(sub, spellIndex, EvalID) then
-                    return spellIndex, EvalID, hit
+                local entry = (sub == 'debuff') and botconfig.getSpellEntry(sub, spellIndex) or nil
+                local isConcussion = entry and spellutils.IsConcussionSpell(entry)
+                local okBefore = not options.beforeCast or options.beforeCast(spellIndex, EvalID, hit)
+                if not okBefore then
+                    if isConcussion then printf('Concussion: spellIndex=%s EvalID=%s blocked by beforeCast=false', spellIndex, tostring(EvalID)) end
+                else
+                    local okImmune = not options.immuneCheck or spellutils.ImmuneCheck(sub, spellIndex, EvalID)
+                    if not okImmune then
+                        if isConcussion then printf('Concussion: spellIndex=%s EvalID=%s blocked by immuneCheck=false', spellIndex, tostring(EvalID)) end
+                    else
+                        local okPreCond = spellutils.PreCondCheck(sub, spellIndex, EvalID)
+                        if not okPreCond then
+                            if isConcussion then printf('Concussion: spellIndex=%s EvalID=%s blocked by preCondCheck=false', spellIndex, tostring(EvalID)) end
+                        else
+                            return spellIndex, EvalID, hit
+                        end
+                    end
                 end
             end
         end

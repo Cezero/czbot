@@ -309,9 +309,15 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         return nil, nil
     end
     local ctx = DebuffEvalBuildContext(spellIndex)
-    if not ctx then return nil, nil end
+    if not ctx then
+        if spellutils.IsConcussionSpell(entry) then printf('Concussion: DebuffEvalBuildContext returned nil for spellIndex %s', spellIndex) end
+        return nil, nil
+    end
     if targethit == 'tanktar' then
         local id, hit = DebuffEvalTankTar(spellIndex, ctx)
+        if spellutils.IsConcussionSpell(entry) then
+            printf('Concussion: DebuffEvalTankTar spellIndex=%s targetId=%s -> id=%s hit=%s match=%s', spellIndex, targetId, tostring(id), tostring(hit), tostring(id == targetId))
+        end
         if id == targetId then return id, hit end
         return nil, nil
     end
@@ -362,10 +368,14 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     local myconfig = botconfig.config
     local entry = botconfig.getSpellEntry('debuff', i)
     if not entry then return false end
-    if not spellutils.CheckGemReadiness('debuff', i, entry) then return false end
+    if not spellutils.CheckGemReadiness('debuff', i, entry) then
+        if spellutils.IsConcussionSpell(entry) then printf('Concussion: BeforeCast spellIndex=%s EvalID=%s -> false (CheckGemReadiness failed)', i, tostring(EvalID)) end
+        return false
+    end
     if not spellutils.IsConcussionSpell(entry) and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false
     end
+    if spellutils.IsConcussionSpell(entry) then printf('Concussion: BeforeCast spellIndex=%s EvalID=%s -> true (proceeding to cast)', i, tostring(EvalID)) end
     charm.BeforeCast(EvalID, targethit)
     if targethit == 'tanktar' and EvalID and EvalID > 0 then
         if not myconfig.melee.offtank then state.getRunconfig().engageTargetId = EvalID end
