@@ -320,6 +320,7 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context, ph
         local id, hit = HPEvalSelf(spellIndex, ctx)
         return rejectIfAlreadyHoT(ctx.entry, id, hit)
     end
+    -- Tank: HP band only; no validtargets/class filter.
     if targethit == 'tank' then
         local id, hit = HPEvalTank(spellIndex, ctx)
         if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
@@ -348,12 +349,18 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context, ph
     end
     if AHThreshold[spellIndex] then
         local th = AHThreshold[spellIndex]
-        local classesForPhase = (phase == 'pc' and th.pc_classes) or (phase == 'groupmember' and th.groupmember_classes) or th.classes
-        local classOk = function(cls)
-            if not cls then return false end
-            local c = cls:lower()
-            if classesForPhase == 'all' then return true end
-            return classesForPhase and classesForPhase[c] == true
+        -- Only groupmember and pc phases use class filtering (validtargets); tank/self/groupheal do not.
+        local classesForPhase = (phase == 'groupmember' and th.groupmember_classes) or (phase == 'pc' and th.pc_classes)
+        local classOk
+        if classesForPhase == nil then
+            classOk = function() return true end
+        else
+            classOk = function(cls)
+                if not cls then return false end
+                local c = cls:lower()
+                if classesForPhase == 'all' then return true end
+                return classesForPhase and classesForPhase[c] == true
+            end
         end
         local sp = mq.TLO.Spawn(targetId)
         if sp and sp.ID() == targetId and mq.TLO.Spawn(targetId).Type() == 'PC' then

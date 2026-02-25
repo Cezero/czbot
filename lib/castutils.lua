@@ -159,8 +159,8 @@ function castutils.getTargetsGroupMember(context, opts)
                 if grpid and grpid > 0 and grpclass then
                     if opts.excludeBotsFromGroup and charinfo.GetInfo(grpname) then
                         -- skip (already added in botsFirst or is a bot)
-                    elseif opts.excludeSelfAndTank and context and context.tankid and grpid == context.tankid then
-                        -- skip tank (heal/buff: tank only in tank phase)
+                    elseif opts.excludeSelfAndTank and context and (grpid == context.tankid or grpid == mq.TLO.Me.ID()) then
+                        -- skip tank and self (heal/buff: tank only in tank phase; groupmember = not self, not tank)
                     else
                         out[#out + 1] = { id = grpid, targethit = grpclass:lower() }
                     end
