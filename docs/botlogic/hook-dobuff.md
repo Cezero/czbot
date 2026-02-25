@@ -7,6 +7,8 @@
 
 Runs the phase-first spell check for the **buff** section. Phase order: self, byname, tank, groupbuff, groupmember, pc, mypet, pet.
 
+**Guards:** doBuff is skipped when travel mode is on, when `dobuff` is off or there is no buff config, or when the bot is a **cleric** and there are PC corpses in camp (within acleash radius)—so clerics focus on heal cycles (including rez) until corpses are cleared.
+
 ```mermaid
 flowchart TB
     Start[doBuff] --> Guards{!dobuff or no buff config?}

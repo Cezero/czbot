@@ -323,6 +323,7 @@ function botbuff.getHookFn(name)
             if state.isTravelMode() then return end
             local myconfig = botconfig.config
             if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end
+            if mq.TLO.Me.Class.ShortName() == 'CLR' and (mq.TLO.SpawnCount('pccorpse radius ' .. (myconfig.settings.acleash or 75))() or 0) > 0 then return end
             if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Buff Check' end
             botbuff.BuffCheck(bothooks.getPriority(hookName))
         end
