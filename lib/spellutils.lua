@@ -570,12 +570,10 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
                 end
             end
         end
-        if not rc.CurSpell.resisted and EvalID then
-            if spellutils.IsConcussionSpell(entry) then
-                spellstates.ResetConcussionCounter(EvalID)
-            else
-                spellstates.IncrementConcussionCounter(EvalID)
-            end
+        if spellutils.IsConcussionSpell(entry) then
+            if EvalID then spellstates.ResetConcussionCounter(EvalID) end
+        elseif not rc.CurSpell.resisted and EvalID then
+            spellstates.IncrementConcussionCounter(EvalID)
         end
     end
     if rc.MissedNote then rc.MissedNote = false end
@@ -596,7 +594,7 @@ end
 function spellutils.clearCastingStateOrResume()
     local rc = state.getRunconfig()
     local hadSub = rc.CurSpell and rc.CurSpell.sub
-    if mq.TLO.Me.Class.ShortName() == 'BRD' and hadSub and (hadSub == 'buff' or hadSub == 'debuff' or hadSub == 'cure') then
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and hadSub and (hadSub == 'buff' or hadSub == 'debuff' or hadSub == 'cure') and not rc.bardNotanktarWait then
         bardtwist.ResumeTwist()
     end
     rc.CurSpell = {}

@@ -396,6 +396,14 @@ local function tickNavigating(rc, spawn)
         outsideCamp = meToCampSq and myconfig.pull.radiusPlus40Sq and meToCampSq > myconfig.pull.radiusPlus40Sq
     end
 
+    -- Pull target below 100% HP (e.g. someone else on it): abort and set FTE so we pick another.
+    if spawn.PctHPs() and spawn.PctHPs() < 100 then
+        local sid = rc.pullAPTargetID
+        rc.FTEList[sid] = { id = sid, hitcount = 0, timer = mq.gettime() }
+        abortPullAndReturnToCamp('Pull target below 100% HP, picking another')
+        return
+    end
+
     -- Add-abort: HP dropped (we took damage)
     if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP then
         abortPullAndReturnToCamp('Add aggro / took damage, returning to camp.')

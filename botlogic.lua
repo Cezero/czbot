@@ -47,12 +47,13 @@ local function charState_Always()
     end
     -- Clear stuck casting: effectively idle or deadline passed with no active cast. Do not clear while memorizing.
     -- When viaMQ2Cast and no cast bar yet (castTimeLeft==0), do not clear as effectivelyIdle so MQ2Cast has time to sit/memorize.
+    -- Skip when BRD is in notanktar (mez) wait so we don't clear state before the song finishes.
     if state.getRunState() == state.STATES.casting then
-        if not spellutils.IsMemorizing() then
+        local rc = state.getRunconfig()
+        if not rc.bardNotanktarWait and not spellutils.IsMemorizing() then
             local castTimeLeft = mq.TLO.Me.CastTimeLeft() or 0
             local effectivelyIdle = state.getMobCount() == 0 and not mq.TLO.Me.Casting() and castTimeLeft == 0
             local deadlineStuck = state.runStateDeadlinePassed() and castTimeLeft == 0
-            local rc = state.getRunconfig()
             if deadlineStuck or (effectivelyIdle and not (rc.CurSpell and rc.CurSpell.viaMQ2Cast and castTimeLeft == 0)) then
                 spellutils.clearCastingStateOrResume()
             end

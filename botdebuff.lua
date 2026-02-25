@@ -130,7 +130,7 @@ local function DebuffEvalTankTar(index, ctx)
                     if ctx.tanktarlvl and spellutils.IsMezSpell(entry) and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
                         return nil, nil
                     end
-                    if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
+                    if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack and not spellutils.IsConcussionSpell(entry) then
                         return nil, nil
                     end
                     if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < ctx.mintar then
@@ -399,6 +399,7 @@ local function DebuffCheckHandleBardNotanktarWait(rc)
     end
     rc.bardNotanktarWait = nil
     state.clearRunState()
+    bardtwist.RestoreCombatTwistAfterNotanktar()
     local duration_sec = spellutils.GetSpellDurationSec(w.entry)
     if duration_sec > 0 then
         local duration_end = mq.gettime() + duration_sec * 1000

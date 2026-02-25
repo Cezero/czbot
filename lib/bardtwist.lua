@@ -198,6 +198,7 @@ end
 function bardtwist.EnsureTwistForMode(mode)
     if not bardtwist.IsBard() then return end
     if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
+    if state.getRunconfig().bardNotanktarWait then return end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
     if not desiredGems or #desiredGems == 0 then
         if mode == 'travel' and mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
@@ -219,8 +220,15 @@ function bardtwist.EnsureTwistForMode(mode)
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
+    if state.getRunconfig().bardNotanktarWait then return end
     local mode = bardtwist.GetCurrentTwistMode()
     if mode then bardtwist.EnsureTwistForMode(mode) end
+end
+
+--- Restore combat twist after BRD notanktar (mez) wait ends. Clears twistOnceActive and runs combat twist. Call only when bardNotanktarWait was just cleared.
+function bardtwist.RestoreCombatTwistAfterNotanktar()
+    twistOnceActive = false
+    bardtwist.EnsureTwistForMode('combat')
 end
 
 function bardtwist.StopTwist()
