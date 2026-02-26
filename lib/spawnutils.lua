@@ -6,6 +6,7 @@ local botconfig = require('lib.config')
 local spellstates = require('lib.spellstates')
 local state = require('lib.state')
 local utils = require('lib.utils')
+local bardtwist = require('lib.bardtwist')
 
 local spawnutils = {}
 
@@ -251,6 +252,9 @@ function spawnutils.AddSpawnCheck()
     spawnutils.buildAndSetCampMobList(rc)
     spawnutils.mergeKillTargetIntoMobList(rc)
     spellstates.PruneDebuffStateNotInMobList(rc.MobList)
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and #(rc.MobList or {}) == 0 then
+        bardtwist.EnsureDefaultTwistRunning()
+    end
 end
 
 function spawnutils.getHookFn(name)

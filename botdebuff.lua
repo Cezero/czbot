@@ -392,12 +392,11 @@ local function DebuffCheckHandleBardNotanktarWait(rc)
     end
     local now = mq.gettime()
     if w.deadline and now < w.deadline then
-        return true
-    end
-    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
-    if stillSinging then
-        w.singingStarted = true
-        return true
+        local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
+        if stillSinging then
+            w.singingStarted = true
+            return true
+        end
     end
     rc.bardNotanktarWait = nil
     state.clearRunState()
@@ -410,7 +409,10 @@ local function DebuffCheckHandleBardNotanktarWait(rc)
         spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, mq.gettime() + 12 * 1000)
     end
     local _, _, tanktar = spellutils.GetTankInfo(true)
-    if tanktar and tanktar > 0 then mq.cmdf('/tar id %s', tanktar) end
+    if tanktar and tanktar > 0 then
+        mq.cmdf('/tar id %s', tanktar)
+        state.getRunconfig().engageTargetId = tanktar
+    end
     return true
 end
 
@@ -428,7 +430,7 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and (castTime * 100) or 3000
-    rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry, singingStarted = false, deadline = mq.gettime() + castTimeMs }
+    rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry, singingStarted = false, deadline = mq.gettime() + castTimeMs + 100 }
     if state.canStartBusyState(state.STATES.casting) then
         state.setRunState(state.STATES.casting, { deadline = mq.gettime() + 20000, priority = bothooks.getPriority('doDebuff') })
     end
