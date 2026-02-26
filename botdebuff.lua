@@ -163,6 +163,9 @@ local function DebuffEvalNotanktar(index, ctx)
                 else
                     if not (myrangeSq and distSq and distSq > myrangeSq) then
                         local tarstacks = spellutils.SpellStacksSpawn(entry, v.ID())
+                        if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks and spellutils.IsMezSpell(entry) then
+                            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', (v.CleanName and v.CleanName()) or ('id ' .. tostring(v.ID())), v.ID())
+                        end
                         if not (ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()) then
                             if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
                                 if not (tonumber(ctx.spelldur) > 0 and v.ID() and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
@@ -342,6 +345,10 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
                     end
                     if not (myrangeSq and distSq and distSq > myrangeSq) then
                         local tarstacks = spellutils.SpellStacksSpawn(entry, targetId)
+                        if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks and spellutils.IsMezSpell(entry) then
+                            local name = (v.CleanName and v.CleanName()) or (mq.TLO.Spawn(targetId).CleanName and mq.TLO.Spawn(targetId).CleanName()) or ('id ' .. tostring(targetId))
+                            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, targetId)
+                        end
                         local vlevel = v.Level and v.Level() or mq.TLO.Spawn(targetId).Level()
                         if not (ctx.spellid and vlevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < vlevel) then
                             if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
@@ -427,6 +434,10 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
     mq.cmd('/squelch /attack off')
     targeting.TargetAndWait(EvalID, 500)
+    if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed() then
+        printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
+        return true
+    end
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
