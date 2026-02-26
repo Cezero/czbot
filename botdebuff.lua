@@ -12,6 +12,7 @@ local botdebuff = {}
 local DebuffBands = {}
 local bardtwist = require('lib.bardtwist')
 local botmelee = require('botmelee')
+local targeting = require('lib.targeting')
 
 local function defaultDebuffEntry()
     return botconfig.getDefaultSpellEntry('debuff')
@@ -425,7 +426,7 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
     printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
     mq.cmd('/squelch /attack off')
-    if mq.TLO.Target.ID() ~= EvalID then mq.cmdf('/tar id %s', EvalID) end
+    targeting.TargetAndWait(EvalID, 500)
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
