@@ -17,6 +17,8 @@ local CASTING_STUCK_MS = 20000
 local CASTING_MEMORIZE_DELAY_MS = 200
 --- When buff remaining time on target is below this (ms), do not interrupt with "buff already present" (allow refresh cast to complete). Should match botbuff's refresh window (e.g. 24s for self).
 local BUFF_REFRESH_THRESHOLD_MS = 24000
+--- When a debuff returns CAST_TAKEHOLD (blocked by another spell), skip that debuff on this spawn for this many ms.
+local BLOCKED_SKIP_MS = 300000
 
 function spellutils.GetDebuffDontStackAllowlist()
     return botconfig.DEBUFF_DONTSTACK_ALLOWED
@@ -673,6 +675,14 @@ function spellutils.handleSpellCheckReentry(sub, options)
             rc.CurSpell.resisted = (castResult == 'CAST_RESIST')
             if castResult == 'CAST_IMMUNE' and rc.CurSpell.target then
                 immune.processList(rc.CurSpell.target)
+            end
+            if castResult == 'CAST_TAKEHOLD' and rc.CurSpell.sub == 'debuff' and rc.CurSpell.target then
+                local entry = botconfig.getSpellEntry('debuff', rc.CurSpell.spell)
+                if entry and entry.spell then
+                    spellstates.DebuffListUpdate(rc.CurSpell.target, entry.spell, mq.gettime() + BLOCKED_SKIP_MS)
+                    local spawnName = mq.TLO.Spawn(rc.CurSpell.target).CleanName() or tostring(rc.CurSpell.target)
+                    printf('\ayCZBot:\ax %s did not take hold on \at%s\ax (blocked); skipping for %d min', entry.spell, spawnName, math.floor(BLOCKED_SKIP_MS / 60000))
+                end
             end
             spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
             if options.afterCast then

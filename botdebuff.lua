@@ -109,37 +109,61 @@ local function DebuffEvalBuildContext(index)
     }
 end
 
+-- Returns true if spawn is a valid target for this debuff (range, level, stacks, duration, AE mintar).
+-- Performs mez skip messages (level, already mezzed) when applicable.
+-- phase: 'tanktar' | 'notanktar' (named uses same rules as tanktar).
+local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
+    local gem = entry.gem
+    local myrangeSq = ctx.myrangeSq
+    if entry.gem == 'ability' then
+        local mr = spawn.MaxRangeTo and spawn.MaxRangeTo()
+        local e = mr and math.max(0, mr - 2)
+        myrangeSq = e and (e * e)
+    end
+    local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
+    if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
+        return false
+    end
+    if myrangeSq and distSq and distSq > myrangeSq then
+        return false
+    end
+    local spawnLevel = (phase == 'tanktar' and ctx.tanktarlvl) or (spawn.Level and spawn.Level())
+    if ctx.spellid and spawnLevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < spawnLevel and spellutils.IsMezSpell(entry) then
+        local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
+        printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
+        return false
+    end
+    local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
+    if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
+        if phase == 'notanktar' and spellutils.IsMezSpell(entry) then
+            local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
+            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, spawn.ID())
+            return false
+        end
+        if phase == 'tanktar' and not spellutils.IsConcussionSpell(entry) then
+            return false
+        end
+    end
+    if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, 6000) then
+        return false
+    end
+    if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
+        return false
+    end
+    return true
+end
+
 local function DebuffEvalTankTar(index, ctx)
     local entry = ctx.entry
-    local gem = entry.gem
     local db = DebuffBands[index]
     if not db or not db.tanktar or not ctx.tanktar then return nil, nil end
     if not castutils.hpEvalSpawn(ctx.tanktar, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar then
-            local myrangeSq = ctx.myrangeSq
-            if entry.gem == 'ability' then
-                local mr = v.MaxRangeTo(); local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
+            if DebuffSpawnNeedsSpell(entry, ctx, v, 'tanktar') then
+                return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
             end
-            local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
-            if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
-                return nil, nil
-            end
-            if not (myrangeSq and distSq and distSq > myrangeSq) then
-                if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
-                    local tanktarstack = spellutils.SpellStacksSpawn(entry, ctx.tanktar)
-                    if ctx.tanktarlvl and spellutils.IsMezSpell(entry) and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
-                        return nil, nil
-                    end
-                    if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack and not spellutils.IsConcussionSpell(entry) then
-                        return nil, nil
-                    end
-                    if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < ctx.mintar then
-                        return nil, nil
-                    end
-                    return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
-                end
-            end
+            return nil, nil
         end
     end
     return nil, nil
@@ -147,35 +171,13 @@ end
 
 local function DebuffEvalNotanktar(index, ctx)
     local entry = ctx.entry
-    local gem = entry.gem
     local db = DebuffBands[index]
     if not db or not db.notanktar or not ctx.mobList[1] then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() ~= ctx.tanktar then
             if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
-                local myrangeSq = ctx.myrangeSq
-                if entry.gem == 'ability' then
-                    local mr = v.MaxRangeTo(); local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
-                end
-                local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
-                if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
-                    -- skip this add (target too close for targetted AE)
-                else
-                    if not (myrangeSq and distSq and distSq > myrangeSq) then
-                        local tarstacks = spellutils.SpellStacksSpawn(entry, v.ID())
-                        if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks and spellutils.IsMezSpell(entry) then
-                            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', (v.CleanName and v.CleanName()) or ('id ' .. tostring(v.ID())), v.ID())
-                        end
-                        if not (ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()) then
-                            if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
-                                if not (tonumber(ctx.spelldur) > 0 and v.ID() and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
-                                    if not (ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, v.ID(), ctx.aeRange) < ctx.mintar) then
-                                        return v.ID(), 'notanktar'
-                                    end
-                                end
-                            end
-                        end
-                    end
+                if DebuffSpawnNeedsSpell(entry, ctx, v, 'notanktar') then
+                    return v.ID(), 'notanktar'
                 end
             end
         end
@@ -185,32 +187,15 @@ end
 
 local function DebuffEvalNamedTankTar(index, ctx)
     local entry = ctx.entry
-    local gem = entry.gem
     local db = DebuffBands[index]
     if not db or not db.named or not ctx.tanktar then return nil, nil end
     if not castutils.hpEvalSpawn(ctx.tanktar, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar and v.Named() then
-            local myrangeSq = ctx.myrangeSq
-            if entry.gem == 'ability' then
-                local mr = v.MaxRangeTo(); local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
-            end
-            local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
-            if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then return nil, nil end
-            if myrangeSq and distSq and distSq > myrangeSq then return nil, nil end
-            if not (ctx.spelldur and tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(v.ID(), ctx.spellid, 6000)) then
-                local tanktarstack = spellutils.SpellStacksSpawn(entry, ctx.tanktar)
-                if ctx.tanktarlvl and spellutils.IsMezSpell(entry) and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < ctx.tanktarlvl then
-                    return nil, nil
-                end
-                if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tanktarstack then
-                    return nil, nil
-                end
-                if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, ctx.tanktar, ctx.aeRange) < ctx.mintar then
-                    return nil, nil
-                end
+            if DebuffSpawnNeedsSpell(entry, ctx, v, 'tanktar') then
                 return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
             end
+            return nil, nil
         end
     end
     return nil, nil
@@ -328,38 +313,13 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     end
     if targethit == 'notanktar' then
         local entry = ctx.entry
-        local gem = entry.gem
         local db = DebuffBands[spellIndex]
         if not db or not db.notanktar then return nil, nil end
         for _, v in ipairs(ctx.mobList) do
             local vid = v.ID and v.ID() or v
             if vid == targetId then
-                if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
-                    local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
-                    if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
-                        break
-                    end
-                    local myrangeSq = ctx.myrangeSq
-                    if entry.gem == 'ability' then
-                        local mr = v.MaxRangeTo and v.MaxRangeTo() or ctx.myrange; local e = mr and math.max(0, mr - 2); myrangeSq = e and (e * e)
-                    end
-                    if not (myrangeSq and distSq and distSq > myrangeSq) then
-                        local tarstacks = spellutils.SpellStacksSpawn(entry, targetId)
-                        if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks and spellutils.IsMezSpell(entry) then
-                            local name = (v.CleanName and v.CleanName()) or (mq.TLO.Spawn(targetId).CleanName and mq.TLO.Spawn(targetId).CleanName()) or ('id ' .. tostring(targetId))
-                            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, targetId)
-                        end
-                        local vlevel = v.Level and v.Level() or mq.TLO.Spawn(targetId).Level()
-                        if not (ctx.spellid and vlevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < vlevel) then
-                            if not ((type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks) then
-                                if not (tonumber(ctx.spelldur) > 0 and spellstates.HasDebuffLongerThan(targetId, ctx.spellid, 6000)) then
-                                    if not (ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, targetId, ctx.aeRange) < ctx.mintar) then
-                                        return targetId, 'notanktar'
-                                    end
-                                end
-                            end
-                        end
-                    end
+                if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) and DebuffSpawnNeedsSpell(entry, ctx, v, 'notanktar') then
+                    return targetId, 'notanktar'
                 end
                 break
             end
