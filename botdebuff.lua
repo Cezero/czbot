@@ -376,7 +376,7 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
         tostring(entry.spell))
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
-    local castTimeMs = (castTime and castTime > 0) and (castTime * 100) or 3000
+    local castTimeMs = (castTime and castTime > 0) and (castTime) or 3000
     -- wait for cast to finish
     mq.delay(castTimeMs + 100)
     do
