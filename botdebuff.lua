@@ -346,66 +346,24 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     return true
 end
 
--- BRD notanktar twist-once: wait for cast to finish then post-cast (resist, DebuffListUpdate, timer, re-target MA). Returns true if handled.
--- Uses a cast deadline so we don't clear the wait (and consider another add) until the song has had time to complete.
-local function DebuffCheckHandleBardNotanktarWait(rc)
-    if mq.TLO.Me.Class.ShortName() ~= 'BRD' or not rc.bardNotanktarWait then
-        return false
-    end
-    local w = rc.bardNotanktarWait
-    if not w or not w.entry or not w.EvalID then
-        rc.bardNotanktarWait = nil
-        state.clearRunState()
-        return false
-    end
-    local now = mq.gettime()
-    if w.deadline and now < w.deadline then
-        local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
-        if stillSinging then
-            w.singingStarted = true
-            return true
-        end
-    end
-    rc.bardNotanktarWait = nil
-    state.clearRunState()
-    bardtwist.RestoreCombatTwistAfterNotanktar()
-    local duration_sec = spellutils.GetSpellDurationSec(w.entry)
-    if duration_sec > 0 then
-        local duration_end = mq.gettime() + duration_sec * 1000
-        spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, duration_end)
-    elseif duration_sec == 0 then
-        spellstates.DebuffListUpdate(w.EvalID, w.entry.spell, mq.gettime() + 12 * 1000)
-    end
-    local _, _, tanktar = spellutils.GetTankInfo(true)
-    if tanktar and tanktar > 0 then
-        mq.cmdf('/tar id %s', tanktar)
-        state.getRunconfig().engageTargetId = tanktar
-    end
-    return true
-end
-
 local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, _runPriority, _spellcheckResume)
     if sub ~= 'debuff' or targethit ~= 'notanktar' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
-    local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry or type(entry.gem) ~= 'number' then return false end
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
-    printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
     mq.cmd('/squelch /attack off')
     targeting.TargetAndWait(EvalID, 500)
     if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed() then
         printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
         return true
     end
-    bardtwist.EnsureTwistForMode('combat')
+    printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and (castTime * 100) or 3000
-    rc.bardNotanktarWait = { spellIndex = spellIndex, EvalID = EvalID, entry = entry, singingStarted = false, deadline = mq.gettime() + castTimeMs + 100 }
-    if state.canStartBusyState(state.STATES.casting) then
-        state.setRunState(state.STATES.casting, { deadline = mq.gettime() + 20000, priority = bothooks.getPriority('doDebuff') })
-    end
+    -- wait for cast to finish
+    mq.delay(castTimeMs + 100)
     return true
 end
 
@@ -565,15 +523,13 @@ function botdebuff.DebuffCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     ---@type RunConfig
     local rc = state.getRunconfig()
-    if DebuffCheckHandleBardNotanktarWait(rc) then return false end
     if spellutils.handleSpellCheckReentry('debuff', { runPriority = runPriority, skipInterruptForBRD = true }) then
         return false
     end
     if state.getMobCount() <= 0 then return false end
     if rc.MobList and rc.MobList[1] then
         local tank, _, tanktar = spellutils.GetTankInfo(true)
-        if tanktar and tanktar > 0 and mq.TLO.Pet.Target.ID() ~= tanktar and not mq.TLO.Me.Pet.Combat() then botmelee
-                .AdvCombat() end
+        if tanktar and tanktar > 0 and mq.TLO.Pet.Target.ID() ~= tanktar and not mq.TLO.Me.Pet.Combat() then botmelee.AdvCombat() end
     end
     local ctx = debuffBuildContext(rc)
     local count = ctx.debuffCount

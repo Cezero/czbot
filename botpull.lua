@@ -475,8 +475,14 @@ local function tickNavigating(rc, spawn)
             mq.cmd('/nav stop log=off')
             mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
             if mq.TLO.Me.Class.ShortName() == 'BRD' then
-                local eg = bardtwist.GetEngageGem()
-                if eg then bardtwist.SetTwistOnceGem(eg) end
+                local entry = botconfig.config.pull.spell
+                if entry and type(entry.gem) == 'number' then
+                    bardtwist.SetTwistOnceGem(entry.gem)
+                    local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
+                    local castTimeMs = (castTime and castTime > 0) and (castTime * 100) or 3000
+                    -- wait for cast to finish
+                    mq.delay(castTimeMs + 100)
+                end
             end
             return
         end
@@ -520,16 +526,13 @@ local function tickAggroing(rc, spawn)
         clearPullState('aggroing: EngageCheck (mob engaged by other)')
         return
     end
-    local isBardSongPull = mq.TLO.Me.Class.ShortName() == 'BRD' and bardtwist.GetEngageGem()
     if rc.pullPhase == 'aggro_wait_target' then
         if mq.gettime() >= (rc.pullDeadline or 0) then
             clearPullState('aggroing: aggro_wait_target timeout')
             return
         end
         if not pullHasLoS(spawn) then
-            if not isBardSongPull then
-                mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(rc.pullAPTargetID))
-            end
+            mq.cmdf('/nav id %s dist=5 log=off los=on', tostring(rc.pullAPTargetID))
             return
         end
         if mq.TLO.Target.ID() ~= rc.pullAPTargetID then

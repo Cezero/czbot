@@ -197,12 +197,10 @@ end
 --- Set twist list for mode. Only issue /twist when not twisting or list differs (avoid restart every tick). For travel with no song, stop twist.
 function bardtwist.EnsureTwistForMode(mode)
     if not bardtwist.IsBard() then return end
-    if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
-    if state.getRunconfig().bardNotanktarWait then return end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
     if not desiredGems or #desiredGems == 0 then
         if mode == 'travel' and mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
-            mq.cmd('/squelch /twist stop')
+            mq.cmd('/twist stop')
         end
         return
     end
@@ -216,33 +214,24 @@ function bardtwist.EnsureTwistForMode(mode)
         return
     end
     if twisting and twistListsEqual(currentGems, desiredGems) then return end
-    mq.cmd('/squelch /twist ' .. table.concat(desiredGems, ' '))
+    mq.cmd('/twist ' .. table.concat(desiredGems, ' '))
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
-    if state.getRunconfig().bardNotanktarWait then return end
     local mode = bardtwist.GetCurrentTwistMode()
     if mode then bardtwist.EnsureTwistForMode(mode) end
 end
 
---- Restore combat twist after BRD notanktar (mez) wait ends. Clears twistOnceActive and runs combat twist. Call only when bardNotanktarWait was just cleared.
-function bardtwist.RestoreCombatTwistAfterNotanktar()
-    twistOnceActive = false
-    bardtwist.EnsureTwistForMode('combat')
-end
-
 function bardtwist.StopTwist()
     twistOnceActive = false
-    if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
-        mq.cmd('/squelch /twist stop')
+        mq.cmd('/twist stop')
     end
 end
 
 --- Restore twist for current mode (e.g. after single cast). Set list if needed then start.
 function bardtwist.ResumeTwist()
     if not bardtwist.IsBard() then return end
-    if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     local mode = bardtwist.GetCurrentTwistMode()
     if not mode then return end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
@@ -251,45 +240,20 @@ function bardtwist.ResumeTwist()
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
     local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
     if twistListsEqual(currentGems, desiredGems) then
-        mq.cmd('/squelch /twist start')
+        mq.cmd('/twist start')
     else
-        mq.cmd('/squelch /twist ' .. table.concat(desiredGems, ' '))
+        mq.cmd('/twist ' .. table.concat(desiredGems, ' '))
     end
 end
 
 function bardtwist.SetTwistOnce(gemList)
-    if not mq.TLO.Plugin('MQ2Twist') or not mq.TLO.Plugin('MQ2Twist').IsLoaded() then return end
     if not gemList or #gemList == 0 then return end
     twistOnceActive = true
-    mq.cmd('/squelch /twist once ' .. table.concat(gemList, ' '))
+    mq.cmd('/twist once ' .. table.concat(gemList, ' '))
 end
 
 function bardtwist.SetTwistOnceGem(gem)
     if gem then bardtwist.SetTwistOnce({ gem }) end
-end
-
---- Use config.pull.spell for twist-on-pull. Returns gem number (1-12) or nil when pull spell is a numeric gem.
-function bardtwist.GetEngageGem()
-    local pull = botconfig.config.pull
-    if not pull or not pull.spell or type(pull.spell) ~= 'table' then return nil end
-    local gem = pull.spell.gem
-    if type(gem) == 'number' and gem >= 1 and gem <= 12 then
-        return gem
-    end
-    return nil
-end
-
---- Use config.pull.spell for twist-on-pull. Returns spell name or nil.
-function bardtwist.GetEngageSpellName()
-    local pull = botconfig.config.pull
-    if not pull or not pull.spell or type(pull.spell) ~= 'table' then return nil end
-    local gem = pull.spell.gem
-    local spell = pull.spell.spell
-    if type(gem) == 'number' and gem >= 1 and gem <= 12 then
-        if spell and spell ~= '' then return spell end
-        return mq.TLO.Me.Gem(gem)()
-    end
-    return nil
 end
 
 return bardtwist

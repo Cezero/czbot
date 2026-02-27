@@ -596,7 +596,7 @@ end
 function spellutils.clearCastingStateOrResume()
     local rc = state.getRunconfig()
     local hadSub = rc.CurSpell and rc.CurSpell.sub
-    if mq.TLO.Me.Class.ShortName() == 'BRD' and hadSub and (hadSub == 'buff' or hadSub == 'debuff' or hadSub == 'cure') and not rc.bardNotanktarWait then
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and hadSub and (hadSub == 'buff' or hadSub == 'debuff' or hadSub == 'cure') then
         bardtwist.ResumeTwist()
     end
     rc.CurSpell = {}
