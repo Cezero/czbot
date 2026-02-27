@@ -114,12 +114,6 @@ local function getStatusLine()
             local name = (rc.followname and rc.followname ~= '') and rc.followname or '—'
             return 'Travel (following ' .. name .. ')'
         end
-        if mq.TLO.Me.Class.ShortName() == 'BRD' then
-            printf('[BRD-STATUS] label=Following mobs=%s engageTargetId=%s runState=%s',
-                tostring(state.getMobCount(rc)),
-                tostring(rc.engageTargetId),
-                state.getRunStateName())
-        end
         return 'Following'
     end
     return 'Idle'

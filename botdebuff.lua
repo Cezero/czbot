@@ -352,40 +352,18 @@ local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, 
     if not entry or type(entry.gem) ~= 'number' then return false end
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
-    do
-        local rc = state.getRunconfig()
-        printf('[BRD-DEBUFF] mez start spellIndex=%s EvalID=%s targethit=%s runState=%s engageTargetId=%s targetID=%s',
-            tostring(spellIndex),
-            tostring(EvalID),
-            tostring(targethit),
-            state.getRunStateName(),
-            tostring(rc.engageTargetId),
-            tostring((mq.TLO.Target.ID() or 0)))
-    end
     mq.cmd('/squelch /attack off')
     targeting.TargetAndWait(EvalID, 500)
     if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed() then
         printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
-        printf('[BRD-DEBUFF] mez skip already-mezzed EvalID=%s', tostring(EvalID))
         return true
     end
     printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
-    printf('[BRD-DEBUFF] mez casting spellIndex=%s gem=%s spell=%s',
-        tostring(spellIndex),
-        tostring(entry.gem),
-        tostring(entry.spell))
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and (castTime) or 3000
     -- wait for cast to finish
     mq.delay(castTimeMs + 100)
-    do
-        local rc = state.getRunconfig()
-        printf('[BRD-DEBUFF] mez done runState=%s engageTargetId=%s mobCount=%s',
-            state.getRunStateName(),
-            tostring(rc.engageTargetId),
-            tostring(state.getMobCount()))
-    end
     return true
 end
 
@@ -545,18 +523,7 @@ function botdebuff.DebuffCheck(runPriority)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     ---@type RunConfig
     local rc = state.getRunconfig()
-    if mq.TLO.Me.Class.ShortName() == 'BRD' then
-        printf('[BRD-DEBUFF] tick runState=%s mobs=%s engageTargetId=%s followid=%s SpellTimer=%s',
-            state.getRunStateName(),
-            tostring(state.getMobCount()),
-            tostring(rc.engageTargetId),
-            tostring(rc.followid),
-            tostring(rc.SpellTimer))
-    end
     if spellutils.handleSpellCheckReentry('debuff', { runPriority = runPriority, skipInterruptForBRD = true }) then
-        if mq.TLO.Me.Class.ShortName() == 'BRD' then
-            printf('[BRD-DEBUFF] reentry-short-circuit')
-        end
         return false
     end
     if state.getMobCount() <= 0 then return false end
