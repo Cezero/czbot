@@ -147,6 +147,13 @@ local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
 
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        printf('[BRD-MELEE] engageTarget entry engageTargetId=%s targetID=%s targetName=%s',
+            tostring(engageTargetId),
+            tostring(mq.TLO.Target.ID() or 0),
+            tostring(mq.TLO.Target.CleanName() or ''))
+    end
+
     if state.getRunState() == state.STATES.melee then
         local p = state.getRunStatePayload()
         if p and p.phase == 'moving_closer' then
@@ -178,11 +185,21 @@ local function engageTarget()
         targeting.TargetAndWait(engageTargetId, 500)
     end
 
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        printf('[BRD-MELEE] engageTarget after TargetAndWait targetID=%s targetName=%s',
+            tostring(mq.TLO.Target.ID() or 0),
+            tostring(mq.TLO.Target.CleanName() or ''))
+    end
+
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop') end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
     if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
     if not mq.TLO.Stick.Active() or (mq.TLO.Stick.StickTarget() ~= engageTargetId) then
         mq.cmdf('/squelch /multiline ; /attack on ; /stick %s', myconfig.melee.stickcmd)
+    end
+
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        printf('[BRD-MELEE] engageTarget issued attack/stick engageTargetId=%s', tostring(engageTargetId))
     end
 
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
@@ -205,6 +222,16 @@ function botmelee.AdvCombat()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
     local rc = state.getRunconfig()
+
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        printf('[BRD-MELEE] AdvCombat entry assist=%s mainTank=%s amMT=%s amMA=%s offtank=%s mobCount=%s',
+            tostring(assistName),
+            tostring(mainTankName),
+            tostring(tankrole.AmIMainTank()),
+            tostring(tankrole.AmIMainAssist()),
+            tostring(myconfig.melee.offtank),
+            tostring(state.getMobCount()))
+    end
 
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Master.Type() == 'PC' then
         clearTankCombatState()
@@ -235,6 +262,14 @@ function botmelee.AdvCombat()
             id = resolveMeleeAssistTarget(assistName, assistpct)
         end
     end
+
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        printf('[BRD-MELEE] AdvCombat resolved id=%s engageTargetRefound=%s prevEngageTargetId=%s',
+            tostring(id),
+            tostring(engageTargetRefound),
+            tostring(rc.engageTargetId))
+    end
+
     rc.engageTargetId = id
 
     if rc.engageTargetId then
@@ -245,6 +280,11 @@ function botmelee.AdvCombat()
             rc.statusMessage = string.format('Off-tanking %s (%s)', name, rc.engageTargetId)
         else
             rc.statusMessage = string.format('Assisting on %s (%s)', name, rc.engageTargetId)
+        end
+        if mq.TLO.Me.Class.ShortName() == 'BRD' then
+            printf('[BRD-MELEE] AdvCombat after-set engageTargetId=%s statusMessage=%s',
+                tostring(rc.engageTargetId),
+                tostring(rc.statusMessage))
         end
         engageTarget()
     else
@@ -273,23 +313,52 @@ end
 function botmelee.getHookFn(name)
     if name == 'doMelee' then
         return function(hookName)
-            if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
+            if mq.TLO.Me.Class.ShortName() == 'BRD' then
+                local rc = state.getRunconfig()
+                printf('[BRD-MELEE] doMelee entry runState=%s busy=%s engageTargetId=%s mobCount=%s',
+                    state.getRunStateName(),
+                    tostring(state.isBusy()),
+                    tostring(rc.engageTargetId),
+                    tostring(state.getMobCount()))
+            end
+            if state.isTravelMode() and not state.isTravelAttackOverriding() then
+                if mq.TLO.Me.Class.ShortName() == 'BRD' then
+                    printf('[BRD-MELEE] doMelee bail: travelMode')
+                end
+                return
+            end
             if state.getRunState() == state.STATES.engage_return_follow then
                 botmove.TickReturnToFollowAfterEngage()
                 return
             end
-            if state.getRunState() == state.STATES.pulling then return end
+            if state.getRunState() == state.STATES.pulling then
+                if mq.TLO.Me.Class.ShortName() == 'BRD' then
+                    printf('[BRD-MELEE] doMelee bail: pulling state')
+                end
+                return
+            end
             if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 state.getRunconfig().engageTargetId = nil
                 state.getRunconfig().statusMessage = ''
+                if mq.TLO.Me.Class.ShortName() == 'BRD' then
+                    printf('[BRD-MELEE] doMelee bail: domelee off and no travel override')
+                end
                 return
             end
-            if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
+            if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then
+                if mq.TLO.Me.Class.ShortName() == 'BRD' then
+                    printf('[BRD-MELEE] doMelee bail: non-combat zone')
+                end
+                return
+            end
             if not state.getRunconfig().MobList[1] then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 state.getRunconfig().engageTargetId = nil
                 state.getRunconfig().statusMessage = ''
+                if mq.TLO.Me.Class.ShortName() == 'BRD' then
+                    printf('[BRD-MELEE] doMelee bail: empty MobList')
+                end
                 return
             end
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
