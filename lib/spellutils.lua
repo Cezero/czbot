@@ -473,6 +473,29 @@ function spellutils.IsTargetedAESpell(entry)
     return aerange > 0
 end
 
+-- True only for single-target group-only spells (e.g. Shrink, alliance). Requires TargetType Single and SpellType containing (Group). Excludes Beneficial(Group) group buffs (Group v1/v2) that can be cast via target-group-buff AAs.
+function spellutils.IsGroupOnlySpell(entry)
+    local e = spellutils.GetSpellEntity(entry)
+    if not e then return false end
+    local okSt, st = pcall(function() return e.SpellType() end)
+    if not okSt or not st or type(st) ~= 'string' or not st:find('%(Group%)') then return false end
+    local okTt, tt = pcall(function() return e.TargetType() end)
+    if not okTt or not tt or type(tt) ~= 'string' or tt ~= 'Single' then return false end
+    return true
+end
+
+-- Returns true if spawnId is the caster or any group member (Member(0) is self).
+function spellutils.IsSpawnInMyGroup(spawnId)
+    if not spawnId or spawnId <= 0 then return false end
+    local members = mq.TLO.Group.Members()
+    if not members or members < 0 then return false end
+    for i = 0, members do
+        local grpid = mq.TLO.Group.Member(i).ID()
+        if grpid and grpid == spawnId then return true end
+    end
+    return false
+end
+
 -- SPA 100 = HoT Heals (MacroQuest spelleffects.h). Returns true if the spell for entry has the HoT effect.
 -- Do not store mq.TLO.Spell() proxy; use direct chains (see HasReagents comment).
 function spellutils.IsHoTSpell(entry)
@@ -848,6 +871,12 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                 fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn,
                                 phase)
+                            if spellIndex and EvalID and targethit then
+                                local entry = botconfig.getSpellEntry(sub, spellIndex)
+                                if entry and spellutils.IsGroupOnlySpell(entry) and targethit ~= 'self' and not spellutils.IsSpawnInMyGroup(EvalID) then
+                                    spellIndex, EvalID, targethit = nil, nil, nil
+                                end
+                            end
                             if spellIndex and EvalID and targethit then
                                 if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 and not spellutils.IsMemorizing() then
                                     mq.cmd('/stopcast')
