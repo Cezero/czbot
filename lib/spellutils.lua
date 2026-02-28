@@ -45,7 +45,8 @@ function spellutils.RecordDontStackDebuffFromTarget(targetSpawnId, ourSpell, cat
     if not spellRef then return end
     local durationSec = 0
     if spellRef.MyDuration then
-        durationSec = tonumber(spellRef.MyDuration.TotalSeconds()) or 0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
+        durationSec = tonumber(spellRef.MyDuration.TotalSeconds()) or
+        0                                                               -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
     end
     if durationSec <= 0 then return end
     local expire = mq.gettime() + durationSec * 1000
@@ -288,7 +289,8 @@ end
 
 -- Default class order for bot list: healers, tanks, casters, DPS. Used when config does not override.
 -- Config: botconfig.getCommon().botListClassOrder = { 'clr', 'shm', 'dru', ... } (lowercase class short names).
-spellutils.DEFAULT_BOTLIST_CLASS_ORDER = { 'clr', 'shm', 'dru', 'war', 'shd', 'pal', 'enc', 'wiz', 'mag', 'nec', 'brd', 'mnk', 'rog', 'bst', 'rng', 'bzk' }
+spellutils.DEFAULT_BOTLIST_CLASS_ORDER = { 'clr', 'shm', 'dru', 'war', 'shd', 'pal', 'enc', 'wiz', 'mag', 'nec', 'brd',
+    'mnk', 'rog', 'bst', 'rng', 'bzk' }
 
 local function _getBotListClassPriority()
     local order = spellutils.DEFAULT_BOTLIST_CLASS_ORDER
@@ -384,7 +386,8 @@ end
 function spellutils.GetSpellDurationSec(entry)
     local e = spellutils.GetSpellEntity(entry)
     if not e or not e.MyDuration then return 0 end
-    return tonumber(e.MyDuration.TotalSeconds()) or 0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
+    return tonumber(e.MyDuration.TotalSeconds()) or
+    0                                                 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
 end
 
 -- Returns true if the debuff entry is a nuke (no duration / direct damage). Used for rotation and flavor filtering.
@@ -641,7 +644,8 @@ function spellutils.handleSpellCheckReentry(sub, options)
     if not spellutils.IsMemorizing() and rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub == 'heal' and rc.CurSpell.target and mq.TLO.Target.ID() == rc.CurSpell.target then
         local entry = botconfig.getSpellEntry('heal', rc.CurSpell.spell)
         if entry then
-            spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target, rc.CurSpell.target, entry)
+            spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target,
+                rc.CurSpell.target, entry)
             if not rc.CurSpell.phase then
                 return false
             end
@@ -681,7 +685,8 @@ function spellutils.handleSpellCheckReentry(sub, options)
                 if entry and entry.spell then
                     spellstates.DebuffListUpdate(rc.CurSpell.target, entry.spell, mq.gettime() + BLOCKED_SKIP_MS)
                     local spawnName = mq.TLO.Spawn(rc.CurSpell.target).CleanName() or tostring(rc.CurSpell.target)
-                    printf('\ayCZBot:\ax %s did not take hold on \at%s\ax (blocked); skipping for %d min', entry.spell, spawnName, math.floor(BLOCKED_SKIP_MS / 60000))
+                    printf('\ayCZBot:\ax %s did not take hold on \at%s\ax (blocked); skipping for %d min', entry.spell,
+                        spawnName, math.floor(BLOCKED_SKIP_MS / 60000))
                 end
             end
             spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)
@@ -771,7 +776,8 @@ end
 
 --- For one target, finds first spell in spellIndices that needs to be cast. Returns spellIndex, EvalID, targethit or nil.
 --- phase: optional; when provided (e.g. heal), passed to targetNeedsSpellFn as fifth argument for per-phase logic.
-function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, targethit, context, options, targetNeedsSpellFn, phase)
+function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, targethit, context, options, targetNeedsSpellFn,
+                                             phase)
     if not targetNeedsSpellFn or not spellIndices then return nil end
     options = options or {}
     local rc = state.getRunconfig()
@@ -840,7 +846,8 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                         end
                         if #fromSpellIndices > 0 then
                             local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
-                                fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn, phase)
+                                fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn,
+                                phase)
                             if spellIndex and EvalID and targethit then
                                 if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 and not spellutils.IsMemorizing() then
                                     mq.cmd('/stopcast')
@@ -1021,7 +1028,8 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
         local shouldInterrupt = (buffPresent and mq.TLO.Spell(spellid).CategoryID() ~= 20) or not stacks
         if shouldInterrupt then
             if not stacks then
-                printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target, targetname)
+                printf('\ayCZBot:\axInterrupt %s on MobID %s Name %s, debuff does not stack', spellname, target,
+                    targetname)
             else
                 printf('\ayCZBot:\axInterrupt %s on MobID %s, debuff already present', spellname, target)
             end
@@ -1236,7 +1244,9 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
-        state.setRunState(state.STATES.casting, { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        state.setRunState(state.STATES.casting,
+            { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell
+            .spellcheckResume })
         return true
     end
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
@@ -1261,13 +1271,17 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.spellid = castSpellId
         mq.cmd(cmd)
         rc.CurSpell.phase = 'casting'
-        state.setRunState(state.STATES.casting, { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+        state.setRunState(state.STATES.casting,
+            { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell
+            .spellcheckResume })
         if needDelay then mq.delay(CASTING_MEMORIZE_DELAY_MS) end
         return true
     end
     spellutils.ExecuteNativeCast(gem, spell, sub, index)
     rc.CurSpell.phase = 'casting'
-    state.setRunState(state.STATES.casting, { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
+    state.setRunState(state.STATES.casting,
+        { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell
+        .spellcheckResume })
     return true
 end
 

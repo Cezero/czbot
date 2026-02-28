@@ -38,6 +38,7 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | **mana**                    | 60                | Minimum mana % required for designated healer classes before a new pull is allowed.                                                       |
 | **manaclass**               | `{ 'CLR', 'DRU', 'SHM' }` | List of uppercase class short names (CLR, DRU, SHM) that are checked for **mana** before allowing a pull.                              |
 | **leash**                   | 500               | While returning to camp with a mob, navigation is paused if the mob is farther than this distance (avoids over-chasing).                  |
+| **addAbortRadius**          | 50                | While navigating to a pull target, NPCs within this radius (units) with line-of-sight can trigger an abort (return to camp).             |
 | **usepriority**             | `false`           | If `true`, prefer mobs that match the runtime **Priority** list over path distance when choosing a pull target.                           |
 | **hunter**                  | `false`           | Hunter mode: no makecamp; anchor is set once. The puller can be far from camp. See [Hunter mode vs camp mode](#hunter-mode-vs-camp-mode). |
 
@@ -79,6 +80,7 @@ pull = {
     mana = 60,
     manaclass = { 'CLR', 'DRU', 'SHM' },
     leash = 500,
+    addAbortRadius = 50,
     usepriority = false,
     hunter = false,
 },

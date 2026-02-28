@@ -34,6 +34,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **travel**   | `<name>`, `me`, or omit  | Same as follow; enables travel mode (follow only; no melee, buff, debuff, heal, cure, sit, pull). Bards twist the song with alias `travel`, or `selos` if none; if neither, twist nothing. Persists across zones; `/cz attack` temporarily enables melee/heal/cure/debuff until target dies, then travel resumes. `/cz stop` or stopping follow turns off travel. |
 | **stop**     | —                        | Disable make camp and follow (and travel mode).                                                                                                                                                                                                                             |
 | **leash**    | —                        | Return to camp (if camp is set).                                                                                                                                                                                                                          |
+| **camprestdistance** | `<number>` | Set distance (units) considered "at camp" for leash and return. Writes to `settings.campRestDistance`.                                                                                                        |
 
 ### Pull
 
@@ -70,6 +71,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **addspell**                    | `heal` / `buff` / `debuff` / `cure` `<position>` | Add a new spell entry at the given position (1 to count+1).                                                 |
 | **refresh** / **refreshspells** | —                                                | Refresh spell state.                                                                                        |
 | **echo**                        | `<config.path>`                                  | Print current value of a config path (e.g. `heal.interruptlevel`).                                          |
+| **togglenuke**                  | `<flavor> [on|off]`                              | Toggle nuke flavor (fire, ice, cold, magic, poison, disease). Stored per zone in cz_common.lua. See [Nuking configuration](nuking-configuration.md). |
 
 ### Other
 
@@ -80,7 +82,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **debug**         | `on` / `off` or toggle                        | Enable/disable debug messages.                                                                                      |
 | **ui** / **show** | —                                             | Open the CZBot UI.                                                                                                  |
 | **quit**          | —                                             | Terminate the bot.                                                                                                  |
-| **chchain**       | `stop` / `setup` / `start` / `tank` / `pause` | Complete Heal chain control.                                                                                        |
+| **chchain**       | **stop** — stop chain. **setup** `<list>` `[pause]` `[tanklist]` — configure cleric list, optional pause value, optional tank list. **start** `[name]` — start chain (name = this toon). **tank** `<name>` — set chain tank. **pause** `[val]` — set or report pause. | Complete Heal chain control.                                                                                        |
 | **draghack**      | `on` / `off` or toggle                        | Toggle use of sumcorpse instead of walk-to-corpse for dragging. See [Corpse dragging](corpse-dragging.md).          |
 | **linkitem**      | —                                             | Link item (event).                                                                                                  |
 | **linkaugs**      | `<slot>`                                      | Print augments in the given slot.                                                                                   |
@@ -97,7 +99,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 
 The config file is a Lua script that returns a table. Path: **`cz_<CharName>.lua`** in your MacroQuest config directory (e.g. `config/cz_Yourname.lua`).
 
-**Top-level keys:** `settings`, `pull`, `melee`, `heal`, `buff`, `debuff`, `cure`, `script`. Each section is a table; `heal`, `buff`, `debuff`, and `cure` contain a **spells** array of spell entries.
+**Top-level keys:** `settings`, `pull`, `melee`, `heal`, `buff`, `debuff`, `cure`, `bard`, `script`. Each section is a table; `heal`, `buff`, `debuff`, and `cure` contain a **spells** array of spell entries. **bard** holds class-specific options (e.g. `mez_remez_sec`). See [Bard configuration](bard-configuration.md).
 
 **Example: overall shape and settings**
 
@@ -113,7 +115,7 @@ StoredConfig = {
     doraid = false,
     dodrag = false,
     domount = false,
-    mountcast = false,
+    mountcast = 'none',
     dosit = true,
     sitmana = 90,
     sitendur = 90,
@@ -123,7 +125,8 @@ StoredConfig = {
     petassist = false,
     acleash = 75,
     followdistance = 35,
-    zradius = 75
+    zradius = 75,
+    campRestDistance = 15
   },
   pull = { ... },
   melee = { ... },
@@ -149,7 +152,7 @@ return StoredConfig
 | **doraid**         | `false`       | Raid mode (zone-specific raid mechanics; when active, pulling is suppressed). See [Raid mode](raid-mode.md).            |
 | **dodrag**         | `false`       | Corpse drag (automatically find and drag peer corpses). See [Corpse dragging](corpse-dragging.md).                      |
 | **domount**        | `false`       | Auto mount.                                                                                                             |
-| **mountcast**      | `false`       | Mount cast (e.g. spell\|item).                                                                                          |
+| **mountcast**      | `'none'`      | Mount cast: spell or item name, or `'none'`.                                                                            |
 | **dosit**          | `true`        | Sit when not in combat.                                                                                                 |
 | **sitmana**        | 90            | Sit when mana % below this; stand when above this + 3 (hysteresis).                                                      |
 | **sitendur**       | 90            | Sit when endurance % below this; stand when above this + 3 (hysteresis).                                                |
@@ -160,11 +163,12 @@ return StoredConfig
 | **acleash**        | 75            | Camp leash distance.                                                                                                    |
 | **followdistance** | 35            | Follow distance: beyond this distance the bot stands and runs follow; within it, sit is allowed when mana below sitmana; stand when above sitmana + 3 (hysteresis). |
 | **zradius**        | 75            | Vertical range from camp for mob list.                                                                                  |
+| **campRestDistance** | 15          | Distance (units) to consider "at camp" for leash and return.                                                            |
 | **spelldb**        | `'spells.db'` | Spell database file.                                                                                                    |
 
 ### Pull section
 
-See [Pull Configuration and Logic](pull-configuration.md) for the full pull table. Options include: **spell** (single block: gem, spell, range), **radius**, **zrange**, **pullMinCon**, **pullMaxCon**, **maxLevelDiff**, **usePullLevels**, **pullMinLevel**, **pullMaxLevel**, **chainpullcnt**, **chainpullhp**, **mana**, **manaclass**, **leash**, **usepriority**, **hunter**.
+See [Pull Configuration and Logic](pull-configuration.md) for the full pull table. Options include: **spell** (single block: gem, spell, range), **radius**, **zrange**, **pullMinCon**, **pullMaxCon**, **maxLevelDiff**, **usePullLevels**, **pullMinLevel**, **pullMaxLevel**, **chainpullcnt**, **chainpullhp**, **mana**, **manaclass**, **leash**, **addAbortRadius**, **usepriority**, **hunter**.
 
 ### Melee section
 
@@ -180,9 +184,9 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 
 ### Heal / Buff / Debuff / Cure sections
 
-- **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **enabled**, **tarcnt** (optional; group heals only), **bands**, **precondition** (optional; default true; boolean or Lua script when set). See [Healing configuration](healing-configuration.md).
-- **buff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands**, **spellicon**, **precondition** (optional; default true; boolean or Lua script when set). See [Buffing configuration](buffing-configuration.md). Bards: see [Bard configuration](bard-configuration.md).
-- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands** (band options include **mintar**/**maxtar** for camp mob-count gate), **recast**, **delay**, **precondition** (optional; default true; boolean or Lua script when set). Charm and targeted AE spells are auto-detected from spell data. Charm targets use the per-zone **Charm list** (Mob Lists tab or **/cz charm**). For **concussion** (aggro-reduce, SPA 92) debuffs, **recast** means “cast every N other debuffs” on the tank target (e.g. recast 2 → two nukes/debuffs, then concussion, repeat); autodetected when the spell has SPA 92 and recast &gt; 0. See [Debuffing configuration](debuffing-configuration.md) and [Spell targeting and bands](spell-targeting-and-bands.md).
+- **heal:** Top-level: **rezoffset**, **interruptlevel**, **xttargets**. Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **minmanapct**, **maxmanapct**, **enabled**, **tarcnt** (optional; group heals only), **bands**, **healResource** (optional; `'hp'` or `'mana'`; when `'mana'`, bands use mana % not HP), **inCombat** (optional; when true and band has corpse, allow rez in combat), **precondition** (optional; default true; boolean or Lua script when set). See [Healing configuration](healing-configuration.md).
+- **buff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **tarcnt** (optional; groupbuff min count), **bands**, **spellicon**, **inCombat**, **inIdle** (Bard twist; when spell can run), **precondition** (optional; default true; boolean or Lua script when set). See [Buffing configuration](buffing-configuration.md). Bards: see [Bard configuration](bard-configuration.md).
+- **debuff:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **enabled**, **bands** (band options include **mintar**/**maxtar** for camp mob-count gate), **recast**, **delay**, **dontStack** (optional; list of categories—skip or interrupt if target has; see [Debuffing configuration](debuffing-configuration.md)), **precondition** (optional; default true; boolean or Lua script when set). Charm and targeted AE spells are auto-detected from spell data. Charm targets use the per-zone **Charm list** (Mob Lists tab or **/cz charm**). For **concussion** (aggro-reduce, SPA 92) debuffs, **recast** means “cast every N other debuffs” on the tank target (e.g. recast 2 → two nukes/debuffs, then concussion, repeat); autodetected when the spell has SPA 92 and recast &gt; 0. See [Debuffing configuration](debuffing-configuration.md) and [Spell targeting and bands](spell-targeting-and-bands.md).
 - **cure:** Spell entries: **gem**, **spell**, **alias**, **announce**, **minmana**, **curetype** (table of strings; default **{ 'all' }**), **enabled**, **bands** (add **priority** to band **targetphase** to run in the priority cure pass; no top-level setting), **precondition** (optional; default true; boolean or Lua script when set). See [Curing configuration](curing-configuration.md).
 
 **Example: one heal spell entry**

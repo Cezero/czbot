@@ -43,6 +43,7 @@ Each entry in **`heal.spells`** can have:
 | **enabled** | Optional. When `true` or missing, the spell is used. When `false`, the spell is not used. Default is `true`. |
 | **tarcnt** | Optional. Only used for **group/AE heals**: minimum number of group members in the HP band (and in range) required to trigger the spell. When omitted, group heals fire when at least 1 member is in band. Not used for single-target heals. |
 | **bands** | Who and at what HP % this spell applies. Each band has **targetphase** (phase stages) and **validtargets** (within-phase types). See [Heal bands](#heal-bands) below. |
+| **healResource** | Optional. `'hp'` (default) or `'mana'`. When `'mana'`, the spell is treated as a mana heal (e.g. Cleric Canni); min/max in bands apply to **mana %** of the target, not HP. When `'mana'`, self phase may be skipped for that spell under certain logic. |
 | **inCombat** | Optional. When `true` and the spell has **corpse** in a band, rez is allowed when mobs are in camp. Default is `false`. |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip this spell for this evaluation; **string** — Lua script run with `mq` and `EvalID` (current target spawn ID) in scope; return a truthy value to allow the cast, otherwise the spell is skipped (e.g. only cast when target HP > X%, or only when not in a certain zone). |
 

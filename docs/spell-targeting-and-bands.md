@@ -8,7 +8,7 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 | -------- | ------------------- | ---------- | ----------------- |
 | **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (phase stages) + **validtargets** (within-phase types) + min/max HP % |
 | **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **inCombat** (and Bard **inIdle**) control when spell can run |
-| **debuff** | Mobs in camp (MA target + adds) | **tarcnt** = min mobs in camp to consider spell | **targetphase** only (tanktar, notanktar, named) + min/max HP % |
+| **debuff** | Mobs in camp (MA target + adds) | **mintar**/**maxtar** (camp mob-count gate) | **targetphase** only (tanktar, notanktar, named) + min/max HP % |
 | **cure**  | Self, tank, group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **priority** in targetphase runs an earlier pass when any cure spell has it (no top-level setting). **groupmember**, **groupcure**, **pc** |
 
 ---

@@ -34,7 +34,7 @@ See [Run state machine](run-state-machine.md) for how the bot enters and leaves 
 
 ### When runState is busy
 
-When `runState` is one of the **busy** states, only hooks whose **priority is less than or equal to** `payload.priority` run. That keeps the "owner" of the current activity (e.g. doPull, or the spell hook that set `casting`) and higher-priority hooks in the loop; lower-priority hooks are skipped until the activity finishes.
+When `runState` is one of the **busy** states, only hooks whose **priority is less than or equal to** `payload.priority` run. That keeps the "owner" of the current activity (e.g. doPull, or the spell hook that set `casting`) and higher-priority hooks in the loop; lower-priority hooks are skipped until the activity finishes. After that priority loop, hooks with **runWhenBusy = true** run (e.g. **doMovementCheck**), so movement (camp return, follow) still runs even when casting.
 
 Busy states (from `lib/state.lua`):
 
@@ -76,7 +76,8 @@ Hooks are defined in `lib/bothooks.lua`. Execution order:
 | 1000 | doDebuff | Debuff phase-first spell check | [hook-dodebuff](hook-dodebuff.md) |
 | 1100 | doBuff | Buff phase-first spell check | [hook-dobuff](hook-dobuff.md) |
 | 1200 | doCure | Cure phase-first spell check | [hook-docure](hook-docure.md) |
-| 1400 | doMiscTimer | Throttled 1s: drag, follow, stuck, camp leash | [hook-domisctimer](hook-domisctimer.md) |
+| 1350 | doMovementCheck | Camp return and follow (runs in runWhenBusy pass when busy) | [hook-domovementcheck](hook-domovementcheck.md) |
+| 1400 | doMiscTimer | Throttled 1s: inactive click, drag | [hook-domisctimer](hook-domisctimer.md) |
 
 ---
 

@@ -23,7 +23,7 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
    - **spell** — Exact spell name (e.g. `"Chaos Flame"`).
    - **enabled** — Optional; default is `true`. When `false`, the spell is not used.
    - **mintar** / **maxtar** — Optional; set in **bands**. Camp mob-count gate (only consider when mob count is in range). E.g. **mintar 2** = at least two mobs in camp. See [Debuffing configuration](debuffing-configuration.md).
-   - **bands** — For nuking the main target use **tanktar**. For multi-target or add nuking add **notanktar**. For named-only nukes add **named**. Use **min**/ **max** to restrict by mob HP % (e.g. nuke only when mob is 5–100% HP).
+   - **bands** — Debuff bands use **targetphase** (not validtargets). For nuking the main target use **tanktar** in targetphase. For multi-target or add nuking add **notanktar**. For named-only nukes add **named**. Use **min**/ **max** to restrict by mob HP % (e.g. nuke only when mob is 5–100% HP).
 
 3. **Optional:** **recast** (resist count before disabling for that spawn), **delay** (ms before same spell can be used again), **alias** (for `/cz cast <alias>`), **minmana**.
 
@@ -38,7 +38,7 @@ debuff = {
       alias = 'nuke',
       minmana = 0,
       bands = {
-        { validtargets = { 'tanktar' }, min = 5, max = 100 }
+        { targetphase = { 'tanktar' }, min = 5, max = 100 }
       },
       recast = 0,
       delay = 0
@@ -53,7 +53,7 @@ Use **tanktar** and **notanktar** in the same band (or separate bands) so the nu
 
 ```lua
 bands = {
-  { validtargets = { 'tanktar', 'notanktar' }, min = 10, max = 100 }
+  { targetphase = { 'tanktar', 'notanktar' }, min = 10, max = 100 }
 }
 ```
 

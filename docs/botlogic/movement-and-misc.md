@@ -1,6 +1,6 @@
 # Movement and misc state machines
 
-Pull, unstuck, dragging, camp return, and engage-return-follow are driven from **doPull** and **doMiscTimer** (and from **doMelee** for engage_return_follow). This page summarizes their state machines and conditions. Implementation: `botpull.lua`, `botmove.lua`.
+Pull, unstuck, dragging, camp return, and engage-return-follow are driven from **doPull**, **doMovementCheck**, and **doMiscTimer** (and from **doMelee** for engage_return_follow). This page summarizes their state machines and conditions. Implementation: `botpull.lua`, `botmove.lua`.
 
 ---
 
@@ -31,7 +31,7 @@ See [hook-dopull](hook-dopull.md) for when doPull decides to call StartPull (cha
 
 ---
 
-## Unstuck (doMiscTimer → FollowAndStuckCheck → UnStuck)
+## Unstuck (doMovementCheck → FollowAndStuckCheck → UnStuck)
 
 runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, wiggle_wait, back_wait. Cleared by `tickUnstuckPhase` when distance improves or deadline. Whenever unstuck is cleared (any exit path), **stucktimer** is set to now + 60s so the next UnStuck attempt is delayed; this gives the bot an idle window to cast and move normally before trying unstuck again.
 
@@ -77,7 +77,7 @@ See [Corpse dragging](../corpse-dragging.md) for configuration.
 
 ## Camp return
 
-runState **camp_return** is set by `botmove.MakeCamp('return')` (doLeashResetCombat, doNavToCamp, setRunState camp_return with 5s deadline). Cleared in **CharState**: when not moving or deadline passed, clearRunState. **MakeCampLeashCheck** (doMiscTimer) can trigger return when campstatus and no engageTargetId and over leash (distance or LOS): doLeashResetCombat then MakeCamp('return').
+runState **camp_return** is set by `botmove.MakeCamp('return')` (doLeashResetCombat, doNavToCamp, setRunState camp_return with 5s deadline). Cleared in **CharState**: when not moving or deadline passed, clearRunState. **MakeCampLeashCheck** (doMovementCheck) can trigger return when campstatus and no engageTargetId and over leash (distance or LOS): doLeashResetCombat then MakeCamp('return').
 
 ---
 
@@ -98,6 +98,7 @@ StartReturnToFollowAfterEngage does: stick off, attack off, target self, FollowC
 
 - [Run state machine](run-state-machine.md) — pulling, dragging, camp_return, engage_return_follow, unstuck
 - [hook-dopull](hook-dopull.md) — When StartPull is called
-- [hook-domisctimer](hook-domisctimer.md) — DragCheck, FollowAndStuckCheck, MakeCampLeashCheck
+- [hook-domisctimer](hook-domisctimer.md) — DragCheck
+- [hook-domovementcheck](hook-domovementcheck.md) — FollowAndStuckCheck, MakeCampLeashCheck
 - [hook-domelee](hook-domelee.md) — TickReturnToFollowAfterEngage, StartReturnToFollowAfterEngage
 - [Corpse dragging](../corpse-dragging.md)
