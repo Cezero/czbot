@@ -194,7 +194,7 @@ end
 
 -- When no engageTargetId: stick off, attack off, pet back, clear NPC target.
 local function disengageCombat()
-    state.getRunconfig().statusMessage = ''
+    if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
     combat.ResetCombatState()
     if state.getRunState() == state.STATES.melee then state.clearRunState() end
 end
@@ -263,7 +263,7 @@ function botmelee.GetPCTarget(pcName)
         local id = mq.TLO.Target.ID()
         return id ~= nil and id ~= 0
     end)
-    state.getRunconfig().statusMessage = ''
+    if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
     for _, v in ipairs(state.getRunconfig().MobList) do
         if mq.TLO.Target.ID() == v.ID() then return mq.TLO.Target.ID() end
     end
@@ -282,14 +282,14 @@ function botmelee.getHookFn(name)
             if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 state.getRunconfig().engageTargetId = nil
-                state.getRunconfig().statusMessage = ''
+                if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
                 return
             end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if not state.getRunconfig().MobList[1] then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 state.getRunconfig().engageTargetId = nil
-                state.getRunconfig().statusMessage = ''
+                if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
                 return
             end
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
