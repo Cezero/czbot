@@ -229,7 +229,9 @@ function botmelee.AdvCombat()
     elseif tankrole.AmIMainAssist() then
         id = selectMATarget(mainTankName)
     else
-        if myconfig.melee.offtank and assistName and mainTankName then
+        if rc.attackCommandEngage and rc.engageTargetId then
+            id = rc.engageTargetId
+        elseif myconfig.melee.offtank and assistName and mainTankName then
             id = resolveOfftankTarget(assistName, mainTankName, assistpct)
         elseif assistName then
             id = resolveMeleeAssistTarget(assistName, assistpct)
@@ -281,15 +283,19 @@ function botmelee.getHookFn(name)
             if state.getRunState() == state.STATES.pulling then return end
             if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
-                state.getRunconfig().engageTargetId = nil
-                if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
+                local rc = state.getRunconfig()
+                rc.engageTargetId = nil
+                rc.attackCommandEngage = nil
+                if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
                 return
             end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if not state.getRunconfig().MobList[1] then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
-                state.getRunconfig().engageTargetId = nil
-                if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
+                local rc = state.getRunconfig()
+                rc.engageTargetId = nil
+                rc.attackCommandEngage = nil
+                if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
                 return
             end
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil

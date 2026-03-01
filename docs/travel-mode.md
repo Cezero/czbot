@@ -27,7 +27,7 @@ While in travel mode, the following are **off**:
 
 ## Attack override
 
-**`/cz attack`** (with optional target name) temporarily enables **melee**, **heal**, **cure**, and **debuff** until the current target dies. When the target dies, travel mode resumes (follow-only, no melee/buff/debuff/heal/cure).
+**`/cz attack`** (with optional target name) engages the MA’s target **immediately**, ignoring the “assist at” percentage. It temporarily enables **melee**, **heal**, **cure**, and **debuff** until the current target dies. The engagement **persists** until the target dies or you run an override (**`/cz abort`**, turning off domelee, or another **`/cz attack`**). When the target dies, travel mode resumes (follow-only, no melee/buff/debuff/heal/cure).
 
 **doBuff remains off** during this override—only melee, heal, cure, and debuff are temporarily allowed.
 

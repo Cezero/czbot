@@ -162,7 +162,7 @@ local function charState_PostDead()
             mq.cmd('/squelch /pet follow')
         end
     end
-    if not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
+    if not rc.attackCommandEngage and not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
         rc.engageTargetId = nil
     end
     if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and mq.TLO.GMCheck() == 'TRUE' then

@@ -3,6 +3,7 @@
 ---@field SubOrder table
 ---@field zonename string
 ---@field engageTargetId number|nil
+---@field attackCommandEngage boolean|nil when true, engageTargetId was set by /cz attack; do not overwrite in AdvCombat for DPS/OT.
 ---@field AlertList number
 ---@field followid number
 ---@field followname string
@@ -205,6 +206,7 @@ function M.resetRunconfig()
         SubOrder = {},
         zonename = '',
         engageTargetId = nil,
+        attackCommandEngage = nil,
         AlertList = 20,
         followid = 0,
         followname = '',

@@ -53,7 +53,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 
 | Command          | Arguments               | Purpose                                                                                                           |
 | ---------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **attack**       | optional `<name>`       | Engage the Main Assist’s target; if name is given, engage that player's target for this engagement only.           |
+| **attack**       | optional `<name>`       | Engage the Main Assist’s target **immediately** (ignores the “assist at” percentage). If `<name>` is given, engage that player’s target for this engagement only. The engagement **persists** until the target dies or an override occurs: **`/cz abort`**, turning off **domelee**, or issuing another **`/cz attack`** (which sets a new target). Normal assist-at logic resumes after the engagement ends. |
 | **abort**        | optional `off`          | Abort: stop cast, clear target, turn off melee/debuff; return to camp. Use `abort off` to re-enable melee/debuff. |
 | **tank**         | `<name>` or `automatic` | Set Main Tank.                                                                                                    |
 | **assist**       | `<name>` or `automatic` | Set Main Assist.                                                                                                  |

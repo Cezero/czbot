@@ -216,6 +216,7 @@ function spawnutils.validateAcmTarget(rc)
     if rc.engageTargetId then
         if not mq.TLO.Spawn(rc.engageTargetId).ID() or mq.TLO.Spawn(rc.engageTargetId).Type() == 'Corpse' then
             rc.engageTargetId = nil
+            rc.attackCommandEngage = nil
             if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
             if state.getRunState() == state.STATES.melee then state.clearRunState() end
         end

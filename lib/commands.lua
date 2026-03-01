@@ -309,6 +309,7 @@ local function cmd_abort(args)
         if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
         if mq.TLO.Target.ID() then mq.cmd('/squelch /target clear') end
         if rc.engageTargetId then rc.engageTargetId = nil end
+        rc.attackCommandEngage = nil
         if botconfig.config.settings.domelee then
             botconfig.config.settings.domelee = false
             rc.meleeAbort = true
@@ -367,7 +368,9 @@ local function cmd_attack(args)
         return
     end
     local KillTarget = maInfo.Target and maInfo.Target.ID or nil
-    state.getRunconfig().engageTargetId = KillTarget
+    local rc = state.getRunconfig()
+    rc.engageTargetId = KillTarget
+    rc.attackCommandEngage = (KillTarget ~= nil)
     if KillTarget then
         local msg = string.format('\ayCZBot:\ax\arEngaging\ax \ay%s\ax now', mq.TLO.Spawn(KillTarget).CleanName())
         if overrideName then

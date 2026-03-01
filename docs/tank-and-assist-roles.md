@@ -8,7 +8,7 @@ This document explains how to configure **Main Tank (MT)**, **Main Assist (MA)**
   The character who receives **heals** (healers prioritize this person) and who is allowed to **pick from the mob list** to start engagements when that character is a bot. Only the MT bot chooses which mob to engage from the camp list (with puller priority).
 
 - **Main Assist (MA)**  
-  The character whose **target** all DPS and offtank follow. When you say “assist,” bots attack whatever the MA has targeted. The `/attack` command engages the MA’s target.
+  The character whose **target** all DPS and offtank follow. When you say “assist,” bots attack whatever the MA has targeted. The **`/cz attack`** command engages the MA’s target **immediately** (ignores assist-at %) and keeps that engagement until the target dies or you run `/cz abort`, turn off domelee, or issue another `/cz attack`.
 
 - **Puller**  
   Set in the game (group window). When the MT is a bot and TankName is set to `"automatic"`, the MT bot prefers the **Puller’s target** when choosing which mob to engage from the camp list (e.g. the mob the puller is bringing in).
@@ -33,7 +33,7 @@ Healers always use the resolved MT. Only the character who is the MT (when a bot
 
 - **Where:** Config file under `settings.AssistName`, or at runtime with `/cz assist <name>` or `/cz assist automatic`.
 - **Values:**
-  - **Character name** — This character is the Main Assist; DPS and offtank follow their target. `/attack` engages the MA’s target.
+  - **Character name** — This character is the Main Assist; DPS and offtank follow their target. **`/cz attack`** engages the MA’s target immediately (ignores assist-at %).
   - **`"manual"`** — No default MA; set at runtime with `/cz assist SomeName`.
   - **`"automatic"`** — Use **raid Main Assist** when in a raid, otherwise **group Main Assist**.
 
