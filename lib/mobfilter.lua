@@ -26,18 +26,18 @@ local LIST_CONFIG = {
 local function saveList(listType)
     local opts = LIST_CONFIG[listType]
     if not opts then return end
-    local comkeytable = botconfig.getCommon()
-    if not comkeytable[opts.commonKey] then comkeytable[opts.commonKey] = {} end
-    comkeytable[opts.commonKey][mq.TLO.Zone.ShortName()] = state.getRunconfig()[opts.runconfigKey]
+    local zone = mq.TLO.Zone.ShortName()
+    local zb = botconfig.ensureZoneBlock(zone)
+    zb[opts.commonKey] = state.getRunconfig()[opts.runconfigKey]
     botconfig.saveCommon()
 end
 
 local function loadZone(listType)
     local opts = LIST_CONFIG[listType]
     if not opts then return end
-    local comkeytable = botconfig.getCommon()
     local zone = mq.TLO.Zone.ShortName()
-    local val = (comkeytable[opts.commonKey] and comkeytable[opts.commonKey][zone]) or {}
+    local zb = botconfig.getZoneBlock(zone)
+    local val = (zb and zb[opts.commonKey]) or {}
     state.getRunconfig()[opts.runconfigKey] = val
     if opts.onZoneLoad then opts.onZoneLoad() end
 end

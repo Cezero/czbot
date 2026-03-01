@@ -143,7 +143,7 @@ function spellutils.ImmuneCheck(Sub, ID, EvalID)
     local zone = mq.TLO.Zone.ShortName()
     local targetname = mq.TLO.Spawn(EvalID).CleanName()
     local t = immune.get()
-    if t[spell] and t[spell][zone] and t[spell][zone][targetname] then return false else return true end
+    if t[spell] and t[spell][targetname] then return false else return true end
 end
 
 --Check Distance (uses distance squared for comparisons)

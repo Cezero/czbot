@@ -188,15 +188,85 @@ end
 
 local COMMON_FILENAME = 'cz_common.lua'
 
+local function migrateOldCommonToZones(common)
+    if not common.nukeFlavorsByZone and not common.excludelist then return false end
+    if not common.zones then common.zones = {} end
+    if common.nukeFlavorsByZone then
+        for zone, val in pairs(common.nukeFlavorsByZone) do
+            if not common.zones[zone] then common.zones[zone] = {} end
+            common.zones[zone].nukeFlavors = val
+        end
+        common.nukeFlavorsByZone = nil
+    end
+    if common.nukeFlavorsAutoDisabledByZone then
+        for zone, val in pairs(common.nukeFlavorsAutoDisabledByZone) do
+            if not common.zones[zone] then common.zones[zone] = {} end
+            common.zones[zone].nukeFlavorsAutoDisabled = val
+        end
+        common.nukeFlavorsAutoDisabledByZone = nil
+    end
+    for _, key in ipairs({ 'excludelist', 'prioritylist', 'charmlist' }) do
+        local byZone = common[key]
+        if byZone then
+            for zone, val in pairs(byZone) do
+                if not common.zones[zone] then common.zones[zone] = {} end
+                common.zones[zone][key] = val
+            end
+            common[key] = nil
+        end
+    end
+    return true
+end
+
+local function migrateCzimmuneIntoZones(common)
+    local immunePath = mq.configDir .. '/' .. 'czimmune.lua'
+    local immuneData, errr = loadfile(immunePath)
+    if errr or not immuneData then return false end
+    local oldImmune = immuneData()
+    if not oldImmune or type(oldImmune) ~= 'table' then return false end
+    if not common.zones then common.zones = {} end
+    for spell, zoneData in pairs(oldImmune) do
+        if type(zoneData) == 'table' then
+            for zone, mobs in pairs(zoneData) do
+                if type(mobs) == 'table' then
+                    if not common.zones[zone] then common.zones[zone] = {} end
+                    if not common.zones[zone].immune then common.zones[zone].immune = {} end
+                    if not common.zones[zone].immune[spell] then common.zones[zone].immune[spell] = {} end
+                    for mobName, _ in pairs(mobs) do
+                        common.zones[zone].immune[spell][mobName] = true
+                    end
+                end
+            end
+        end
+    end
+    return true
+end
+
+--- Return the zone block for zone (read-only); nil if zone or zones missing.
+function M.getZoneBlock(zone)
+    local common = M.getCommon()
+    if not common.zones then return nil end
+    return common.zones[zone]
+end
+
+--- Return the zone block for zone, creating common.zones and zone entry if needed (for writing).
+function M.ensureZoneBlock(zone)
+    local common = M.getCommon()
+    if not common.zones then common.zones = {} end
+    if not common.zones[zone] then common.zones[zone] = {} end
+    return common.zones[zone]
+end
+
 function M.loadCommon()
     local commonData, errr = loadfile(mq.configDir .. '/' .. COMMON_FILENAME)
     if not errr and commonData then
         M._common = commonData()
         if not M._common then M._common = {} end
-        return M._common
+    else
+        M._common = {}
     end
-    M._common = {}
-    mq.pickle(COMMON_FILENAME, M._common)
+    local migrated = migrateOldCommonToZones(M._common) or migrateCzimmuneIntoZones(M._common)
+    if migrated or not commonData then M.saveCommon() end
     return M._common
 end
 
@@ -206,13 +276,11 @@ end
 
 --- Load nuke flavor state for current zone from cz_common into runconfig. Call on zone change.
 function M.loadNukeFlavorsFromZone()
-    local common = M.getCommon()
-    if not common.nukeFlavorsByZone then common.nukeFlavorsByZone = {} end
-    if not common.nukeFlavorsAutoDisabledByZone then common.nukeFlavorsAutoDisabledByZone = {} end
     local zone = mq.TLO.Zone.ShortName()
+    local zb = M.getZoneBlock(zone)
     local rc = state.getRunconfig()
-    rc.nukeFlavorsAllowed = common.nukeFlavorsByZone[zone]
-    rc.nukeFlavorsAutoDisabled = common.nukeFlavorsAutoDisabledByZone[zone]
+    rc.nukeFlavorsAllowed = zb and zb.nukeFlavors or nil
+    rc.nukeFlavorsAutoDisabled = zb and zb.nukeFlavorsAutoDisabled or nil
     if rc.nukeFlavorsAutoDisabled and next(rc.nukeFlavorsAutoDisabled) == nil then
         rc.nukeFlavorsAutoDisabled = nil
     end
@@ -223,11 +291,9 @@ function M.saveNukeFlavorsToCommon()
     local zone = mq.TLO.Zone.ShortName()
     if not zone or zone == '' then return end
     local rc = state.getRunconfig()
-    local common = M.getCommon()
-    if not common.nukeFlavorsByZone then common.nukeFlavorsByZone = {} end
-    if not common.nukeFlavorsAutoDisabledByZone then common.nukeFlavorsAutoDisabledByZone = {} end
-    common.nukeFlavorsByZone[zone] = rc.nukeFlavorsAllowed
-    common.nukeFlavorsAutoDisabledByZone[zone] = rc.nukeFlavorsAutoDisabled
+    local zb = M.ensureZoneBlock(zone)
+    zb.nukeFlavors = rc.nukeFlavorsAllowed
+    zb.nukeFlavorsAutoDisabled = rc.nukeFlavorsAutoDisabled
     M.saveCommon()
 end
 
@@ -667,7 +733,7 @@ function M.WriteToFile(config, path)
     return writeConfigToFile(config, path)
 end
 
--- Full config load: main config, subsystem configs, script order, cz_common. Immune data is owned by lib/immune.lua.
+-- Full config load: main config, subsystem configs, script order, cz_common. Immune data is stored per zone in cz_common (zones[zone].immune).
 function M.LoadConfig()
     local path = M.getPath()
     M.Load(path)
