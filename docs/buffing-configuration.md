@@ -46,7 +46,7 @@ Bands use **targetphase** (priority stages) and **validtargets** (classes or `al
 - **name** — Buff specific characters by name (list their names in **validtargets** when using **byname** in targetphase).
 - **groupbuff** — Group AE buff: when the spell targets the group (e.g. Group v1), the bot counts group members in range who need the buff (peers from charinfo, non-peers from Spawn when BuffsPopulated); if the count is at least **tarcnt** (optional, default 1), it casts on self. **tarcnt** can be set on the spell entry.
 - **groupmember** — Single-target buffs only for characters in the bot’s (EQ) group; includes non-bot group members. For non-peers, buff state comes only from **Spawn** after targeting (Spawn.BuffsPopulated must be true). Add **pc** in targetphase to also buff peers outside the group (evaluated after groupmember).
-- **tank** — Can be a non-bot when explicitly named in config (TankName). Buff need for non-peers is only known from the **Spawn** TLO after you have targeted that spawn long enough for **Spawn.BuffsPopulated** to be true (same as mobs). When we have buff data we only cast if they need it; when out-of-group and we don’t have data we cast in range (best-effort).
+- **tank** — Can be a non-bot when explicitly named in config (TankName). Buff need for non-peers is only known from the **Spawn** TLO after you have targeted that spawn long enough for **Spawn.BuffsPopulated** to be true (same as mobs). When we have buff data we only cast if they need it; when out-of-group and we don’t have data we cast in range (best-effort). When this bot is the main tank, the tank phase has a single target (this bot), so you do not need **self** in targetphase for the MT to receive a tank-only buff.
 
 **Evaluation order (priority)**
 

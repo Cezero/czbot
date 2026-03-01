@@ -22,9 +22,14 @@ When **MQ2Twist** is loaded and you are a bard, the bot maintains a default twis
 | **idle**   | No mobs in camp                       | All buffs with **inIdle** checked (config order).                                                          |
 | **combat** | Mobs in camp, assisting (not pulling) | Buffs with **inCombat** checked (config order) then all debuff entries with **tanktar** and numeric gem (config order). |
 | **pull**   | Pull state (navigating / returning)   | Buffs with **self** and **pull** (e.g. Selo's) in bands.                                                   |
+| **travel** | Travel mode active (`/cz travel`)     | Single song: buff with alias `travel`, else `selos`; if neither, no twist. Config order.                   |
 
 - The bot only issues `/twist` when the desired list differs from the current list or twist is stopped, so it does not restart the sequence every tick.
 - **Item / alt** buffs are **not** in the default twist; they are cast normally (stop twist → cast → resume). To use clickies in a twist, configure the MQ2Twist INI (slots 21–40) and run `/twist` manually or combine with your list.
+
+### Travel twist
+
+When the bot is in **travel mode** (`/cz travel`), it uses the **travel twist**: a single song from **`config.buff.spells`** with alias **`travel`**, or if none, alias **`selos`**; if neither exists, no twist. For when travel mode is on and how to turn it off, see [Travel mode](travel-mode.md).
 
 For full targeting and band details, see [Spell targeting and bands](spell-targeting-and-bands.md) and [Buffing configuration](buffing-configuration.md). For BRD, the self phase is handled by the MQ2Twist default twist when bardtwist is in use.
 

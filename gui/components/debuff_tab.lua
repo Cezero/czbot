@@ -40,6 +40,15 @@ local TARGETPHASE_OPTIONS_DEBUFF = {
     { key = 'named',     label = 'Named',             tooltip = 'Use on named mobs only.' },
 }
 
+local function entryHasTanktarOrNamed(entry)
+    for _, band in ipairs(entry.bands or {}) do
+        for _, p in ipairs(band.targetphase or {}) do
+            if p == 'tanktar' or p == 'named' then return true end
+        end
+    end
+    return false
+end
+
 local function runConfigLoaders()
     botconfig.ApplyAndPersist()
 end
@@ -93,6 +102,20 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
             if onChanged then onChanged() end
         end,
     })
+
+    if entryHasTanktarOrNamed(entry) then
+        ImGui.Text('When MT Only')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Only cast this debuff when this character is the main tank.')
+        end
+        ImGui.SameLine()
+        local onlyMT = entry.onlyMT == true
+        local onlyMTValue, onlyMTPressed = ImGui.Checkbox('##' .. idPrefix .. '_onlyMT', onlyMT)
+        if onlyMTPressed then
+            entry.onlyMT = onlyMTValue
+            if onChanged then onChanged() end
+        end
+    end
 end
 
 --- Draw the full Debuff tab content.

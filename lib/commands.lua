@@ -36,6 +36,7 @@ local TOGGLELIST = {
     dosit = true,
     domount = true,
     dodrag = true,
+    doforage = true,
 }
 
 -- --- Toggle handler (domelee, dopull, etc.) ---
@@ -78,6 +79,44 @@ local function cmd_toggle(args)
     botconfig.RunConfigLoaders()
     if botconfig.config.settings.doraid then botraid.LoadRaidConfig() end
     printf('\ayCZBot:\axTurning %s to %s', args[1], isDopull and tostring(rc.dopull) or tostring(botconfig.config.settings[args[1]]))
+end
+
+local function cmd_addjunk(args, str)
+    local zone = mq.TLO.Zone.ShortName()
+    if not zone or zone == '' then
+        printf('\ayCZBot:\ax No zone; cannot add junk.')
+        return
+    end
+    local itemName
+    if args[2] then
+        itemName = table.concat(args, ' ', 2)
+    elseif mq.TLO.Cursor.ID() and mq.TLO.Cursor.Name() then
+        itemName = mq.TLO.Cursor.Name()
+    end
+    if not itemName or itemName == '' then
+        printf('\ayCZBot:\ax No item name given and nothing on cursor. Use: /cz addjunk <itemname> or put item on cursor.')
+        return
+    end
+    botconfig.addZoneJunk(zone, itemName)
+    printf('\ayCZBot:\ax Added "%s" to zone %s junk list.', itemName, zone)
+end
+
+local function cmd_foragezone(args, str)
+    local zone = mq.TLO.Zone.ShortName()
+    if not zone or zone == '' then
+        printf('\ayCZBot:\ax No zone; cannot set foragezone.')
+        return
+    end
+    local sub = args[2] and args[2]:lower()
+    if sub == 'on' then
+        botconfig.setForageDisabledInZone(zone, false)
+        printf('\ayCZBot:\ax Auto-forage enabled in this zone.')
+    elseif sub == 'off' then
+        botconfig.setForageDisabledInZone(zone, true)
+        printf('\ayCZBot:\ax Auto-forage disabled in this zone.')
+    else
+        printf('\ayCZBot:\ax Usage: /cz foragezone on|off')
+    end
 end
 
 local function cmd_import(args)
@@ -821,6 +860,8 @@ local handlers = {
     spread = cmd_spread,
     raid = cmd_raid,
     togglenuke = cmd_togglenuke,
+    addjunk = cmd_addjunk,
+    foragezone = cmd_foragezone,
     quit = cmd_quit,
 }
 

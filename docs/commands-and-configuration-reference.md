@@ -31,7 +31,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | ------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **makecamp** | `on`, `off`, or `return` | Set or clear make camp; `return` sends bot back to camp.                                                                                                                                                                                                  |
 | **follow**   | `<name>`, `me`, or omit  | Follow the named character (disables make camp). With `me` or no name, follow TankName. When the command is sent via MQRemote (e.g. `/rc +self group /cz follow`), sender is not available—use MQRemote `/rc` directly (no CZBot `/an*execute` commands). |
-| **travel**   | `<name>`, `me`, or omit  | Same as follow; enables travel mode (follow only; no melee, buff, debuff, heal, cure, sit, pull). Bards twist the song with alias `travel`, or `selos` if none; if neither, twist nothing. Persists across zones; `/cz attack` temporarily enables melee/heal/cure/debuff until target dies, then travel resumes. `/cz stop` or stopping follow turns off travel. |
+| **travel**   | `<name>`, `me`, or omit  | Same as follow; enables travel mode (follow only; no melee, buff, debuff, heal, cure, sit, mount, pull). Bards twist the song with alias `travel`, or `selos` if none; if neither, twist nothing. Persists across zones; `/cz attack` temporarily enables melee/heal/cure/debuff until target dies, then travel resumes. `/cz stop` or stopping follow turns off travel. See [Travel mode](travel-mode.md). |
 | **stop**     | —                        | Disable make camp and follow (and travel mode).                                                                                                                                                                                                                             |
 | **leash**    | —                        | Return to camp (if camp is set).                                                                                                                                                                                                                          |
 | **camprestdistance** | `<number>` | Set distance (units) considered "at camp" for leash and return. Writes to `settings.campRestDistance`.                                                                                                        |
@@ -165,6 +165,8 @@ return StoredConfig
 | **zradius**        | 75            | Vertical range from camp for mob list.                                                                                  |
 | **campRestDistance** | 15          | Distance (units) to consider "at camp" for leash and return.                                                            |
 | **spelldb**        | `'spells.db'` | Spell database file.                                                                                                    |
+
+Travel mode has no config option; it is enabled by the **/cz travel** command. See [Travel mode](travel-mode.md).
 
 ### Pull section
 

@@ -7,6 +7,7 @@ local utils = require('lib.utils')
 local bothooks = require('lib.bothooks')
 local charm = require('lib.charm')
 local castutils = require('lib.castutils')
+local tankrole = require('lib.tankrole')
 
 local botdebuff = {}
 local DebuffBands = {}
@@ -161,6 +162,7 @@ local function DebuffEvalTankTar(index, ctx)
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar then
             if DebuffSpawnNeedsSpell(entry, ctx, v, 'tanktar') then
+                if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
                 return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
             end
             return nil, nil
@@ -193,6 +195,7 @@ local function DebuffEvalNamedTankTar(index, ctx)
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == ctx.tanktar and v.Named() then
             if DebuffSpawnNeedsSpell(entry, ctx, v, 'tanktar') then
+                if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
                 return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
             end
             return nil, nil
@@ -303,12 +306,18 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     if not ctx then return nil, nil end
     if targethit == 'tanktar' then
         local id, hit = DebuffEvalTankTar(spellIndex, ctx)
-        if id == targetId then return id, hit end
+        if id == targetId then
+            if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
+            return id, hit
+        end
         return nil, nil
     end
     if targethit == 'named' then
         local id, hit = DebuffEvalNamedTankTar(spellIndex, ctx)
-        if id == targetId then return id, hit end
+        if id == targetId then
+            if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
+            return id, hit
+        end
         return nil, nil
     end
     if targethit == 'notanktar' then

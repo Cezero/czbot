@@ -106,7 +106,7 @@ From `BuffEval` in the code, the order is:
 
 1. **self** — Yourself (including auto-detected pet summon when you have no pet).
 2. **byname** — Specific characters whose names appear in **validtargets** when **byname** is in targetphase.
-3. **tank** — Main Tank (can be non-bot when explicitly named; only out-of-group non-bot we buff). Non-peer buff state from Spawn after targeting (BuffsPopulated).
+3. **tank** — Main Tank (can be non-bot when explicitly named; only out-of-group non-bot we buff). Non-peer buff state from Spawn after targeting (BuffsPopulated). When this bot is the main tank, that target is this bot, so a buff with only **tank** in targetphase is cast on self without needing **self** in the band.
 4. **groupbuff** — Group AE buff; spell targets group; cast when enough group members need the buff (**tarcnt**). Need is from charinfo for peers, Spawn (when BuffsPopulated) for non-peers.
 5. **groupmember** — In-group only (single-target); includes non-bot group members. Non-peer need from Spawn (BuffsPopulated).
 6. **pc** — All peers by class (from validtargets). Not limited to group. Config token **bots** is accepted and treated as **pc**.

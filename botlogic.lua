@@ -96,9 +96,27 @@ local function charState_Always()
         mq.cmd('/squelch /sit on')
     end
 
-    -- Cursor / inventory: auto-inv or set OutOfSpace
+    -- Auto-forage when idle: doForage on, ability ready, free inv, no cursor, zone allows forage. Throttle 1.5s.
+    local forageThrottleMs = 1500
+    if not _G._czForageLastTime then _G._czForageLastTime = 0 end
+    if state.getRunState() == state.STATES.idle
+        and botconfig.config.settings.doforage
+        and mq.TLO.Me.AbilityReady and mq.TLO.Me.AbilityReady('Forage') and mq.TLO.Me.AbilityReady('Forage')()
+        and not mq.TLO.Cursor.ID()
+        and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0
+        and not botconfig.isForageDisabledInZone(mq.TLO.Zone.ShortName())
+        and mq.gettime() >= _G._czForageLastTime + forageThrottleMs then
+        _G._czForageLastTime = mq.gettime()
+        mq.cmd('/doability Forage')
+    end
+
+    -- Cursor / inventory: junk destroy or auto-inv or set OutOfSpace
     if mq.TLO.Cursor.ID() and not rc.OutOfSpace then
-        if mq.TLO.Me.FreeInventory() == 0 then
+        local zone = mq.TLO.Zone.ShortName()
+        local cursorName = mq.TLO.Cursor.Name()
+        if zone and cursorName and botconfig.isZoneJunk(zone, cursorName) then
+            mq.cmd('/destroy')
+        elseif mq.TLO.Me.FreeInventory() == 0 then
             printf('\ayCZBot:\axI\'m out of inventory space!')
             rc.OutOfSpace = true
         else

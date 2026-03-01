@@ -72,7 +72,17 @@ local DO_FLAGS = {
     { key = 'dodrag', label = 'Drag' },
     { key = 'domount', label = 'Mount' },
     { key = 'dosit', label = 'Sit' },
+    { key = 'doforage', label = 'Forage' },
 }
+
+local function hasForageAbility()
+    local ok, v = pcall(function()
+        local ab = mq.TLO.Me.Ability and mq.TLO.Me.Ability('Forage')
+        if not ab then return nil end
+        return ab()
+    end)
+    return ok and v ~= nil and (type(v) == 'number' and v > 0 or v == true)
+end
 
 local STATE_NUM_TO_LABEL = {
     [state.STATES.dead] = 'Dead',
@@ -444,7 +454,15 @@ function M.draw()
         if ImGui.BeginTable('flags table', 2, ImGuiTableFlags.None) then
             ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, FLAGS_COLUMN_WIDTH)
             ImGui.TableSetupColumn('', ImGuiTableColumnFlags.WidthFixed, FLAGS_COLUMN_WIDTH)
-            for i, entry in ipairs(DO_FLAGS) do
+            local flagsToShow = {}
+            for _, entry in ipairs(DO_FLAGS) do
+                if entry.key == 'doforage' then
+                    if hasForageAbility() then flagsToShow[#flagsToShow + 1] = entry end
+                else
+                    flagsToShow[#flagsToShow + 1] = entry
+                end
+            end
+            for i, entry in ipairs(flagsToShow) do
                 if (i - 1) % 2 == 0 then
                     ImGui.TableNextRow()
                 end

@@ -9,6 +9,7 @@
 ---@field domount boolean|nil
 ---@field mountcast string|nil
 ---@field dosit boolean|nil
+---@field doforage boolean|nil
 ---@field sitmana number|nil
 ---@field sitendur number|nil
 ---@field TankName string|nil
@@ -107,7 +108,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
     melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
@@ -120,7 +121,7 @@ local subOrder = {
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
     buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'spellicon', 'precondition' },
-    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'bands', 'recast', 'delay', 'precondition', 'dontStack' },
+    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
 }
@@ -137,7 +138,7 @@ end
 local defaultSpellEntries = {
     heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, inCombat = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, healResource = 'hp', precondition = nil },
     buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
-    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil },
+    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, onlyMT = false },
     cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = { 'all' }, enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
 
@@ -297,6 +298,44 @@ function M.saveNukeFlavorsToCommon()
     M.saveCommon()
 end
 
+--- Zone junk list (cz_common zones[zone].junk): set of item names to destroy when foraged in this zone.
+function M.getZoneJunk(zone)
+    local zb = M.getZoneBlock(zone)
+    return zb and zb.junk or nil
+end
+
+function M.addZoneJunk(zone, itemName)
+    if not zone or zone == '' or not itemName or itemName == '' then return end
+    local zb = M.ensureZoneBlock(zone)
+    if not zb.junk then zb.junk = {} end
+    zb.junk[itemName] = true
+    M.saveCommon()
+end
+
+function M.isZoneJunk(zone, itemName)
+    local junk = M.getZoneJunk(zone)
+    if not junk or not itemName or itemName == '' then return false end
+    if junk[itemName] then return true end
+    local lower = itemName:lower()
+    for k in pairs(junk) do
+        if k and k:lower() == lower then return true end
+    end
+    return false
+end
+
+--- Zone forage disable (cz_common zones[zone].forageDisabled): when true, do not auto-forage in this zone.
+function M.isForageDisabledInZone(zone)
+    local zb = M.getZoneBlock(zone)
+    return zb and zb.forageDisabled == true
+end
+
+function M.setForageDisabledInZone(zone, disabled)
+    if not zone or zone == '' then return end
+    local zb = M.ensureZoneBlock(zone)
+    zb.forageDisabled = disabled and true or false
+    M.saveCommon()
+end
+
 function M.getSubOrder()
     return subOrder
 end
@@ -443,8 +482,8 @@ local function writeConfigToFile(config, filename)
             local valueStr = nil
             for _, key in ipairs(order2) do
                 value = t[key]
-                if value == nil or (key == 'announce' and value == false) then
-                    -- omit nil keys and announce when false to keep config sparse
+                if value == nil or (key == 'announce' and value == false) or (key == 'onlyMT' and value == false) then
+                    -- omit nil keys and announce/onlyMT when false to keep config sparse
                 elseif key == 'dontStack' and type(value) == "table" and #value > 0 then
                     local allowed = M.DEBUFF_DONTSTACK_ALLOWED
                     local parts = {}
@@ -669,6 +708,7 @@ function M.Load(path)
     if (M.config.settings.domount == nil) then M.config.settings.domount = false end
     if (M.config.settings.mountcast == nil) then M.config.settings.mountcast = 'none' end
     if (M.config.settings.dosit == nil) then M.config.settings.dosit = true end
+    if (M.config.settings.doforage == nil) then M.config.settings.doforage = false end
     if (M.config.settings.sitmana == nil) then M.config.settings.sitmana = 90 end
     if (M.config.settings.sitendur == nil) then M.config.settings.sitendur = 90 end
     if (M.config.settings.acleash == nil) then M.config.settings.acleash = 75 end
