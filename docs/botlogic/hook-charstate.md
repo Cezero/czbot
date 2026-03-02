@@ -23,8 +23,8 @@ flowchart TB
     CampReturn -->|No| CampLeash[campstatus and beyond acleash? MakeCamp return]
     ClearCamp --> FollowStand
     CampLeash --> FollowStand
-    FollowStand[followid and sitting and far? /stand]
-    FollowStand --> Sit[dosit and not moving/cast/combat? sit check]
+    FollowStand[followid and far? stand; campstatus and not AtCamp? stand]
+    FollowStand --> Sit[dosit and not moving/cast/combat and in camp/follow range? sit check]
     Sit --> Cursor[cursor and inv? autoinv or OutOfSpace]
     Cursor --> Mount[domount? MountCheck]
     Mount --> Dead{DEAD or HOVER?}
@@ -49,7 +49,7 @@ flowchart TB
 
 - **Startup:** On first run with arg `startup`: if hovering/corpse, set terminate; stop nav/stick; if combat, attack off.
 - **Camp return:** If runState is camp_return and (not moving or deadline passed), clearRunState. If campstatus and beyond acleash, call botmove.MakeCamp('return').
-- **Sit:** If dosit, not moving, no cast, no combat, no autofire: if follow and far skip sit; else if mana/endur in band (and not 40% HP with mobs) then /sit on.
+- **Sit / stand with camp & follow:** When dosit is on, not moving, no cast, no combat, no autofire: if follow is active and beyond follow distance, or campstatus is true and `botmove.AtCamp()` is false, force `/stand` and skip sitting; otherwise, if mana/endurance are in the sit band (and not 40%% HP with mobs) then `/sit on` using the usual hysteresis around `sitmana`/`sitendur`.
 - **Dead:** If DEAD or HOVER, set runState 'dead', set HoverEchoTimer if unset, and if HoverTimer passed call Event_Slain. If we were dead and are now alive, clearRunState.
 - **Engage:** If we have no engageTargetId or our target is not engageTargetId, attack off and pet back. If no MobList[1] and engageTargetId, clear engageTargetId.
 - **Pet:** If pet ID changed (new pet or different), set MyPetID and /pet leader.

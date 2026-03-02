@@ -1032,6 +1032,9 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     local durMs = tonumber(spelldurMs) or 0
     if mq.TLO.Me.CastTimeLeft() <= 0 or (sub ~= 'debuff' and sub ~= 'buff') or not spelldurMs or durMs <= 0 or mq.TLO.Me.Class.ShortName() == 'BRD' then return end
     if mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
+    local criteria = rc.CurSpell and rc.CurSpell.targethit or nil
+    local isSelfTarget = target == mq.TLO.Me.ID()
+    local isSelfGroupBuff = (criteria == 'groupbuff' and isSelfTarget)
     local buffid = mq.TLO.Target.Buff(spellname).ID() or false
     local buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
     local buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
@@ -1045,7 +1048,7 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
             spellutils.clearCastingStateOrResume()
-        elseif buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS then
+        elseif buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS and not isSelfGroupBuff then
             -- Buff present with enough time left: interrupt. Below threshold we allow refresh cast to complete.
             printf('\ayCZBot:\axInterrupt %s, buff already present', spellname)
             mq.cmd('/interrupt')

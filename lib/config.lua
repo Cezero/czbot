@@ -120,7 +120,7 @@ local subOrder = {
 
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
-    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'tarcnt', 'bands', 'spellicon', 'precondition' },
+    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'tarcnt', 'bands', 'spellicon', 'precondition' },
     debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },

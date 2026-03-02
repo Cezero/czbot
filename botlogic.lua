@@ -66,10 +66,19 @@ local function charState_Always()
     -- Stand if follow on and target beyond follow distance
     if rc.followid and rc.followid > 0 then
         local followSpawn = mq.TLO.Spawn(rc.followid)
-        local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), followSpawn.X(), followSpawn.Y())
-        if dSq and botconfig.config.settings.followdistanceSq and dSq >= botconfig.config.settings.followdistanceSq then
-            mustStand = true
+        local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+        local fx, fy = followSpawn.X(), followSpawn.Y()
+        if meX and meY and fx and fy then
+            local dSq = utils.getDistanceSquared2D(meX, meY, fx, fy)
+            local followdistanceSq = botconfig.config.settings.followdistanceSq
+            if dSq and followdistanceSq and dSq >= followdistanceSq then
+                mustStand = true
+            end
         end
+    end
+    -- Stand if camp is active and we are outside camp range
+    if rc.campstatus and not botmove.AtCamp() then
+        mustStand = true
     end
     -- Stand if < 40% HP and mobs in camp
     if mq.TLO.Me.PctHPs() < 40 and state.getMobCount() > 0 then mustStand = true end
