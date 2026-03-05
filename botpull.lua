@@ -72,6 +72,32 @@ local function getEffectiveAbilityRange()
     return getPullRange(entry)
 end
 
+--- Builds a set (id -> true) of current XTarget spawn IDs, excluding dead/corpse.
+local function getCurrentXTargetIdSet()
+    local set = {}
+    local n = mq.TLO.Me.XTarget() or 0
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        if xt and xt.ID() and xt.ID() > 0 and xt.Type() ~= 'Corpse' and not xt.Dead() then
+            set[xt.ID()] = true
+        end
+    end
+    return set
+end
+
+--- Returns true if spawnId is on extended target (any slot, skip dead/corpse).
+local function isSpawnOnXTarget(spawnId)
+    if not spawnId or spawnId == 0 then return false end
+    local n = mq.TLO.Me.XTarget() or 0
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        if xt and xt.ID() == spawnId and xt.Type() ~= 'Corpse' and not xt.Dead() then
+            return true
+        end
+    end
+    return false
+end
+
 local function clearPullState(reason)
     local rc = state.getRunconfig()
     rc.pullState = nil
@@ -81,6 +107,7 @@ local function clearPullState(reason)
     rc.pullPhase = nil
     rc.pullDeadline = nil
     rc.pullNavStartHP = nil
+    rc.pullXTargetIdsAtStart = nil
     rc.pullAggroingStartTime = nil
     rc.pullAtCampSince = nil
     rc.pullHealerManaWait = nil
@@ -353,6 +380,7 @@ function botpull.StartPull()
     rc.pullPhase = nil
     rc.pullDeadline = nil
     rc.pullNavStartHP = mq.TLO.Me.PctHPs()
+    rc.pullXTargetIdsAtStart = getCurrentXTargetIdSet()
     state.setRunState(state.STATES.pulling, { priority = bothooks.getPriority('doPull') })
     rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawn.ID())
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
@@ -436,6 +464,35 @@ local function tickNavigating(rc, spawn)
                     abortPullAndReturnToCamp('Add aggro, returning to camp.')
                     return
                 end
+            end
+        end
+    end
+
+    -- XTarget authoritative: new mob on XTarget = add (abort) or pull target (transition to returning)
+    local xtAtStart = rc.pullXTargetIdsAtStart or {}
+    local currentXt = getCurrentXTargetIdSet()
+    for id, _ in pairs(currentXt) do
+        if not xtAtStart[id] then
+            if id == rc.pullAPTargetID then
+                -- Pull target just appeared on XTarget: we have aggro, return to camp
+                mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
+                rc.pullState = 'returning'
+                rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
+                rc.pullPhase = nil
+                rc.pulledmob = rc.pullAPTargetID
+                rc.pullreturntimer = mq.gettime() + 60000
+                rc.pulledmobLastDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), spawn.X(), spawn.Y(), spawn.Z())
+                rc.pulledmobLastCloserTime = mq.gettime()
+                if rc.pullRangedStoredItem and rc.pullRangedStoredItem ~= '' then
+                    mq.cmdf('/exchange "%s" Ranged', rc.pullRangedStoredItem)
+                    rc.pullRangedStoredItem = nil
+                end
+                combat.ResetCombatState({ clearTarget = false, clearPet = false })
+                botmove.NavToCamp({ dist = 0, echoMsg = '\\ayReturning to camp' })
+                return
+            else
+                abortPullAndReturnToCamp('Add aggro (XTarget), returning to camp.')
+                return
             end
         end
     end
@@ -563,14 +620,14 @@ local function tickAggroing(rc, spawn)
         mq.delay(50)
     end
 
-    -- Aggroing timeout: no agro after 15s -> abort and return to camp
+    -- Aggroing timeout: no agro after 15s -> abort (XTarget authoritative: only timeout when pull target not on XTarget)
     local aggroingElapsed = mq.gettime() - (rc.pullAggroingStartTime or 0)
-    if aggroingElapsed > 15000 and not pullMobHasAgroOnMe(spawn) then
+    if aggroingElapsed > 15000 and not isSpawnOnXTarget(rc.pullAPTargetID) then
         abortPullAndReturnToCamp('No agro after 15s, returning to camp.')
         return
     end
-    -- Only transition to returning when mob has agro on me and min wait (1.5s) has passed
-    if spawn.Aggressive() and pullMobHasAgroOnMe(spawn) and aggroingElapsed >= 1500 then
+    -- XTarget authoritative: transition to returning when pull target is on XTarget and min wait (1.5s) has passed
+    if isSpawnOnXTarget(rc.pullAPTargetID) and aggroingElapsed >= 1500 then
         rc.pullState = 'returning'
         rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
         rc.pullPhase = nil

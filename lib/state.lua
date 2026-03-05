@@ -24,6 +24,7 @@
 ---@field pulledmobLastDistSq number|nil cached distance-squared from puller to pulled mob when last saw it closer
 ---@field pulledmobLastCloserTime number|nil mq.gettime() when we last observed pulled mob get closer (10s timeout)
 ---@field pullNavStartHP number|nil PctHPs when we started navigating (for add-abort on damage)
+---@field pullXTargetIdsAtStart table|nil set of XTarget spawn IDs at pull start (id -> true), for add detection while navigating
 ---@field pullarc number|nil
 ---@field FTEList table
 ---@field FTECount number
@@ -255,6 +256,7 @@ function M.resetRunconfig()
         pullDeadline = nil,
         pullAggroingStartTime = nil,
         pullAtCampSince = nil,
+        pullXTargetIdsAtStart = nil,
         pullRangedStoredItem = nil,
         stucktimer = 0,
         unstuckWiggleIndex = nil,
