@@ -54,12 +54,12 @@ Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()`) and by MQ z
 
 1. Sets `statusMessage = 'Zone change, waiting...'`, delay 1s.
 2. **DelayOnZone()**:
-   - If runState is `dead`, clears run state.
-   - Sets `zonename` to current zone short name.
-   - Clears camp: `makecamp` and `campstatus = false`.
-   - Turns off `dopull`; clears `engageTargetId` and global `APTarget`.
-   - Runs mobfilter for exclude and priority (zone).
-   - Cleans spellstates mob list; resets `MountCastFailed`.
+    - If runState is `dead`, clears run state.
+    - Sets `zonename` to current zone short name.
+    - Clears camp: `makecamp` and `campstatus = false`.
+    - Turns off `dopull`; clears `engageTargetId` and global `APTarget`.
+    - Runs mobfilter for exclude and priority (zone).
+    - Cleans spellstates mob list; resets `MountCastFailed`.
 3. Clears `statusMessage`.
 
 See [Run state machine](run-state-machine.md) and [hook AddSpawnCheck](hook-addspawncheck.md) (MobList is rebuilt each tick from current zone/camp).
@@ -83,7 +83,7 @@ Target is Encounter Locked (FTE) to someone else.
 
 - Echoes message; increments `FTECount` if it was 0.
 - Updates `FTEList[spawn.ID()]` with hitcount (1→2→3) and timer (10s, 30s, 90.5s).
-- Runs: `/target myself`, `/attack off`, `/stopcast`, `/nav stop`, `/stick off`.
+- Runs: `/mqtarget myself`, `/attack off`, `/stopcast`, `/nav stop`, `/stick off`.
 - If `dopull` is true: clears pull target (sets global `APTarget = false`).
 
 Pull and AddSpawnCheck use FTE list to avoid pulling or listing FTE-locked mobs.
@@ -109,20 +109,20 @@ These handlers are only used when the current cast did **not** use MQ2Cast’s `
 
 ## Other handlers (short notes)
 
-| Event | Handler | Effect |
-|-------|---------|--------|
-| MissedNote | Event_MissedNote | Sets `runconfig.MissedNote = true` |
-| CastStn | Event_CastStn | Stub (no-op) |
-| CharmBroke | Event_CharmBroke | `charm.OnCharmBroke(line, charmspell)` |
-| ResetMelee | Event_ResetMelee | Stub |
-| WornOff | Event_WornOff | Stub |
-| Camping | Event_Camping | Stub |
-| GoM | Event_GoM | Stub |
-| LockedDoor | Event_LockedDoor | Stub |
-| LinkItem | Event_LinkItem | Validates slot/HP filter; echoes item link and /rs |
-| TooSteep | Event_TooSteep | Stub |
-| MountFailed | Event_MountFailed | If domount: sets global `MountCastFailed = true` |
-| MobProb | Event_MobProb | Throttled 3s; if engageTargetId and path length ≤ acleash, /nav to target; sets mobprobtimer |
+| Event       | Handler           | Effect                                                                                       |
+| ----------- | ----------------- | -------------------------------------------------------------------------------------------- |
+| MissedNote  | Event_MissedNote  | Sets `runconfig.MissedNote = true`                                                           |
+| CastStn     | Event_CastStn     | Stub (no-op)                                                                                 |
+| CharmBroke  | Event_CharmBroke  | `charm.OnCharmBroke(line, charmspell)`                                                       |
+| ResetMelee  | Event_ResetMelee  | Stub                                                                                         |
+| WornOff     | Event_WornOff     | Stub                                                                                         |
+| Camping     | Event_Camping     | Stub                                                                                         |
+| GoM         | Event_GoM         | Stub                                                                                         |
+| LockedDoor  | Event_LockedDoor  | Stub                                                                                         |
+| LinkItem    | Event_LinkItem    | Validates slot/HP filter; echoes item link and /rs                                           |
+| TooSteep    | Event_TooSteep    | Stub                                                                                         |
+| MountFailed | Event_MountFailed | If domount: sets global `MountCastFailed = true`                                             |
+| MobProb     | Event_MobProb     | Throttled 3s; if engageTargetId and path length ≤ acleash, /nav to target; sets mobprobtimer |
 
 ---
 

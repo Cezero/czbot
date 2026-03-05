@@ -140,7 +140,7 @@ function botevents.Event_FTELocked()
     elseif state.getRunconfig().FTEList[spawn.ID()] and state.getRunconfig().FTEList[spawn.ID()].hitcount >= 2 then
         state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 3, timer = mq.gettime() + 90500 }
     end
-    mq.cmd('/multiline ; /squelch /target myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
+    mq.cmd('/multiline ; /squelch /mqtarget myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
     if state.getRunconfig().dopull then
         print('clearing pull target because FTELock detected') -- not debug, real error message
         APTarget = false

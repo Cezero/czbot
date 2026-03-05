@@ -163,7 +163,8 @@ function botpull.EngageCheck()
     local rc = state.getRunconfig()
     if bot then
         local tspawn = mq.TLO.Spawn(targetid)
-        local targetDistSq = utils.getDistanceSquared3D(tspawn.X(), tspawn.Y(), tspawn.Z(), rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
+        local targetDistSq = utils.getDistanceSquared3D(tspawn.X(), tspawn.Y(), tspawn.Z(), rc.makecamp.x, rc.makecamp.y,
+            rc.makecamp.z)
         local range = getEffectiveAbilityRange()
         local rangeSq = range and (range * range) or nil
         if targetDistSq and rangeSq and targetDistSq > rangeSq and not myconfig.pull.hunter then return false end
@@ -171,7 +172,7 @@ function botpull.EngageCheck()
     if totID and totID > 0 and totID ~= mq.TLO.Me.ID() and (totType ~= 'NPC') and totType ~= 'Corpse' then
         printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arengaged\ax by someone else! Returning to camp!', target)
         rc.engagetracker[targetid] = (mq.gettime() + 60000)
-        mq.cmd('/multiline ; /squelch /target clear ; /nav stop log=off')
+        mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
         return true
     end
     return false
@@ -187,7 +188,8 @@ local function canStartPull(rc)
             rc.pulledmobLastDistSq = nil
             rc.pulledmobLastCloserTime = nil
         else
-            local pulledDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), pmob.X(), pmob.Y(), pmob.Z())
+            local pulledDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), pmob.X(),
+                pmob.Y(), pmob.Z())
             if not pulledDistSq or not myconfig.settings.acleashSq then
                 -- no distance or no acleash, clear and continue
                 rc.pulledmob = nil
@@ -340,7 +342,7 @@ function botpull.StartPull()
 
     local distance = spawn.Distance() and math.floor(spawn.Distance()) or 0
     printf('\ayCZBot:\axAttempting to pull \ar%s \arid %s \auat %s', spawn.Name(), spawn.ID(), distance)
-    mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /target clear')
+    mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /mqtarget clear')
     mq.cmdf('/nav id %s dist= 7 log=off los=on', spawn.ID())
     if isWarp then mq.cmdf('/warp id %s', spawn.ID()) end
 
@@ -364,7 +366,7 @@ local function isPullWarp()
 end
 
 local function abortPullAndReturnToCamp(reason)
-    mq.cmd('/multiline ; /squelch /target clear ; /nav stop log=off')
+    mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
     local rc = state.getRunconfig()
     rc.engageTargetId = nil
     rc.pullState = 'returning_after_abort'
@@ -402,7 +404,8 @@ local function tickNavigating(rc, spawn)
     local haveTarget = (mq.TLO.Target.ID() == rc.pullAPTargetID)
     local outsideCamp = nil
     if rc.campstatus then
-        local meToCampSq = utils.getDistanceSquared3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z())
+        local meToCampSq = utils.getDistanceSquared3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(),
+            mq.TLO.Me.Y(), mq.TLO.Me.Z())
         outsideCamp = meToCampSq and myconfig.pull.radiusPlus40Sq and meToCampSq > myconfig.pull.radiusPlus40Sq
     end
 
@@ -450,7 +453,8 @@ local function tickNavigating(rc, spawn)
         return
     end
     if rc.campstatus then
-        local meToCampSq = utils.getDistanceSquared3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z())
+        local meToCampSq = utils.getDistanceSquared3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, mq.TLO.Me.X(),
+            mq.TLO.Me.Y(), mq.TLO.Me.Z())
         if meToCampSq and myconfig.pull.radiusPlus40Sq and meToCampSq > myconfig.pull.radiusPlus40Sq then
             clearPullState('navigating: outside camp radius')
             return
@@ -572,7 +576,8 @@ local function tickAggroing(rc, spawn)
         rc.pullPhase = nil
         rc.pulledmob = rc.pullAPTargetID
         rc.pullreturntimer = mq.gettime() + 60000
-        rc.pulledmobLastDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), spawn.X(), spawn.Y(), spawn.Z())
+        rc.pulledmobLastDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), spawn.X(),
+            spawn.Y(), spawn.Z())
         rc.pulledmobLastCloserTime = mq.gettime()
         if rc.pullRangedStoredItem and rc.pullRangedStoredItem ~= '' then
             mq.cmdf('/exchange "%s" Ranged', rc.pullRangedStoredItem)

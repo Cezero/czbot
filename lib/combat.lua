@@ -18,7 +18,7 @@ function combat.ResetCombatState(opts)
         mq.cmd('/squelch /pet back off')
         mq.cmd('/squelch /pet follow')
     end
-    if clearTarget and mq.TLO.Target.Type() == 'NPC' then mq.cmd('/squelch /target clear') end
+    if clearTarget and mq.TLO.Target.Type() == 'NPC' then mq.cmd('/squelch /mqtarget clear') end
 end
 
 return combat

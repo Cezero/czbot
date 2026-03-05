@@ -31,7 +31,7 @@ flowchart TB
     Nav --> End
 ```
 
-- **StartPull:** Requires canStartPull (no MasterPause, HP > 45%, nav mesh, group checks); ensureCampAndAnchor (mapfilter, makecamp or hunter anchor); buildPullMobList (spawnutils); selectPullTarget (closest by path, or priority list if usepriority). Then /attack off, /stick off, /target clear, /nav to spawn; set pullAPTargetID, pullTagTimer, pullReturnTimer, pullState = 'navigating', setRunState('pulling', { priority = doPull }).
+- **StartPull:** Requires canStartPull (no MasterPause, HP > 45%, nav mesh, group checks); ensureCampAndAnchor (mapfilter, makecamp or hunter anchor); buildPullMobList (spawnutils); selectPullTarget (closest by path, or priority list if usepriority). Then /attack off, /stick off, /mqtarget clear, /nav to spawn; set pullAPTargetID, pullTagTimer, pullReturnTimer, pullState = 'navigating', setRunState('pulling', { priority = doPull }).
 - **PullTick:** See [Movement and misc state](movement-and-misc.md#pull-state-machine-dopull) for navigating → aggroing → returning → waiting_combat.
 
 ## See also

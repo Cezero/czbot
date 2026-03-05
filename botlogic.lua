@@ -94,7 +94,8 @@ local function charState_Always()
                 wantToSit = true
             end
         end
-        aboveSitHysteresis = (mq.TLO.Me.MaxMana() == 0 or mq.TLO.Me.PctMana() > sitmana + SIT_HYSTERESIS_PCT) and (mq.TLO.Me.PctEndurance() > sitendur + SIT_HYSTERESIS_PCT)
+        aboveSitHysteresis = (mq.TLO.Me.MaxMana() == 0 or mq.TLO.Me.PctMana() > sitmana + SIT_HYSTERESIS_PCT) and
+        (mq.TLO.Me.PctEndurance() > sitendur + SIT_HYSTERESIS_PCT)
     end
     -- if sitting and must stand or (above hysteresis and not casting), stand. Do not stand for mana while casting/memorizing.
     if mq.TLO.Me.Sitting() and (mustStand or (aboveSitHysteresis and state.getRunState() ~= state.STATES.casting)) then
@@ -135,7 +136,8 @@ local function charState_Always()
     elseif not mq.TLO.Cursor.ID() and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0 then
         rc.OutOfSpace = false
     end
-    if botconfig.config.settings.domount and not state.isTravelMode() and botconfig.config.settings.mountcast then spellutils.MountCheck() end
+    if botconfig.config.settings.domount and not state.isTravelMode() and botconfig.config.settings.mountcast then
+        spellutils.MountCheck() end
 end
 
 --- Returns true if dead/hover; caller should return. Sets dead state and HoverTimer/HoverEchoTimer, may call Event_Slain.
@@ -160,7 +162,7 @@ local function charState_PostDead()
     end
     local tarname = mq.TLO.Target.Name()
     if tarname and string.find(tarname, 'corpse') then
-        mq.cmd('/squelch /multiline ; /attack off ; /target clear ; /stick off')
+        mq.cmd('/squelch /multiline ; /attack off ; /mqtarget clear ; /stick off')
     end
     if mq.TLO.Me.State() == 'FEIGN' then mq.cmd('/stand') end
     local rc = state.getRunconfig()

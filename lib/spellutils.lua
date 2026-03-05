@@ -46,7 +46,7 @@ function spellutils.RecordDontStackDebuffFromTarget(targetSpawnId, ourSpell, cat
     local durationSec = 0
     if spellRef.MyDuration then
         durationSec = tonumber(spellRef.MyDuration.TotalSeconds()) or
-        0                                                               -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
+            0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
     end
     if durationSec <= 0 then return end
     local expire = mq.gettime() + durationSec * 1000
@@ -387,7 +387,7 @@ function spellutils.GetSpellDurationSec(entry)
     local e = spellutils.GetSpellEntity(entry)
     if not e or not e.MyDuration then return 0 end
     return tonumber(e.MyDuration.TotalSeconds()) or
-    0                                                 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
+        0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
 end
 
 -- Returns true if the debuff entry is a nuke (no duration / direct damage). Used for rotation and flavor filtering.
@@ -994,7 +994,7 @@ function spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltar
     local lostOrCorpse = (targetSpawn.ID() == 0) or
         (string.find(targetSpawn.Name() or '', 'corpse') and criteria ~= 'corpse')
     if not lostOrCorpse then return end
-    mq.cmd('/squelch /multiline; /stick off ; /target clear')
+    mq.cmd('/squelch /multiline; /stick off ; /mqtarget clear')
     if mq.TLO.Me.CastTimeLeft() > 0 and rc.CurSpell.target ~= mq.TLO.Me.ID() and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
         mq.cmd('/echo I lost my target, interrupting')
         if rc.CurSpell.viaMQ2Cast then mq.cmd('/interrupt') else mq.cmd('/stopcast') end
@@ -1102,7 +1102,7 @@ function spellutils.InterruptCheck()
 
     spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
     if criteria ~= 'corpse' and targetSpawn.Type() == 'Corpse' then
-        mq.cmd('/multiline ; /interrupt ; /squelch /target clear ; /echo My target is dead, interrupting')
+        mq.cmd('/multiline ; /interrupt ; /squelch /mqtarget clear ; /echo My target is dead, interrupting')
     end
     spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
     if sub == 'debuff' then
@@ -1277,8 +1277,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
         state.setRunState(state.STATES.casting,
-            { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell
-            .spellcheckResume })
+            {
+                deadline = mq.gettime() + CASTING_STUCK_MS,
+                priority = runPriority,
+                spellcheckResume = rc.CurSpell
+                    .spellcheckResume
+            })
         return true
     end
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
@@ -1304,16 +1308,24 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmd(cmd)
         rc.CurSpell.phase = 'casting'
         state.setRunState(state.STATES.casting,
-            { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell
-            .spellcheckResume })
+            {
+                deadline = mq.gettime() + CASTING_STUCK_MS,
+                priority = runPriority,
+                spellcheckResume = rc.CurSpell
+                    .spellcheckResume
+            })
         if needDelay then mq.delay(CASTING_MEMORIZE_DELAY_MS) end
         return true
     end
     spellutils.ExecuteNativeCast(gem, spell, sub, index)
     rc.CurSpell.phase = 'casting'
     state.setRunState(state.STATES.casting,
-        { deadline = mq.gettime() + CASTING_STUCK_MS, priority = runPriority, spellcheckResume = rc.CurSpell
-        .spellcheckResume })
+        {
+            deadline = mq.gettime() + CASTING_STUCK_MS,
+            priority = runPriority,
+            spellcheckResume = rc.CurSpell
+                .spellcheckResume
+        })
     return true
 end
 

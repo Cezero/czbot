@@ -59,14 +59,14 @@ local function cmd_toggle(args)
             if botconfig.config.pull.hunter then
                 rc.makecamp = { x = nil, y = nil, z = nil }
             end
-            mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
+            mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
         end
     else
         if getVal() then
             setVal(false)
             if args[1] == 'dopull' or args[1] == 'domelee' then
                 if APTarget and APTarget.ID() then APTarget = nil end
-                mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
+                mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
             end
             if args[1] == 'dopull' and botconfig.config.pull.hunter then
                 rc.makecamp = { x = nil, y = nil, z = nil }
@@ -78,7 +78,8 @@ local function cmd_toggle(args)
     end
     botconfig.RunConfigLoaders()
     if botconfig.config.settings.doraid then botraid.LoadRaidConfig() end
-    printf('\ayCZBot:\axTurning %s to %s', args[1], isDopull and tostring(rc.dopull) or tostring(botconfig.config.settings[args[1]]))
+    printf('\ayCZBot:\axTurning %s to %s', args[1],
+        isDopull and tostring(rc.dopull) or tostring(botconfig.config.settings[args[1]]))
 end
 
 local function cmd_addjunk(args, str)
@@ -94,7 +95,8 @@ local function cmd_addjunk(args, str)
         itemName = mq.TLO.Cursor.Name()
     end
     if not itemName or itemName == '' then
-        printf('\ayCZBot:\ax No item name given and nothing on cursor. Use: /cz addjunk <itemname> or put item on cursor.')
+        printf(
+            '\ayCZBot:\ax No item name given and nothing on cursor. Use: /cz addjunk <itemname> or put item on cursor.')
         return
     end
     botconfig.addZoneJunk(zone, itemName)
@@ -243,7 +245,7 @@ local function cmd_exclude(args)
         if name and removeFromList(rc.ExcludeList, name) then
             printf('\ayCZBot:\axRemoved %s from exclude list', name)
             if APTarget and APTarget.ID() then APTarget = nil end
-            mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
+            mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
             mobfilter.process('exclude', 'save')
         end
         return
@@ -253,7 +255,7 @@ local function cmd_exclude(args)
         printf('\ayCZBot:\axExcluding %s from CZBot', excludemob)
         table.insert(rc.ExcludeList, excludemob)
         if APTarget and APTarget.ID() then APTarget = nil end
-        mq.cmd('/squelch /target clear ; /nav stop ; /stick off ; /attack off')
+        mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
         mobfilter.process('exclude', 'save')
     end
 end
@@ -307,7 +309,7 @@ local function cmd_abort(args)
             mq.cmd('/stopcast')
         end
         if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
-        if mq.TLO.Target.ID() then mq.cmd('/squelch /target clear') end
+        if mq.TLO.Target.ID() then mq.cmd('/squelch /mqtarget clear') end
         if rc.engageTargetId then rc.engageTargetId = nil end
         rc.attackCommandEngage = nil
         if botconfig.config.settings.domelee then
@@ -410,13 +412,15 @@ end
 
 local function cmd_acleash(args)
     botconfig.config.settings.acleash = tonumber(args[2])
-    botconfig.config.settings.acleashSq = (botconfig.config.settings.acleash or 0) * (botconfig.config.settings.acleash or 0)
+    botconfig.config.settings.acleashSq = (botconfig.config.settings.acleash or 0) *
+        (botconfig.config.settings.acleash or 0)
     printf('\ayCZBot:\axSetting acleash to %s', botconfig.config.settings.acleash)
 end
 
 local function cmd_camprestdistance(args)
     botconfig.config.settings.campRestDistance = tonumber(args[2])
-    botconfig.config.settings.campRestDistanceSq = (botconfig.config.settings.campRestDistance or 0) * (botconfig.config.settings.campRestDistance or 0)
+    botconfig.config.settings.campRestDistanceSq = (botconfig.config.settings.campRestDistance or 0) *
+        (botconfig.config.settings.campRestDistance or 0)
     printf('\ayCZBot:\axSetting campRestDistance to %s', botconfig.config.settings.campRestDistance)
 end
 
@@ -769,13 +773,15 @@ local function cmd_togglenuke(args)
     local raw = args[2] and tostring(args[2]) or ''
     local flavorArg = string.lower(raw:match('^%s*(.-)%s*$') or '')
     if flavorArg == '' then
-        printf('\ayCZBot:\ax Usage: /cz togglenuke <flavor> [on|off]. Flavors: fire, ice, magic, poison, disease (and cold=ice).')
+        printf(
+            '\ayCZBot:\ax Usage: /cz togglenuke <flavor> [on|off]. Flavors: fire, ice, magic, poison, disease (and cold=ice).')
         return
     end
     local flavor = (flavorArg == 'cold') and 'ice' or flavorArg
     local applicable = getApplicableNukeFlavors()
     if not applicable[flavor] then
-        printf('\ayCZBot:\ax No nuke with flavor \ar%s\ax in debuff list. Use a flavor from your configured nukes.', flavor)
+        printf('\ayCZBot:\ax No nuke with flavor \ar%s\ax in debuff list. Use a flavor from your configured nukes.',
+            flavor)
         return
     end
     local force = args[3] and string.lower(args[3])
@@ -800,8 +806,11 @@ local function cmd_togglenuke(args)
     else
         local allowed = (not rc.nukeFlavorsAutoDisabled or not rc.nukeFlavorsAutoDisabled[flavor])
             and (not rc.nukeFlavorsAllowed or rc.nukeFlavorsAllowed[flavor])
-        if allowed then setOff(); printf('\ayCZBot:\ax Nuke flavor \ar%s\ax turned off.', flavor)
-        else setOn(); printf('\ayCZBot:\ax Nuke flavor \ag%s\ax turned on.', flavor) end
+        if allowed then
+            setOff(); printf('\ayCZBot:\ax Nuke flavor \ar%s\ax turned off.', flavor)
+        else
+            setOn(); printf('\ayCZBot:\ax Nuke flavor \ag%s\ax turned on.', flavor)
+        end
     end
     rc.nukeResistDisabledRecent = nil
     botconfig.saveNukeFlavorsToCommon()
