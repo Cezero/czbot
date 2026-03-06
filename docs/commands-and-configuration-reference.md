@@ -35,6 +35,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **stop**     | —                        | Disable make camp and follow (and travel mode).                                                                                                                                                                                                                             |
 | **leash**    | —                        | Return to camp (if camp is set).                                                                                                                                                                                                                          |
 | **camprestdistance** | `<number>` | Set distance (units) considered "at camp" for leash and return. Writes to `settings.campRestDistance`.                                                                                                        |
+| **acleash**  | `<number>`              | Set camp leash distance (max distance from camp for mob list / targeting).                                                                                                                |
 
 ### Pull
 
@@ -42,6 +43,10 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | ------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **dopull**          | `on` / `off` or toggle | Enable/disable pulling.                                                                                                                                 |
 | **xarc**            | `<degrees>` or none    | Directional pulling: restrict pulls to an arc in front of the bot (e.g. `90`). No argument turns it off. (This is the runtime “pullarc” setting.)       |
+### Mob lists
+
+| Command             | Arguments              | Purpose                                                                                                                                                 |
+| ------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **exclude**         | `<name>` or target     | Add a mob to the exclude list (pull and target selection skip it). Changes are saved automatically to the common config (cz_common.lua).                |
 | **exclude remove**  | `<name>` or target     | Remove a mob from the exclude list.                                                                                                                     |
 | **priority**        | `<name>` or target     | Add a mob to the priority list; when pull.usepriority is true, prefer these mobs. Changes are saved automatically to the common config (cz_common.lua). |
@@ -59,7 +64,6 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **assist**       | `<name>` or `automatic` | Set Main Assist.                                                                                                  |
 | **offtank**      | `on` / `off` or toggle  | Enable/disable offtank behavior.                                                                                  |
 | **stickcmd**     | `<string>`              | Set stick command (e.g. `hold uw 7`).                                                                             |
-| **acleash**      | `<number>`              | Set camp leash distance (max distance from camp for mob list / targeting).                                        |
 | **targetfilter** | `0` / `1` / `2`         | Filter for mob list: 0 = NPC + aggressive + LOS (pull only aggressive), 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
 
 ### Spells and config
@@ -67,7 +71,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | Command                         | Arguments                                        | Purpose                                                                                                     |
 | ------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | **cast**                        | `<alias> [target]` or `<alias> on` / `off`       | Cast a spell by alias (heal/buff/debuff/cure). With `on`/`off`, enable or disable that spell (**enabled**). |
-| **setvar**                      | `<path> <value>`                                 | Set a config value at runtime (e.g. `settings.petassist true`). Writes to config file.                      |
+| **setvar**                      | `<path> <value>`                                 | Set a config value at runtime (e.g. `settings.petassist true`). Writes to config file. See [setvar reference](setvar-reference.md) for all paths and descriptions. |
 | **addspell**                    | `heal` / `buff` / `debuff` / `cure` `<position>` | Add a new spell entry at the given position (1 to count+1).                                                 |
 | **refresh** / **refreshspells** | —                                                | Refresh spell state.                                                                                        |
 | **echo**                        | `<config.path>`                                  | Print current value of a config path (e.g. `heal.interruptlevel`).                                          |

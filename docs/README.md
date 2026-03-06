@@ -77,5 +77,6 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | Document                                                                        | Description                                                         |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | [Commands and configuration reference](commands-and-configuration-reference.md) | Full list of /cz commands and all config file options in one place. |
+| [setvar reference](setvar-reference.md)                                         | All /cz setvar paths (section.key), types, defaults, and purpose.   |
 
 
