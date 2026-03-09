@@ -10,6 +10,7 @@ local myconfig = botconfig.config
 
 local botmove = {}
 local CorpseID = nil
+local lastFollowResolveFailTime = 0
 
 -- ---------------------------------------------------------------------------
 -- Follow / stuck helpers
@@ -24,13 +25,26 @@ local function refreshFollowId()
         end
         if not rc.followid or rc.followid == 0 then return end
     end
+    local followid = rc.followid
+    if not followid or followid == 0 then return end
     -- After zone, spawn by old id is invalid; re-resolve from followname. Clear stale id if leader not in zone yet.
-    if not mq.TLO.Spawn('id ' .. rc.followid).ID() or mq.TLO.Spawn('id ' .. rc.followid).Type() == 'Corpse' then
+    if not mq.TLO.Spawn('id ' .. followid).ID() or mq.TLO.Spawn('id ' .. followid).Type() == 'Corpse' then
         local id = rc.followname and rc.followname ~= '' and mq.TLO.Spawn('=' .. rc.followname).ID()
         if id then
             rc.followid = id
         else
-            rc.followid = nil
+            local now = mq.gettime()
+            local oldName = rc.followname
+            rc.followid = 0
+            rc.followname = ''
+            if now >= lastFollowResolveFailTime + 15000 then
+                lastFollowResolveFailTime = now
+                if oldName and oldName ~= '' then
+                    printf('\ayCZBot:\axFollow: unable to resolve leader "%s" in zone; clearing follow.', oldName)
+                else
+                    printf('\ayCZBot:\axFollow: unable to resolve current follow target; clearing follow.')
+                end
+            end
         end
     end
 end
@@ -110,6 +124,7 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
 end
 
 local function tryPathExistsUnstuck(followid)
+    if not followid or followid == 0 then return false end
     if not mq.TLO.Navigation.PathExists('id ' .. followid)() then return false end
     mq.cmdf('/nav id %s los=on dist=15 log=off', followid)
     if state.canStartBusyState(state.STATES.unstuck) then
@@ -260,8 +275,8 @@ local function makeCampOn()
     setCampHere()
     state.getRunconfig().campstatus = true
     local rc = state.getRunconfig()
-    rc.followid = nil
-    rc.followname = nil
+    rc.followid = 0
+    rc.followname = ''
     printf('\ayCZBot:\axhanging out using mq2nav')
     return true
 end

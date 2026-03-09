@@ -216,8 +216,8 @@ function M.draw()
                 ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
                 ImGui.PushStyleColor(ImGuiCol.Text, RED)
                 if ImGui.SmallButton(stopIcon .. '##follow_stop') then
-                    rc.followid = nil
-                    rc.followname = nil
+                    rc.followid = 0
+                    rc.followname = ''
                     rc.travelMode = false
                 end
                 if ImGui.IsItemHovered() then ImGui.SetTooltip('Stop following') end

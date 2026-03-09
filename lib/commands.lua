@@ -176,10 +176,11 @@ end
 
 local function cmd_makecamp(args, str)
     botmove.MakeCamp(args[2])
-    if state.getRunconfig().followid or state.getRunconfig().followname then
-        state.getRunconfig().followid = nil
-        state.getRunconfig().followname = nil
-        state.getRunconfig().travelMode = false
+    local rc = state.getRunconfig()
+    if rc.followid or rc.followname then
+        rc.followid = 0
+        rc.followname = ''
+        rc.travelMode = false
     end
 end
 
@@ -195,10 +196,11 @@ local function cmd_follow(args, str)
 end
 
 local function cmd_stop(args)
-    if state.getRunconfig().followid or state.getRunconfig().followname then
-        state.getRunconfig().followid = nil
-        state.getRunconfig().followname = nil
-        state.getRunconfig().travelMode = false
+    local rc = state.getRunconfig()
+    if rc.followid or rc.followname then
+        rc.followid = 0
+        rc.followname = ''
+        rc.travelMode = false
     end
     if state.getRunconfig().campstatus then botmove.MakeCamp('off') end
     printf('\ayCZBot:\ax\arDisabling makecamp and follow')
