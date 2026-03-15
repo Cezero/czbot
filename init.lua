@@ -1,11 +1,7 @@
 local mq = require('mq')
 
 -- Require MQCharinfo before loading bot (so we can end macro if unavailable).
-local ok, _ = pcall(require, 'mqcharinfo')
-if not ok then
-    print('\ayCZBot:\ax MQCharinfo (mqcharinfo) is required but failed to load.')
-    return
-end
+local charinfo = require('mqcharinfo')
 
 -- Load required MQ plugins and end macro if any fail to load.
 if not mq.TLO.Plugin('MQ2Cast').IsLoaded() then mq.cmd('/squelch /plugin MQ2Cast load') end

@@ -54,7 +54,7 @@ local GREEN = ImVec4(0, 0.8, 0, 1)
 local BLACK = ImVec4(0, 0, 0, 1)
 local WHITE = ImVec4(1, 1, 1, 1)
 local LIGHT_GREY = ImVec4(0.75, 0.75, 0.75, 1)
-local TABLE_BORDER_BLUE = ImVec4(51/255, 105/255, 173/255, 1.0)
+local TABLE_BORDER_BLUE = ImVec4(51 / 255, 105 / 255, 173 / 255, 1.0)
 
 local FLAGS_COLUMN_WIDTH = 65
 local FLAGS_ROW_PADDING_Y = 2
@@ -62,16 +62,16 @@ local FLAGS_PANEL_WIDTH = 145
 local NUMERIC_INPUT_WIDTH = 80
 
 local DO_FLAGS = {
-    { key = 'dopull', label = 'Pull' },
+    { key = 'dopull',   label = 'Pull' },
     { key = 'dodebuff', label = 'Debuff' },
-    { key = 'doheal', label = 'Heal' },
-    { key = 'dobuff', label = 'Buff' },
-    { key = 'docure', label = 'Cure' },
-    { key = 'domelee', label = 'Melee' },
-    { key = 'doraid', label = 'Raid' },
-    { key = 'dodrag', label = 'Drag' },
-    { key = 'domount', label = 'Mount' },
-    { key = 'dosit', label = 'Sit' },
+    { key = 'doheal',   label = 'Heal' },
+    { key = 'dobuff',   label = 'Buff' },
+    { key = 'docure',   label = 'Cure' },
+    { key = 'domelee',  label = 'Melee' },
+    { key = 'doraid',   label = 'Raid' },
+    { key = 'dodrag',   label = 'Drag' },
+    { key = 'domount',  label = 'Mount' },
+    { key = 'dosit',    label = 'Sit' },
     { key = 'doforage', label = 'Forage' },
 }
 
@@ -141,7 +141,8 @@ function M.draw()
     local pauseIconW = (select(1, ImGui.CalcTextSize(Icons.FA_PAUSE_CIRCLE)) or 0) + style.FramePadding.x * 2
     local exitLabelW = (select(1, ImGui.CalcTextSize('Exit')) or 0)
     local exitIconW = (select(1, ImGui.CalcTextSize(Icons.FA_POWER_OFF)) or 0) + style.FramePadding.x * 2
-    local buttonsTotalW = pauseLabelW + style.ItemSpacing.x + pauseIconW + style.ItemSpacing.x + exitLabelW + style.ItemSpacing.x + exitIconW
+    local buttonsTotalW = pauseLabelW + style.ItemSpacing.x + pauseIconW + style.ItemSpacing.x + exitLabelW +
+    style.ItemSpacing.x + exitIconW
     local avail = ImGui.GetContentRegionAvail()
     if avail > 0 then
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + avail - buttonsTotalW)
@@ -235,8 +236,11 @@ function M.draw()
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
             local followdistanceVal = botconfig.config.settings.followdistance or 35
-            local followDistNew, followDistCh = inputs.boundedInt('follow_distance', followdistanceVal, 1, 500, 5, '##follow_distance')
-            if followDistCh then botconfig.config.settings.followdistance = followDistNew; runConfigLoaders() end
+            local followDistNew, followDistCh = inputs.boundedInt('follow_distance', followdistanceVal, 1, 500, 5,
+                '##follow_distance')
+            if followDistCh then
+                botconfig.config.settings.followdistance = followDistNew; runConfigLoaders()
+            end
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Follow distance (units) before moving to catch up.') end
             ImGui.TableNextColumn()
             -- Camp section (align to same pixel row as Follow; inner border adds ~3px so compensate)
@@ -268,40 +272,50 @@ function M.draw()
             ImGui.PopStyleColor(2)
             local locationStr = 'unset'
             if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
-                locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0, rc.makecamp.z or 0)
+                locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0,
+                    rc.makecamp.z or 0)
             end
             ImGui.Spacing()
             ImGui.TextColored(WHITE, '%s', 'Location: ')
-            ImGui.SameLine(0,2)
+            ImGui.SameLine(0, 2)
             ImGui.TextColored(LIGHT_GREY, '%s', locationStr)
             ImGui.TextColored(WHITE, '%s', 'Radius: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
             local acleashVal = botconfig.config.settings.acleash or 75
             local radiusNew, radiusCh = inputs.boundedInt('camp_radius', acleashVal, 1, 10000, 5, '##camp_radius')
-            if radiusCh then botconfig.config.settings.acleash = radiusNew; runConfigLoaders() end
+            if radiusCh then
+                botconfig.config.settings.acleash = radiusNew; runConfigLoaders()
+            end
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp radius for in-camp mob checks.') end
             ImGui.TextColored(WHITE, '%s', 'ZRadius: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
             local zradiusVal = botconfig.config.settings.zradius or 75
             local zradiusNew, zradiusCh = inputs.boundedInt('camp_zradius', zradiusVal, 1, 1000, 5, '##camp_zradius')
-            if zradiusCh then botconfig.config.settings.zradius = zradiusNew; runConfigLoaders() end
+            if zradiusCh then
+                botconfig.config.settings.zradius = zradiusNew; runConfigLoaders()
+            end
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Camp Z (vertical) radius for in-camp mob checks.') end
             ImGui.TextColored(WHITE, '%s', 'RestDist: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
             local campRestDistanceVal = botconfig.config.settings.campRestDistance or 15
-            local campRestDistanceNew, campRestDistanceCh = inputs.boundedInt('camp_restdist', campRestDistanceVal, 1, 100, 1, '##camp_restdist')
-            if campRestDistanceCh then botconfig.config.settings.campRestDistance = campRestDistanceNew; runConfigLoaders() end
-            if ImGui.IsItemHovered() then ImGui.SetTooltip('Distance (units) from camp to count as \'at camp\' for leash and return.') end
+            local campRestDistanceNew, campRestDistanceCh = inputs.boundedInt('camp_restdist', campRestDistanceVal, 1,
+                100, 1, '##camp_restdist')
+            if campRestDistanceCh then
+                botconfig.config.settings.campRestDistance = campRestDistanceNew; runConfigLoaders()
+            end
+            if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                'Distance (units) from camp to count as \'at camp\' for leash and return.') end
             ImGui.TextColored(WHITE, '%s', '# Mobs: ')
-            ImGui.SameLine(0,2)
+            ImGui.SameLine(0, 2)
             ImGui.TextColored(LIGHT_GREY, '%s', tostring(state.getMobCount(rc)))
             ImGui.SameLine()
             local campDist = nil
             if rc.makecamp and rc.makecamp.x and rc.makecamp.y and rc.makecamp.z then
-                campDist = utils.calcDist3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), rc.makecamp.x, rc.makecamp.y, rc.makecamp.z)
+                campDist = utils.calcDist3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), rc.makecamp.x, rc.makecamp.y,
+                    rc.makecamp.z)
             end
             local distStr = (campDist and string.format('%.1f', campDist)) or '—'
             local distAvail = select(1, ImGui.GetContentRegionAvail())
@@ -318,8 +332,11 @@ function M.draw()
             if tf < 0 or tf > 2 then tf = 0 end
             local targetFilterIdx = tf + 1
             local targetFilterOptions = { 'Aggressive NPCs', 'LoS NPCs', 'All NPCs' }
-            local tfNew, tfCh = combos.combo('camp_targetfilter', targetFilterIdx, targetFilterOptions, '##camp_targetfilter')
-            if tfCh then botconfig.config.settings.TargetFilter = tfNew - 1; runConfigLoaders() end
+            local tfNew, tfCh = combos.combo('camp_targetfilter', targetFilterIdx, targetFilterOptions,
+                '##camp_targetfilter')
+            if tfCh then
+                botconfig.config.settings.TargetFilter = tfNew - 1; runConfigLoaders()
+            end
             if ImGui.IsItemHovered() then ImGui.SetTooltip('Filter for which spawns count as valid camp mobs.') end
             ImGui.EndTable()
         end
@@ -340,16 +357,22 @@ function M.draw()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local sitmanaVal = botconfig.config.settings.sitmana or 90
         local sitmanaNew, sitmanaCh = inputs.boundedInt('sit_mana_pct', sitmanaVal, 0, 100, 5, '##sit_mana_pct')
-        if sitmanaCh then botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders() end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('If Sit is on, sit when mana is below this %%; stand when above this %% + 3 (hysteresis).') end
+        if sitmanaCh then
+            botconfig.config.settings.sitmana = sitmanaNew; runConfigLoaders()
+        end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'If Sit is on, sit when mana is below this %%; stand when above this %% + 3 (hysteresis).') end
         ImGui.SameLine()
         ImGui.TextColored(WHITE, '%s', 'Sit Endurance %: ')
         ImGui.SameLine(0, 2)
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
         local sitendurVal = botconfig.config.settings.sitendur or 90
         local sitendurNew, sitendurCh = inputs.boundedInt('sit_endur_pct', sitendurVal, 0, 100, 5, '##sit_endur_pct')
-        if sitendurCh then botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders() end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('If Sit is on, sit when endurance is below this %%; stand when above this %% + 3 (hysteresis).') end
+        if sitendurCh then
+            botconfig.config.settings.sitendur = sitendurNew; runConfigLoaders()
+        end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'If Sit is on, sit when endurance is below this %%; stand when above this %% + 3 (hysteresis).') end
         -- Mount: type dropdown + click-to-edit name (spellbook/item validation)
         ImGui.Spacing()
         ImGui.TextColored(WHITE, '%s', 'Mount: ')
@@ -366,7 +389,8 @@ function M.draw()
         local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, nil)
         if mountTypeCh then
             local newType = (mountTypeNew == 1) and 'gem' or 'item'
-            botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and (mountName .. '|' .. newType) or 'none'
+            botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and
+            (mountName .. '|' .. newType) or 'none'
             runConfigLoaders()
         end
         ImGui.SameLine()
@@ -381,11 +405,13 @@ function M.draw()
             mountState.error = nil
             modals.openValidatedEditModal(MOUNT_MODAL_ID)
         end
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('Click to edit: spell (search spellbook) or item (search inventory).') end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'Click to edit: spell (search spellbook) or item (search inventory).') end
         if mountState.open then
             local function onMountSave(value)
                 local trimmed = (value or ''):match('^%s*(.-)%s*$')
-                botconfig.config.settings.mountcast = (trimmed == '' or trimmed == 'none') and 'none' or (trimmed .. '|' .. currentMountType)
+                botconfig.config.settings.mountcast = (trimmed == '' or trimmed == 'none') and 'none' or
+                (trimmed .. '|' .. currentMountType)
                 mountState.open = false
                 mountState.buffer = ''
                 runConfigLoaders()
@@ -408,7 +434,8 @@ function M.draw()
                     if f then applicable[f] = true end
                 end
             end
-            local order = { 'fire', 'ice', 'magic', 'poison', 'disease', 'chromatic', 'prismatic', 'unresistable', 'corruption' }
+            local order = { 'fire', 'ice', 'magic', 'poison', 'disease', 'chromatic', 'prismatic', 'unresistable',
+                'corruption' }
             if next(applicable) then
                 local options = {}
                 local value = {}
@@ -421,7 +448,8 @@ function M.draw()
                         options[#options + 1] = {
                             key = f,
                             label = label,
-                            tooltip = autoDisabled and 'Auto-disabled (resist streak). Uncheck then check to re-enable.' or ('Toggle ' .. label .. ' nukes.'),
+                            tooltip = autoDisabled and 'Auto-disabled (resist streak). Uncheck then check to re-enable.' or
+                            ('Toggle ' .. label .. ' nukes.'),
                         }
                         if allowed then value[#value + 1] = f end
                     end
