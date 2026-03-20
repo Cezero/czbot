@@ -3,7 +3,14 @@
 -- targetphase = priority stages; validtargets = within-phase types (classes, or all/bots/raid for corpse).
 
 local spellbands = {}
-local spellutils = require('lib.spellutils')
+
+-- Keep this module dependency-light to avoid circular requires:
+-- spellutils -> castutils -> spellbands -> spellutils.
+local function normalizeDebuffTargetPhase(token)
+    if token == 'tanktar' then return 'matar' end
+    if token == 'notanktar' then return 'notmatar' end
+    return token
+end
 
 local DEBUFF_SPECIAL_MAX = 200
 local HEAL_CORPSE_TARGETS = { all = true, bots = true, raid = true }
@@ -152,7 +159,7 @@ function spellbands.applyBands(section, entry, index)
                 if band.mintar ~= nil and (mintar == nil or band.mintar > mintar) then mintar = band.mintar end
                 if band.maxtar ~= nil and (maxtar == nil or band.maxtar < maxtar) then maxtar = band.maxtar end
                 for _, c in ipairs(targetPhase) do
-                    c = spellutils.NormalizeDebuffTargetPhase(c)
+                    c = normalizeDebuffTargetPhase(c)
                     if c == 'matar' then matar = true
                     elseif c == 'notmatar' then notmatar = true
                     elseif c == 'named' then named = true
