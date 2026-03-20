@@ -21,6 +21,9 @@ local myconfig = botconfig.config
 local SIT_HYSTERESIS_PCT = 3
 -- Throttle pet retarget commands to avoid spamming during rapid target changes.
 local _petAttackRetargetLastTime = 0
+-- Throttle debug logs so we don't spam every tick.
+local _charStatePetBackoffDebugLastTime = 0
+local _charStateEngageTargetClearedDebugLastTime = 0
 
 -- CharState: per-tick character state. Split into sub-handlers for clarity and testability.
 
@@ -175,6 +178,21 @@ local function charState_PostDead()
         if not rc.engageTargetId then
             -- Disengaged: keep the existing behavior to ensure pet isn't fighting stale targets.
             if mq.TLO.Me.Pet.Aggressive() then
+                local now = mq.gettime()
+                if now >= _charStatePetBackoffDebugLastTime + 1000 then
+                    _charStatePetBackoffDebugLastTime = now
+                    printf(
+                        '\ayCZBot:\axDebug charState pet backoff follower\ax runState=%s engageTargetId=%s targetId=%s petTargetId=%s petAgg=%s meCombat=%s mobListCount=%s mobList1=%s',
+                        state.getRunStateName(),
+                        tostring(rc.engageTargetId),
+                        tostring(mq.TLO.Target.ID() or 0),
+                        tostring(mq.TLO.Me.Pet.Target.ID() or 0),
+                        tostring(mq.TLO.Me.Pet.Aggressive()),
+                        tostring(mq.TLO.Me.Combat()),
+                        tostring(#(rc.MobList or {})),
+                        tostring((rc.MobList and rc.MobList[1] ~= nil) and true or false)
+                    )
+                end
                 mq.cmd('/squelch /pet back off')
                 mq.cmd('/squelch /pet follow')
             end
@@ -191,6 +209,23 @@ local function charState_PostDead()
         end
     end
     if not rc.attackCommandEngage and not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
+        local oldEngageTargetId = rc.engageTargetId
+        if oldEngageTargetId ~= nil then
+            local now = mq.gettime()
+            if now >= _charStateEngageTargetClearedDebugLastTime + 1000 then
+                _charStateEngageTargetClearedDebugLastTime = now
+                printf(
+                    '\ayCZBot:\axDebug charState cleared engageTargetId\ax oldEngageTargetId=%s mobListCount=%s mobList1=%s meCombat=%s petAgg=%s petTargetId=%s targetId=%s',
+                    tostring(oldEngageTargetId),
+                    tostring(#(rc.MobList or {})),
+                    tostring((rc.MobList and rc.MobList[1] ~= nil) and true or false),
+                    tostring(mq.TLO.Me.Combat()),
+                    tostring(mq.TLO.Me.Pet.Aggressive()),
+                    tostring(mq.TLO.Me.Pet.Target.ID() or 0),
+                    tostring(mq.TLO.Target.ID() or 0)
+                )
+            end
+        end
         rc.engageTargetId = nil
     end
     if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and (---@diagnostic disable-next-line: undefined-field
