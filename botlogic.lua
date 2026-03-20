@@ -10,6 +10,8 @@ local spellutils = require('lib.spellutils')
 local bardtwist = require('lib.bardtwist')
 local botevents = require('botevents')
 local utils = require('lib.utils')
+local tankrole = require('lib.tankrole')
+local mqcharinfo = require('mqcharinfo')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -178,23 +180,48 @@ local function charState_PostDead()
         if not rc.engageTargetId then
             -- Disengaged: keep the existing behavior to ensure pet isn't fighting stale targets.
             if mq.TLO.Me.Pet.Aggressive() then
+                local desiredPetTargetId = nil
+                local maName = tankrole.GetAssistTargetName()
+                if maName and maName ~= '' then
+                    local maInfo = mqcharinfo.GetInfo(maName)
+                    local maTargetId = (maInfo and maInfo.ID and maInfo.Target) and maInfo.Target.ID or nil
+                    if maTargetId and maTargetId ~= 0 then desiredPetTargetId = maTargetId end
+                end
+                if not desiredPetTargetId then
+                    local _, _, tanktar = spellutils.GetTankInfo(true)
+                    if tanktar and tanktar ~= 0 then desiredPetTargetId = tanktar end
+                end
+
+                local petTargetId = mq.TLO.Me.Pet.Target.ID() or 0
+                local mismatch = desiredPetTargetId and petTargetId ~= desiredPetTargetId or false
                 local now = mq.gettime()
                 if now >= _charStatePetBackoffDebugLastTime + 1000 then
                     _charStatePetBackoffDebugLastTime = now
                     printf(
-                        '\ayCZBot:\axDebug charState pet backoff follower\ax runState=%s engageTargetId=%s targetId=%s petTargetId=%s petAgg=%s meCombat=%s mobListCount=%s mobList1=%s',
+                        '\ayCZBot:\axDebug charState pet backoff follower\ax runState=%s engageTargetId=%s targetId=%s petTargetId=%s desiredPetTargetId=%s mismatch=%s petAgg=%s meCombat=%s mobListCount=%s mobList1=%s',
                         state.getRunStateName(),
                         tostring(rc.engageTargetId),
                         tostring(mq.TLO.Target.ID() or 0),
-                        tostring(mq.TLO.Me.Pet.Target.ID() or 0),
+                        tostring(petTargetId),
+                        tostring(desiredPetTargetId),
+                        tostring(mismatch),
                         tostring(mq.TLO.Me.Pet.Aggressive()),
                         tostring(mq.TLO.Me.Combat()),
                         tostring(#(rc.MobList or {})),
                         tostring((rc.MobList and rc.MobList[1] ~= nil) and true or false)
                     )
                 end
-                mq.cmd('/squelch /pet back off')
-                mq.cmd('/squelch /pet follow')
+
+                if mismatch and desiredPetTargetId then
+                    -- Only retarget occasionally; otherwise we'd keep stopping/re-engaging until MQ2/AI swaps targets.
+                    local throttleMs = 2000
+                    if now >= _petAttackRetargetLastTime + throttleMs then
+                        _petAttackRetargetLastTime = now
+                        mq.cmd('/squelch /pet back off')
+                        mq.cmd('/squelch /pet follow')
+                        mq.cmdf('/squelch /pet attack %s', desiredPetTargetId)
+                    end
+                end
             end
         else
             -- Engaged: if pet is already aggressive but targeting something else, retarget (throttled).
