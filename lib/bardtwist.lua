@@ -24,15 +24,15 @@ local function buffHasPhase(entry, phase)
     return false
 end
 
---- Parse entry.bands for tanktar (debuff).
-local function debuffHasTanktar(entry)
+--- Parse entry.bands for matar (debuff).
+local function debuffHasMatar(entry)
     local bands = entry and entry.bands
     if not bands or type(bands) ~= 'table' then return false end
     for _, band in ipairs(bands) do
         local tp = band.targetphase
         if type(tp) == 'table' then
             for _, p in ipairs(tp) do
-                if p == 'tanktar' then return true end
+                if p == 'matar' or p == 'tanktar' then return true end -- accept legacy
             end
         end
     end
@@ -86,7 +86,7 @@ function bardtwist.BuildNoncombatTwistList()
     return out
 end
 
---- Combat twist list: buffs where inCombat is true (or legacy cbt in bands), then debuffs with tanktar. Config order.
+--- Combat twist list: buffs where inCombat is true (or legacy cbt in bands), then debuffs targeting the MA (matar). Config order.
 function bardtwist.BuildCombatTwistList()
     if not bardtwist.IsBard() then return {} end
     local out = {}
@@ -107,7 +107,7 @@ function bardtwist.BuildCombatTwistList()
         for i = 1, #debuffs do
             local entry = debuffs[i]
             if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
-                if debuffHasTanktar(entry) then
+                if debuffHasMatar(entry) then
                     out[#out + 1] = entry.gem
                 end
             end

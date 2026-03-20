@@ -6,7 +6,7 @@ This document explains how to configure the bot’s **debuffing** behavior: whic
 
 - **Master switch:** Debuffing runs only when **`settings.dodebuff`** is `true`. Default is `false`.
 - **Mob list:** The bot builds a list of valid mobs (within **acleash** and **zradius** of camp, filtered by **TargetFilter**). Debuffs are only cast on mobs in this list.
-- **Evaluation order:** The bot evaluates **phases** in order: charm (if the zone has a **Charm list** and a charm spell is configured) → **notanktar** (other mobs / adds) → **tanktar** (MA/tank’s current target) → **named** (named mobs that are the tank target). For each phase it considers each mob target and checks **all** debuff spells that have that phase in their bands before moving on. For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
+- **Evaluation order:** The bot evaluates **phases** in order: charm (if the zone has a **Charm list** and a charm spell is configured) → **notmatar** (other mobs / adds) → **matar** (MA/tank’s current target) → **named** (named mobs that are the tank target). For each phase it considers each mob target and checks **all** debuff spells that have that phase in their bands before moving on. For a detailed explanation of spell targeting logic and how band tags interact, see [Spell targeting and bands](spell-targeting-and-bands.md).
 - **Melee combat abilities** (disciplines, kick/bash-style abilities) use this same debuff system with **gem** `'disc'` or `'ability'`; see [Melee combat abilities](melee-combat-abilities.md).
 
 ---
@@ -47,13 +47,14 @@ Charmed, Crippled, Feared, Maloed, Mezzed, Rooted, Snared, Tashed
 
 Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff uses **targetphase** only (no validtargets; target is always mobs). Each band has:
 
-- **targetphase:** One or more of: **tanktar**, **notanktar**, **named**.
-  - **tanktar** — The Main Tank’s (or MA’s) current target.
-  - **notanktar** — Any other mob in the list (adds).
-  - **named** — Only named mobs; when used with tanktar, only the tank target if it is named.
+- **targetphase:** One or more of: **matar**, **notmatar**, **named**.
+  - **matar** — The Main Assist’s current target. If a debuff band has `onlyMT=true`, then `matar` casts on the Main Tank’s target instead (only when this bot is the Main Tank).
+  - **notmatar** — Any other mob in the list (adds).
+  - **named** — Named mobs. With `matar`, the chosen `matar` target is required to be named (MA by default, MT when `onlyMT=true`).
+- **Migration note:** Legacy `tanktar`/`notanktar` tokens are accepted as aliases for `matar`/`notmatar` so existing configs keep working. New configurations should use the canonical `matar`/`notmatar` names.
 - **min** / **max:** Mob HP % range (0–100). The mob’s HP must be in this range to be considered.
 
-- **mintar** / **maxtar:** Optional. Camp mob-count gate (total mobs in camp). Omit the field or set to **0** for no limit. **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X (X &gt; 0). **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X (X &gt; 0). **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. For **targeted AE** spells (auto-detected when spell TargetType is "Targeted AE" and AERange > 0), **mintar** is also the minimum number of mobs **within the spell's AERange of the candidate target** (so the spell is not cast on a lone add with no other mobs in AE range). If a spell has only **notanktar** in its bands and neither **mintar** nor **maxtar** is set in any band, the bot defaults **mintar** to 2 so the spell is only considered when there is at least one add (optimization).
+- **mintar** / **maxtar:** Optional. Camp mob-count gate (total mobs in camp). Omit the field or set to **0** for no limit. **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X (X &gt; 0). **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X (X &gt; 0). **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. For **targeted AE** spells (auto-detected when spell TargetType is "Targeted AE" and AERange > 0), **mintar** is also the minimum number of mobs **within the spell's AERange of the candidate target** (so the spell is not cast on a lone add with no other mobs in AE range). If a spell has only **notmatar** in its bands and neither **mintar** nor **maxtar** is set in any band, the bot defaults **mintar** to 2 so the spell is only considered when there is at least one add (optimization).
 
 **Example: nuke on tank target and slow on adds**
 
@@ -66,7 +67,7 @@ debuff = {
       alias = 'nuke',
       minmana = 0,
       bands = {
-        { targetphase = { 'tanktar' }, min = 5, max = 100, mintar = 10 }
+        { targetphase = { 'matar' }, min = 5, max = 100, mintar = 10 }
       },
       recast = 0,
       delay = 0,
@@ -78,7 +79,7 @@ debuff = {
       alias = 'slow',
       minmana = 0,
       bands = {
-        { targetphase = { 'notanktar' }, min = 20, max = 100, mintar = 5 }
+        { targetphase = { 'notmatar' }, min = 20, max = 100, mintar = 5 }
       },
       recast = 2,
       delay = 0,
@@ -113,7 +114,7 @@ When the **MQ2Cast** plugin is loaded, the bot uses `/casting` for debuff spells
 ## Behavior summary
 
 - **Immune check:** The bot can skip mobs marked immune to the spell (per zone/target in immune data).
-- **Before cast (tanktar):** When casting on the tank target, the bot may set **engageTargetId** to that mob (so melee/pet follow) and send pet attack if **petassist** is on.
+- **Before cast (matar):** When casting on the MA target, the bot may set **engageTargetId** to that mob (so melee/pet follow) and send pet attack if **petassist** is on.
 - **Recast:** After **recast** resists on the same spawn, the spell is disabled for that spawn for a duration.
 - **Level:** For some spell types (e.g. Enthrall/mez), the spell’s **MaxLevel** is checked against the mob’s level; over-level mobs are skipped.
 - **dontStack:** If a debuff entry has **dontStack** set, the bot will not cast it when the current target already has that category (e.g. already Snared), and will interrupt the cast if that category appears on the target while casting (e.g. another toon's snare lands). The bot records the other spell's duration so it does not re-attempt the same debuff on that mob every tick.
@@ -122,6 +123,6 @@ When the **MQ2Cast** plugin is loaded, the bot uses `/casting` for debuff spells
 
 ## See also
 
-- [Nuking configuration](nuking-configuration.md) — Configure nukes as debuffs (typically **tanktar**, optionally **notanktar**). Multiple nukes rotate; flavor (fire/ice/magic, etc.) is auto-detected and can be filtered at runtime via Status tab or `/cz togglenuke`.
-- [Mezzing configuration](mezzing-configuration.md) — Configure mez as debuffs (typically **notanktar**; Charm list for charm mez).
-- [Melee combat abilities](melee-combat-abilities.md) — Configure disciplines and /doability-style abilities as debuffs (typically **tanktar**).
+- [Nuking configuration](nuking-configuration.md) — Configure nukes as debuffs (typically **matar**, optionally **notmatar**). Multiple nukes rotate; flavor (fire/ice/magic, etc.) is auto-detected and can be filtered at runtime via Status tab or `/cz togglenuke`.
+- [Mezzing configuration](mezzing-configuration.md) — Configure mez as debuffs (typically **notmatar**; Charm list for charm mez).
+- [Melee combat abilities](melee-combat-abilities.md) — Configure disciplines and /doability-style abilities as debuffs (typically **matar**).

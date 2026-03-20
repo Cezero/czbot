@@ -4,13 +4,13 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
 
 ## Overview
 
-- **Nuking = debuffs.** There is no separate “nuke” section. You add your nuke spell(s) under **`config.debuff.spells`** and set **bands** to **tanktar** (MA/tank’s target), and optionally **notanktar** (adds) or **named** (named only).
+- **Nuking = debuffs.** There is no separate “nuke” section. You add your nuke spell(s) under **`config.debuff.spells`** and set **bands** to **matar** (MA target), and optionally **notmatar** (adds) or **named** (named only).
 - **Master switch:** Turn on debuffing with **`settings.dodebuff`** (or `/cz dodebuff on`).
 - **Nuke rotation:** If you configure multiple nuke spells (e.g. Shock of Ice and Shock of Fire), the bot **rotates** between them—one cast of each in sequence—instead of only ever casting the first. Nukes are auto-detected (spells with no duration).
 - **Nuke flavor (resist type):** Each nuke’s **flavor** (fire, ice, magic, poison, disease, etc.) is **auto-detected** from the spell’s resist type. You can disable specific flavors at runtime (e.g. turn off fire nukes in Plane of Fire) via the Status tab checkboxes or **`/cz togglenuke <flavor> [on|off]`**. Settings are stored per zone in **cz_common.lua** in the per-zone block **zones**[*zone*] (**nukeFlavors**, **nukeFlavorsAutoDisabled**).
 - **Recast and auto-disable:** The existing **recast** option (resist count per spawn) applies to nukes. If the same flavor is disabled due to resists on **3 mobs in a row**, that flavor is **globally auto-disabled** until you re-enable it (checkbox or `/cz togglenuke <flavor> on`).
 - For all debuff options (recast, delay, charm, gem types, etc.), see [Debuffing configuration](debuffing-configuration.md).
-- See [Spell targeting and bands](spell-targeting-and-bands.md) for how tanktar and notanktar interact and evaluation order.
+- See [Spell targeting and bands](spell-targeting-and-bands.md) for how matar and notmatar interact and evaluation order.
 
 ---
 
@@ -23,11 +23,11 @@ This document explains how to set up **nuking** (direct-damage spells on the tan
    - **spell** — Exact spell name (e.g. `"Chaos Flame"`).
    - **enabled** — Optional; default is `true`. When `false`, the spell is not used.
    - **mintar** / **maxtar** — Optional; set in **bands**. Camp mob-count gate (only consider when mob count is in range). E.g. **mintar 2** = at least two mobs in camp. See [Debuffing configuration](debuffing-configuration.md).
-   - **bands** — Debuff bands use **targetphase** (not validtargets). For nuking the main target use **tanktar** in targetphase. For multi-target or add nuking add **notanktar**. For named-only nukes add **named**. Use **min**/ **max** to restrict by mob HP % (e.g. nuke only when mob is 5–100% HP).
+   - **bands** — Debuff bands use **targetphase** (not validtargets). For nuking the main target use **matar** in targetphase. For multi-target or add nuking add **notmatar**. For named-only nukes add **named**. Use **min**/ **max** to restrict by mob HP % (e.g. nuke only when mob is 5–100% HP).
 
 3. **Optional:** **recast** (resist count before disabling for that spawn), **delay** (ms before same spell can be used again), **alias** (for `/cz cast <alias>`), **minmana**.
 
-**Example: single-target nuke on tank target**
+**Example: single-target nuke on MA target**
 
 ```lua
 debuff = {
@@ -38,7 +38,7 @@ debuff = {
       alias = 'nuke',
       minmana = 0,
       bands = {
-        { targetphase = { 'tanktar' }, min = 5, max = 100 }
+        { targetphase = { 'matar' }, min = 5, max = 100 }
       },
       recast = 0,
       delay = 0
@@ -49,11 +49,11 @@ debuff = {
 
 **Example: nuke tank target and adds**
 
-Use **tanktar** and **notanktar** in the same band (or separate bands) so the nuke can fire on the MA’s target and on other mobs in the list:
+Use **matar** and **notmatar** in the same band (or separate bands) so the nuke can fire on the MA target and on other mobs in the list:
 
 ```lua
 bands = {
-  { targetphase = { 'tanktar', 'notanktar' }, min = 10, max = 100 }
+  { targetphase = { 'matar', 'notmatar' }, min = 10, max = 100 }
 }
 ```
 

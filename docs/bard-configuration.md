@@ -9,7 +9,7 @@ This document explains the nuances and considerations when configuring a **bard 
 - **Interrupts:** The bot does not interrupt bard casts (buff, debuff, cure). No configuration required.
 - **Movement and casting:** Bards can move, use nav, and stick while "casting"; the bot does not force a stop before casting.
 - **Melee:** Before casting, if **domelee** is on and the bard is not in combat, the bot re-engages melee. Set **settings.domelee** if the bard should melee when not casting.
-- **Debuffs:** **tanktar** debuffs are part of the **combat twist**. **notanktar** debuffs (mez, add-only) use a twist-once flow: target add → sing once → wait → re-target MA; optional re-apply timer (e.g. mez before duration ends).
+- **Debuffs:** **matar** debuffs are part of the **combat twist**. **notmatar** debuffs (mez, add-only) use a twist-once flow: target add → sing once → wait → re-target MA; optional re-apply timer (e.g. mez before duration ends).
 
 ---
 
@@ -20,7 +20,7 @@ When **MQ2Twist** is loaded and you are a bard, the bot maintains a default twis
 | Mode       | When used                             | Contents                                                                                                   |
 | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | **idle**   | No mobs in camp                       | All buffs with **inIdle** checked (config order).                                                          |
-| **combat** | Mobs in camp, assisting (not pulling) | Buffs with **inCombat** checked (config order) then all debuff entries with **tanktar** and numeric gem (config order). |
+| **combat** | Mobs in camp, assisting (not pulling) | Buffs with **inCombat** checked (config order) then all debuff entries with **matar** and numeric gem (config order). |
 | **pull**   | Pull state (navigating / returning)   | Buffs with **self** and **pull** (e.g. Selo's) in bands.                                                   |
 | **travel** | Travel mode active (`/cz travel`)     | Single song: buff with alias `travel`, else `selos`; if neither, no twist. Config order.                   |
 
@@ -63,19 +63,19 @@ buff = {
 
 ### Example debuff block (minimal)
 
-**tanktar** = in combat twist. **notanktar** = twist-once (target add, sing once, re-target MA). Optional **bard.mez_remez_sec** for re-mez before duration ends.
+**matar** = in combat twist. **notmatar** = twist-once (target add, sing once, re-target MA). Optional **bard.mez_remez_sec** for re-mez before duration ends.
 
 ```lua
 debuff = {
   spells = {
-    { gem = 4, spell = 'Requiem of Time', bands = { { targetphase = { 'tanktar' }, min = 1, max = 100 } } },
-    { gem = 5, spell = 'Lullaby',         bands = { { targetphase = { 'notanktar' }, min = 90, max = 100 } } },
+    { gem = 4, spell = 'Requiem of Time', bands = { { targetphase = { 'matar' }, min = 1, max = 100 } } },
+    { gem = 5, spell = 'Lullaby',         bands = { { targetphase = { 'notmatar' }, min = 90, max = 100 } } },
   }
 }
 ```
 
-- Gem 4: **tanktar** — plays in the combat twist on the MA target (e.g. slow).
-- Gem 5: **notanktar** — mez on adds; bot uses twist-once (target add → sing once → re-target MA). Re-apply before mez wears if **config.bard.mez_remez_sec** is set.
+- Gem 4: **matar** — plays in the combat twist on the MA target (e.g. slow).
+- Gem 5: **notmatar** — mez on adds; bot uses twist-once (target add → sing once → re-target MA). Re-apply before mez wears if **config.bard.mez_remez_sec** is set.
 
 ---
 
@@ -103,7 +103,7 @@ The **leash** check (return to camp when over leash) is **not** skipped for bard
 
 The melee phase does **not** get the 5-second "moving_closer" deadline for bards that other classes get.
 
-Before casting a spell, if **settings.domelee** is on, there are mobs in camp, the spell target is not a mez add (notanktar), and the bard is not in combat, the bot calls the combat logic to re-engage melee. So the bot tries to get the bard back into combat when about to cast a non-mez spell.
+Before casting a spell, if **settings.domelee** is on, there are mobs in camp, the spell target is not a mez add (notmatar), and the bard is not in combat, the bot calls the combat logic to re-engage melee. So the bot tries to get the bard back into combat when about to cast a non-mez spell.
 
 **Recommendation:** Set **settings.domelee** to `true` if you want the bard to melee when not casting.
 
@@ -127,31 +127,31 @@ Configure in **pull.spell** (same block as the pull method): set **gem** to the 
 
 ---
 
-## notanktar debuffs (mez and add-only)
+## notmatar debuffs (mez and add-only)
 
-For **BRD**, **notanktar** debuffs (mez or any add-only debuff) do **not** use a normal cast. The bot:
+For **BRD**, **notmatar** debuffs (mez or any add-only debuff) do **not** use a normal cast. The bot:
 
 1. Turns attack off and targets the add.
 2. Runs **combat** twist as the “restore” list, then `/twist once <gem>` for the debuff song.
 3. Waits for the cast to finish (MQ2Twist sings once then auto-resumes combat twist).
 4. Updates debuff state and optionally sets a **re-apply timer** (see below).
-5. Re-targets the MA/tank target.
+5. Re-targets the MA.
 
-**tanktar** debuffs are part of the **combat** twist and play in the normal twist cycle; no special flow.
+**matar** debuffs are part of the **combat** twist and play in the normal twist cycle; no special flow.
 
 ### Re-apply timer (mez_remez_sec)
 
 Optional **config.bard**:
 
-- **mez_remez_sec** — Seconds before the notanktar debuff duration ends to re-apply (e.g. re-mez). Default **6** if omitted. Applies to any notanktar debuff with a duration (e.g. mez). When the timer expires, the bot will target that add again and run the twist-once flow.
+- **mez_remez_sec** — Seconds before the notmatar debuff duration ends to re-apply (e.g. re-mez). Default **6** if omitted. Applies to any notmatar debuff with a duration (e.g. mez). When the timer expires, the bot will target that add again and run the twist-once flow.
 
-The re-apply timer is set **whenever** the notanktar twist-once wait ends (when the bot stops waiting for the song to finish), even if song start was not detected (e.g. so adds still get re-mezzed). Only the “target is mezzed” debuff state is skipped when the song was never seen. When the mez spell has no duration in spell data, re-apply uses a fixed **12 second** interval so adds stay mezzed until the MA engages them.
+The re-apply timer is set **whenever** the notmatar twist-once wait ends (when the bot stops waiting for the song to finish), even if song start was not detected (e.g. so adds still get re-mezzed). Only the “target is mezzed” debuff state is skipped when the song was never seen. When the mez spell has no duration in spell data, re-apply uses a fixed **12 second** interval so adds stay mezzed until the MA engages them.
 
 ---
 
 ## Mez and melee (known limitation)
 
-When mezzing a **notanktar** (an add), the bot turns attack off, targets the add, and uses the twist-once flow. After the cast it re-targets the MA. The bard may not re-engage melee until the add is dead or mez is cleared; be aware when using a bard for mezzing.
+When mezzing a **notmatar** (an add), the bot turns attack off, targets the add, and uses the twist-once flow. After the cast it re-targets the MA. The bard may not re-engage melee until the add is dead or mez is cleared; be aware when using a bard for mezzing.
 
 ---
 
@@ -166,9 +166,9 @@ The "already on target" and resist handling for debuffs treat bards specially (e
 | Area              | What to do                                                                                                                                                                                                                                         |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Buffs**         | Use **self**, **cbt**, **idle**, and **pull** in bands as needed. Tank, groupbuff, groupmember, pc, mypet, pet have no effect for bards. Self buffs are sustained by the default twist.                                                            |
-| **Default twist** | Noncombat = all self buffs; combat = cbt buffs + tanktar debuffs; pull = buffs with **pull**. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI.                                                                            |
+| **Default twist** | Noncombat = all self buffs; combat = cbt buffs + matar debuffs; pull = buffs with **pull**. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI.                                                                            |
 | **Pull**          | Add **pull** to buff bands for pull twist (e.g. Selo's). Use **pull.spell** with a numeric **gem** (and **spell** name) for the agro song.                                                                                                         |
-| **Debuffs**       | **tanktar** → in combat twist. **notanktar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
+| **Debuffs**       | **matar** → in combat twist. **notmatar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
 | **Cures**         | No special config; twist stops then resumes after cast.                                                                                                                                                                                            |
 | **Interrupts**    | Automatic; the bot does not interrupt bard casts.                                                                                                                                                                                                  |
 | **Movement**      | Automatic; bards can move while casting.                                                                                                                                                                                                           |

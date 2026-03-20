@@ -78,6 +78,19 @@ function M.draw()
         if otoCh then melee.otoffset = otoNew; runConfigLoaders() end
     end
 
+    ImGui.Spacing()
+    ImGui.Text('MT Sticky')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('When this bot is the MT (and not an offtank), stay on target even if MA changes.')
+    end
+    ImGui.SameLine()
+    local mtStickyChecked = (melee.mtSticky == true)
+    local mtVal, mtPressed = ImGui.Checkbox('##combat_mtSticky', mtStickyChecked)
+    if mtPressed then
+        melee.mtSticky = mtVal
+        runConfigLoaders()
+    end
+
     -- Line 2: Stick Settings
     ImGui.Spacing()
     ImGui.Text('Stick Settings')

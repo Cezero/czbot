@@ -52,7 +52,7 @@ Under **`config.melee`**:
 
 ## Using disciplines and combat abilities
 
-To use **disciplines** or **combat abilities** (e.g. kick, bash, backstab), enable **`settings.dodebuff`** and add debuff entries under **`config.debuff.spells`** with **gem** `'disc'` (disciplines) or `'ability'` (combat abilities) and the desired **bands** (e.g. **tanktar** for the MA's target). See [Melee combat abilities](melee-combat-abilities.md) for details and examples.
+To use **disciplines** or **combat abilities** (e.g. kick, bash, backstab), enable **`settings.dodebuff`** and add debuff entries under **`config.debuff.spells`** with **gem** `'disc'` (disciplines) or `'ability'` (combat abilities) and the desired **bands** (e.g. **matar** for the MA's target). See [Melee combat abilities](melee-combat-abilities.md) for details and examples.
 
 ---
 

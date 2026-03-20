@@ -95,7 +95,7 @@ These sections only have **spells** (arrays of spell entries). Spell entries and
 
 | Path | Type | Default | Purpose |
 |------|------|---------|---------|
-| **bard.mez_remez_sec** | number | 6 | Seconds before notanktar debuff (e.g. mez) ends to re-apply. See [Bard configuration](bard-configuration.md). |
+| **bard.mez_remez_sec** | number | 6 | Seconds before notmatar debuff (e.g. mez) ends to re-apply. See [Bard configuration](bard-configuration.md). |
 
 ---
 

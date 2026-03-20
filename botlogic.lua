@@ -188,8 +188,12 @@ local function charState_PostDead()
                     if maTargetId and maTargetId ~= 0 then desiredPetTargetId = maTargetId end
                 end
                 if not desiredPetTargetId then
-                    local _, _, tanktar = spellutils.GetTankInfo(true)
-                    if tanktar and tanktar ~= 0 then desiredPetTargetId = tanktar end
+                    -- If MA has no target, do not fall back to MT target.
+                    -- Only allow MT->pet fallback when MT sticky mode is enabled.
+                    if tankrole.AmIMainTank() and myconfig.melee and myconfig.melee.mtSticky == true and not myconfig.melee.offtank then
+                        local _, _, tanktar = spellutils.GetTankInfo(true)
+                        if tanktar and tanktar ~= 0 then desiredPetTargetId = tanktar end
+                    end
                 end
 
                 local petTargetId = mq.TLO.Me.Pet.Target.ID() or 0

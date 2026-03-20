@@ -35,15 +35,15 @@ local PRIMARY_OPTIONS_DEBUFF = {
 }
 
 local TARGETPHASE_OPTIONS_DEBUFF = {
-    { key = 'tanktar',   label = "Tank's Target",     tooltip = "Use when tank has a target (e.g. debuff tank's target)." },
-    { key = 'notanktar', label = "Not Tank's Target", tooltip = 'Use on mobs not targeted by the tank (e.g. mez adds).' },
-    { key = 'named',     label = 'Named',             tooltip = 'Use on named mobs only.' },
+    { key = 'matar',   label = "Assist's Target",     tooltip = "Use on the Main Assist's current target. If `onlyMT=true`, cast on the Main Tank's target instead (only when this bot is the MT)." },
+    { key = 'notmatar', label = "Not Assist's Target", tooltip = 'Use on camp mobs that are NOT the Main Assist target (adds). `mez` debuffs exclude both MA target and MT target.' },
+    { key = 'named',     label = 'Named',               tooltip = 'Use on named mobs only (applies to the selected target for this phase).' },
 }
 
-local function entryHasTanktarOrNamed(entry)
+local function entryHasMatarOrNamed(entry)
     for _, band in ipairs(entry.bands or {}) do
         for _, p in ipairs(band.targetphase or {}) do
-            if p == 'tanktar' or p == 'named' then return true end
+            if p == 'matar' or p == 'tanktar' or p == 'named' then return true end -- accept legacy tanktar
         end
     end
     return false
@@ -103,7 +103,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
         end,
     })
 
-    if entryHasTanktarOrNamed(entry) then
+    if entryHasMatarOrNamed(entry) then
         ImGui.Text('When MT Only')
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip('Only cast this debuff when this character is the main tank.')
@@ -125,6 +125,22 @@ function M.draw()
     if not debuff.spells then debuff.spells = {} end
     local spells = debuff.spells
     for i, entry in ipairs(spells) do
+        -- Normalize legacy tokens so the UI reflects canonical matar/notmatar.
+        if entry.bands and type(entry.bands) == 'table' then
+            for _, band in ipairs(entry.bands) do
+                if band and type(band.targetphase) == 'table' then
+                    local changed = false
+                    local out = {}
+                    for _, p in ipairs(band.targetphase) do
+                        local np = spellutils.NormalizeDebuffTargetPhase(p)
+                        if np ~= p then changed = true end
+                        out[#out + 1] = np
+                    end
+                    if changed then band.targetphase = out end
+                end
+            end
+        end
+
         local detectedTypeLabel
         if spellutils.IsNukeSpell(entry) then
             local flavor = spellutils.GetNukeFlavor(entry)

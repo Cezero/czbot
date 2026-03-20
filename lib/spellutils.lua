@@ -570,6 +570,48 @@ function spellutils.GetTankInfo(includeTarget)
     return mainTankName, tankid, tanktar, tanktarhp
 end
 
+-- Assist = Main Assist only (whose target DPS/OT follow).
+-- Mirrors GetTankInfo but resolves from AssistName (and does not depend on MT).
+function spellutils.GetAssistInfo(includeTarget)
+    local assistName = tankrole.GetAssistTargetName()
+    if not assistName or assistName == '' then return nil, nil, nil, nil end
+
+    local assistid = mq.TLO.Spawn('pc =' .. assistName).ID()
+    if not includeTarget then return assistName, assistid, nil, nil end
+
+    local assistar, assistarhp
+    local info = charinfo.GetInfo(assistName)
+    if info and info.ID then
+        assistar = info.Target and info.Target.ID or nil
+        assistarhp = info.TargetHP
+    elseif assistid then
+        local botmelee = require('botmelee')
+        assistar = botmelee.GetPCTarget(assistName)
+        assistarhp = assistar and mq.TLO.Spawn(assistar).PctHPs() or nil
+    end
+
+    if assistar == 0 then assistar = nil end
+    return assistName, assistid, assistar, assistarhp
+end
+
+-- Canonicalize debuff targetphase tokens.
+-- Back-compat: accepts legacy `tanktar`/`notanktar` and normalizes them.
+function spellutils.NormalizeDebuffTargetPhase(token)
+    if token == 'tanktar' then return 'matar' end
+    if token == 'notanktar' then return 'notmatar' end
+    return token
+end
+
+-- Normalize an array of targetphase tokens (or return as-is when not an array).
+function spellutils.NormalizeDebuffTargetPhaseList(tokens)
+    if type(tokens) ~= 'table' then return tokens end
+    local out = {}
+    for _, t in ipairs(tokens) do
+        out[#out + 1] = spellutils.NormalizeDebuffTargetPhase(t)
+    end
+    return out
+end
+
 -- Post-cast logic when CastTimeLeft() has reached 0 (called from handleSpellCheckReentry / phase-first re-entry).
 function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     local rc = state.getRunconfig()
@@ -1258,10 +1300,10 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
             { deadline = mq.gettime() + 3000, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
     end
-    if (sub == 'debuff' and targethit == 'notanktar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
+    if (sub == 'debuff' and targethit == 'notmatar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
     if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
-        if (botconfig.config.settings.domelee and state.getMobCount() > 0 and targethit ~= 'notanktar' and not mq.TLO.Me.Combat()) then
+        if (botconfig.config.settings.domelee and state.getMobCount() > 0 and targethit ~= 'notmatar' and not mq.TLO.Me.Combat()) then
             if _deps.AdvCombat then _deps.AdvCombat() end
         end
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end

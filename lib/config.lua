@@ -56,6 +56,7 @@
 ---@field assistpct number|nil
 ---@field stickcmd string|nil
 ---@field offtank boolean|nil
+---@field mtSticky boolean|nil
 ---@field minmana number|nil
 ---@field otoffset number|nil
 
@@ -75,7 +76,7 @@
 ---@field spells table[]|nil
 
 ---@class ConfigBard
----@field mez_remez_sec number|nil seconds before notanktar debuff (e.g. mez) ends to re-apply
+---@field mez_remez_sec number|nil seconds before notmatar debuff (e.g. mez) ends to re-apply
 
 ---@class Config
 ---@field settings ConfigSettings|nil
@@ -110,7 +111,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
-    melee = { 'assistpct', 'stickcmd', 'offtank', 'minmana', 'otoffset' },
+    melee = { 'assistpct', 'stickcmd', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
@@ -134,11 +135,17 @@ local function applySectionDefaults(section, defaults)
     end
 end
 
+local function normalizeDebuffTargetPhaseToken(token)
+    if token == 'tanktar' then return 'matar' end
+    if token == 'notanktar' then return 'notmatar' end
+    return token
+end
+
 -- Canonical default spell entry per section. getDefaultSpellEntry returns a copy so callers do not mutate.
 local defaultSpellEntries = {
     heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, inCombat = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'groupmember', 'groupheal', 'mypet', 'pet', 'corpse' }, validtargets = { 'all' }, min = 0, max = 60 } }, healResource = 'hp', precondition = nil },
     buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
-    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'tanktar', 'notanktar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, onlyMT = false },
+    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'matar', 'notmatar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, onlyMT = false },
     cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = { 'all' }, enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
 
@@ -431,7 +438,8 @@ local function writeConfigToFile(config, filename)
                     file:write(indent .. "    " .. formatKey('targetphase') .. " = { ")
                     local parts = {}
                     for _, c in ipairs(band.targetphase) do
-                        parts[#parts + 1] = "'" .. tostring(c):gsub("'", "\\'") .. "'"
+                        local cn = normalizeDebuffTargetPhaseToken(c)
+                        parts[#parts + 1] = "'" .. tostring(cn):gsub("'", "\\'") .. "'"
                     end
                     file:write(table.concat(parts, ", "))
                     file:write(" },\n")
@@ -447,7 +455,8 @@ local function writeConfigToFile(config, filename)
                 elseif type(band.targetphase) == "table" and #band.targetphase > 0 then
                     local isDebuffOnly = true
                     for _, p in ipairs(band.targetphase) do
-                        if p ~= 'tanktar' and p ~= 'notanktar' and p ~= 'named' then
+                        p = normalizeDebuffTargetPhaseToken(p)
+                        if p ~= 'matar' and p ~= 'notmatar' and p ~= 'named' then
                             isDebuffOnly = false
                             break
                         end
@@ -760,7 +769,7 @@ function M.Load(path)
     M.config.pull.leashSq = (M.config.pull.leash or 0) * (M.config.pull.leash or 0)
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
-        stickcmd = 'hold uw 7', offtank = false, otoffset = 0, minmana = 0, assistpct = 99,
+        stickcmd = 'hold uw 7', offtank = false, mtSticky = false, otoffset = 0, minmana = 0, assistpct = 99,
     })
     applySectionDefaults('heal', { rezoffset = 0, interruptlevel = 0.80, xttargets = 0 })
 end

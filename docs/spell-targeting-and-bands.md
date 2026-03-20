@@ -8,7 +8,7 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 | -------- | ------------------- | ---------- | ----------------- |
 | **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (phase stages) + **validtargets** (within-phase types) + min/max HP % |
 | **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **inCombat** (and Bard **inIdle**) control when spell can run |
-| **debuff** | Mobs in camp (MA target + adds) | **mintar**/**maxtar** (camp mob-count gate) | **targetphase** only (tanktar, notanktar, named) + min/max HP % |
+| **debuff** | Mobs in camp (MA target + adds) | **mintar**/**maxtar** (camp mob-count gate) | **targetphase** only (matar, notmatar, named) + min/max HP % |
 | **cure**  | Self, tank, group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **priority** in targetphase runs an earlier pass when any cure spell has it (no top-level setting). **groupmember**, **groupcure**, **pc** |
 
 ---
@@ -59,7 +59,7 @@ The bot builds a list of valid mobs (within camp leash and filters). This list i
 
 ### mintar / maxtar (debuff — camp-size gate)
 
-**mintar** and **maxtar** are optional band fields. They are checked at the **start** of debuff evaluation for that spell. **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X. **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X. **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. If the current **MobCount** is outside the spell's effective range, the spell is **not considered at all** this tick — no target is chosen. See [Debuffing configuration](debuffing-configuration.md) for full details and the notanktar-only default.
+**mintar** and **maxtar** are optional band fields. They are checked at the **start** of debuff evaluation for that spell. **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X. **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X. **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. If the current **MobCount** is outside the spell's effective range, the spell is **not considered at all** this tick — no target is chosen. See [Debuffing configuration](debuffing-configuration.md) for full details and the notmatar-only default.
 
 ### Evaluation order
 
@@ -67,28 +67,28 @@ For each debuff spell, the bot tries the following in order; the **first** valid
 
 1. **Charm recast** — If charm broke and a recast was requested for this spell.
 2. **Charm targets** — Mobs in the per-zone **Charm list** (Mob Lists tab or `/cz charm`); charm spells are auto-detected (spell has Charm effect).
-3. **notanktar** — Any other mob in the camp list (adds). Only tried if bands include **notanktar**.
-4. **tanktar** — The MA’s current target. Only tried if the spell’s bands include **tanktar**.
-5. **named** — Named mob that is the tank target. Only tried if bands include **named**.
+3. **notmatar** — Any other mob in the camp list (adds). Only tried if bands include **notmatar**.
+4. **matar** — The MA’s current target. Only tried if the spell’s bands include **matar**.
+5. **named** — Named mob matching the chosen `matar` target (MA by default; MT when `onlyMT=true`). Only tried if bands include **named**.
 
 ```mermaid
 flowchart LR
     campCountCheck[mintar/maxtar check]
     charmRecast[charm recast]
     charmTargets[charm targets]
-    tanktar[tanktar]
-    notanktar[notanktar]
+    matar[matar]
+    notmatar[notmatar]
     named[named]
-    campCountCheck --> charmRecast --> charmTargets --> notanktar --> tanktar --> named
+    campCountCheck --> charmRecast --> charmTargets --> notmatar --> matar --> named
 ```
 
 ### Band tags and combining them
 
-- **tanktar** — The MA’s (or tank’s) current target.
-- **notanktar** — Any other mob in the list (adds).
-- **named** — Named mob; with tanktar, only the tank target when it is named.
+- **matar** — The MA’s (or tank’s) current target.
+- **notmatar** — Any other mob in the list (adds).
+- **named** — Named mob; when combined with `matar`, it applies to the chosen `matar` target (MA by default; MT when `onlyMT=true`).
 
-A spell can have **multiple** valid target types (e.g. both **tanktar** and **notanktar**). Because **notanktar** is tried before **tanktar**, adds are considered first; when no add needs the spell, the tank's target can be chosen. So the same spell can fire on an add in one tick and on the tank's target in another. If only **notanktar** is in bands, only adds are ever chosen.
+A spell can have **multiple** valid target types (e.g. both **matar** and **notmatar**). Because **notmatar** is tried before **matar**, adds are considered first; when no add needs the spell, the MA's target can be chosen. So the same spell can fire on an add in one tick and on the MA's target in another. If only **notmatar** is in bands, only adds are ever chosen.
 
 ### HP band
 
@@ -151,6 +151,6 @@ Bands use **targetphase** and **validtargets** (no min/max). **targetphase** tok
 - [Buffing configuration](buffing-configuration.md) — Buff bands, spellicon, combat vs idle.
 - [Debuffing configuration](debuffing-configuration.md) — Debuff bands, Charm list (per-zone), recast, delay.
 - [Curing configuration](curing-configuration.md) — Cure bands, curetype, priority phase.
-- [Nuking configuration](nuking-configuration.md) — Nukes as debuffs (tanktar, notanktar).
-- [Mezzing configuration](mezzing-configuration.md) — Mez as debuffs (notanktar, Charm list).
+- [Nuking configuration](nuking-configuration.md) — Nukes as debuffs (matar, notmatar).
+- [Mezzing configuration](mezzing-configuration.md) — Mez as debuffs (notmatar, Charm list).
 - [Out-of-group peers](out-of-group-peers.md) — How peers outside your group are treated for heals, buffs, cures.

@@ -56,9 +56,16 @@ local function DebuffEvalBuildContext(index)
     local gem = entry.gem
     local spellId, spellMaxLvl, myrange, spelldur, minCastDistSq, aeRange, minCastDist = nil, nil, nil, nil, nil, nil,
         nil
-    local tank, tankid, tanktar, tanktarhp = spellutils.GetTankInfo(true)
-    if tanktar == 0 then tanktar = nil end
-    local tanktarlvl = tanktar and mq.TLO.Spawn(tanktar).Level()
+    -- Decoupled targets:
+    -- - MA target drives default debuff/tanktar targeting.
+    -- - MT target is available for `onlyMT` debuffs and for mez exception.
+    local _tank, tankid, mtTargetId, mtTargetHp = spellutils.GetTankInfo(true)
+    if mtTargetId == 0 then mtTargetId = nil end
+    local mtTargetLvl = mtTargetId and mq.TLO.Spawn(mtTargetId).Level()
+
+    local _assist, assistid, maTargetId, maTargetHp = spellutils.GetAssistInfo(true)
+    if maTargetId == 0 then maTargetId = nil end
+    local maTargetLvl = maTargetId and mq.TLO.Spawn(maTargetId).Level()
     if gem ~= 'ability' and gem ~= 'script' then
         local spellEntity = spellutils.GetSpellEntity(entry)
         if not spellEntity then return nil end
@@ -91,11 +98,13 @@ local function DebuffEvalBuildContext(index)
         spellrange = spellrange,
         spelldur = spelldur,
         gem = gem,
-        tank = tank,
-        tankid = tankid,
-        tanktar = tanktar,
-        tanktarhp = tanktarhp,
-        tanktarlvl = tanktarlvl,
+        assistid = assistid,
+        maTargetId = maTargetId,
+        maTargethp = maTargetHp,
+        maTargetLvl = maTargetLvl,
+        mtTargetId = mtTargetId,
+        mtTargethp = mtTargetHp,
+        mtTargetLvl = mtTargetLvl,
         spellmaxlvl = spellMaxLvl,
         myrange = myrange,
         myrangeSq = myrangeSq,
@@ -112,10 +121,18 @@ end
 
 -- Returns true if spawn is a valid target for this debuff (range, level, stacks, duration, AE mintar).
 -- Performs mez skip messages (level, already mezzed) when applicable.
--- phase: 'tanktar' | 'notanktar' (named uses same rules as tanktar).
+-- phase: 'matar' | 'notmatar' (named uses same rules as matar).
 local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     local gem = entry.gem
     local myrangeSq = ctx.myrangeSq
+    local spawnId = spawn and spawn.ID and spawn.ID() or nil
+
+    -- Mez exception: mez/add-only debuffs should never land on MT's target.
+    -- MA target is excluded earlier by phase targeting, but MT target is excluded here.
+    if phase == 'notmatar' and spellutils.IsMezSpell(entry) and ctx.mtTargetId and spawnId == ctx.mtTargetId then
+        return false
+    end
+
     if entry.gem == 'ability' then
         local mr = spawn.MaxRangeTo and spawn.MaxRangeTo()
         local e = mr and math.max(0, mr - 2)
@@ -128,7 +145,14 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     if myrangeSq and distSq and distSq > myrangeSq then
         return false
     end
-    local spawnLevel = (phase == 'tanktar' and ctx.tanktarlvl) or (spawn.Level and spawn.Level())
+    local spawnLevel = spawn.Level and spawn.Level()
+    if phase == 'matar' and spawnId then
+        if ctx.maTargetId and spawnId == ctx.maTargetId and ctx.maTargetLvl then
+            spawnLevel = ctx.maTargetLvl
+        elseif ctx.mtTargetId and spawnId == ctx.mtTargetId and ctx.mtTargetLvl then
+            spawnLevel = ctx.mtTargetLvl
+        end
+    end
     if ctx.spellid and spawnLevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < spawnLevel and spellutils.IsMezSpell(entry) then
         local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
         printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
@@ -136,12 +160,12 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     end
     local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
-        if phase == 'notanktar' and spellutils.IsMezSpell(entry) then
+        if phase == 'notmatar' and spellutils.IsMezSpell(entry) then
             local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
             printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, spawn.ID())
             return false
         end
-        if phase == 'tanktar' and not spellutils.IsConcussionSpell(entry) then
+        if phase == 'matar' and not spellutils.IsConcussionSpell(entry) then
             return false
         end
     end
@@ -154,16 +178,23 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     return true
 end
 
-local function DebuffEvalTankTar(index, ctx)
+local function DebuffEvalMatar(index, ctx)
     local entry = ctx.entry
     local db = DebuffBands[index]
-    if not db or not db.tanktar or not ctx.tanktar then return nil, nil end
-    if not castutils.hpEvalSpawn(ctx.tanktar, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
+    if not db or not db.matar then return nil, nil end
+    if spellutils.IsMezSpell(entry) then return nil, nil end
+
+    -- `matar` phase provides both MA and MT candidate targets.
+    -- For `onlyMT` debuffs we cast on MT's target; otherwise on MA's target.
+    if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
+    local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
+    if not chosenTargetId then return nil, nil end
+
+    if not castutils.hpEvalSpawn(chosenTargetId, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
-        if v.ID() == ctx.tanktar then
-            if DebuffSpawnNeedsSpell(entry, ctx, v, 'tanktar') then
-                if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
-                return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
+        if v.ID() == chosenTargetId then
+            if DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then
+                return chosenTargetId, 'matar'
             end
             return nil, nil
         end
@@ -171,15 +202,17 @@ local function DebuffEvalTankTar(index, ctx)
     return nil, nil
 end
 
-local function DebuffEvalNotanktar(index, ctx)
+local function DebuffEvalNotmatar(index, ctx)
     local entry = ctx.entry
     local db = DebuffBands[index]
-    if not db or not db.notanktar or not ctx.mobList[1] then return nil, nil end
+    if not db or not db.notmatar or not ctx.mobList[1] then return nil, nil end
+    local maTargetId = ctx.maTargetId
     for _, v in ipairs(ctx.mobList) do
-        if v.ID() ~= ctx.tanktar then
+        local vid = v.ID and v.ID() or nil
+        if vid and vid ~= maTargetId then
             if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
-                if DebuffSpawnNeedsSpell(entry, ctx, v, 'notanktar') then
-                    return v.ID(), 'notanktar'
+                if DebuffSpawnNeedsSpell(entry, ctx, v, 'notmatar') then
+                    return v.ID(), 'notmatar'
                 end
             end
         end
@@ -187,16 +220,21 @@ local function DebuffEvalNotanktar(index, ctx)
     return nil, nil
 end
 
-local function DebuffEvalNamedTankTar(index, ctx)
+local function DebuffEvalNamedMatar(index, ctx)
     local entry = ctx.entry
     local db = DebuffBands[index]
-    if not db or not db.named or not ctx.tanktar then return nil, nil end
-    if not castutils.hpEvalSpawn(ctx.tanktar, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
+    if not db or not db.named then return nil, nil end
+    if spellutils.IsMezSpell(entry) then return nil, nil end
+
+    if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
+    local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
+    if not chosenTargetId then return nil, nil end
+
+    if not castutils.hpEvalSpawn(chosenTargetId, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
     for _, v in ipairs(ctx.mobList) do
-        if v.ID() == ctx.tanktar and v.Named() then
-            if DebuffSpawnNeedsSpell(entry, ctx, v, 'tanktar') then
-                if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
-                return state.getRunconfig().engageTargetId or ctx.tanktar, 'tanktar'
+        if v.ID() == chosenTargetId and v.Named() then
+            if DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then
+                return chosenTargetId, 'matar'
             end
             return nil, nil
         end
@@ -218,16 +256,16 @@ local function DebuffEval(index)
     if not ctx then return nil, nil end
     id, hit = charm.EvalTarget(index, ctx)
     if id then return id, hit end
-    id, hit = DebuffEvalTankTar(index, ctx)
+    id, hit = DebuffEvalMatar(index, ctx)
     if id then return id, hit end
-    id, hit = DebuffEvalNotanktar(index, ctx)
+    id, hit = DebuffEvalNotmatar(index, ctx)
     if id then return id, hit end
-    id, hit = DebuffEvalNamedTankTar(index, ctx)
+    id, hit = DebuffEvalNamedMatar(index, ctx)
     if id then return id, hit end
     return nil, nil
 end
 
-local DEBUFF_PHASE_ORDER = { 'charm', 'notanktar', 'tanktar', 'named' }
+local DEBUFF_PHASE_ORDER = { 'charm', 'notmatar', 'matar', 'named' }
 
 local function debuffGetTargetsForPhase(phase, context)
     local out = {}
@@ -251,21 +289,34 @@ local function debuffGetTargetsForPhase(phase, context)
         end
         return out
     end
-    if phase == 'tanktar' and context.tanktar and context.tanktar > 0 then
-        out[#out + 1] = { id = context.tanktar, targethit = 'tanktar' }
-        return out
-    end
-    if phase == 'notanktar' then
-        for _, v in ipairs(mobList) do
-            local vid = v.ID and v.ID() or v
-            if vid and vid ~= context.tanktar then out[#out + 1] = { id = vid, targethit = 'notanktar' } end
+    local maTargetId = context.maTargetId
+    local mtTargetId = context.mtTargetId
+    if phase == 'matar' then
+        -- Suspend matar/named entirely when MA has no target.
+        if not maTargetId or maTargetId <= 0 then return out end
+        out[#out + 1] = { id = maTargetId, targethit = 'matar' }
+        if mtTargetId and mtTargetId > 0 and mtTargetId ~= maTargetId then
+            out[#out + 1] = { id = mtTargetId, targethit = 'matar' }
         end
         return out
     end
-    if phase == 'named' and context.tanktar and context.tanktar > 0 then
-        local sp = mq.TLO.Spawn(context.tanktar)
-        if sp and sp.ID() == context.tanktar and sp.Named() then
-            out[#out + 1] = { id = context.tanktar, targethit = 'named' }
+    if phase == 'notmatar' then
+        for _, v in ipairs(mobList) do
+            local vid = v.ID and v.ID() or v
+            if vid and (not maTargetId or vid ~= maTargetId) then
+                out[#out + 1] = { id = vid, targethit = 'notmatar' }
+            end
+        end
+        return out
+    end
+    if phase == 'named' then
+        -- Suspend named entirely when MA has no target.
+        if not maTargetId or maTargetId <= 0 then return out end
+        local ids = { maTargetId }
+        if mtTargetId and mtTargetId > 0 and mtTargetId ~= maTargetId then ids[#ids + 1] = mtTargetId end
+        for _, id in ipairs(ids) do
+            local sp = mq.TLO.Spawn(id)
+            if sp and sp.ID() == id and sp.Named() then out[#out + 1] = { id = id, targethit = 'named' } end
         end
         return out
     end
@@ -304,8 +355,8 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     end
     local ctx = DebuffEvalBuildContext(spellIndex)
     if not ctx then return nil, nil end
-    if targethit == 'tanktar' then
-        local id, hit = DebuffEvalTankTar(spellIndex, ctx)
+    if targethit == 'matar' then
+        local id, hit = DebuffEvalMatar(spellIndex, ctx)
         if id == targetId then
             if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
             return id, hit
@@ -313,22 +364,22 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         return nil, nil
     end
     if targethit == 'named' then
-        local id, hit = DebuffEvalNamedTankTar(spellIndex, ctx)
+        local id, hit = DebuffEvalNamedMatar(spellIndex, ctx)
         if id == targetId then
             if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
             return id, hit
         end
         return nil, nil
     end
-    if targethit == 'notanktar' then
+    if targethit == 'notmatar' then
         local entry = ctx.entry
         local db = DebuffBands[spellIndex]
-        if not db or not db.notanktar then return nil, nil end
+        if not db or not db.notmatar then return nil, nil end
         for _, v in ipairs(ctx.mobList) do
             local vid = v.ID and v.ID() or v
             if vid == targetId then
-                if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) and DebuffSpawnNeedsSpell(entry, ctx, v, 'notanktar') then
-                    return targetId, 'notanktar'
+                if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) and DebuffSpawnNeedsSpell(entry, ctx, v, 'notmatar') then
+                    return targetId, 'notmatar'
                 end
                 break
             end
@@ -346,17 +397,31 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
         return false
     end
     charm.BeforeCast(EvalID, targethit)
-    if targethit == 'tanktar' and EvalID and EvalID > 0 then
-        if not myconfig.melee.offtank then state.getRunconfig().engageTargetId = EvalID end
-        if mq.TLO.Pet.Target.ID() ~= EvalID and not mq.TLO.Me.Pet.Combat() then
-            mq.cmdf('/pet attack %s', EvalID)
+    if targethit == 'matar' and EvalID and EvalID > 0 then
+        local rc = state.getRunconfig()
+        local desiredPetTargetId = EvalID
+        if tankrole.AmIMainTank() and myconfig.melee['mtSticky'] == true and not myconfig.melee.offtank then
+            -- Sticky MT: keep melee/pets on MT target even if the matar debuff is aimed at MA target.
+            local _, _, mtTargetId = spellutils.GetTankInfo(true)
+            if mtTargetId and mtTargetId ~= 0 then
+                rc.engageTargetId = mtTargetId
+                desiredPetTargetId = mtTargetId
+            else
+                rc.engageTargetId = EvalID
+            end
+        elseif not myconfig.melee.offtank then
+            rc.engageTargetId = EvalID
+        end
+
+        if desiredPetTargetId and mq.TLO.Pet.Target.ID() ~= desiredPetTargetId and not mq.TLO.Me.Pet.Combat() then
+            mq.cmdf('/pet attack %s', desiredPetTargetId)
         end
     end
     return true
 end
 
-local function DebuffCheckBardNotanktarCast(spellIndex, EvalID, targethit, sub, _runPriority, _spellcheckResume)
-    if sub ~= 'debuff' or targethit ~= 'notanktar' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, _runPriority, _spellcheckResume)
+    if sub ~= 'debuff' or targethit ~= 'notmatar' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry or type(entry.gem) ~= 'number' then return false end
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
@@ -481,7 +546,7 @@ local function debuffGetSpellIndices(phase, count, ctx, target)
     end
     for _, i in ipairs(rotated) do nonNuke[#nonNuke + 1] = i end
     local fullBase = nonNuke
-    if (phase == 'tanktar' or phase == 'named') and target and target.id then
+    if (phase == 'matar' or phase == 'named') and target and target.id then
         local concussionIndex, concussionRecast = nil, nil
         for _, i in ipairs(fullBase) do
             local entry = botconfig.getSpellEntry('debuff', i)
@@ -509,18 +574,23 @@ local function debuffGetSpellIndices(phase, count, ctx, target)
     return fullBase
 end
 
---- Single place for debuff hook context: tanktar, charmRecasts, debuffCount, mobList, mobcountstart. Depends on engageTargetId/MobList (doDebuff runs after AddSpawnCheck and doMelee).
+--- Single place for debuff hook context:
+--- MA/MT targets are computed here so `matar`/`notmatar`/`named` phase targeting can be decoupled.
 local function debuffBuildContext(rc)
     rc = rc or state.getRunconfig()
     local count = botconfig.getSpellCount('debuff')
-    local _, _, tanktar = spellutils.GetTankInfo(true)
+    local _, _, maTargetId = spellutils.GetAssistInfo(true)
+    if maTargetId == 0 then maTargetId = nil end
+    local _, _, mtTargetId = spellutils.GetTankInfo(true)
+    if mtTargetId == 0 then mtTargetId = nil end
     local charmRecasts = {}
     for i = 1, count do
         local id, hit = charm.GetRecastRequestForIndex(i)
         if id then charmRecasts[i] = { id = id, targethit = hit or 'charmtar' } end
     end
     return {
-        tanktar = tanktar,
+        maTargetId = maTargetId,
+        mtTargetId = mtTargetId,
         charmRecasts = charmRecasts,
         debuffCount = count,
         mobList = rc.MobList or {},
@@ -537,8 +607,24 @@ function botdebuff.DebuffCheck(runPriority)
     end
     if state.getMobCount() <= 0 then return false end
     if rc.MobList and rc.MobList[1] then
-        local tank, _, tanktar = spellutils.GetTankInfo(true)
-        if tanktar and tanktar > 0 and mq.TLO.Pet.Target.ID() ~= tanktar and not mq.TLO.Me.Pet.Combat() then botmelee.AdvCombat() end
+        local desiredPetTargetId = rc.engageTargetId
+        local _, _, maTargetId = spellutils.GetAssistInfo(true)
+        if maTargetId == 0 then maTargetId = nil end
+        local _, _, mtTargetId = spellutils.GetTankInfo(true)
+        if mtTargetId == 0 then mtTargetId = nil end
+
+        -- Sticky MT mode: pets stay on MT's target even when a tanktar debuff is aimed at MA.
+        if not (desiredPetTargetId and desiredPetTargetId > 0) then
+            if tankrole.AmIMainTank() and botconfig.config.melee and botconfig.config.melee['mtSticky'] == true and not botconfig.config.melee.offtank then
+                desiredPetTargetId = mtTargetId
+            else
+                desiredPetTargetId = maTargetId
+            end
+        end
+
+        if desiredPetTargetId and desiredPetTargetId > 0 and mq.TLO.Pet.Target.ID() ~= desiredPetTargetId and not mq.TLO.Me.Pet.Combat() then
+            botmelee.AdvCombat()
+        end
     end
     local ctx = debuffBuildContext(rc)
     local count = ctx.debuffCount
@@ -548,7 +634,7 @@ function botdebuff.DebuffCheck(runPriority)
         runPriority = runPriority,
         immuneCheck = true,
         beforeCast = DebuffOnBeforeCast,
-        customCastFn = DebuffCheckBardNotanktarCast,
+        customCastFn = DebuffCheckBardNotmatarCast,
         entryValid = DebuffEntryValid,
         afterCast = function(i, EvalID, targethit)
             return DebuffCheckAfterCast(i, EvalID, targethit, ctx.mobcountstart)

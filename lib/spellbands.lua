@@ -3,6 +3,7 @@
 -- targetphase = priority stages; validtargets = within-phase types (classes, or all/bots/raid for corpse).
 
 local spellbands = {}
+local spellutils = require('lib.spellutils')
 
 local DEBUFF_SPECIAL_MAX = 200
 local HEAL_CORPSE_TARGETS = { all = true, bots = true, raid = true }
@@ -17,7 +18,7 @@ function spellbands.applyBands(section, entry, index)
     if not bands or type(bands) ~= 'table' then
         if section == 'heal' then return {} end
         if section == 'buff' or section == 'cure' then return {} end
-        if section == 'debuff' then return { mobMin = 0, mobMax = 100, tanktar = false, notanktar = false, named = false } end
+        if section == 'debuff' then return { mobMin = 0, mobMax = 100, matar = false, notmatar = false, named = false } end
         return {}
     end
 
@@ -136,7 +137,7 @@ function spellbands.applyBands(section, entry, index)
     if section == 'debuff' then
         local mobMin, mobMax = nil, nil
         local mintar, maxtar = nil, nil
-        local tanktar, notanktar, named = false, false, false
+        local matar, notmatar, named = false, false, false
         for _, band in ipairs(bands) do
             local targetPhase = band.targetphase
             if type(targetPhase) == 'table' then
@@ -151,8 +152,9 @@ function spellbands.applyBands(section, entry, index)
                 if band.mintar ~= nil and (mintar == nil or band.mintar > mintar) then mintar = band.mintar end
                 if band.maxtar ~= nil and (maxtar == nil or band.maxtar < maxtar) then maxtar = band.maxtar end
                 for _, c in ipairs(targetPhase) do
-                    if c == 'tanktar' then tanktar = true
-                    elseif c == 'notanktar' then notanktar = true
+                    c = spellutils.NormalizeDebuffTargetPhase(c)
+                    if c == 'matar' then matar = true
+                    elseif c == 'notmatar' then notmatar = true
                     elseif c == 'named' then named = true
                     end
                 end
@@ -160,8 +162,8 @@ function spellbands.applyBands(section, entry, index)
         end
         if mobMin == nil then mobMin = 0 end
         if mobMax == nil then mobMax = 100 end
-        if not tanktar and notanktar and not named and mintar == nil and maxtar == nil then mintar = 2 end
-        return { mobMin = mobMin, mobMax = mobMax, mintar = mintar, maxtar = maxtar, tanktar = tanktar, notanktar = notanktar, named = named }
+        if not matar and not notmatar and not named and mintar == nil and maxtar == nil then mintar = 2 end
+        return { mobMin = mobMin, mobMax = mobMax, mintar = mintar, maxtar = maxtar, matar = matar, notmatar = notmatar, named = named }
     end
 
     return {}

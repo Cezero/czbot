@@ -32,7 +32,7 @@ Phase order and target types are per section. See [Spell targeting and bands](..
 | Section | Phase order (typical) |
 |---------|------------------------|
 | heal | corpse, self, groupheal, tank, groupmember, pc, mypet, pet, xtgt |
-| debuff | charm, tanktar, notanktar, named |
+| debuff | charm, notmatar, matar, named |
 | cure | self, tank, groupcure, groupmember, pc (priority cure uses a different order) |
 | buff | self, byname, tank, groupbuff, groupmember, pc, mypet, pet |
 
