@@ -53,6 +53,7 @@
 ---@field pullDeadline number|nil
 ---@field pullAggroingStartTime number|nil mq.gettime() when entered aggroing state (for timeout)
 ---@field pullAtCampSince number|nil mq.gettime() when we reached camp in returning_after_abort (for wait before next pull)
+---@field pullAbortReturnDeadline number|nil mq.gettime() failsafe deadline for returning_after_abort
 ---@field pullRangedStoredItem string|nil item name swapped out of Ranged slot during pull (restored on return)
 ---@field stucktimer number|nil
 ---@field unstuckWiggleIndex number|nil current step (1–9) in unstuck wiggle sequence; nil when not wiggling or after sequence
@@ -256,6 +257,7 @@ function M.resetRunconfig()
         pullDeadline = nil,
         pullAggroingStartTime = nil,
         pullAtCampSince = nil,
+        pullAbortReturnDeadline = nil,
         pullXTargetIdsAtStart = nil,
         pullRangedStoredItem = nil,
         stucktimer = 0,

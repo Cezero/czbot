@@ -16,6 +16,7 @@ local bardtwist = require('lib.bardtwist')
 local PULLEDMOB_NO_CLOSER_MS = 10000
 local RETURNING_AFTER_ABORT_WAIT_MS = 5000
 local PULL_RETURN_EXTRA_WAIT_MS = 5000
+local RETURNING_AFTER_ABORT_TIMEOUT_MS = 30000
 
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
 -- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullHealerManaWait, pullRangedStoredItem;
@@ -110,6 +111,7 @@ local function clearPullState(reason)
     rc.pullXTargetIdsAtStart = nil
     rc.pullAggroingStartTime = nil
     rc.pullAtCampSince = nil
+    rawset(rc, 'pullAbortReturnDeadline', nil)
     rc.pullHealerManaWait = nil
     rc.pullRangedStoredItem = nil
     rc.pulledmob = nil
@@ -433,14 +435,35 @@ local function abortPullAndReturnToCamp(reason)
     rc.pullState = 'returning_after_abort'
     rc.pullAPTargetID = nil
     rc.pullAtCampSince = nil
+    rawset(rc, 'pullAbortReturnDeadline', mq.gettime() + RETURNING_AFTER_ABORT_TIMEOUT_MS)
     rc.statusMessage = 'Returning to camp after abort'
     botmove.NavToCamp({ dist = 0, echoMsg = '\\ayAdd aggro, returning to camp' })
     if reason then printf('\ayCZBot:\ax [Pull] abort: %s', reason) end
 end
 
+local function hasCampAnchor(rc)
+    return rc.makecamp and rc.makecamp.x and rc.makecamp.y and rc.makecamp.z
+end
+
+-- Abort-return should tolerate camp LOS edge cases; distance is sufficient to recover state.
+local function isAtCampEnoughForAbortReturn(rc)
+    if not hasCampAnchor(rc) then return false end
+    local meToCampSq = utils.getDistanceSquared2D(rc.makecamp.x, rc.makecamp.y, mq.TLO.Me.X(), mq.TLO.Me.Y())
+    local campCloseSq = myconfig.settings.campRestDistanceSq
+    return meToCampSq and campCloseSq and meToCampSq <= campCloseSq
+end
+
 -- One tick of returning_after_abort: nav to camp, then wait at camp before allowing next pull.
 local function tickReturningAfterAbort(rc)
-    if not botmove.AtCamp() then
+    if not hasCampAnchor(rc) then
+        clearPullState('returning_after_abort: no camp anchor')
+        return
+    end
+    if rc.pullAbortReturnDeadline and mq.gettime() >= rc.pullAbortReturnDeadline then
+        clearPullState('returning_after_abort: timeout failsafe')
+        return
+    end
+    if not isAtCampEnoughForAbortReturn(rc) then
         rc.pullAtCampSince = nil
         if not mq.TLO.Navigation.Active() then
             botmove.NavToCamp({ dist = 0 })
