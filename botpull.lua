@@ -135,6 +135,9 @@ function botpull.LoadPullConfig()
     rc.pullreturntimer = nil
     rc.pulledmobLastDistSq = nil
     rc.pulledmobLastCloserTime = nil
+    if not rawget(rc, 'pullAttemptedIds') then
+        rawset(rc, 'pullAttemptedIds', {})
+    end
     if not rc.pullarc then rc.pullarc = nil end
 end
 
@@ -339,6 +342,22 @@ local function selectPullTarget(apmoblist, rc)
         end
         if #filtered > 0 then candidates = filtered end
     end
+    local attempted = rawget(rc, 'pullAttemptedIds') or {}
+    local unattempted = {}
+    local skippedAttemptedCount = 0
+    for _, v in ipairs(candidates) do
+        if not attempted[v.ID()] then
+            unattempted[#unattempted + 1] = v
+        else
+            skippedAttemptedCount = skippedAttemptedCount + 1
+        end
+    end
+    if skippedAttemptedCount > 0 then
+        printf('\ayCZBot:\ax [Pull] skipping %d recently-attempted pull target(s)', skippedAttemptedCount)
+    end
+    if #unattempted > 0 then
+        candidates = unattempted
+    end
     local pulltar, pulltardist = nil, nil
     for _, v in ipairs(candidates) do
         local pl = mq.TLO.Navigation.PathLength('id ' .. v.ID())()
@@ -396,6 +415,20 @@ end
 local function abortPullAndReturnToCamp(reason)
     mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
     local rc = state.getRunconfig()
+    if rc.pullAPTargetID and rc.pullAPTargetID > 0 then
+        local shouldMarkAttempted = reason == 'Pull target below 100% HP, picking another'
+            or reason == 'No agro after 15s, returning to camp.'
+            or reason == 'navigating: EngageCheck (mob engaged by other)'
+            or reason == 'aggroing: EngageCheck (mob engaged by other)'
+        if shouldMarkAttempted then
+            local attempted = rawget(rc, 'pullAttemptedIds')
+            if not attempted then
+                attempted = {}
+                rawset(rc, 'pullAttemptedIds', attempted)
+            end
+            attempted[rc.pullAPTargetID] = true
+        end
+    end
     rc.engageTargetId = nil
     rc.pullState = 'returning_after_abort'
     rc.pullAPTargetID = nil
@@ -476,6 +509,7 @@ local function tickNavigating(rc, spawn)
             if id == rc.pullAPTargetID then
                 -- Pull target just appeared on XTarget: we have aggro, return to camp
                 mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
+                rawset(rc, 'pullAttemptedIds', {})
                 rc.pullState = 'returning'
                 rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
                 rc.pullPhase = nil
@@ -523,7 +557,7 @@ local function tickNavigating(rc, spawn)
         end
         if mq.TLO.Me.TargetOfTarget.ID() and mq.TLO.Target.ID() and mq.TLO.Target.Type() == 'NPC' and spawnDistSq and spawnDistSq <= rangeSq then
             if botpull.EngageCheck() then
-                clearPullState('navigating: EngageCheck (mob engaged by other)')
+                abortPullAndReturnToCamp('navigating: EngageCheck (mob engaged by other)')
                 return
             end
         end
@@ -584,7 +618,7 @@ local function tickAggroing(rc, spawn)
     end
     -- Mob engaged by someone else (e.g. MA): clear so puller is effectively assisting, not "aggroing".
     if botpull.EngageCheck() then
-        clearPullState('aggroing: EngageCheck (mob engaged by other)')
+        abortPullAndReturnToCamp('aggroing: EngageCheck (mob engaged by other)')
         return
     end
     if rc.pullPhase == 'aggro_wait_target' then
@@ -628,6 +662,7 @@ local function tickAggroing(rc, spawn)
     end
     -- XTarget authoritative: transition to returning when pull target is on XTarget and min wait (1.5s) has passed
     if isSpawnOnXTarget(rc.pullAPTargetID) and aggroingElapsed >= 1500 then
+        rawset(rc, 'pullAttemptedIds', {})
         rc.pullState = 'returning'
         rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
         rc.pullPhase = nil
