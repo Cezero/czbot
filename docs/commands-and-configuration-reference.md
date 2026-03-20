@@ -53,6 +53,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **priority remove** | `<name>` or target     | Remove a mob from the priority list.                                                                                                                    |
 | **charm**           | `<name>` or target     | Add a mob to the charm list for the current zone (allowed charm targets). Saved to common config (cz_common.lua).                                        |
 | **charm remove**    | `<name>` or target     | Remove a mob from the charm list.                                                                                                                        |
+| **reloadcommon**    | —                      | Reload `cz_common.lua` from disk and refresh current-zone exclude/priority/charm lists and nuke flavor auto-disable state. |
 
 ### Combat and roles
 

@@ -304,6 +304,19 @@ local function cmd_charm(args)
     end
 end
 
+-- Reload shared common config from disk, then refresh current-zone runtime derived lists/state.
+-- This is useful when multiple bots share `cz_common.lua` and one bot edits via UI.
+local function cmd_reloadcommon(args)
+    botconfig.loadCommon()
+    mobfilter.process('exclude', 'zone')
+    mobfilter.process('priority', 'zone')
+    mobfilter.process('charm', 'zone')
+    botconfig.loadNukeFlavorsFromZone()
+    local zone = mq.TLO.Zone.ShortName()
+    zone = zone and zone ~= '' and zone or '<unknown>'
+    printf('\ayCZBot:\ax Reloaded \agcz_common.lua\ax and refreshed zone state (zone=%s).', zone)
+end
+
 local function cmd_abort(args)
     local rc = state.getRunconfig()
     if not args[2] then
@@ -851,6 +864,8 @@ local handlers = {
     xarc = cmd_xarc,
     priority = cmd_priority,
     charm = cmd_charm,
+    reloadcommon = cmd_reloadcommon,
+    reloadczcommon = cmd_reloadcommon,
     abort = cmd_abort,
     leash = cmd_leash,
     attack = cmd_attack,

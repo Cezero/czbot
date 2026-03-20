@@ -19,6 +19,8 @@ local botlogic = {}
 local myconfig = botconfig.config
 
 local SIT_HYSTERESIS_PCT = 3
+-- Throttle pet retarget commands to avoid spamming during rapid target changes.
+local _petAttackRetargetLastTime = 0
 
 -- CharState: per-tick character state. Split into sub-handlers for clarity and testability.
 
@@ -167,16 +169,32 @@ local function charState_PostDead()
     if mq.TLO.Me.State() == 'FEIGN' then mq.cmd('/stand') end
     local rc = state.getRunconfig()
     if not rc.engageTargetId or mq.TLO.Target.ID() ~= rc.engageTargetId then
+        -- When engaged on a mob, we should never force the pet passive; doing so causes DPS loss.
         if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
-        if (not rc.engageTargetId or (rc.engageTargetId and mq.TLO.Me.Pet.Target.ID() ~= rc.engageTargetId)) and mq.TLO.Me.Pet.Aggressive() then
-            mq.cmd('/squelch /pet back off')
-            mq.cmd('/squelch /pet follow')
+
+        if not rc.engageTargetId then
+            -- Disengaged: keep the existing behavior to ensure pet isn't fighting stale targets.
+            if mq.TLO.Me.Pet.Aggressive() then
+                mq.cmd('/squelch /pet back off')
+                mq.cmd('/squelch /pet follow')
+            end
+        else
+            -- Engaged: if pet is already aggressive but targeting something else, retarget (throttled).
+            if mq.TLO.Me.Pet.Aggressive() and mq.TLO.Me.Pet.Target.ID() ~= rc.engageTargetId then
+                local now = mq.gettime()
+                local throttleMs = 2000
+                if now >= _petAttackRetargetLastTime + throttleMs then
+                    _petAttackRetargetLastTime = now
+                    mq.cmdf('/squelch /pet attack %s', rc.engageTargetId)
+                end
+            end
         end
     end
     if not rc.attackCommandEngage and not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
         rc.engageTargetId = nil
     end
-    if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and mq.TLO.GMCheck() == 'TRUE' then
+    if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and (---@diagnostic disable-next-line: undefined-field
+        mq.TLO.GMCheck() == 'TRUE') then
         botevents.Event_GMDetected()
     end
     if mq.TLO.Me.Pet.ID() then
