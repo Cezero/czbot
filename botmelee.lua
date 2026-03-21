@@ -237,6 +237,9 @@ function botmelee.AdvCombat()
         if myconfig.melee.offtank and assistName and mainTankName then
             -- An offtank MT does not follow MA (this bot's melee is independent).
             id = resolveOfftankTarget(assistName, mainTankName, assistpct)
+        elseif tankrole.AmIMainAssist() and not myconfig.melee.offtank then
+            -- Combined MT+MA: MA target selection (resolveMeleeAssistTarget cannot /assist self).
+            id = selectMATarget()
         elseif myconfig.melee.mtSticky and not myconfig.melee.offtank then
             -- Sticky MT: keep tanking its own target.
             id, engageTargetRefound = selectTankTarget(mainTankName)

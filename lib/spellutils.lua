@@ -546,6 +546,20 @@ function spellutils.IsConcussionSpell(entry)
     return ok and hasConc
 end
 
+--- When MT/MA is self, charinfo may lag; use Target if it is in MobList.
+local function selfTargetIdFromMobList()
+    local tid = mq.TLO.Target.ID()
+    if not tid or tid == 0 then return nil, nil end
+    local ml = state.getRunconfig().MobList
+    if not ml then return nil, nil end
+    for _, v in ipairs(ml) do
+        if v.ID() == tid then
+            return tid, mq.TLO.Target.PctHPs()
+        end
+    end
+    return nil, nil
+end
+
 -- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.
 function spellutils.GetTankInfo(includeTarget)
     local mainTankName = state.getRunconfig().TankName
@@ -565,6 +579,10 @@ function spellutils.GetTankInfo(includeTarget)
         local botmelee = require('botmelee')
         tanktar = botmelee.GetPCTarget(mainTankName)
         tanktarhp = tanktar and mq.TLO.Spawn(tanktar).PctHPs() or nil
+    end
+    if includeTarget and mainTankName == mq.TLO.Me.Name() and (not tanktar or tanktar == 0) then
+        local t, h = selfTargetIdFromMobList()
+        if t then tanktar, tanktarhp = t, h end
     end
     if tanktar == 0 then tanktar = nil end
     return mainTankName, tankid, tanktar, tanktarhp
@@ -588,6 +606,10 @@ function spellutils.GetAssistInfo(includeTarget)
         local botmelee = require('botmelee')
         assistar = botmelee.GetPCTarget(assistName)
         assistarhp = assistar and mq.TLO.Spawn(assistar).PctHPs() or nil
+    end
+    if includeTarget and assistName == mq.TLO.Me.Name() and (not assistar or assistar == 0) then
+        local t, h = selfTargetIdFromMobList()
+        if t then assistar, assistarhp = t, h end
     end
 
     if assistar == 0 then assistar = nil end
