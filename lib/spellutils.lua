@@ -378,7 +378,22 @@ function spellutils.GetSpellEntity(entry)
         if not mq.TLO.FindItem(entry.spell)() then return nil end
         return mq.TLO.FindItem(entry.spell).Spell
     end
+    if entry.gem == 'alt' then
+        local aa = mq.TLO.Me.AltAbility(entry.spell)
+        if not aa or not aa() then return nil end
+        local sp = aa.Spell
+        if sp and sp() then return sp end
+        return nil
+    end
     return mq.TLO.Spell(entry.spell)
+end
+
+-- True when MQ spell data says TargetType Self (self-only; no need to retarget to cast).
+function spellutils.IsSelfTargetSpell(entry)
+    local e = spellutils.GetSpellEntity(entry)
+    if not e or not e.TargetType then return false end
+    local tt = e.TargetType()
+    return type(tt) == 'string' and tt == 'Self'
 end
 
 -- Return duration in seconds for the entry's spell (handles item). Returns 0 if none or invalid.
@@ -827,7 +842,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     if rc.CurSpell and rc.CurSpell.phase == 'precast' then
-        if mq.TLO.Target.ID() ~= rc.CurSpell.target then
+        local preEntry = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
+        local skipPrecastTargetWait = preEntry and spellutils.IsSelfTargetSpell(preEntry) and
+            rc.CurSpell.target == mq.TLO.Me.ID()
+        if mq.TLO.Target.ID() ~= rc.CurSpell.target and not skipPrecastTargetWait then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
             spellutils.clearCastingStateOrResume()
             return true
@@ -1095,13 +1113,35 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
                                                            targetname)
     local durMs = tonumber(spelldurMs) or 0
     if mq.TLO.Me.CastTimeLeft() <= 0 or (sub ~= 'debuff' and sub ~= 'buff') or not spelldurMs or durMs <= 0 or mq.TLO.Me.Class.ShortName() == 'BRD' then return end
-    if mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
+    local selfBuffNoRetarget = (sub == 'buff' and entry and spellutils.IsSelfTargetSpell(entry) and target == mq.TLO.Me.ID())
+    if selfBuffNoRetarget then
+        if not mq.TLO.Me.BuffsPopulated() then return end
+    else
+        if mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
+    end
     local criteria = rc.CurSpell and rc.CurSpell.targethit or nil
     local isSelfTarget = target == mq.TLO.Me.ID()
     local isSelfGroupBuff = (criteria == 'groupbuff' and isSelfTarget)
-    local buffid = mq.TLO.Target.Buff(spellname).ID() or false
-    local buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
-    local buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
+    local buffid, buffstaleness, buffdur
+    if selfBuffNoRetarget then
+        local mb = mq.TLO.Me.Buff(spellname)
+        local ms = mq.TLO.Me.Song(spellname)
+        if mb() then
+            buffid = mb.ID() or false
+            buffstaleness = mb.Staleness() or 0
+            buffdur = mb.Duration() or 0
+        elseif ms() then
+            buffid = ms.ID() or false
+            buffstaleness = ms.Staleness() or 0
+            buffdur = ms.Duration() or 0
+        else
+            buffid, buffstaleness, buffdur = false, 0, 0
+        end
+    else
+        buffid = mq.TLO.Target.Buff(spellname).ID() or false
+        buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
+        buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
+    end
     local buffPresent = buffid and buffstaleness < 2000 and buffdur > (durMs * 0.10)
     local stacks = mq.TLO.Spell(spellid).StacksTarget()
 
@@ -1257,7 +1297,9 @@ function spellutils.BuildMQ2CastCommand(entry, EvalID, sub)
     local spellname = entry.spell
     local castArg = (type(gem) == 'number') and tostring(gem) or gem
     local cmd = string.format('/casting "%s" %s', spellname, castArg)
-    cmd = cmd .. string.format(' -targetid|%s', EvalID)
+    if not spellutils.IsSelfTargetSpell(entry) then
+        cmd = cmd .. string.format(' -targetid|%s', EvalID)
+    end
     if sub == 'debuff' then
         cmd = cmd .. ' -maxtries|2'
     end
@@ -1336,7 +1378,8 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         local _, tankid = spellutils.GetTankInfo(true)
         if tankid ~= meId then mtSelfCastInCombat = false end
     end
-    if not useMQ2Cast and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat then
+    local skipSelfRetarget = (EvalID == meId and spellutils.IsSelfTargetSpell(entry))
+    if not useMQ2Cast and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat and not skipSelfRetarget then
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
