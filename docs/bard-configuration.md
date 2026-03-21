@@ -5,7 +5,7 @@ This document explains the nuances and considerations when configuring a **bard 
 ## Overview
 
 - **Default twist (MQ2Twist):** Self buffs with numeric gems are sustained via a continuous twist derived from your buff config. The bot runs **noncombat** (idle), **combat**, or **pull** twist depending on state; when it needs to cast something else (mez, cure, single spell), it stops twist, casts, then resumes.
-- **Buff targeting:** For bards, only the **self** phase is used for buffs; the buff hook does **not** schedule single casts for self — the twist handles all self buffs. Use spell-level **inCombat** and **inIdle** to control which twist list each buff is in; use **pull** in bands for the pull twist (see below).
+- **Buff targeting:** For bards, only the **self** phase is used for buffs; the buff hook does **not** schedule single casts for self — the twist handles all self buffs. Use spell-level **inCombat** and **inIdle** to control which twist list each buff is in; use **pull** in bands for the pull twist (see below). Spell-level **combatOnly** applies only to non-bard auto buffs; bards should use **inCombat** / **inIdle** instead.
 - **Interrupts:** The bot does not interrupt bard casts (buff, debuff, cure). No configuration required.
 - **Movement and casting:** Bards can move, use nav, and stick while "casting"; the bot does not force a stop before casting.
 - **Melee:** Before casting, if **domelee** is on and the bard is not in combat, the bot re-engages melee. Set **settings.domelee** if the bard should melee when not casting.

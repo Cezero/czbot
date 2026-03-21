@@ -6,7 +6,7 @@ This document explains how to configure the bot’s **buffing** behavior: which 
 
 - **Master switch:** Buffing runs only when **`settings.dobuff`** is `true`. Default is `false`.
 - **Evaluation order:** The buff loop evaluates **phases** in order (see [Buff bands](#buff-bands)): self → byname → tank → groupbuff → groupmember → pc → mypet → pet. For each phase it considers each target and checks **all** buff spells that have that phase in their bands before moving to the next phase. **pc** = all peers (any character known via charinfo), not limited to group members. **groupmember** = in-group only (including non-bot group members, via Group TLO). The only out-of-group non-bot PC we buff is the **explicitly configured tank** (TankName).
-- **When buffs run:** Buffs are always allowed when there are no mobs in camp. Spell-level **inCombat** controls whether a buff can be cast when mobs are in camp: when `true`, the buff runs in both idle and combat; when `false` or unset, the buff runs only when idle. **Bards** also have spell-level **inIdle**, which controls whether the buff is in the **idle twist list**; the **combat twist list** uses **inCombat**. The two twist lists are independent (see [Bard configuration](bard-configuration.md)).
+- **When buffs run:** By default, buffs are allowed when there are no mobs in camp. Spell-level **inCombat** controls whether a buff can be cast when mobs are in camp: when `true`, the buff runs in both idle and combat; when `false` or unset, the buff runs only when idle. Spell-level **combatOnly** (non-bard) means the buff is **only** considered when mobs are in camp — not while idle — which implies combat allowance for the auto buff loop; use it for very short self buffs (e.g. Yaulp) so the bot does not refresh them every few seconds out of combat. **Bards** use **inCombat** / **inIdle** with twist instead; **combatOnly** is ignored for BRD (see [Bard configuration](bard-configuration.md)).
 
 ---
 
@@ -33,6 +33,7 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 | **bands** | Who receives the buff. See [Buff bands](#buff-bands) below. |
 | **inCombat** | Optional. When `true`, this buff can be cast when mobs are in camp. Default is `false`. |
 | **inIdle** | Optional. **Bard only.** When `true` (default), this buff is included in the idle twist list. When `false`, it is not twisted when idle. Ignored for non-bards. GUI shows "In idle" only for Bards. |
+| **combatOnly** | Optional. **Non-bard only** (ignored for BRD). When `true`, the auto buff loop **only** considers this spell when mobs are in camp — never while idle. Implies combat allowance; you do not need **inCombat** for eligibility (you may still set **inCombat** for documentation clarity). Default is `false`. GUI shows "Combat only" for non-bards. |
 | **spellicon** | Optional. Buff icon ID. If set (non-zero), the bot skips a target who already has that buff icon (avoids overwriting). |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
@@ -93,6 +94,23 @@ buff = {
 }
 ```
 
+**Example: short self buff (combat only, e.g. Yaulp)**
+
+```lua
+{
+  gem = 2,
+  spell = 'Yaulp VII',
+  minmana = 0,
+  combatOnly = true,
+  bands = {
+    { targetphase = { 'self' }, validtargets = { 'all' } }
+  },
+  spellicon = 0
+}
+```
+
+Refreshes only when mobs are in camp, not every tick while idle. Manual `/cz cast` is unchanged and can still be used out of combat.
+
 ---
 
 ## Runtime control
@@ -106,4 +124,4 @@ buff = {
 ## Behavior summary
 
 - **Spellicon:** When **spellicon** is set, the bot checks whether the candidate target already has that buff (by icon). If they do, the target is skipped so the same buff is not recast unnecessarily.
-- **Combat vs idle:** Buffs are always allowed when there are no mobs in camp. Set **inCombat** `true` on a spell entry to allow that buff when mobs are in camp. **inIdle** (Bard only) controls whether the buff is in the idle twist list; see [Bard configuration](bard-configuration.md).
+- **Combat vs idle:** By default, buffs are allowed when there are no mobs in camp. Set **inCombat** `true` on a spell entry to allow that buff when mobs are in camp. Set **combatOnly** `true` (non-bard) to **skip** that spell while idle and only run it when mobs are in camp. **inIdle** (Bard only) controls whether the buff is in the idle twist list; see [Bard configuration](bard-configuration.md).

@@ -98,6 +98,22 @@ local function buffCustomSection(entry, idPrefix, onChanged)
         entry.inCombat = inCbtVal
         if onChanged then onChanged() end
     end
+    -- Combat only (non-Bard): auto buff loop considers this spell only when mobs are in camp
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
+        ImGui.Spacing()
+        ImGui.Text('Combat only')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(
+                'Only consider this buff when mobs are in camp (not while idle). For short self buffs (e.g. Yaulp) so they are not refreshed every tick out of combat. Implies allow in combat for the auto buff loop.')
+        end
+        ImGui.SameLine()
+        local cbtOnly = entry.combatOnly == true
+        local cbtOnlyVal, cbtOnlyPressed = ImGui.Checkbox('##' .. idPrefix .. '_combatOnly', cbtOnly)
+        if cbtOnlyPressed then
+            entry.combatOnly = cbtOnlyVal
+            if onChanged then onChanged() end
+        end
+    end
     -- In idle (Bard only): include in twist when no mobs in camp
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         ImGui.Text('In idle')

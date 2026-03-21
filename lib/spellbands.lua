@@ -138,6 +138,7 @@ function spellbands.applyBands(section, entry, index)
         end
         if entry.inCombat ~= nil then rt.inCombat = (entry.inCombat == true) end
         if entry.inIdle ~= nil then rt.inIdle = (entry.inIdle == true) end
+        if section == 'buff' and entry.combatOnly ~= nil then rt.combatOnly = (entry.combatOnly == true) end
         return rt
     end
 

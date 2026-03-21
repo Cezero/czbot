@@ -18,7 +18,7 @@ flowchart TB
     RunPhase --> PhaseLoop[phase order: self byname tank groupbuff groupmember pc mypet pet]
 ```
 
-BuffCheck calls RunPhaseFirstSpellCheck with buff-specific getTargetsForPhase and targetNeedsSpell. Bands control which phases each spell uses via **targetphase** (self, tank, groupbuff, groupmember, pc, mypet, pet). Pet summon spells are auto-detected (Category Pet or SPA 33/103) and only cast when the bot has no pet. IconCheck and PeerHasBuff / Stacks / FreeBuffSlots determine if a target needs the spell. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md).
+BuffCheck calls RunPhaseFirstSpellCheck with buff-specific getTargetsForPhase and targetNeedsSpell. Spell-level **entryValid** gating (before per-target checks) applies **inCombat** and **combatOnly** (non-bard) so some buffs run only when idle, only when mobs are in camp, or both; see [Buffing configuration](../buffing-configuration.md). Bands control which phases each spell uses via **targetphase** (self, tank, groupbuff, groupmember, pc, mypet, pet). Pet summon spells are auto-detected (Category Pet or SPA 33/103) and only cast when the bot has no pet. IconCheck and PeerHasBuff / Stacks / FreeBuffSlots determine if a target needs the spell. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md).
 
 ## See also
 

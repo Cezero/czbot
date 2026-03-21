@@ -307,7 +307,11 @@ function botbuff.BuffCheck(runPriority)
             local gem = entry.gem
             if entry.enabled == false then return false end
             if not ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') then return false end
-            return (not hasMob) or (hasMob and (BuffClass[i] and BuffClass[i].inCombat == true))
+            local bc = BuffClass[i]
+            if mq.TLO.Me.Class.ShortName() ~= 'BRD' and bc and bc.combatOnly == true then
+                return hasMob
+            end
+            return (not hasMob) or (hasMob and bc and bc.inCombat == true)
         end,
     }
     local function getSpellIndices(phase, _target)

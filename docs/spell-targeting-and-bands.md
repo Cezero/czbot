@@ -7,7 +7,7 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 | Section  | What "target" means | Count gate | Bands (main idea) |
 | -------- | ------------------- | ---------- | ----------------- |
 | **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (phase stages) + **validtargets** (within-phase types) + min/max HP % |
-| **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **inCombat** (and Bard **inIdle**) control when spell can run |
+| **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **inCombat**, **combatOnly** (non-bard), and Bard **inIdle** control when spell can run |
 | **debuff** | Mobs in camp (MA target + adds) | **mintar**/**maxtar** (camp mob-count gate) | **targetphase** only (matar, notmatar, named) + min/max HP % |
 | **cure**  | Self, tank, group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **priority** in targetphase runs an earlier pass when any cure spell has it (no top-level setting). **groupmember**, **groupcure**, **pc** |
 
@@ -98,7 +98,7 @@ Each band’s **min** / **max** define mob HP %. For debuff, all bands for that 
 
 ## Buff targeting
 
-Buff spells choose a target in a fixed order. Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). Spell-level **inCombat** controls whether the buff can run when mobs are in camp; **inIdle** (Bard only) controls whether the buff is in the idle twist list. These are not targetphase tokens.
+Buff spells choose a target in a fixed order. Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). Spell-level **inCombat** controls whether the buff can run when mobs are in camp; **combatOnly** (non-bard) restricts the auto buff loop to only consider the spell when mobs are in camp (not while idle); **inIdle** (Bard only) controls whether the buff is in the idle twist list. These are not targetphase tokens.
 
 ### Evaluation order
 
@@ -117,7 +117,7 @@ For **BRD**, only **self** is tried after the initial self check (no tank/groupb
 
 ### Bands
 
-Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**, **byname**. (**petspell** is deprecated: spell-type flag only, not a phase; pet summon is auto-detected.) validtargets: class shorts or **all** (for **groupmember** and **pc**); or character names (for **byname**). Spell-level **inCombat** and **inIdle** (Bard only) control when the spell can run / which twist list it is in; do not put **cbt** or **idle** in targetphase. **tarcnt** optional for **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
+Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**, **byname**. (**petspell** is deprecated: spell-type flag only, not a phase; pet summon is auto-detected.) validtargets: class shorts or **all** (for **groupmember** and **pc**); or character names (for **byname**). Spell-level **inCombat**, **combatOnly** (non-bard), and **inIdle** (Bard only) control when the spell can run / which twist list it is in; do not put **cbt** or **idle** in targetphase. **tarcnt** optional for **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
 
 ---
 
