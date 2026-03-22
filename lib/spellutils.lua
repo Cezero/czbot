@@ -1122,27 +1122,34 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     local criteria = rc.CurSpell and rc.CurSpell.targethit or nil
     local isSelfTarget = target == mq.TLO.Me.ID()
     local isSelfGroupBuff = (criteria == 'groupbuff' and isSelfTarget)
-    local buffid, buffstaleness, buffdur
+    local function meBuffDuration(slot)
+        if not slot or not slot.Duration then return 0 end
+        local ok, v = pcall(function() return slot.Duration() end)
+        return (ok and v) or 0
+    end
+    local function meBuffId(slot)
+        if not slot or not slot.ID then return false end
+        local ok, v = pcall(function() return slot.ID() end)
+        return ok and v or false
+    end
+    local buffid, buffdur
     if selfBuffNoRetarget then
         local mb = mq.TLO.Me.Buff(spellname)
         local ms = mq.TLO.Me.Song(spellname)
         if mb() then
-            buffid = mb.ID() or false
-            buffstaleness = mb.Staleness() or 0
-            buffdur = mb.Duration() or 0
+            buffid = meBuffId(mb)
+            buffdur = meBuffDuration(mb)
         elseif ms() then
-            buffid = ms.ID() or false
-            buffstaleness = ms.Staleness() or 0
-            buffdur = ms.Duration() or 0
+            buffid = meBuffId(ms)
+            buffdur = meBuffDuration(ms)
         else
-            buffid, buffstaleness, buffdur = false, 0, 0
+            buffid, buffdur = false, 0
         end
     else
         buffid = mq.TLO.Target.Buff(spellname).ID() or false
-        buffstaleness = mq.TLO.Target.Buff(spellname).Staleness() or 0
         buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
     end
-    local buffPresent = buffid and buffstaleness < 2000 and buffdur > (durMs * 0.10)
+    local buffPresent = buffid and buffdur > (durMs * 0.10)
     local stacks = mq.TLO.Spell(spellid).StacksTarget()
 
     if sub == 'buff' then
