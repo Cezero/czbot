@@ -2,8 +2,9 @@
 -- Signature: M.draw(spell, opts)
 --   spell: spell entry table to read/write (e.g. config.pull.spell or config.heal.spells[i]).
 --   opts: required id (string), primaryOptions (table); optional label, onChanged, displayCommonFields (default true),
---         showRange (default false), customSection, targetphaseOptions, validtargetsOptions, validtargetsOptionsPerPhase,
---         showBandMinMax, showBandMinTarMaxtar. customSection(entry, idPrefix, onChanged) renders category-only fields.
+--         showRange (default false), collapsible (default false): when true, wrap entry in ImGui.CollapsingHeader; default
+--         collapsed on first use (ImGuiCond.FirstUseEver). customSection, targetphaseOptions, validtargetsOptions,
+--         validtargetsOptionsPerPhase, showBandMinMax, showBandMinTarMaxtar. customSection(entry, idPrefix, onChanged).
 --   targetphaseOptions / validtargetsOptions: each entry { key, label, tooltip }.
 --   validtargetsOptionsPerPhase: optional; when set, target options shown are those for this band's selected phases only (phase -> options array).
 -- Widths are hardcoded; caller does not control layout. All widget IDs use opts.id as prefix.
@@ -131,7 +132,7 @@ local BLACK = ImVec4(0, 0, 0, 1)
 
 --- Draw spell entry: label, type combo, spell/item/ability selectable; optionally range, common fields, customSection.
 --- @param spell table spell entry to read/write
---- @param opts table required: id (string), primaryOptions (table). optional: label, onChanged, displayCommonFields (default true), showRange (default false), customSection(entry, idPrefix, onChanged), targetphaseOptions, validtargetsOptions, validtargetsOptionsPerPhase, showBandMinMax, showBandMinTarMaxtar. targetphaseOptions/validtargetsOptions entries: { key, label, tooltip }. validtargetsOptionsPerPhase: optional table phase -> options; when set, targets row shows only options for this band's selected phases.
+--- @param opts table required: id (string), primaryOptions (table). optional: label, onChanged, displayCommonFields (default true), showRange (default false), collapsible (default false), customSection(entry, idPrefix, onChanged), targetphaseOptions, validtargetsOptions, validtargetsOptionsPerPhase, showBandMinMax, showBandMinTarMaxtar. targetphaseOptions/validtargetsOptions entries: { key, label, tooltip }. validtargetsOptionsPerPhase: optional table phase -> options; when set, targets row shows only options for this band's selected phases.
 function M.draw(spell, opts)
     opts = opts or {}
     local id = opts.id
@@ -167,6 +168,22 @@ function M.draw(spell, opts)
         elseif type(spell.precondition) == 'string' and state.preconditionBuf ~= spell.precondition then
             -- Sync buffer from spell so any stored string is always displayed (e.g. after config load)
             state.preconditionBuf = spell.precondition
+        end
+    end
+
+    if opts.collapsible then
+        local gtHeader = type(spell.gem) == 'number' and 'gem' or spell.gem
+        local spellNameForHeader
+        if UNUSED_SPELL_TYPES[gtHeader] then
+            spellNameForHeader = 'unused'
+        elseif not spell.spell or spell.spell:match('^%s*$') then
+            spellNameForHeader = 'unset'
+        else
+            spellNameForHeader = spell.spell:match('^%s*(.-)%s*$') or 'unset'
+        end
+        ImGui.SetNextItemOpen(false, ImGuiCond.FirstUseEver)
+        if not ImGui.CollapsingHeader(string.format('%s — %s', labelText, spellNameForHeader) .. '##' .. id .. '_collapse') then
+            return
         end
     end
 

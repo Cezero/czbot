@@ -113,6 +113,7 @@ function M.draw()
         spell_entry.draw(entry, {
             id = 'cure_' .. i,
             label = 'Cure ' .. i,
+            collapsible = true,
             primaryOptions = PRIMARY_OPTIONS,
             onChanged = runConfigLoaders,
             displayCommonFields = true,

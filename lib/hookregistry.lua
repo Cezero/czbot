@@ -7,6 +7,9 @@
 -- Normal hooks: Skipped when MasterPause. When state is busy and payload has priority,
 --   only hooks with hook.priority <= payload.priority run (higher-priority hooks and the busy-holding hook).
 local mq = require('mq')
+-- Throttled: when busy with payload.priority, hooks with higher priority numbers are skipped (see runNormalHooks).
+local _hookSkipLogNextTime = 0
+local HOOK_SKIP_LOG_INTERVAL_MS = 1000
 local _hooks = {}
 local _hookFns = {} -- name -> function (implementations registered by modules)
 local _sortedNormal = nil
@@ -106,9 +109,31 @@ function hookregistry.runNormalHooks()
             maxPriority = payload.priority
         end
     end
+    local skippedByBusyCap = nil
+    if maxPriority ~= nil then
+        skippedByBusyCap = {}
+    end
     for _, h in ipairs(list) do
         if maxPriority == nil or h.priority <= maxPriority then
             h.fn(h.name)
+        elseif skippedByBusyCap then
+            skippedByBusyCap[#skippedByBusyCap + 1] = string.format('%s(%d)', h.name, h.priority)
+        end
+    end
+    if skippedByBusyCap and #skippedByBusyCap > 0 then
+        local now = mq.gettime()
+        if now >= _hookSkipLogNextTime then
+            _hookSkipLogNextTime = now + HOOK_SKIP_LOG_INTERVAL_MS
+            local rc = state.getRunconfig()
+            local cs = rc.CurSpell
+            local curSpellStr = 'nil'
+            if cs and cs.sub and cs.phase then
+                curSpellStr = string.format('%s/%s', tostring(cs.sub), tostring(cs.phase))
+            elseif cs and cs.sub then
+                curSpellStr = tostring(cs.sub)
+            end
+            printf('\ayCZBot:\ax [busy] cap=%s runState=%s skipped=%s CurSpell=%s', tostring(maxPriority),
+                state.getRunStateName(), table.concat(skippedByBusyCap, ','), curSpellStr)
         end
     end
     -- When busy (e.g. casting), run runWhenBusy hooks so movement (camp return, follow) still runs.

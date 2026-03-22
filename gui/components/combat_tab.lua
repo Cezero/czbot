@@ -144,6 +144,7 @@ function M.draw()
     spell_entry.draw(pull.spell, {
         id = 'pull_spell',
         label = 'Method: ',
+        collapsible = false,
         primaryOptions = PRIMARY_OPTIONS_PULL,
         onChanged = runConfigLoaders,
         displayCommonFields = false,

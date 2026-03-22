@@ -152,6 +152,7 @@ function M.draw()
         spell_entry.draw(entry, {
             id = 'debuff_' .. i,
             label = 'Debuff ' .. i,
+            collapsible = true,
             detectedTypeLabel = detectedTypeLabel,
             detectedTypeLabel2 = detectedTypeLabel2,
             primaryOptions = PRIMARY_OPTIONS_DEBUFF,

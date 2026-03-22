@@ -1336,6 +1336,17 @@ function spellutils.BuildMQ2CastCommand(entry, EvalID, sub)
     return cmd
 end
 
+-- Throttled printf when entering a cast pipeline phase (see hookregistry [busy] cap when hooks skip).
+local _castPhaseDbgNextTime = 0
+local CAST_PHASE_DBG_INTERVAL_MS = 1000
+local function dbgCastPhase(phase, sub, index, runPriority)
+    local now = mq.gettime()
+    if now < _castPhaseDbgNextTime then return end
+    _castPhaseDbgNextTime = now + CAST_PHASE_DBG_INTERVAL_MS
+    printf('\ayCZBot:\ax [cast] %s sub=%s idx=%s runPriority=%s', tostring(phase), tostring(sub), tostring(index),
+        tostring(runPriority))
+end
+
 --- Only for cast types MQ2Cast does not support. Called from CastSpell when gem is script/disc/ability.
 function spellutils.ExecuteNativeCast(gem, spell, sub, index)
     if gem == 'script' then
@@ -1390,6 +1401,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmd('/multiline ; /nav stop log=off ; /stick off')
         rc.CurSpell.phase = 'precast_wait_move'
         rc.CurSpell.deadline = mq.gettime() + 3000
+        dbgCastPhase('precast_wait_move', sub, index, runPriority)
         state.setRunState(state.STATES.casting,
             { deadline = mq.gettime() + 3000, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
@@ -1414,6 +1426,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
+        dbgCastPhase('precast', sub, index, runPriority)
         state.setRunState(state.STATES.casting,
             {
                 deadline = mq.gettime() + CASTING_STUCK_MS,
@@ -1445,6 +1458,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.spellid = castSpellId
         mq.cmd(cmd)
         rc.CurSpell.phase = 'casting'
+        dbgCastPhase('casting', sub, index, runPriority)
         state.setRunState(state.STATES.casting,
             {
                 deadline = mq.gettime() + CASTING_STUCK_MS,
@@ -1457,6 +1471,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     end
     spellutils.ExecuteNativeCast(gem, spell, sub, index)
     rc.CurSpell.phase = 'casting'
+    dbgCastPhase('casting(native)', sub, index, runPriority)
     state.setRunState(state.STATES.casting,
         {
             deadline = mq.gettime() + CASTING_STUCK_MS,

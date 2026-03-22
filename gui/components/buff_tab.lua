@@ -140,6 +140,7 @@ function M.draw()
         spell_entry.draw(entry, {
             id = 'buff_' .. i,
             label = 'Buff ' .. i,
+            collapsible = true,
             primaryOptions = PRIMARY_OPTIONS,
             onChanged = runConfigLoaders,
             displayCommonFields = true,

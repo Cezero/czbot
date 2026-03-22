@@ -177,6 +177,7 @@ function M.draw()
         spell_entry.draw(entry, {
             id = 'heal_' .. i,
             label = 'Heal ' .. i,
+            collapsible = true,
             detectedTypeLabel = detectedTypeLabel,
             primaryOptions = PRIMARY_OPTIONS,
             onChanged = runConfigLoaders,
