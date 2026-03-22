@@ -181,8 +181,9 @@ function M.draw(spell, opts)
         else
             spellNameForHeader = spell.spell:match('^%s*(.-)%s*$') or 'unset'
         end
+        -- Use ### so ImGui IDs only the stable suffix; dynamic spell text would otherwise change the ID and re-apply FirstUseEver (collapse).
         ImGui.SetNextItemOpen(false, ImGuiCond.FirstUseEver)
-        if not ImGui.CollapsingHeader(string.format('%s — %s', labelText, spellNameForHeader) .. '##' .. id .. '_collapse') then
+        if not ImGui.CollapsingHeader(string.format('%s — %s###%s', labelText, spellNameForHeader, id .. '_collapse')) then
             return
         end
     end

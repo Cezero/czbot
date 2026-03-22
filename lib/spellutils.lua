@@ -866,6 +866,8 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     if rc.CurSpell and rc.CurSpell.phase == 'precast_wait_move' then
+        -- Only the hook for this sub advances the pipeline; other hooks skip their phase loop until the owning hook runs.
+        if rc.CurSpell.sub ~= sub then return true end
         if mq.TLO.Me.Moving() then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
             spellutils.clearCastingStateOrResume()
@@ -879,6 +881,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     if rc.CurSpell and rc.CurSpell.phase == 'precast' then
+        if rc.CurSpell.sub ~= sub then return true end
         local preEntry = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
         local skipPrecastTargetWait = preEntry and rc.CurSpell.target == mq.TLO.Me.ID() and
             (spellutils.IsSelfTargetSpell(preEntry) or
@@ -1278,6 +1281,41 @@ end
 
 -- CastSpell helpers (used by CastSpell only or by re-entry flow).
 
+--- True if the configured gem slot (1–12) holds this entry's spell. Empty/wrong spell = not memmed here (MQ2Cast may memorize).
+local function spellMemmedInConfiguredGemSlot(entry)
+    local gem = entry.gem
+    local spellName = entry.spell
+    if not spellName or spellName == '' then return false end
+    local slot = nil
+    if type(gem) == 'number' and gem >= 1 and gem <= 12 then
+        slot = gem
+    elseif type(gem) == 'string' then
+        local n = tonumber(gem)
+        if n and n >= 1 and n <= 12 then slot = n end
+    end
+    if not slot then return false end
+    local gemTlo = mq.TLO.Me.Gem(slot)
+    if not gemTlo then return false end
+    local ok, inSlot = pcall(function() return gemTlo() end)
+    if not ok or not inSlot or inSlot == '' then return false end
+    return string.lower(inSlot) == string.lower(spellName)
+end
+
+--- If true, CastSpell should return false before CurSpell: MQ2Cast would only wait on reuse (Lua would mirror that busy window).
+--- Only when the spell is already in the target gem; if the slot is empty or another spell, MQ2Cast may need to memorize — do not defer.
+function spellutils.ShouldDeferMQ2CastForGemCooldown(entry)
+    if not entry or type(entry.gem) ~= 'number' then return false end
+    if entry.gem < 1 or entry.gem > 12 then return false end
+    if not spellMemmedInConfiguredGemSlot(entry) then return false end
+    local spell = string.lower(entry.spell or '')
+    if spell == '' then return false end
+    local sr = mq.TLO.Me.SpellReady(spell)
+    if not sr then return false end
+    local ok, ready = pcall(function() return sr() end)
+    if not ok or ready then return false end
+    return true
+end
+
 function spellutils.CheckGemReadiness(sub, index, entry)
     local rc = state.getRunconfig()
     local spell = entry.spell
@@ -1402,6 +1440,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if not spellutils.SpellCheck(sub, index) then return false end
         if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then return false end
         if not spellutils.CheckGemReadiness(sub, index, entry) then return false end
+        if spellutils.ShouldDeferMQ2CastForGemCooldown(entry) then return false end
         rc.CurSpell = {
             sub = sub,
             spell = index,
