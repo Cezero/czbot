@@ -196,6 +196,11 @@ function M.canStartBusyState(stateNum)
         return false
     end
 
+    -- Do not replace casting with melee; doMelee was clobbering runState while CurSpell still active (spell pipeline desync).
+    if stateNum == M.STATES.melee and current == M.STATES.casting then
+        return false
+    end
+
     if stateNum == M.STATES.melee then return true end
 
     return false

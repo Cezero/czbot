@@ -280,12 +280,18 @@ function botmelee.AdvCombat()
 
     if rc.engageTargetId then
         local name = mq.TLO.Spawn(rc.engageTargetId).CleanName() or tostring(rc.engageTargetId)
-        if tankrole.AmIMainTank() and myconfig.melee.mtSticky == true and not myconfig.melee.offtank then
-            rc.statusMessage = string.format('Tanking %s (%s)', name, rc.engageTargetId)
-        elseif myconfig.melee.offtank then
-            rc.statusMessage = string.format('Off-tanking %s (%s)', name, rc.engageTargetId)
-        else
-            rc.statusMessage = string.format('Assisting on %s (%s)', name, rc.engageTargetId)
+        local cs = rc.CurSpell
+        local curSpellBusy = cs and cs.sub and cs.phase and
+            (cs.phase == 'precast' or cs.phase == 'precast_wait_move' or cs.phase == 'casting' or cs.phase == 'cast_complete_pending_resist')
+        local skipAssistStatus = state.getRunState() == state.STATES.casting or curSpellBusy
+        if not skipAssistStatus then
+            if tankrole.AmIMainTank() and myconfig.melee.mtSticky == true and not myconfig.melee.offtank then
+                rc.statusMessage = string.format('Tanking %s (%s)', name, rc.engageTargetId)
+            elseif myconfig.melee.offtank then
+                rc.statusMessage = string.format('Off-tanking %s (%s)', name, rc.engageTargetId)
+            else
+                rc.statusMessage = string.format('Assisting on %s (%s)', name, rc.engageTargetId)
+            end
         end
         engageTarget()
     else

@@ -102,25 +102,22 @@ function hookregistry.runNormalHooks()
         end
         return
     end
-    local maxPriority = nil
-    if state.isBusy() then
-        local payload = state.getRunStatePayload()
-        if payload and type(payload.priority) == 'number' then
-            maxPriority = payload.priority
-        end
-    end
-    local skippedByBusyCap = nil
-    if maxPriority ~= nil then
-        skippedByBusyCap = {}
-    end
+    local skippedByBusyCap = {}
     for _, h in ipairs(list) do
+        local maxPriority = nil
+        if state.isBusy() then
+            local payload = state.getRunStatePayload()
+            if payload and type(payload.priority) == 'number' then
+                maxPriority = payload.priority
+            end
+        end
         if maxPriority == nil or h.priority <= maxPriority then
             h.fn(h.name)
-        elseif skippedByBusyCap then
-            skippedByBusyCap[#skippedByBusyCap + 1] = string.format('%s(%d)', h.name, h.priority)
+        else
+            skippedByBusyCap[#skippedByBusyCap + 1] = string.format('%s(%d>%s)', h.name, h.priority, tostring(maxPriority))
         end
     end
-    if skippedByBusyCap and #skippedByBusyCap > 0 then
+    if #skippedByBusyCap > 0 then
         local now = mq.gettime()
         if now >= _hookSkipLogNextTime then
             _hookSkipLogNextTime = now + HOOK_SKIP_LOG_INTERVAL_MS
@@ -132,7 +129,14 @@ function hookregistry.runNormalHooks()
             elseif cs and cs.sub then
                 curSpellStr = tostring(cs.sub)
             end
-            printf('\ayCZBot:\ax [busy] cap=%s runState=%s skipped=%s CurSpell=%s', tostring(maxPriority),
+            local capNow = nil
+            if state.isBusy() then
+                local payload = state.getRunStatePayload()
+                if payload and type(payload.priority) == 'number' then
+                    capNow = payload.priority
+                end
+            end
+            printf('\ayCZBot:\ax [busy] cap=%s runState=%s skipped=%s CurSpell=%s', tostring(capNow),
                 state.getRunStateName(), table.concat(skippedByBusyCap, ','), curSpellStr)
         end
     end

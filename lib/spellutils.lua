@@ -8,6 +8,7 @@ local tankrole = require('lib.tankrole')
 local charinfo = require("mqcharinfo")
 local bardtwist = require('lib.bardtwist')
 local castutils = require('lib.castutils')
+local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local spellutils = {}
 local _deps = {}
@@ -736,6 +737,32 @@ function spellutils.IsMemorizing()
     return (mq.TLO.Me.CastTimeLeft() or 0) == 0
 end
 
+--- When resuming a cast, use bothooks priority for spellcheckResume.hook so an earlier hook (e.g. doHeal) does not pass wrong runPriority to another sub's CurSpell (e.g. buff).
+local function spellRunPriorityForResume(options, rc)
+    local sr = rc.CurSpell and rc.CurSpell.spellcheckResume
+    if sr and sr.hook then
+        local hp = bothooks.getPriority(sr.hook)
+        if hp then return hp end
+    end
+    return options and options.runPriority
+end
+
+local _buffResumeDbgNextTime = 0
+local BUFF_RESUME_DBG_INTERVAL_MS = 1000
+local function dbgBuffResumeTrace(phase, callerSub, options, rc)
+    local cs = rc.CurSpell
+    if not cs or cs.sub ~= 'buff' then return end
+    local optPri = options and options.runPriority
+    local resolved = spellRunPriorityForResume(options, rc)
+    if optPri == resolved and callerSub == 'buff' then return end
+    local now = mq.gettime()
+    if now < _buffResumeDbgNextTime then return end
+    _buffResumeDbgNextTime = now + BUFF_RESUME_DBG_INTERVAL_MS
+    local hook = cs.spellcheckResume and cs.spellcheckResume.hook
+    printf('\ayCZBot:\ax [buff-resume] %s callerSub=%s optPri=%s resolvedPri=%s resumeHook=%s', tostring(phase),
+        tostring(callerSub), tostring(optPri), tostring(resolved), tostring(hook))
+end
+
 --- Handles CurSpell re-entry (casting, precast, precast_wait_move). Returns true if handled (caller should return), false to run the phase-first loop.
 function spellutils.handleSpellCheckReentry(sub, options)
     options = options or {}
@@ -844,8 +871,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
             spellutils.clearCastingStateOrResume()
             return true
         end
-        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub,
-            options.runPriority, rc.CurSpell.spellcheckResume)
+        local rp = spellRunPriorityForResume(options, rc)
+        dbgBuffResumeTrace('precast_wait_move', sub, options, rc)
+        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub, rp,
+            rc.CurSpell.spellcheckResume)
         return true
     end
 
@@ -859,8 +888,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
             spellutils.clearCastingStateOrResume()
             return true
         end
-        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub,
-            options.runPriority, rc.CurSpell.spellcheckResume)
+        local rp = spellRunPriorityForResume(options, rc)
+        dbgBuffResumeTrace('precast', sub, options, rc)
+        spellutils.CastSpell(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub, rp,
+            rc.CurSpell.spellcheckResume)
         return true
     end
 
