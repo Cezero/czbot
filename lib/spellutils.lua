@@ -396,6 +396,14 @@ function spellutils.IsSelfTargetSpell(entry)
     return type(tt) == 'string' and tt == 'Self'
 end
 
+-- Group AE heals: TargetType Group v1 / Group v2 — no forced target; HP-threshold interrupt does not apply.
+function spellutils.IsGroupV1OrV2HealEntry(entry)
+    local e = spellutils.GetSpellEntity(entry)
+    if not e or not e.TargetType then return false end
+    local tt = e.TargetType()
+    return tt == 'Group v1' or tt == 'Group v2'
+end
+
 -- Return duration in seconds for the entry's spell (handles item). Returns 0 if none or invalid.
 -- MyDuration() returns ticks (1 tick = 6 sec); use MyDuration.TotalSeconds() for seconds.
 function spellutils.GetSpellDurationSec(entry)
@@ -843,8 +851,9 @@ function spellutils.handleSpellCheckReentry(sub, options)
 
     if rc.CurSpell and rc.CurSpell.phase == 'precast' then
         local preEntry = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
-        local skipPrecastTargetWait = preEntry and spellutils.IsSelfTargetSpell(preEntry) and
-            rc.CurSpell.target == mq.TLO.Me.ID()
+        local skipPrecastTargetWait = preEntry and rc.CurSpell.target == mq.TLO.Me.ID() and
+            (spellutils.IsSelfTargetSpell(preEntry) or
+                (rc.CurSpell.sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(preEntry)))
         if mq.TLO.Target.ID() ~= rc.CurSpell.target and not skipPrecastTargetWait then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
             spellutils.clearCastingStateOrResume()
@@ -1087,6 +1096,7 @@ end
 
 function spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
     if sub ~= 'heal' or criteria == 'corpse' then return end
+    if entry and spellutils.IsGroupV1OrV2HealEntry(entry) then return end
     if criteria == 'self' and entry and entry.healResource == 'mana' then return end
     local th = AHThreshold and spell and AHThreshold[spell] and AHThreshold[spell][criteria]
     if not th or not targetSpawn.PctHPs() or targetSpawn.ID() ~= target then return end
@@ -1151,9 +1161,10 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     end
     local buffPresent = buffid and buffdur > (durMs * 0.10)
     local stacks = mq.TLO.Spell(spellid).StacksTarget()
+    local spellTargetType = mq.TLO.Spell(spellid).TargetType() or ''
 
     if sub == 'buff' then
-        if not stacks then
+        if not stacks and spellTargetType ~= 'Self' then
             printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, targetname)
             mq.cmd('/interrupt')
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
@@ -1202,6 +1213,18 @@ function spellutils.InterruptCheck()
     local spelldur = spellutils.GetSpellDurationSec(entry) * 1000
     if not criteria then return false end
     if not target or not spell or not criteria or not sub then return false end
+
+    -- Group v1/v2 heal: re-check evalGroupAECount mid-cast; interrupt if band/tarcnt no longer satisfied.
+    if sub == 'heal' and criteria == 'groupheal' and entry and spellutils.IsGroupV1OrV2HealEntry(entry) then
+        local botheal = require('botheal')
+        local gid, _ghit = botheal.EvalGroupHealIfNeeded(spell)
+        if not gid then
+            mq.cmd('/interrupt')
+            spellutils.clearCastingStateOrResume()
+            return
+        end
+    end
+
     if not mq.TLO.Target.ID() or mq.TLO.Target.ID() == 0 then return false end
     local targetSpawn = mq.TLO.Target
 
@@ -1304,7 +1327,7 @@ function spellutils.BuildMQ2CastCommand(entry, EvalID, sub)
     local spellname = entry.spell
     local castArg = (type(gem) == 'number') and tostring(gem) or gem
     local cmd = string.format('/casting "%s" %s', spellname, castArg)
-    if not spellutils.IsSelfTargetSpell(entry) then
+    if not spellutils.IsSelfTargetSpell(entry) and not (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry)) then
         cmd = cmd .. string.format(' -targetid|%s', EvalID)
     end
     if sub == 'debuff' then
@@ -1385,7 +1408,8 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         local _, tankid = spellutils.GetTankInfo(true)
         if tankid ~= meId then mtSelfCastInCombat = false end
     end
-    local skipSelfRetarget = (EvalID == meId and spellutils.IsSelfTargetSpell(entry))
+    local skipSelfRetarget = (EvalID == meId and spellutils.IsSelfTargetSpell(entry)) or
+        (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry))
     if not useMQ2Cast and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat and not skipSelfRetarget then
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'

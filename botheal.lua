@@ -420,4 +420,13 @@ function botheal.getHookFn(name)
     return nil
 end
 
+--- Same predicate as pre-cast group heal (HPEvalGrp + evalGroupAECount). Used by spellutils mid-cast interrupt.
+--- @param spellIndex number heal.spells index
+--- @return number|nil id, string|nil targethit
+function botheal.EvalGroupHealIfNeeded(spellIndex)
+    local ctx = HPEvalContext(spellIndex)
+    if not ctx then return nil, nil end
+    return HPEvalGrp(spellIndex, ctx)
+end
+
 return botheal

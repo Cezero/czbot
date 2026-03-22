@@ -28,6 +28,10 @@ All heal options live under **`config.heal`**. Spell entries are in **`heal.spel
 | **interruptlevel** | 0.80 | Used when deciding whether to interrupt a cast (e.g. for a higher-priority heal). Target HP threshold. |
 | **xttargets** | 0 | Comma- or digit-separated extended target slot numbers (e.g. `1,2,3` or `123`) that are valid for heals. When set, spells with band **xtgt** can heal those XTarget slots. |
 
+### Group AE heals (MQ TargetType Group v1 / Group v2)
+
+For spells whose MQ **TargetType** is **Group v1** or **Group v2**, the bot does **not** force a friendly target: it omits `-targetid` on `/casting` and skips `/tar` to the caster before the cast, so you may keep a **mob** targeted or **no target** and the spell still applies to the group. **`interruptlevel`** does **not** apply to these spells (no HP-threshold interrupt on the current target). While the cast bar is active, the bot re-evaluates the same **groupheal** logic as pre-cast (`tarcnt`, HP band, AE range) and **interrupts** if the group would no longer qualify.
+
 ### Heal spell entries
 
 Each entry in **`heal.spells`** can have:
