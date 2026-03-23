@@ -96,7 +96,7 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 
 ### Master pause
 
-- **`/czp`** or **`/czpause [on|off]`** — Pause or unpause the entire bot. No arguments toggles pause.
+- **`/czp`** or **`/czpause [on|off]`** — Pause or resume the entire bot. No arguments toggles pause.
 
 ---
 

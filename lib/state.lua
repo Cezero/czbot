@@ -386,7 +386,7 @@ function M.getMobCount(rc)
 end
 
 ---Toggle or set global MasterPause (pause CZBot). Used by status tab Pause button and /czp.
----@param ... string|nil 'on' = pause, 'off' = unpause, none = toggle
+---@param ... string|nil 'on' = pause, 'off' = resume, none = toggle
 function M.czpause(...)
     local args = { ... }
     if args[1] and args[1] == 'off' then

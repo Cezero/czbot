@@ -133,10 +133,10 @@ function M.draw()
     ImGui.SameLine()
     local style = ImGui.GetStyle()
     local isPaused = (_G.MasterPause == true)
-    local pauseLabel = isPaused and 'Unpause' or 'Pause'
+    local pauseLabel = isPaused and 'Resume' or 'Pause'
     local pauseLabelW = math.max(
         (select(1, ImGui.CalcTextSize('Pause')) or 0),
-        (select(1, ImGui.CalcTextSize('Unpause')) or 0)
+        (select(1, ImGui.CalcTextSize('Resume')) or 0)
     )
     local pauseIconW = (select(1, ImGui.CalcTextSize(Icons.FA_PAUSE_CIRCLE)) or 0) + style.FramePadding.x * 2
     local exitLabelW = (select(1, ImGui.CalcTextSize('Exit')) or 0)
@@ -154,7 +154,7 @@ function M.draw()
     if ImGui.SmallButton(Icons.FA_PAUSE_CIRCLE .. '##pause') then
         state.czpause()
     end
-    if ImGui.IsItemHovered() then ImGui.SetTooltip(isPaused and 'Unpause CZBot' or 'Pause CZBot') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip(isPaused and 'Resume CZBot' or 'Pause CZBot') end
     ImGui.PopStyleColor(2)
     ImGui.SameLine()
     ImGui.Text('%s', 'Exit')
