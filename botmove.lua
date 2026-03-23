@@ -373,6 +373,7 @@ local function tickDragging(payload)
         end
         local corpsedist = mq.TLO.Spawn(cid).Distance3D()
         if mq.TLO.Spawn(cid).ID() and corpsedist and corpsedist < 90 then
+            targeting.TargetAndWait(cid, 500)
             mq.cmd('/multiline ; /corpsedrag ; /nav stop')
             if payload.mode == 'carry' then
                 carryCorpseID = cid
@@ -402,6 +403,8 @@ local function tickDragging(payload)
     if payload.phase == 'returning_camp' then
         if hasCampSet(rc) and campDistanceOk(rc) and campLOSOk(rc) then
             if mq.TLO.Navigation.Active() then mq.cmd('/nav stop') end
+            targeting.TargetAndWait(cid, 500)
+            mq.cmd('/corpsedrop')
             state.clearRunState()
             CorpseID = nil
             return true

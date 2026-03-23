@@ -71,7 +71,7 @@ stateDiagram-v2
 ```
 
 - **DragCheck:** If runState dragging, tickDragging (see below). Else mode is selected from camp state. No-camp mode uses nearby search (`settings.acleash`) and skips acquisition while already carrying a corpse. Camp mode uses 1500 range and starts a fetch-return cycle. If corpse and PathExists, startDrag: if DragHack and not justDidSumcorpse, /sumcorpse; else set runState dragging phase init (2s).
-- **tickDragging:** init: after deadline, target corpse, set phase sneak. sneak: ROG uses sneak/hide until ready then /nav id corpse and phase navigating. navigating: when corpse distance < 90, /corpsedrag; no-camp mode clears and keeps carried corpse, camp mode transitions to returning_camp and navs back to camp. returning_camp: clear when at camp, nav stops, or deadline passes.
+- **tickDragging:** init: after deadline, target corpse, set phase sneak. sneak: ROG uses sneak/hide until ready then /nav id corpse and phase navigating. navigating: when corpse distance < 90, target corpse then /corpsedrag; no-camp mode clears and keeps carried corpse, camp mode transitions to returning_camp and navs back to camp. returning_camp: at camp, target corpse and /corpsedrop, then clear; also clears on nav stop/deadline fallback.
 - **Camp leash interaction:** `MakeCampLeashCheck` skips leash-reset while a camp fetch-return drag workflow is active, so drag can leave and re-enter camp without immediate leash interruption.
 
 See [Corpse dragging](../corpse-dragging.md) for configuration.
