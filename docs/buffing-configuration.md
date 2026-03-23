@@ -35,7 +35,7 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 | **inCombat** | Optional. When `true`, this buff can be cast when mobs are in camp. Default is `false`. |
 | **inIdle** | Optional. **Bard only.** When `true` (default), this buff is included in the idle twist list. When `false`, it is not twisted when idle. Ignored for non-bards. GUI shows "In idle" only for Bards. |
 | **combatOnly** | Optional. **Non-bard only** (ignored for BRD). When `true`, the auto buff loop **only** considers this spell when mobs are in camp — never while idle. Implies combat allowance; you do not need **inCombat** for eligibility (you may still set **inCombat** for documentation clarity). Default is `false`. GUI shows "Combat only" for non-bards. |
-| **spellicon** | Optional. Buff icon ID. If set (non-zero), the bot skips a target who already has that buff icon (avoids overwriting). |
+| **spellicon** | Optional. Spell ID used for “already has buff” detection. If set (non-zero), the bot skips a target who already has that buff (avoids overwriting). |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
 ### Buff bands
@@ -124,5 +124,5 @@ Refreshes only when mobs are in camp, not every tick while idle. Manual `/cz cas
 
 ## Behavior summary
 
-- **Spellicon:** When **spellicon** is set, the bot checks whether the candidate target already has that buff (by icon). If they do, the target is skipped so the same buff is not recast unnecessarily.
+- **Spellicon:** When **spellicon** is set, the bot checks whether the candidate target already has that buff (by spell ID). If they do, the target is skipped so the same buff is not recast unnecessarily.
 - **Combat vs idle:** By default, buffs are allowed when there are no mobs in camp. Set **inCombat** `true` on a spell entry to allow that buff when mobs are in camp. Set **combatOnly** `true` (non-bard) to **skip** that spell while idle and only run it when mobs are in camp. **inIdle** (Bard only) controls whether the buff is in the idle twist list; see [Bard configuration](bard-configuration.md).

@@ -9,6 +9,20 @@ local inputs = require('gui.widgets.inputs')
 local M = {}
 
 local NUMERIC_INPUT_WIDTH = 80
+local SPELICON_INPUT_WIDTH = 220
+
+-- Per-spell-entry editable buffer for `spellicon`.
+-- We display canonical spell name for the stored numeric spell ID, but we let the user input either
+-- a spell ID or a spell name (validated and converted back to numeric spell ID).
+local spelliconTextState = {}
+
+local function resolveSpelliconName(spellicon)
+    local sid = tonumber(spellicon)
+    if not sid or sid == 0 then return '' end
+    local name = mq.TLO.Spell(sid).Name()
+    if type(name) == 'string' and name ~= '' then return name end
+    return tostring(sid)
+end
 
 local PRIMARY_OPTIONS = {
     { value = 'gem',     label = 'Gem' },
@@ -56,19 +70,55 @@ local function runConfigLoaders()
 end
 
 local function buffCustomSection(entry, idPrefix, onChanged)
-    -- spellicon row: 5-digit numeric input
-    ImGui.Text('Spell icon')
+    -- spellicon row: input a spell ID or spell name (validated => stored as numeric spell ID)
+    ImGui.Text('Spellicon')
     if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Icon index for UI/display. 0 = default.')
+        ImGui.SetTooltip('Spell ID used to detect whether the target already has this buff. Input can be a spell name or a numeric spell ID. Empty/0 disables.')
     end
     ImGui.SameLine()
-    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-    local icon = entry.spellicon
-    if icon == nil then icon = 0 end
-    local newIcon, iconCh = inputs.boundedInt(idPrefix .. '_spellicon', icon, 0, 99999, 1, '##' .. idPrefix .. '_spellicon')
-    if iconCh then
-        entry.spellicon = newIcon
-        if onChanged then onChanged() end
+    ImGui.SetNextItemWidth(SPELICON_INPUT_WIDTH)
+
+    if not spelliconTextState[idPrefix] then
+        spelliconTextState[idPrefix] = { buf = '', lastSpellicon = nil, error = nil }
+    end
+    local s = spelliconTextState[idPrefix]
+
+    local current = entry.spellicon or 0
+    if s.lastSpellicon ~= current then
+        s.buf = resolveSpelliconName(current)
+        s.lastSpellicon = current
+        s.error = nil
+    end
+
+    local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
+    local flags = (ImGuiInputTextFlags.EnterReturnsTrue) or 0
+    local newBuf, changed = ImGui.InputText('##' .. idPrefix .. '_spellicon', s.buf or '', flags)
+    if changed and newBuf ~= nil then
+        local trimmed = (newBuf:match('^%s*(.-)%s*$') or '')
+        s.buf = newBuf
+        local candidate = tonumber(trimmed) or trimmed
+
+        if trimmed == '' or trimmed == '0' then
+            entry.spellicon = 0
+            s.lastSpellicon = 0
+            s.error = nil
+            s.buf = ''
+            if onChanged then onChanged() end
+        else
+            local resolved = mq.TLO.Spell(candidate).ID()
+            local sidNum = tonumber(resolved)
+            if sidNum and sidNum > 0 then
+                entry.spellicon = sidNum
+                s.lastSpellicon = sidNum
+                s.error = nil
+                s.buf = resolveSpelliconName(sidNum) -- always display canonical name
+                if onChanged then onChanged() end
+            else
+                s.error = 'Invalid spell ID/name'
+            end
+        end
+    elseif ImGui.IsItemHovered() and s.error then
+        ImGui.SetTooltip(s.error)
     end
     ImGui.Spacing()
     -- tarcnt row
@@ -134,8 +184,8 @@ end
 function M.draw()
     local buff = botconfig.config.buff
     if not buff then return end
-    if not buff.spells then buff.spells = {} end
-    local spells = buff.spells
+    local spells = buff.spells or {}
+    buff.spells = spells
     for i, entry in ipairs(spells) do
         spell_entry.draw(entry, {
             id = 'buff_' .. i,

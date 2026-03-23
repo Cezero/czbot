@@ -248,8 +248,24 @@ function spellutils.SpawnNeedsBuff(spawnId, spellName, spellicon)
     local sp = mq.TLO.Spawn(spawnId)
     if not sp or not sp.ID() or sp.ID() == 0 then return false end
     if not sp.BuffsPopulated or not sp.BuffsPopulated() then return false end
-    local hasBuff = sp.Buff(spellName)()
-    return not hasBuff
+    -- MQ2 `Buff(spellName)` can return a different buff on partial-name matches.
+    -- Only treat it as "has this buff" when the matched buff's spell id equals the configured spell id.
+    local spellid
+    do
+        local ok, id = pcall(function() return mq.TLO.Spell(spellName).ID() end)
+        spellid = ok and id or nil
+    end
+
+    local buff = sp.Buff(spellName)
+    local hasAnyBuffMatchByName = buff and buff() or false
+    if not hasAnyBuffMatchByName then return true end
+    if not spellid then
+        -- Can't resolve spell id: preserve legacy behavior (presence by name means we consider it "already buffed").
+        return false
+    end
+
+    local matchedBuffId = buff.ID() or nil
+    return matchedBuffId ~= spellid
 end
 
 -- Spawn: does this spawn have a matching detrimental? Same as buffs: only valid after targeting
@@ -1193,7 +1209,9 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
         buffid = mq.TLO.Target.Buff(spellname).ID() or false
         buffdur = mq.TLO.Target.Buff(spellname).Duration() or 0
     end
-    local buffPresent = buffid and buffdur > (durMs * 0.10)
+    -- MQ2 `Buff(spellName)` can return a different buff on partial-name matches.
+    -- Only treat it as "present" when it matches the configured spell id.
+    local buffPresent = (buffid and spellid and buffid == spellid) and buffdur > (durMs * 0.10)
     local stacks = mq.TLO.Spell(spellid).StacksTarget()
     local spellTargetType = mq.TLO.Spell(spellid).TargetType() or ''
 

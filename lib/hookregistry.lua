@@ -136,8 +136,6 @@ function hookregistry.runNormalHooks()
                     capNow = payload.priority
                 end
             end
-            printf('\ayCZBot:\ax [busy] cap=%s runState=%s skipped=%s CurSpell=%s', tostring(capNow),
-                state.getRunStateName(), table.concat(skippedByBusyCap, ','), curSpellStr)
         end
     end
     -- When busy (e.g. casting), run runWhenBusy hooks so movement (camp return, follow) still runs.
