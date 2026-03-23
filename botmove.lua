@@ -10,6 +10,7 @@ local myconfig = botconfig.config
 
 local botmove = {}
 local CorpseID = nil
+local carryCorpseID = nil
 local lastFollowResolveFailTime = 0
 
 -- ---------------------------------------------------------------------------
@@ -237,6 +238,16 @@ local function campLOSOk(rc)
         ',' .. meY .. ',' .. meZ .. ':' .. rc.makecamp.x .. ',' .. rc.makecamp.y .. ',' .. rc.makecamp.z)()
 end
 
+local function hasCampSet(rc)
+    return rc and rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y and rc.makecamp.z
+end
+
+local function isCampDragWorkflowActive()
+    if state.getRunState() ~= state.STATES.dragging then return false end
+    local p = state.getRunStatePayload()
+    return p and p.mode == 'camp_fetch'
+end
+
 local function doLeashResetCombat()
     combat.ResetCombatState()
 end
@@ -318,6 +329,7 @@ local function tickDragging(payload)
         state.clearRunState()
         return true
     end
+    local rc = state.getRunconfig()
     local cid = payload.corpseID
     if payload.phase == 'init' then
         if mq.gettime() < (payload.deadline or 0) then return true end
@@ -327,7 +339,12 @@ local function tickDragging(payload)
         targeting.TargetAndWait(cid, 500)
         if state.canStartBusyState(state.STATES.dragging) then
             state.setRunState(state.STATES.dragging,
-                { phase = 'sneak', corpseID = cid, priority = bothooks.getPriority('doMiscTimer') })
+                {
+                    phase = 'sneak',
+                    mode = payload.mode,
+                    corpseID = cid,
+                    priority = bothooks.getPriority('doMiscTimer')
+                })
         end
         return true
     end
@@ -340,7 +357,12 @@ local function tickDragging(payload)
         mq.cmdf('/nav id %s', cid)
         if state.canStartBusyState(state.STATES.dragging) then
             state.setRunState(state.STATES.dragging,
-                { phase = 'navigating', corpseID = cid, priority = bothooks.getPriority('doMiscTimer') })
+                {
+                    phase = 'navigating',
+                    mode = payload.mode,
+                    corpseID = cid,
+                    priority = bothooks.getPriority('doMiscTimer')
+                })
         end
         return true
     end
@@ -352,15 +374,50 @@ local function tickDragging(payload)
         local corpsedist = mq.TLO.Spawn(cid).Distance3D()
         if mq.TLO.Spawn(cid).ID() and corpsedist and corpsedist < 90 then
             mq.cmd('/multiline ; /corpsedrag ; /nav stop')
+            if payload.mode == 'carry' then
+                carryCorpseID = cid
+                state.clearRunState()
+                CorpseID = nil
+                return true
+            end
+            if payload.mode == 'camp_fetch' and hasCampSet(rc) then
+                doNavToCamp({ dist = myconfig.settings.campRestDistance or 15 })
+                if state.canStartBusyState(state.STATES.dragging) then
+                    state.setRunState(state.STATES.dragging,
+                        {
+                            phase = 'returning_camp',
+                            mode = 'camp_fetch',
+                            corpseID = cid,
+                            deadline = mq.gettime() + 20000,
+                            priority = bothooks.getPriority('doMiscTimer')
+                        })
+                end
+                return true
+            end
             state.clearRunState()
             CorpseID = nil
+            return true
+        end
+    end
+    if payload.phase == 'returning_camp' then
+        if hasCampSet(rc) and campDistanceOk(rc) and campLOSOk(rc) then
+            if mq.TLO.Navigation.Active() then mq.cmd('/nav stop') end
+            state.clearRunState()
+            CorpseID = nil
+            return true
+        end
+        if not mq.TLO.Navigation.Active() or mq.gettime() >= (payload.deadline or 0) then
+            state.clearRunState()
+            CorpseID = nil
+            return true
         end
     end
     return true
 end
 
-local function findCorpseToDrag()
+local function findCorpseToDrag(maxDist)
     local bots = charinfo.GetPeers()
+    local searchDist = maxDist or DragDist
     for cor = 1, charinfo.GetPeerCnt() do
         local bot = bots[cor]
         local corpse = nil
@@ -369,14 +426,14 @@ local function findCorpseToDrag()
             corpse = mq.TLO.Spawn(bot .. "'s corpse").Type()
             corpsedist = mq.TLO.Spawn(bot .. "'s corpse").Distance()
         end
-        if corpse == 'Corpse' and corpsedist and corpsedist > 10 and corpsedist < DragDist then
+        if corpse == 'Corpse' and corpsedist and corpsedist > 10 and corpsedist < searchDist then
             return mq.TLO.Spawn(bot .. "'s corpse").ID()
         end
     end
     return nil
 end
 
-local function startDrag(corpseId, justDidSumcorpse)
+local function startDrag(corpseId, justDidSumcorpse, mode)
     local rc = state.getRunconfig()
     if rc.DragHack and corpseId and not justDidSumcorpse then
         targeting.TargetAndWait(corpseId, 500)
@@ -389,6 +446,7 @@ local function startDrag(corpseId, justDidSumcorpse)
             state.setRunState(state.STATES.dragging,
                 {
                     phase = 'init',
+                    mode = mode,
                     corpseID = corpseId,
                     deadline = mq.gettime() + 2000,
                     priority = bothooks.getPriority(
@@ -488,6 +546,7 @@ end
 function botmove.MakeCampLeashCheck()
     if not state.getRunconfig().campstatus then return end
     if state.getRunconfig().engageTargetId then return end
+    if isCampDragWorkflowActive() then return end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     if state.getRunState() == state.STATES.pulling then return end
     local rc = state.getRunconfig()
@@ -532,16 +591,24 @@ end
 
 function botmove.DragCheck()
     local just_did_sumcorpse = tickSumcorpsePending()
+    local rc = state.getRunconfig()
+    local mode = hasCampSet(rc) and 'camp_fetch' or 'carry'
 
     if state.getRunState() == state.STATES.dragging then
         local payload = state.getRunStatePayload()
         if tickDragging(payload) then return end
     end
 
+    if mode == 'carry' and carryCorpseID then
+        if mq.TLO.Spawn(carryCorpseID).ID() then return false end
+        carryCorpseID = nil
+    end
+
     CorpseID = nil
-    CorpseID = findCorpseToDrag()
+    local searchDist = (mode == 'carry') and (myconfig.settings.acleash or 75) or DragDist
+    CorpseID = findCorpseToDrag(searchDist)
     if not CorpseID then return false end
-    startDrag(CorpseID, just_did_sumcorpse)
+    startDrag(CorpseID, just_did_sumcorpse, mode)
 end
 
 return botmove

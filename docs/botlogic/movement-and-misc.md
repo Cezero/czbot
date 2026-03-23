@@ -57,7 +57,7 @@ stateDiagram-v2
 
 ## Dragging (doMiscTimer → DragCheck)
 
-runState **dragging** is set by `botmove.startDrag()` with phases: init, sneak, navigating. Cleared when nav stops or corpse is close and /corpsedrag runs.
+runState **dragging** is set by `botmove.startDrag()` with phases: init, sneak, navigating, returning_camp (camp mode only).
 
 ```mermaid
 stateDiagram-v2
@@ -65,11 +65,14 @@ stateDiagram-v2
     [*] --> init: startDrag corpseId
     init --> sneak: 2s deadline, target, hidec
     sneak --> navigating: ROG hide/sneak else /nav id corpse
-    navigating --> [*]: nav inactive or corpse < 90 dist, corpsedrag
+    navigating --> returning_camp: camp mode, corpse < 90, corpsedrag
+    returning_camp --> [*]: at camp or nav inactive/deadline
+    navigating --> [*]: no-camp mode, corpse < 90, corpsedrag
 ```
 
-- **DragCheck:** If runState dragging, tickDragging (see below). Else findCorpseToDrag (peer corpses in range). If corpse and PathExists, startDrag: if DragHack and not justDidSumcorpse, /sumcorpse; else set runState dragging phase init (2s).
-- **tickDragging:** init: after deadline, target corpse, set phase sneak. sneak: ROG uses sneak/hide until ready then /nav id corpse and phase navigating. navigating: when nav inactive clear; when corpse distance < 90, /corpsedrag, /nav stop, clear.
+- **DragCheck:** If runState dragging, tickDragging (see below). Else mode is selected from camp state. No-camp mode uses nearby search (`settings.acleash`) and skips acquisition while already carrying a corpse. Camp mode uses 1500 range and starts a fetch-return cycle. If corpse and PathExists, startDrag: if DragHack and not justDidSumcorpse, /sumcorpse; else set runState dragging phase init (2s).
+- **tickDragging:** init: after deadline, target corpse, set phase sneak. sneak: ROG uses sneak/hide until ready then /nav id corpse and phase navigating. navigating: when corpse distance < 90, /corpsedrag; no-camp mode clears and keeps carried corpse, camp mode transitions to returning_camp and navs back to camp. returning_camp: clear when at camp, nav stops, or deadline passes.
+- **Camp leash interaction:** `MakeCampLeashCheck` skips leash-reset while a camp fetch-return drag workflow is active, so drag can leave and re-enter camp without immediate leash interruption.
 
 See [Corpse dragging](../corpse-dragging.md) for configuration.
 
