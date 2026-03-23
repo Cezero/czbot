@@ -248,6 +248,16 @@ local function isCampDragWorkflowActive()
     return p and p.mode == 'camp_fetch'
 end
 
+local function isCorpseAtCamp(corpseID, rc)
+    if not corpseID or not hasCampSet(rc) then return false end
+    local corpseX = mq.TLO.Spawn(corpseID).X()
+    local corpseY = mq.TLO.Spawn(corpseID).Y()
+    if not corpseX or not corpseY then return false end
+    local campCloseSq = myconfig.settings.campRestDistanceSq
+    local distSq = utils.getDistanceSquared2D(corpseX, corpseY, rc.makecamp.x, rc.makecamp.y)
+    return distSq and campCloseSq and distSq <= campCloseSq
+end
+
 local function doLeashResetCombat()
     combat.ResetCombatState()
 end
@@ -418,22 +428,31 @@ local function tickDragging(payload)
     return true
 end
 
-local function findCorpseToDrag(maxDist)
+local function findCorpseToDrag(maxDist, mode)
+    local rc = state.getRunconfig()
     local bots = charinfo.GetPeers()
     local searchDist = maxDist or DragDist
+    local furthestCorpseID = nil
+    local furthestDist = -1
     for cor = 1, charinfo.GetPeerCnt() do
         local bot = bots[cor]
-        local corpse = nil
-        local corpsedist = nil
         if bot then
-            corpse = mq.TLO.Spawn(bot .. "'s corpse").Type()
-            corpsedist = mq.TLO.Spawn(bot .. "'s corpse").Distance()
-        end
-        if corpse == 'Corpse' and corpsedist and corpsedist > 10 and corpsedist < searchDist then
-            return mq.TLO.Spawn(bot .. "'s corpse").ID()
+            local corpseSpawn = mq.TLO.Spawn(bot .. "'s corpse")
+            local corpseType = corpseSpawn.Type()
+            local corpsedist = corpseSpawn.Distance()
+            local corpseID = corpseSpawn.ID()
+            local inRange = corpseType == 'Corpse' and corpsedist and corpsedist > 10 and corpsedist < searchDist
+            if inRange and corpseID then
+                local atCamp = mode == 'camp_fetch' and isCorpseAtCamp(corpseID, rc)
+                local canActOnCorpse = rc.DragHack or mq.TLO.Navigation.PathExists('id ' .. corpseID)()
+                if not atCamp and canActOnCorpse and corpsedist > furthestDist then
+                    furthestDist = corpsedist
+                    furthestCorpseID = corpseID
+                end
+            end
         end
     end
-    return nil
+    return furthestCorpseID
 end
 
 local function startDrag(corpseId, justDidSumcorpse, mode)
@@ -609,7 +628,7 @@ function botmove.DragCheck()
 
     CorpseID = nil
     local searchDist = (mode == 'carry') and (myconfig.settings.acleash or 75) or DragDist
-    CorpseID = findCorpseToDrag(searchDist)
+    CorpseID = findCorpseToDrag(searchDist, mode)
     if not CorpseID then return false end
     startDrag(CorpseID, just_did_sumcorpse, mode)
 end
