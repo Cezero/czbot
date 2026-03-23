@@ -344,7 +344,6 @@ local function tickDragging(payload)
     if payload.phase == 'init' then
         if mq.gettime() < (payload.deadline or 0) then return true end
         mq.cmd('/hidec none')
-        mq.cmd('/hidec alwaysnpc')
         mq.cmd('/multiline ; /attack off ; /stick off')
         targeting.TargetAndWait(cid, 500)
         if state.canStartBusyState(state.STATES.dragging) then
@@ -467,7 +466,7 @@ local function startDrag(corpseId, justDidSumcorpse, mode)
         return true
     end
     if corpseId and mq.TLO.Navigation.PathExists('id ' .. corpseId)() then
-        mq.cmd('/multiline ; /mqtarget clear ; /hidec all')
+        mq.cmd('/mqtarget clear')
         if state.canStartBusyState(state.STATES.dragging) then
             state.setRunState(state.STATES.dragging,
                 {
