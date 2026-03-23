@@ -432,12 +432,11 @@ local function tickDragging(payload)
     return true
 end
 
-local function findCorpseToDrag(maxDist, mode)
+local function findCorpseCandidates(maxDist, mode)
     local rc = state.getRunconfig()
     local bots = charinfo.GetPeers()
     local searchDist = maxDist or DragDist
-    local furthestCorpseID = nil
-    local furthestDist = -1
+    local candidates = {}
     for cor = 1, charinfo.GetPeerCnt() do
         local bot = bots[cor]
         if bot then
@@ -448,15 +447,16 @@ local function findCorpseToDrag(maxDist, mode)
             local inRange = corpseType == 'Corpse' and corpsedist and corpsedist > 10 and corpsedist < searchDist
             if inRange and corpseID then
                 local atCamp = mode == 'camp_fetch' and isCorpseAtCamp(corpseID, rc)
-                local canActOnCorpse = rc.DragHack or mq.TLO.Navigation.PathExists('id ' .. corpseID)()
-                if not atCamp and canActOnCorpse and corpsedist > furthestDist then
-                    furthestDist = corpsedist
-                    furthestCorpseID = corpseID
+                if not atCamp then
+                    candidates[#candidates + 1] = { id = corpseID, dist = corpsedist }
                 end
             end
         end
     end
-    return furthestCorpseID
+    table.sort(candidates, function(a, b)
+        return a.dist > b.dist
+    end)
+    return candidates
 end
 
 local function startDrag(corpseId, justDidSumcorpse, mode)
@@ -464,7 +464,7 @@ local function startDrag(corpseId, justDidSumcorpse, mode)
     if rc.DragHack and corpseId and not justDidSumcorpse then
         targeting.TargetAndWait(corpseId, 500)
         mq.cmd('/sumcorpse')
-        return
+        return true
     end
     if corpseId and mq.TLO.Navigation.PathExists('id ' .. corpseId)() then
         mq.cmd('/multiline ; /mqtarget clear ; /hidec all')
@@ -478,8 +478,10 @@ local function startDrag(corpseId, justDidSumcorpse, mode)
                     priority = bothooks.getPriority(
                         'doMiscTimer')
                 })
+            return true
         end
     end
+    return false
 end
 
 -- ---------------------------------------------------------------------------
@@ -632,9 +634,15 @@ function botmove.DragCheck()
 
     CorpseID = nil
     local searchDist = (mode == 'carry') and (myconfig.settings.acleash or 75) or DragDist
-    CorpseID = findCorpseToDrag(searchDist, mode)
-    if not CorpseID then return false end
-    startDrag(CorpseID, just_did_sumcorpse, mode)
+    local candidates = findCorpseCandidates(searchDist, mode)
+    if #candidates == 0 then return false end
+    for _, corpse in ipairs(candidates) do
+        if startDrag(corpse.id, just_did_sumcorpse, mode) then
+            CorpseID = corpse.id
+            return true
+        end
+    end
+    return false
 end
 
 return botmove
