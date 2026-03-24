@@ -88,6 +88,7 @@ function chchain.OnGo(line, arg1)
         mq.cmdf(
             '/rs Tank %s is out of range of complete heal!', rc.chchainTank)
     end
+    spellutils.AutoinvIfCursorBlockingCast()
     mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', rc.chchainTank, rc.chchainPause,
         mq.TLO.Me.PctMana())
     state.setRunState(state.STATES.chchain, { deadline = chtimer, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
@@ -98,6 +99,7 @@ function chchain.Tick()
     local p = state.getRunStatePayload()
     if not p or not p.chnextclr then state.clearRunState() return end
     if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then
+        spellutils.AutoinvIfCursorBlockingCast()
         mq.cmdf('/casting "Complete Heal" 5')
         return
     end

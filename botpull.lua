@@ -7,6 +7,7 @@ local spawnutils = require('lib.spawnutils')
 local botmelee = require('botmelee')
 local botmove = require('botmove')
 local utils = require('lib.utils')
+local spellutils = require('lib.spellutils')
 local charinfo = require("mqcharinfo")
 local myconfig = botconfig.config
 
@@ -752,6 +753,7 @@ local function tickAggroing(rc, spawn)
                 rc.pullDeadline = mq.gettime() + 2000
                 return
             end
+            spellutils.AutoinvIfCursorBlockingCast()
             mq.cmdf('/multiline ; /nav stop log=off ; /casting "%s" %s', spellName, tostring(gem))
             rc.pullPhase = 'aggro_wait_cast'
             rc.pullDeadline = mq.gettime() + 8000
@@ -788,13 +790,13 @@ local function tickAggroing(rc, spawn)
             rc.pullDeadline = mq.gettime() + 2000
             return
         end
+        spellutils.AutoinvIfCursorBlockingCast()
         mq.cmdf('/multiline ; /nav stop log=off ; /cast item "%s"', spell)
         rc.pullPhase = 'aggro_wait_cast'
         rc.pullDeadline = mq.gettime() + 8000
         return
     end
     if gem == 'script' and spell ~= '' then
-        local spellutils = require('lib.spellutils')
         if spellutils.RunScript then
             mq.cmd('/nav stop log=off')
             spellutils.RunScript(spell, 'pull', spawn.ID())

@@ -21,6 +21,7 @@ local botlogic = {}
 local myconfig = botconfig.config
 
 local SIT_HYSTERESIS_PCT = 3
+local FORAGE_CURSOR_STALE_MS = 5000
 -- Throttle pet retarget commands to avoid spamming during rapid target changes.
 local _petAttackRetargetLastTime = 0
 
@@ -122,23 +123,37 @@ local function charState_Always()
         and mq.gettime() >= _G._czForageLastTime + forageThrottleMs then
         _G._czForageLastTime = mq.gettime()
         mq.cmd('/doability Forage')
+        rc.forageExpectCursor = true
+        rc.forageCursorUntil = mq.gettime() + FORAGE_CURSOR_STALE_MS
+        rc.forageSawCursor = false
     end
 
-    -- Cursor / inventory: junk destroy or auto-inv or set OutOfSpace
-    if mq.TLO.Cursor.ID() and not rc.OutOfSpace then
+    -- Cursor / inventory: junk destroy (any); OutOfSpace (any); /autoinv only after bot Forage (forageExpectCursor)
+    if mq.TLO.Cursor.ID() then
         local zone = mq.TLO.Zone.ShortName()
         local cursorName = mq.TLO.Cursor.Name()
         if zone and cursorName and botconfig.isZoneJunk(zone, cursorName) then
             mq.cmd('/destroy')
         elseif mq.TLO.Me.FreeInventory() == 0 then
-            printf('\ayCZBot:\axI\'m out of inventory space!')
+            if not rc.OutOfSpace then
+                printf('\ayCZBot:\axI\'m out of inventory space!')
+            end
             rc.OutOfSpace = true
-        else
+        elseif not rc.OutOfSpace and rc.forageExpectCursor and mq.TLO.Me.FreeInventory() > 0 then
             mq.cmd('/autoinv')
             rc.OutOfSpace = false
         end
+        if rc.forageExpectCursor then
+            rc.forageSawCursor = true
+        end
     elseif not mq.TLO.Cursor.ID() and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0 then
         rc.OutOfSpace = false
+    end
+    if not mq.TLO.Cursor.ID() and rc.forageExpectCursor and
+        (rc.forageSawCursor or mq.gettime() >= (rc.forageCursorUntil or 0)) then
+        rc.forageExpectCursor = false
+        rc.forageSawCursor = nil
+        rc.forageCursorUntil = nil
     end
     if botconfig.config.settings.domount and not state.isTravelMode() and botconfig.config.settings.mountcast then
         spellutils.MountCheck() end

@@ -63,6 +63,9 @@
 ---@field statusMessage string User-facing activity line for GUI
 ---@field pullHealerManaWait { name: string, pct: number }|nil when set, puller is waiting on this healer's mana before next pull; status tab shows it
 ---@field OutOfSpace boolean|nil true when inventory was full (cursor item); cleared when space available again
+---@field forageExpectCursor boolean|nil after /doability Forage: expect item on cursor; CharState /autoinv only while set
+---@field forageCursorUntil number|nil mq.gettime() deadline for stale clear when forage yields nothing
+---@field forageSawCursor boolean|nil true once cursor had an item after forage (clears flag when cursor empties before deadline)
 --- CHChain state (set by commands.cmd_chchain / chchainSetupContinuation; read by lib.chchain).
 ---@field doChchain boolean
 ---@field chchainCurtank number

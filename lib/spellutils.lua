@@ -1409,6 +1409,13 @@ function spellutils.RequireTargetThenDontStackDebuff(entry, EvalID)
     return false
 end
 
+--- Empty cursor into inventory when needed so /casting can proceed (MQ2Cast cannot cast with hands full).
+function spellutils.AutoinvIfCursorBlockingCast()
+    if mq.TLO.Cursor.ID() and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0 then
+        mq.cmd('/autoinv')
+    end
+end
+
 function spellutils.BuildMQ2CastCommand(entry, EvalID, sub)
     local gem = entry.gem
     local spellname = entry.spell
@@ -1544,6 +1551,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         local needDelay = (type(gem) == 'number' and not mq.TLO.Me.SpellReady(spell)())
         rc.CurSpell.viaMQ2Cast = true
         rc.CurSpell.spellid = castSpellId
+        spellutils.AutoinvIfCursorBlockingCast()
         mq.cmd(cmd)
         rc.CurSpell.phase = 'casting'
         dbgCastPhase('casting', sub, index, runPriority)
