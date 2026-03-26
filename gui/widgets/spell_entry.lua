@@ -131,6 +131,18 @@ local SPELL_SELECTABLE_WIDTH = 140
 local NUMERIC_INPUT_WIDTH = 80
 local ALIAS_INPUT_WIDTH = 100
 
+local function hasAnyPhase(phases, wanted)
+    if type(phases) ~= 'table' then return false end
+    local wantedSet = {}
+    for _, key in ipairs(wanted or {}) do
+        wantedSet[key] = true
+    end
+    for _, phase in ipairs(phases) do
+        if wantedSet[phase] then return true end
+    end
+    return false
+end
+
 local GREEN = ImVec4(0, 0.8, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
 local BLACK = ImVec4(0, 0, 0, 1)
@@ -455,7 +467,8 @@ function M.draw(spell, opts)
                 else
                     effectiveTargetOpts = validtargetsOptions
                 end
-                if #effectiveTargetOpts > 0 then
+                local showTargetsForPhase = hasAnyPhase(band.targetphase, { 'groupmember', 'pc' })
+                if showTargetsForPhase and #effectiveTargetOpts > 0 then
                     labeled_grid.checkboxGrid({
                         id = id .. '_band' .. bi .. '_vt',
                         label = 'Targets:',
@@ -464,7 +477,24 @@ function M.draw(spell, opts)
                         columns = targetsColumns,
                         onToggle = function(key, isChecked)
                             if isChecked then
-                                band.validtargets[#band.validtargets + 1] = key
+                                local exists = false
+                                for _, selected in ipairs(band.validtargets) do
+                                    if selected == key then
+                                        exists = true
+                                        break
+                                    end
+                                end
+                                if not exists then
+                                    band.validtargets[#band.validtargets + 1] = key
+                                end
+                                if key ~= 'all' then
+                                    for i = #band.validtargets, 1, -1 do
+                                        if band.validtargets[i] == 'all' then
+                                            table.remove(band.validtargets, i)
+                                            break
+                                        end
+                                    end
+                                end
                             else
                                 for i = #band.validtargets, 1, -1 do
                                     if band.validtargets[i] == key then
