@@ -170,7 +170,7 @@ end
 function botpull.SetPullArc(arc)
     local rc = state.getRunconfig()
     if not arc and rc.pullarc then
-        mq.cmd('/echo \arTurning off Directional Pulling.')
+        print('\ayCZBot:\ax \arTurning off Directional Pulling.')
         rc.pullarc = 0
     else
         rc.pullarc = tonumber(arc)
@@ -323,7 +323,7 @@ local function ensureCampAndAnchor(rc)
     mq.cmdf('/squelch /mapfilter CastRadius %s', castRadius)
     if not myconfig.pull.hunter and not rc.campstatus then botmove.MakeCamp('on') end
     if myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
-        mq.cmd('/echo setting HunterMode anchor')
+        print('\ayCZBot:\ax setting HunterMode anchor')
         botmove.SetCampHere()
         if rc.campstatus then botmove.MakeCamp('off') end
     end

@@ -77,6 +77,9 @@ end
 -- ---------------------------------------------------------------------------
 
 local UNSTUCK_EXIT_COOLDOWN_MS = 60000
+local UNSTUCK_NAV_WAIT_MS = 5000
+local UNSTUCK_NUDGE_HOLD_MS = 600
+local UNSTUCK_RETRY_LIMIT = 3
 
 local function isValidFollowTarget(followid)
     if not followid or followid == 0 then return false end
@@ -96,6 +99,36 @@ local function clearUnstuckIfFollowInactive(rc)
     return true
 end
 
+local function normalizeHeading360(heading)
+    local h = heading or 0
+    while h < 0 do h = h + 360 end
+    while h >= 360 do h = h - 360 end
+    return h
+end
+
+local function beginUnstuckNudge(followid, stuckdistance, attempts)
+    local heading = normalizeHeading360(mq.TLO.Me.Heading() or 0)
+    local offsets = { 25, -25, 45, -45, 65, -65, 90, -90 }
+    local idxMax = math.min(#offsets, math.max(2, (attempts or 1) * 2))
+    local offset = offsets[math.random(1, idxMax)]
+    local targetHeading = normalizeHeading360(heading + offset)
+
+    mq.cmd('/squelch /nav stop')
+    mq.cmdf('/squelch /multiline ; /face fast heading %s ; /stand ; /keypress forward hold', targetHeading)
+
+    if state.canStartBusyState(state.STATES.unstuck) then
+        state.setRunState(state.STATES.unstuck,
+            {
+                phase = 'nudge_wait',
+                deadline = mq.gettime() + UNSTUCK_NUDGE_HOLD_MS,
+                followid = followid,
+                stuckdistance = stuckdistance,
+                attempts = attempts or 1,
+                priority = bothooks.getPriority('doMiscTimer')
+            })
+    end
+end
+
 local function tickUnstuckPhase(p, followid, stuckdistance)
     local rc = state.getRunconfig()
     if not p or p.followid ~= followid then
@@ -111,33 +144,30 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
             state.clearRunState()
             return true
         end
-        rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
-        state.clearRunState()
-    elseif p.phase == 'wiggle_wait' then
-        mq.cmd('/squelch /keypress forward')
-        mq.cmdf('/squelch /nav id %s log=off', followid)
-        if nowdist and stuckdistance >= nowdist + 10 then
+
+        local attempts = (p.attempts or 0) + 1
+        if attempts > UNSTUCK_RETRY_LIMIT then
             rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
             state.clearRunState()
             return true
         end
-        mq.cmd('/squelch /keypress back hold')
+
+        beginUnstuckNudge(followid, stuckdistance, attempts)
+    elseif p.phase == 'nudge_wait' then
+        mq.cmd('/squelch /keypress forward')
+        mq.cmdf('/squelch /nav id %s los=on dist=15 log=off', followid)
+        local restartDist = mq.TLO.Spawn(followid).Distance3D() or stuckdistance
         if state.canStartBusyState(state.STATES.unstuck) then
             state.setRunState(state.STATES.unstuck,
                 {
-                    phase = 'back_wait',
-                    deadline = mq.gettime() + 2000,
+                    phase = 'nav_wait5',
+                    deadline = mq.gettime() + UNSTUCK_NAV_WAIT_MS,
                     followid = followid,
-                    stuckdistance = stuckdistance,
-                    priority =
-                        bothooks.getPriority('doMiscTimer')
+                    stuckdistance = restartDist,
+                    attempts = p.attempts or 1,
+                    priority = bothooks.getPriority('doMiscTimer')
                 })
         end
-    elseif p.phase == 'back_wait' then
-        mq.cmd('/squelch /keypress back')
-        mq.cmdf('/squelch /nav id %s log=off', followid)
-        rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
-        state.clearRunState()
     end
     return true
 end
@@ -150,8 +180,10 @@ local function tryPathExistsUnstuck(followid)
         state.setRunState(state.STATES.unstuck,
             {
                 phase = 'nav_wait5',
-                deadline = mq.gettime() + 5000,
+                deadline = mq.gettime() + UNSTUCK_NAV_WAIT_MS,
                 followid = followid,
+                stuckdistance = mq.TLO.Spawn(followid).Distance3D() or 100,
+                attempts = 0,
                 priority = bothooks.getPriority(
                     'doMiscTimer')
             })
@@ -159,59 +191,9 @@ local function tryPathExistsUnstuck(followid)
     return true
 end
 
-local function tryAutoSizeUnstuck(followid, stuckdistance)
-    if not mq.TLO.Navigation.Active() then return false end
-    if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 1') end
-    local d = mq.TLO.Spawn(followid).Distance3D()
-    local rc = state.getRunconfig()
-    if d and stuckdistance >= d + 10 then
-        rc.stucktimer = mq.gettime() + 60000
-        return true
-    end
-    if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 12') end
-    d = mq.TLO.Spawn(followid).Distance3D()
-    if d and stuckdistance >= d + 10 then
-        rc.stucktimer = mq.gettime() + 60000
-        return true
-    end
-    if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then mq.cmd('/autosize sizeself 8') end
-    d = mq.TLO.Spawn(followid).Distance3D()
-    if d and stuckdistance >= d + 10 then
-        rc.stucktimer = mq.gettime() + 60000
-        return true
-    end
-    return false
-end
-
--- Unstuck wiggle: last step uses random heading/size (obstacle avoidance; movement needed is unknown).
+-- Unstuck nudge: stop nav, turn slightly left/right, move forward briefly.
 local function doWiggleUnstuck(followid, stuckdistance)
-    local rc = state.getRunconfig()
-    local stuckdir = math.random(0, 360)
-    local ransize = math.random(1, 12)
-    local wiggleHeadings = { 0, 90, 180, 270, 0, 90, 180, 270, stuckdir }
-    local wiggleSizes = { 1, 1, 1, 1, 12, 12, 12, 12, ransize }
-    mq.cmd('/nav stop')
-    local idx = (rc.unstuckWiggleIndex or 0) + 1
-    rc.unstuckWiggleIndex = idx
-    local heading = wiggleHeadings[idx] or stuckdir
-    local size = wiggleSizes[idx] or ransize
-    print('facing heading:', heading, ' sizing to:', size) -- not debug, but needs reformatting / context to be meaningful
-    if mq.TLO.Plugin("MQ2AutoSize").IsLoaded() then
-        mq.cmdf('/squelch /multiline ; /face fast heading %s ; /stand ; /autosize sizeself %s ; /keypress forward hold',
-            heading, size)
-    end
-    if state.canStartBusyState(state.STATES.unstuck) then
-        state.setRunState(state.STATES.unstuck,
-            {
-                phase = 'wiggle_wait',
-                deadline = mq.gettime() + 2000,
-                followid = followid,
-                stuckdistance = stuckdistance,
-                priority =
-                    bothooks.getPriority('doMiscTimer')
-            })
-    end
-    if idx >= 9 then rc.unstuckWiggleIndex = nil end
+    beginUnstuckNudge(followid, stuckdistance, 1)
 end
 
 -- ---------------------------------------------------------------------------
@@ -285,7 +267,7 @@ local function doNavToCamp(opts)
     opts = opts or {}
     local rc = state.getRunconfig()
     if not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then return end
-    if opts.echoMsg then mq.cmd('/echo ' .. opts.echoMsg) end
+    if opts.echoMsg then printf('\ayCZBot:\ax %s', opts.echoMsg) end
     if opts.dist ~= nil then
         mq.cmdf('/nav locxyz %s %s %s log=off dist=%s', rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, opts.dist)
     else
@@ -545,8 +527,7 @@ function botmove.UnStuck()
 
     if tryPathExistsUnstuck(followid) then return false end
 
-    mq.cmd('/echo I appear to be stuck, attempting to get unstuck')
-    if tryAutoSizeUnstuck(followid, stuckdistance) then return false end
+    print('I appear to be stuck, attempting to get unstuck')
 
     doWiggleUnstuck(followid, stuckdistance)
     return false

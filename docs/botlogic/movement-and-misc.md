@@ -33,7 +33,7 @@ See [hook-dopull](hook-dopull.md) for when doPull decides to call StartPull (cha
 
 ## Unstuck (doMovementCheck → FollowAndStuckCheck → UnStuck)
 
-runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, wiggle_wait, back_wait. Cleared by `tickUnstuckPhase` when distance improves or deadline. Whenever unstuck is cleared (any exit path), **stucktimer** is set to now + 60s so the next UnStuck attempt is delayed; this gives the bot an idle window to cast and move normally before trying unstuck again.
+runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, nudge_wait. If pathing stalls, unstuck now escalates into repeated nudge + re-nav attempts before applying cooldown.
 
 ```mermaid
 stateDiagram-v2
@@ -41,17 +41,15 @@ stateDiagram-v2
     [*] --> tryPathExists: UnStuck, followid far
     tryPathExists --> nav_wait5: PathExists, /nav to followid
     nav_wait5 --> [*]: 5s and distance improved
-    nav_wait5 --> [*]: 5s deadline
-    [*] --> tryAutoSize: PathExists failed or not tried
-    tryAutoSize --> [*]: distance improved
-    [*] --> wiggle_wait: doWiggleUnstuck
-    wiggle_wait --> back_wait: 2s then keypress back
-    back_wait --> [*]: 2s then /nav, clear
-    wiggle_wait --> [*]: distance improved
+    nav_wait5 --> nudge_wait: 5s deadline and no progress
+    nudge_wait --> nav_wait5: release forward, /nav to followid
+    nav_wait5 --> [*]: retries exhausted -> cooldown
+    [*] --> nudge_wait: PathExists failed
 ```
 
-- **UnStuck:** Only runs when followid is set and distance >= acleash. If already in unstuck, tickUnstuckPhase runs. Then try PathExists → nav to followid, set unstuck phase nav_wait5 (5s). Else try AutoSize (if loaded) to shrink and recheck distance. Else doWiggleUnstuck: random heading/size, set phase wiggle_wait (2s).
-- **tickUnstuckPhase:** nav_wait5: when deadline, if distance improved set stucktimer and clear; else set stucktimer cooldown and clear. wiggle_wait: when deadline, /nav to followid, then set back_wait (2s). back_wait: when deadline, keypress back release, /nav; set stucktimer cooldown (60s) and clear. All clear paths set stucktimer so the next UnStuck is delayed.
+- **UnStuck:** Only runs when followid is set and distance >= acleash. If already in unstuck, `tickUnstuckPhase` runs. Then try PathExists → nav to followid and set `nav_wait5` (5s). If PathExists fails, immediately start nudge recovery.
+- **tickUnstuckPhase:** `nav_wait5`: on deadline, if distance improved set cooldown and clear; if no progress, increment retry count, stop nav, turn left/right relative to current heading, hold forward briefly, then transition to `nudge_wait`. `nudge_wait`: release forward and reissue `/nav id ...`, then return to `nav_wait5`. After retry limit, apply 60s cooldown and clear.
+- **MQ2AutoSize dependency removed:** unstuck no longer changes character size and no longer requires MQ2AutoSize to perform recovery movement.
 
 ---
 

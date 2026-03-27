@@ -18,7 +18,8 @@ function TrakBreathOut()
             myconfig.settings.domelee = false
             state.getRunconfig().engageTargetId = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
-            mq.cmd('/multiline ; /nav loc -1180 -75 -178 ; /echo TrotsRaid: Moving away from Trak')
+            mq.cmd('/nav loc -1180 -75 -178')
+            print('\ayCZBot:\ax TrotsRaid: Moving away from Trak')
             mq.delay(200)
         end
     end
@@ -37,7 +38,8 @@ function TrakBreathIn()
             if meleeclass[myclass] then myconfig.settings.domelee = true end
             state.getRunconfig().engageTargetId = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
-            mq.cmd('/multiline ; /nav id ${Spawn[Trakanon].ID} distance=35 ; /echo TrotsRaid: Resuming Combat with Trak...')
+            mq.cmd('/nav id ${Spawn[Trakanon].ID} distance=35')
+            print('\ayCZBot:\ax TrotsRaid: Resuming Combat with Trak...')
             mq.delay(200)
         end
     end
