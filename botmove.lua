@@ -100,7 +100,7 @@ local function clearUnstuckIfFollowInactive(rc)
 end
 
 local function normalizeHeading360(heading)
-    local h = heading or 0
+    local h = tonumber(heading) or 0
     while h < 0 do h = h + 360 end
     while h >= 360 do h = h - 360 end
     return h
