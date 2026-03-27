@@ -219,6 +219,7 @@ function M.draw()
                 ImGui.PushStyleColor(ImGuiCol.Text, RED)
                 if ImGui.SmallButton(stopIcon .. '##follow_stop') then
                     local wasTravelMode = (rc.travelMode == true)
+                    botmove.ClearFollowMovementState()
                     rc.followid = 0
                     rc.followname = ''
                     rc.travelMode = false

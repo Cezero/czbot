@@ -78,6 +78,24 @@ end
 
 local UNSTUCK_EXIT_COOLDOWN_MS = 60000
 
+local function isValidFollowTarget(followid)
+    if not followid or followid == 0 then return false end
+    local sid = mq.TLO.Spawn('id ' .. followid).ID() or 0
+    if sid == 0 then return false end
+    local stype = mq.TLO.Spawn('id ' .. followid).Type() or ''
+    return stype ~= 'Corpse' and stype ~= 'CORPSE'
+end
+
+local function clearUnstuckIfFollowInactive(rc)
+    if state.getRunState() ~= state.STATES.unstuck then return false end
+    local hasFollowName = rc.followname and rc.followname ~= ''
+    local hasValidFollowTarget = isValidFollowTarget(rc.followid)
+    if hasFollowName or hasValidFollowTarget then return false end
+    rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
+    state.clearRunState()
+    return true
+end
+
 local function tickUnstuckPhase(p, followid, stuckdistance)
     local rc = state.getRunconfig()
     if not p or p.followid ~= followid then
@@ -487,21 +505,35 @@ end
 -- Public API
 -- ---------------------------------------------------------------------------
 
+function botmove.ClearFollowMovementState()
+    local current = state.getRunState()
+    if current == state.STATES.unstuck or current == state.STATES.engage_return_follow then
+        state.clearRunState()
+    end
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+end
+
 function botmove.FollowCall()
     if MasterPause then return false end
     local rc = state.getRunconfig()
+    refreshFollowId()
+    clearUnstuckIfFollowInactive(rc)
+    if not rc.followid or rc.followid == 0 then return false end
     if not rc.stucktimer then rc.stucktimer = 0 end
     if rc.stucktimer <= mq.gettime() then botmove.UnStuck() end
-    refreshFollowId()
-    if not rc.followid or rc.followid == 0 then return end
+    if not isValidFollowTarget(rc.followid) then return false end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
     doFollowNav()
+    return true
 end
 
 function botmove.UnStuck()
     local rc = state.getRunconfig()
+    clearUnstuckIfFollowInactive(rc)
     local followid = rc.followid
     if not followid or followid == 0 then return false end
+    if not isValidFollowTarget(followid) then return false end
+    if not mq.TLO.Navigation.Active() then return false end
     local stuckdistance = mq.TLO.Spawn(followid).Distance3D() or 100
     local acleash = myconfig.settings.acleash
     if stuckdistance < acleash then return false end
@@ -558,6 +590,7 @@ function botmove.FollowAndStuckCheck()
     if (rc.followid and rc.followid > 0) or (rc.followname and rc.followname ~= '') then
         refreshFollowId()
     end
+    clearUnstuckIfFollowInactive(rc)
     if not (rc.followid and rc.followid > 0) then return end
     local followid = mq.TLO.Spawn(rc.followid).ID() or 0
     if followid > 0 and followid ~= rc.followid then

@@ -206,6 +206,7 @@ end
 local function cmd_stop(args)
     local rc = state.getRunconfig()
     local wasTravelMode = (rc.travelMode == true)
+    botmove.ClearFollowMovementState()
     if rc.followid or rc.followname then
         rc.followid = 0
         rc.followname = ''
