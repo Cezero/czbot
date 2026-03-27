@@ -6,6 +6,7 @@ local Icons = require('mq.ICONS')
 local botconfig = require('lib.config')
 local botmove = require('botmove')
 local state = require('lib.state')
+local bardtwist = require('lib.bardtwist')
 local utils = require('lib.utils')
 local spellutils = require('lib.spellutils')
 local tankrole = require('lib.tankrole')
@@ -217,9 +218,13 @@ function M.draw()
                 ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
                 ImGui.PushStyleColor(ImGuiCol.Text, RED)
                 if ImGui.SmallButton(stopIcon .. '##follow_stop') then
+                    local wasTravelMode = (rc.travelMode == true)
                     rc.followid = 0
                     rc.followname = ''
                     rc.travelMode = false
+                    if wasTravelMode and bardtwist and bardtwist.EnsureDefaultTwistRunning then
+                        bardtwist.EnsureDefaultTwistRunning()
+                    end
                 end
                 if ImGui.IsItemHovered() then ImGui.SetTooltip('Stop following') end
                 ImGui.PopStyleColor(2)

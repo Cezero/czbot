@@ -8,14 +8,9 @@ if not ok then
 end
 
 -- Load required MQ plugins and end macro if any fail to load.
-if not mq.TLO.Plugin('MQ2Cast').IsLoaded() then mq.cmd('/squelch /plugin MQ2Cast load') end
 if not mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() then mq.cmd('/squelch /plugin MQ2MoveUtils load') end
 if not mq.TLO.Plugin('MQ2Twist').IsLoaded() then mq.cmd('/squelch /plugin MQ2Twist load') end
 mq.delay(2000)
-if not mq.TLO.Plugin('MQ2Cast').IsLoaded() then
-    print('\ayCZBot:\ax MQ2Cast is required but failed to load.')
-    return
-end
 if not mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() then
     print('\ayCZBot:\ax MQ2MoveUtils is required but failed to load.')
     return

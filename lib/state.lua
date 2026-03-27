@@ -28,7 +28,7 @@
 ---@field pullarc number|nil
 ---@field FTEList table
 ---@field FTECount number
----@field CurSpell table When casting: phase (e.g. casting, precast, precast_wait_move), sub, spell (index), target, targethit, spellcheckResume; when via MQ2Cast: viaMQ2Cast, spellid.
+---@field CurSpell table When casting: phase (e.g. casting, precast, precast_wait_move), sub, spell (index), target, targethit, spellcheckResume; casting backend fields: viaCastingLib (alias viaMQ2Cast for compatibility), spellid, castToken.
 ---@field HoverTimer number
 ---@field DragHack boolean
 ---@field HoverEchoTimer number

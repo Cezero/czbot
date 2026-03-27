@@ -8,6 +8,7 @@ local botmelee = require('botmelee')
 local botmove = require('botmove')
 local utils = require('lib.utils')
 local spellutils = require('lib.spellutils')
+local casting = require('lib.casting')
 local charinfo = require("mqcharinfo")
 local myconfig = botconfig.config
 
@@ -730,7 +731,7 @@ local function tickAggroing(rc, spawn)
 
     -- Ranged (bow): swap in bow if needed, ranged attack, swap back after (on returning)
     if gem == 'ranged' and spell ~= '' then
-        local rangeSlotName = mq.TLO.Me.InvSlot('Ranged').Item.Name() and mq.TLO.Me.InvSlot('Ranged').Item.Name() or ''
+        local rangeSlotName = mq.TLO.InvSlot('Ranged').Item.Name() and mq.TLO.InvSlot('Ranged').Item.Name() or ''
         if rangeSlotName ~= spell then
             if rangeSlotName ~= '' then
                 rc.pullRangedStoredItem = rangeSlotName
@@ -754,7 +755,12 @@ local function tickAggroing(rc, spawn)
                 return
             end
             spellutils.AutoinvIfCursorBlockingCast()
-            mq.cmdf('/multiline ; /nav stop log=off ; /casting "%s" %s', spellName, tostring(gem))
+            casting.start({
+                spellName = spellName,
+                gemType = gem,
+                targetId = rc.pullAPTargetID,
+                maxTries = 1,
+            })
             rc.pullPhase = 'aggro_wait_cast'
             rc.pullDeadline = mq.gettime() + 8000
             if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end

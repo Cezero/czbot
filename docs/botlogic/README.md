@@ -4,7 +4,7 @@ This section charts the bot's state and decision logic so you can trace how any 
 
 ## Requirements
 
-MQ2Cast, MQ2MoveUtils, and MQ2Twist are required. The bot relies on MQ2Cast to handle spell casting and to memorize spells into gems when needed as part of the `/casting` command; the script does not manage memorization itself. They are loaded in `init.lua` before the main loop runs; the bot does not start if any fail to load. Spell casting flow and event docs assume MQ2Cast is present.
+MQ2MoveUtils and MQ2Twist are required. Casting is handled by `lib/casting.lua`, which performs native cast/item/AA dispatch and gem memorization when needed. `init.lua` still loads required movement/twist plugins before the main loop starts.
 
 ## One-tick flow
 

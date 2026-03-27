@@ -7,6 +7,7 @@ local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local spellutils = require('lib.spellutils')
 local command_dispatcher = require('lib.command_dispatcher')
+local casting = require('lib.casting')
 
 local chchain = {}
 
@@ -98,13 +99,19 @@ end
 function chchain.Tick()
     local p = state.getRunStatePayload()
     if not p or not p.chnextclr then state.clearRunState() return end
-    if mq.TLO.Cast.Result() == 'CAST_FIZZLE' then
+    if casting.result() == 'CAST_FIZZLE' then
         spellutils.AutoinvIfCursorBlockingCast()
-        mq.cmdf('/casting "Complete Heal" 5')
+        casting.start({
+            spellName = 'Complete Heal',
+            gemType = 5,
+            targetId = mq.TLO.Target.ID() or 0,
+            maxTries = 1,
+        })
         return
     end
     if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
-        mq.cmdf('/multiline ; /rs CHChain: Target died, interrupting cast ; /interrupt')
+        mq.cmdf('/rs CHChain: Target died, interrupting cast')
+        casting.interrupt()
         mq.cmdf('/rs <<Go %s>>', p.chnextclr)
         state.clearRunState()
         return

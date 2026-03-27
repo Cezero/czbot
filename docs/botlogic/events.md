@@ -100,10 +100,10 @@ Called when GM check (e.g. MQ2GMCheck) indicates a GM is present. Throttled by `
 
 ## Event_CastRst / Event_CastImm
 
-These handlers are only used when the current cast did **not** use MQ2Cast’s `/casting` (i.e. disc, ability, script, or fallback `/cast`). Resist/immune for casts started with `/casting` come from `Cast.Result` in `handleSpellCheckReentry` (see [Spell casting flow](spell-casting-flow.md)).
+These handlers feed cast outcomes into `lib/casting.lua` for all cast backends. Resist/immune signals are normalized there and consumed by `handleSpellCheckReentry` (see [Spell casting flow](spell-casting-flow.md)).
 
-- **CastRst** (resist/avoid): sets global `SpellResisted = true`. Debuff and other logic can use this on cast complete (e.g. recast counter, immune list). Skipped when `CurSpell.viaMQ2Cast` is true.
-- **CastImm** (target cannot be / immune to slow): if the current cast matches `CurSpell` and target is single-target, calls `immune.processList(immuneID)` (target spawn ID) for the target so the bot can avoid recasting that spell on that mob. Skipped when `CurSpell.viaMQ2Cast` is true.
+- **CastRst** (resist/avoid): sets normalized cast result to `CAST_RESIST` (and still sets `SpellResisted` for legacy non-library paths).
+- **CastImm** (target cannot be / immune to slow): sets normalized cast result to `CAST_IMMUNE`; immune list updates are applied during cast completion.
 
 ---
 

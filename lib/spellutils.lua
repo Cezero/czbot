@@ -10,11 +10,12 @@ local bardtwist = require('lib.bardtwist')
 local castutils = require('lib.castutils')
 local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
+local casting = require('lib.casting')
 local spellutils = {}
 local _deps = {}
 
 local CASTING_STUCK_MS = 20000
---- Delay (ms) after /casting when spell must be memorized, so MQ2Cast can set state before next tick and charState won't stand for hysteresis.
+--- Delay (ms) after cast start when spell must be memorized, so casting state is visible before next tick and charState won't stand for hysteresis.
 local CASTING_MEMORIZE_DELAY_MS = 200
 --- When buff remaining time on target is below this (ms), do not interrupt with "buff already present" (allow refresh cast to complete). Should match botbuff's refresh window (e.g. 24s for self).
 local BUFF_REFRESH_THRESHOLD_MS = 24000
@@ -681,7 +682,7 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     if not entry then return end
     local spell = string.lower(entry.spell or '')
     local spellid = mq.TLO.Spell(spell).ID()
-    if not rc.CurSpell.viaMQ2Cast and SpellResisted then
+    if not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib and SpellResisted then
         rc.CurSpell.resisted = true
         SpellResisted = false
     end
@@ -731,6 +732,7 @@ function spellutils.clearCastingStateOrResume()
     end
     rc.CurSpell = {}
     rc.statusMessage = ''
+    casting.clear()
     local p = state.getRunStatePayload()
     if p and p.spellcheckResume and p.spellcheckResume.hook then
         local resumeNum = state.RESUME_BY_HOOK[p.spellcheckResume.hook]
@@ -747,10 +749,8 @@ end
 --- True when MQ2Cast is memorizing (spell into gem). Cast.Status() contains 'M'; no cast bar yet (CastTimeLeft 0) to distinguish from HoT channeling.
 function spellutils.IsMemorizing()
     local rc = state.getRunconfig()
-    if not rc.CurSpell or not rc.CurSpell.viaMQ2Cast then return false end
-    local status = mq.TLO.Cast.Status() or ''
-    if not string.find(status, 'M') then return false end
-    return (mq.TLO.Me.CastTimeLeft() or 0) == 0
+    if not rc.CurSpell or (not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib) then return false end
+    return casting.isMemorizing()
 end
 
 --- When resuming a cast, use bothooks priority for spellcheckResume.hook so an earlier hook (e.g. doHeal) does not pass wrong runPriority to another sub's CurSpell (e.g. buff).
@@ -784,6 +784,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
     options = options or {}
     local skipInterruptForBRD = options.skipInterruptForBRD ~= false
     local rc = state.getRunconfig()
+    casting.tick()
 
     -- Stuck casting recovery: clear if we've been in casting state past deadline. Do not clear while memorizing.
     if state.getRunState() == state.STATES.casting and state.runStateDeadlinePassed() then
@@ -815,7 +816,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
     end
 
     -- MQ2Cast completion: poll Cast.Status and Cast.Result; do not use CastTimeLeft.
-    if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.viaMQ2Cast then
+    if rc.CurSpell and rc.CurSpell.phase == 'casting' and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) then
         -- Self cast: MT keeps mob targeted; do not require Target.ID() == CurSpell.target.
         if rc.CurSpell.target and rc.CurSpell.target ~= mq.TLO.Me.ID() and mq.TLO.Target.ID() ~= rc.CurSpell.target then
             spellutils.clearCastingStateOrResume()
@@ -824,9 +825,9 @@ function spellutils.handleSpellCheckReentry(sub, options)
         if (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') and not spellutils.IsMemorizing() then
             spellutils.InterruptCheck()
         end
-        local status = mq.TLO.Cast.Status() or ''
-        local storedId = mq.TLO.Cast.Stored.ID() or 0
-        local castResult = mq.TLO.Cast.Result() or ''
+        local status = casting.status() or ''
+        local storedId = casting.storedSpellId() or 0
+        local castResult = casting.result() or ''
         local complete = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
         if complete then
             rc.CurSpell.resisted = (castResult == 'CAST_RESIST')
@@ -854,7 +855,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
         end
     end
 
-    if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' and not rc.CurSpell.viaMQ2Cast then
+    if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' and not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib then
         -- Self cast: MT keeps mob targeted; do not require Target.ID() == CurSpell.target.
         if rc.CurSpell.target and rc.CurSpell.target ~= mq.TLO.Me.ID() and mq.TLO.Target.ID() ~= rc.CurSpell.target then
             spellutils.clearCastingStateOrResume()
@@ -1138,7 +1139,7 @@ function spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltar
     mq.cmd('/squelch /multiline; /stick off ; /mqtarget clear')
     if mq.TLO.Me.CastTimeLeft() > 0 and rc.CurSpell.target ~= mq.TLO.Me.ID() and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
         mq.cmd('/echo I lost my target, interrupting')
-        if rc.CurSpell.viaMQ2Cast then mq.cmd('/interrupt') else mq.cmd('/stopcast') end
+        if rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib then casting.interrupt() else mq.cmd('/stopcast') end
         if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
     end
     if state.getRunconfig().domelee and _deps.AdvCombat then _deps.AdvCombat() end
@@ -1284,7 +1285,7 @@ function spellutils.InterruptCheck()
     if sub == 'heal' then
         spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
     end
-    if string.find(mq.TLO.Cast.Status() or '', 'M') then return false end
+    if spellutils.IsMemorizing() then return false end
 
     spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
     if criteria ~= 'corpse' and targetSpawn.Type() == 'Corpse' then
@@ -1409,25 +1410,25 @@ function spellutils.RequireTargetThenDontStackDebuff(entry, EvalID)
     return false
 end
 
---- Empty cursor into inventory when needed so /casting can proceed (MQ2Cast cannot cast with hands full).
+--- Empty cursor into inventory when needed so casting can proceed (hands-full blocks cast commands).
 function spellutils.AutoinvIfCursorBlockingCast()
     if mq.TLO.Cursor.ID() and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0 then
         mq.cmd('/autoinv')
     end
 end
 
-function spellutils.BuildMQ2CastCommand(entry, EvalID, sub)
-    local gem = entry.gem
-    local spellname = entry.spell
-    local castArg = (type(gem) == 'number') and tostring(gem) or gem
-    local cmd = string.format('/casting "%s" %s', spellname, castArg)
-    if not spellutils.IsSelfTargetSpell(entry) and not (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry)) then
-        cmd = cmd .. string.format(' -targetid|%s', EvalID)
-    end
-    if sub == 'debuff' then
-        cmd = cmd .. ' -maxtries|2'
-    end
-    return cmd
+function spellutils.BuildCastRequest(entry, EvalID, sub)
+    local maxTries = (sub == 'debuff') and 2 or 1
+    return {
+        spellName = entry.spell,
+        gemType = entry.gem,
+        targetId = EvalID,
+        sub = sub,
+        maxTries = maxTries,
+        allowNoTarget = (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry)),
+        isSelfTarget = spellutils.IsSelfTargetSpell(entry),
+        spellId = spellutils.GetSpellId(entry),
+    }
 end
 
 -- Throttled printf when entering a cast pipeline phase (see hookregistry [busy] cap when hooks skip).
@@ -1509,7 +1510,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         end
         if type(gem) == 'number' and mq.TLO.Me.SpellReady(spell)() then mq.cmd('/squelch /stopcast') end
     end
-    local useMQ2Cast = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
+    local useCastingLib = (type(gem) == 'number' or gem == 'item' or gem == 'alt')
     local mtSelfCastInCombat = (EvalID == meId and mq.TLO.Me.Combat())
     if mtSelfCastInCombat then
         local _, tankid = spellutils.GetTankInfo(true)
@@ -1517,7 +1518,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     end
     local skipSelfRetarget = (EvalID == meId and spellutils.IsSelfTargetSpell(entry)) or
         (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry))
-    if not useMQ2Cast and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat and not skipSelfRetarget then
+    if not useCastingLib and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat and not skipSelfRetarget then
         mq.cmdf('/tar id %s', EvalID)
         rc.CurSpell.phase = 'precast'
         rc.CurSpell.deadline = mq.gettime() + 1000
@@ -1540,19 +1541,24 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     -- Stand to cast only when not about to memorize: standing interrupts MQ2Cast memorization.
     if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and (not rc.CurSpell or rc.CurSpell.phase ~= 'casting') then
         local standToCast = true
-        if useMQ2Cast and type(gem) == 'number' and not mq.TLO.Me.SpellReady(spell)() then
+        if useCastingLib and type(gem) == 'number' and not mq.TLO.Me.SpellReady(spell)() then
             standToCast = false
         end
         if standToCast then mq.cmd('/stand') end
     end
-    if useMQ2Cast then
+    if useCastingLib then
         local castSpellId = spellutils.GetSpellId(entry)
-        local cmd = spellutils.BuildMQ2CastCommand(entry, EvalID, sub)
+        local castRequest = spellutils.BuildCastRequest(entry, EvalID, sub)
         local needDelay = (type(gem) == 'number' and not mq.TLO.Me.SpellReady(spell)())
         rc.CurSpell.viaMQ2Cast = true
+        rc.CurSpell.viaCastingLib = true
         rc.CurSpell.spellid = castSpellId
         spellutils.AutoinvIfCursorBlockingCast()
-        mq.cmd(cmd)
+        if not casting.start(castRequest) then
+            rc.CurSpell = {}
+            rc.statusMessage = ''
+            return false
+        end
         rc.CurSpell.phase = 'casting'
         dbgCastPhase('casting', sub, index, runPriority)
         state.setRunState(state.STATES.casting,

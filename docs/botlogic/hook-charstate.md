@@ -53,7 +53,7 @@ flowchart TB
 - **Dead:** If DEAD or HOVER, set runState 'dead', set HoverEchoTimer if unset, and if HoverTimer passed call Event_Slain. If we were dead and are now alive, clearRunState.
 - **Engage:** If we have no engageTargetId or our target is not engageTargetId, attack off and pet back. If no MobList[1] and engageTargetId, clear engageTargetId.
 - **Pet:** If pet ID changed (new pet or different), set MyPetID and /pet leader.
-- **Cursor / inventory:** Zone junk on the cursor → `/destroy`. Full bags with something on the cursor → `OutOfSpace` and a message. **`/autoinv` only** when `runconfig.forageExpectCursor` is set (after `/doability Forage`); the flag clears when the cursor was seen and then emptied, or after a short stale deadline if forage yielded nothing. Manual cursor items are not auto-inventoried here. Before **`/casting`** (MQ2Cast), `spellutils.AutoinvIfCursorBlockingCast()` clears the cursor when needed (see spell casting flow).
+- **Cursor / inventory:** Zone junk on the cursor → `/destroy`. Full bags with something on the cursor → `OutOfSpace` and a message. **`/autoinv` only** when `runconfig.forageExpectCursor` is set (after `/doability Forage`); the flag clears when the cursor was seen and then emptied, or after a short stale deadline if forage yielded nothing. Manual cursor items are not auto-inventoried here. Before a cast starts, `spellutils.AutoinvIfCursorBlockingCast()` clears the cursor when needed (see spell casting flow).
 
 ## See also
 

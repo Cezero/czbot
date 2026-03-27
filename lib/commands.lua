@@ -18,6 +18,7 @@ local chchain = require('lib.chchain')
 local mobfilter = require('lib.mobfilter')
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
+local bardtwist = require('lib.bardtwist')
 local groupmanager = require('lib.groupmanager')
 local charinfo = require("mqcharinfo")
 local utils = require('lib.utils')
@@ -38,6 +39,12 @@ local TOGGLELIST = {
     dodrag = true,
     doforage = true,
 }
+
+local function refreshBardTwistMode()
+    if bardtwist and bardtwist.EnsureDefaultTwistRunning then
+        bardtwist.EnsureDefaultTwistRunning()
+    end
+end
 
 -- --- Toggle handler (domelee, dopull, etc.) ---
 local function cmd_toggle(args)
@@ -181,6 +188,7 @@ local function cmd_makecamp(args, str)
         rc.followid = 0
         rc.followname = ''
         rc.travelMode = false
+        refreshBardTwistMode()
     end
 end
 
@@ -197,10 +205,14 @@ end
 
 local function cmd_stop(args)
     local rc = state.getRunconfig()
+    local wasTravelMode = (rc.travelMode == true)
     if rc.followid or rc.followname then
         rc.followid = 0
         rc.followname = ''
-        rc.travelMode = false
+    end
+    rc.travelMode = false
+    if wasTravelMode then
+        refreshBardTwistMode()
     end
     if state.getRunconfig().campstatus then botmove.MakeCamp('off') end
     printf('\ayCZBot:\ax\arDisabling makecamp and follow')

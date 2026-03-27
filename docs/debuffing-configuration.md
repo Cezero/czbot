@@ -97,9 +97,9 @@ debuff = {
 
 ---
 
-## MQ2Cast and -maxtries
+## Casting retries
 
-When the **MQ2Cast** plugin is loaded, the bot uses `/casting` for debuff spells and appends **`-maxtries|2`** so MQ2Cast may retry once on resist/fizzle before returning a final result. The bot still sees one “logical” cast completion: **recast** (disable after N resists per spawn) and **afterCast** logic run once per cast using the final `Cast.Result`. Without MQ2Cast, the bot uses `/cast` and chat events (CastRst) for resist.
+For debuff spells, `lib/casting.lua` retries once (`maxTries = 2`) on retryable failures (for example resist/fizzle/interrupt) before returning a final result. The bot still sees one logical completion: **recast** (disable after N resists per spawn) and **afterCast** logic run once per cast using the final cast result.
 
 ---
 

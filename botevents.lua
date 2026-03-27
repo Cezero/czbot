@@ -8,6 +8,7 @@ local mobfilter = require('lib.mobfilter')
 local chchain = require('lib.chchain')
 local follow = require('lib.follow')
 local charinfo = require("mqcharinfo")
+local casting = require('lib.casting')
 
 local botevents = {}
 
@@ -51,19 +52,25 @@ function botevents.Event_Slain()
 end
 
 function botevents.Event_CastRst()
-    if state.getRunconfig().CurSpell and state.getRunconfig().CurSpell.viaMQ2Cast then return end
+    if state.getRunconfig().CurSpell and (state.getRunconfig().CurSpell.viaMQ2Cast or state.getRunconfig().CurSpell.viaCastingLib) then
+        casting.notifyResist()
+        return
+    end
     SpellResisted = true
 end
 
 function botevents.Event_CastImm(line)
-    if state.getRunconfig().CurSpell and state.getRunconfig().CurSpell.viaMQ2Cast then return end
+    if state.getRunconfig().CurSpell and (state.getRunconfig().CurSpell.viaMQ2Cast or state.getRunconfig().CurSpell.viaCastingLib) then
+        casting.notifyImmune()
+        return
+    end
     local curtarget = mq.TLO.Target.ID()
     local sub = state.getRunconfig().CurSpell.sub
     local spell = state.getRunconfig().CurSpell.spell
     local spellid = mq.TLO.Spell(botconfig.config[sub .. spell].spell).ID()
     if not spellid then return end
     if string.find(line, "(with this spell)") then return false end
-    if mq.TLO.Cast.Stored.ID() == spellid then
+    if casting.storedSpellId() == spellid then
         if mq.TLO.Spell(spellid).TargetType() ~= "Targeted AE" and mq.TLO.Spell(spellid).TargetType() ~= "PB AE" then
             if state.getRunconfig().CurSpell.target then
                 if state.getRunconfig().CurSpell.target == curtarget then
@@ -192,6 +199,9 @@ function botevents.BindEvents()
     mq.event('CastRst1', "Your target resisted the#*#", botevents.Event_CastRst)
     mq.event('CastRst2', "#*#resisted your#*#!#*#", botevents.Event_CastRst)
     mq.event('CastRst3', "#*#avoided your#*#!#*#", botevents.Event_CastRst)
+    mq.event('CastFizzle', "Your spell fizzles#*#", function() casting.notifyResult('CAST_FIZZLE') end)
+    mq.event('CastInterrupted', "Your casting has been interrupted#*#", function() casting.notifyResult('CAST_INTERRUPTED') end)
+    mq.event('CastTakeHold', "Your spell did not take hold#*#", function() casting.notifyTakeHold() end)
     mq.event('CastImm', "Your target cannot be#*#", botevents.Event_CastImm)
     mq.event('SlowImm', "Your target is immune to changes in its attack speed", botevents.Event_CastImm)
     mq.event('MissedNote', "You miss a note, bringing your#*#", botevents.Event_MissedNote)
