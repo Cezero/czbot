@@ -4,7 +4,7 @@ local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
 local state = require('lib.state')
 local utils = require('lib.utils')
-local charinfo = require('mqcharinfo')
+local charinfo = require('plugins.charinfo')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
 

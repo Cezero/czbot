@@ -7,11 +7,10 @@ local state = require('lib.state')
 local botmove = require('botmove')
 local hookregistry = require('lib.hookregistry')
 local spellutils = require('lib.spellutils')
-local bardtwist = require('lib.bardtwist')
 local botevents = require('botevents')
 local utils = require('lib.utils')
 local tankrole = require('lib.tankrole')
-local mqcharinfo = require('mqcharinfo')
+local charinfo = require('plugins.charinfo')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end

@@ -9,7 +9,7 @@ local botmove = require('botmove')
 local utils = require('lib.utils')
 local spellutils = require('lib.spellutils')
 local casting = require('lib.casting')
-local charinfo = require("mqcharinfo")
+local charinfo = require('plugins.charinfo')
 local myconfig = botconfig.config
 
 local botpull = {}
