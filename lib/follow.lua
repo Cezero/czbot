@@ -5,7 +5,7 @@
 local mq = require('mq')
 local state = require('lib.state')
 local botmove = require('botmove')
-local charinfo = require("mqcharinfo")
+local charinfo = require("plugin.charinfo")
 
 local follow = {}
 

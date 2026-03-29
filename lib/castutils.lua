@@ -3,7 +3,7 @@ local botconfig = require('lib.config')
 local spellbands = require('lib.spellbands')
 local state = require('lib.state')
 local utils = require('lib.utils')
-local charinfo = require('mqcharinfo')
+local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
 
 local castutils = {}

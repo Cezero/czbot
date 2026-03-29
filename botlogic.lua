@@ -194,7 +194,7 @@ local function charState_PostDead()
                 local desiredPetTargetId = nil
                 local maName = tankrole.GetAssistTargetName()
                 if maName and maName ~= '' then
-                    local maInfo = mqcharinfo.GetInfo(maName)
+                    local maInfo = charinfo.GetInfo(maName)
                     local maTargetId = (maInfo and maInfo.ID and maInfo.Target) and maInfo.Target.ID or nil
                     if maTargetId and maTargetId ~= 0 then desiredPetTargetId = maTargetId end
                 end
