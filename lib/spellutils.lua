@@ -17,6 +17,14 @@ local _deps = {}
 local CASTING_STUCK_MS = 20000
 --- Delay (ms) after cast start when spell must be memorized, so casting state is visible before next tick and charState won't stand for hysteresis.
 local CASTING_MEMORIZE_DELAY_MS = 200
+--- Terminal casting.result() values that mean the cast pipeline may run OnCastComplete / afterCast. All others clear state without success bookkeeping.
+local CASTING_LIB_SUCCESS_RESULTS = {
+    CAST_SUCCESS = true,
+    CAST_RESIST = true,
+    CAST_IMMUNE = true,
+    CAST_TAKEHOLD = true,
+    CAST_FIZZLE = true,
+}
 --- When buff remaining time on target is below this (ms), do not interrupt with "buff already present" (allow refresh cast to complete). Should match botbuff's refresh window (e.g. 24s for self).
 local BUFF_REFRESH_THRESHOLD_MS = 24000
 --- When a debuff returns CAST_TAKEHOLD (blocked by another spell), skip that debuff on this spawn for this many ms.
@@ -828,7 +836,14 @@ function spellutils.handleSpellCheckReentry(sub, options)
         local status = casting.status() or ''
         local storedId = casting.storedSpellId() or 0
         local castResult = casting.result() or ''
-        local complete = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
+        local idleLike = (not string.find(status, 'C') and not string.find(status, 'M') and storedId == (rc.CurSpell.spellid or 0))
+        local complete = idleLike and CASTING_LIB_SUCCESS_RESULTS[castResult]
+        if idleLike and not complete then
+            printf('\ayCZBot:\ax cast lib finished without success (\ar%s\ax) sub=\at%s\ax spellidx=\at%s\ax', castResult,
+                tostring(rc.CurSpell.sub), tostring(rc.CurSpell.spell))
+            spellutils.clearCastingStateOrResume()
+            return false
+        end
         if complete then
             rc.CurSpell.resisted = (castResult == 'CAST_RESIST')
             if castResult == 'CAST_IMMUNE' and rc.CurSpell.target then

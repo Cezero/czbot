@@ -55,6 +55,15 @@ local function applyTarget(req)
     return mq.TLO.Target.ID() == req.targetId
 end
 
+local function spellReadyByName(spellName)
+    if not spellName or spellName == '' then return true end
+    local key = string.lower(spellName)
+    local sr = mq.TLO.Me.SpellReady(key)
+    if not sr then return false end
+    local ok, ready = pcall(function() return sr() end)
+    return ok and ready
+end
+
 local function beginCast(req)
     local gemType = req.gemType
     if not _active then return false end
@@ -91,6 +100,12 @@ local function ensureMemorizedIfNeeded(req)
     if not spellName or spellName == '' then return true end
     local inGem = mq.TLO.Me.Gem(slot)() or ''
     if string.lower(inGem) == string.lower(spellName) then
+        if not spellReadyByName(spellName) then
+            _active.phase = 'memorizing'
+            _active.status = 'M'
+            _active.deadline = mq.gettime() + CAST_MEMO_TIMEOUT_MS
+            return false
+        end
         return true
     end
     if not mq.TLO.Me.Book(spellName)() then
@@ -159,7 +174,10 @@ function casting.tick()
     if _active.phase == 'memorizing' then
         local req = _active.request
         local inGem = mq.TLO.Me.Gem(req.gemType)() or ''
-        if req.spellName and string.lower(inGem) == string.lower(req.spellName) then
+        if req.spellName and string.lower(inGem) == string.lower(req.spellName) and spellReadyByName(req.spellName) then
+            if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() then
+                mq.cmd('/stand')
+            end
             beginCast(req)
             return
         end
