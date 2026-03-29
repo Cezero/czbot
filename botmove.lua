@@ -5,7 +5,7 @@ local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local utils = require('lib.utils')
-local charinfo = require('plugins.charinfo')
+local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
 
 local botmove = {}

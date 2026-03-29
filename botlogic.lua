@@ -10,7 +10,7 @@ local spellutils = require('lib.spellutils')
 local botevents = require('botevents')
 local utils = require('lib.utils')
 local tankrole = require('lib.tankrole')
-local charinfo = require('plugins.charinfo')
+local charinfo = require('plugin.charinfo')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end

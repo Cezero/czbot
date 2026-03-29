@@ -1,7 +1,7 @@
 local mq = require('mq')
 
 -- Require MQCharinfo before loading bot (so we can end macro if unavailable).
-local ok, _ = pcall(require, 'plugins.charinfo')
+local ok, _ = pcall(require, 'plugin.charinfo')
 if not ok then
     print('\ayCZBot:\ax MQCharinfo (charinfo) is required but failed to load.')
     return
