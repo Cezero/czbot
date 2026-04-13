@@ -1,4 +1,4 @@
--- Generic spell/ability entry widget: gem type + spell name with type-based validation.
+﻿-- Generic spell/ability entry widget: gem type + spell name with type-based validation.
 -- Signature: M.draw(spell, opts)
 --   spell: spell entry table to read/write (e.g. config.pull.spell or config.heal.spells[i]).
 --   opts: required id (string), primaryOptions (table); optional label, onChanged, displayCommonFields (default true),
@@ -78,7 +78,9 @@ end
 local function validateDiscipline(name)
     if not name or name:match('^%s*$') then return false, 'Enter a discipline name' end
     name = name:match('^%s*(.-)%s*$')
-    local disc = mq.TLO.Me.Discipline(name)
+    local me = mq.TLO.Me
+    local caLookup = me and me.CombatAbility
+    local disc = caLookup and caLookup(name)
     local discId = disc and disc.ID and disc.ID()
     if tonumber(discId) and tonumber(discId) > 0 then return true end
     return false, 'Discipline not found'

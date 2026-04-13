@@ -1,4 +1,4 @@
--- Reusable validated edit modal: text entry, optional validateFn, Save/Cancel, in-dialog error.
+﻿-- Reusable validated edit modal: text entry, optional validateFn, Save/Cancel, in-dialog error.
 -- Phase 2: CloseCurrentPopup() and onSave/onCancel are deferred to the next frame (avoids crash
 -- when closing from deep nesting). state.pendingClose ('save'|'cancel') is set on button click.
 -- validateFn(value) returns success (boolean), optional errorMessage (string).
@@ -53,10 +53,11 @@ function M.validatedEditModal(id, state, validateFn, onSave, onCancel)
     end
     imgui.Spacing()
     imgui.SetNextItemWidth(280)
-    local buf, changed = imgui.InputText('##value' .. popupId, state.buffer or '', EnterReturnsTrue)
-    if changed then state.buffer = buf end
+    local buf, submitted = imgui.InputText('##value' .. popupId, state.buffer or '', EnterReturnsTrue)
+    -- Keep caller-owned buffer synced even when Enter wasn't pressed.
+    if buf ~= state.buffer then state.buffer = buf end
     imgui.Spacing()
-    if imgui.Button('Save##ValidatedEditModal_Save_' .. id) then
+    if submitted or imgui.Button('Save##ValidatedEditModal_Save_' .. id) then
         state.error = nil
         local ok, errMsg
         if validateFn then
