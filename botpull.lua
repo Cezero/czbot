@@ -540,10 +540,10 @@ local function tickNavigating(rc, spawn)
         outsideCamp = meToCampSq and myconfig.pull.radiusPlus40Sq and meToCampSq > myconfig.pull.radiusPlus40Sq
     end
 
-    -- Pull target below 100% HP (e.g. someone else on it): abort and set FTE so we pick another.
+    -- Pull target below 100% HP (e.g. someone else on it): unpullable only, not combat FTE block.
     if spawn.PctHPs() and spawn.PctHPs() < 100 then
         local sid = rc.pullAPTargetID
-        rc.FTEList[sid] = { id = sid, hitcount = 0, timer = mq.gettime() }
+        if sid and sid > 0 then spawnutils.markPullUnpullable(rc, sid) end
         abortPullAndReturnToCamp('Pull target below 100% HP, picking another')
         return
     end
@@ -956,6 +956,17 @@ function botpull.getHookFn(name)
         end
     end
     return nil
+end
+
+--- Abort active pull when FTE lock fires (clears APTarget and returns to camp when navigating/aggroing).
+function botpull.AbortPullForFTE(reason)
+    local rc = state.getRunconfig()
+    if APTarget then APTarget = false end
+    if state.getRunState() == state.STATES.pulling and rc.pullAPTargetID then
+        abortPullAndReturnToCamp(reason or 'FTE lock detected')
+    elseif rc.pullAPTargetID then
+        rc.pullAPTargetID = nil
+    end
 end
 
 return botpull

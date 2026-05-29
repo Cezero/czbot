@@ -9,6 +9,7 @@ local chchain = require('lib.chchain')
 local follow = require('lib.follow')
 local casting = require('lib.casting')
 local botpull = require('botpull')
+local spawnutils = require('lib.spawnutils')
 
 local botevents = {}
 
@@ -135,24 +136,31 @@ function botevents.Event_TooSteep()
 end
 
 function botevents.Event_FTELocked()
-    local spawn = mq.TLO.Target
-    if spawn.ID() and spawn.ID() > 0 then
-        printf(
-            '\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', spawn.Name())
+    local rc = state.getRunconfig()
+    local spawnId = spawnutils.resolveFTELockedSpawnId(rc)
+    local displayName = mq.TLO.Target.CleanName() or mq.TLO.Target.Name()
+    if spawnId then
+        local sp = mq.TLO.Spawn(spawnId)
+        displayName = sp.CleanName() or sp.Name() or tostring(spawnId)
     end
-    if state.getRunconfig().FTECount == 0 then state.getRunconfig().FTECount = state.getRunconfig().FTECount + 1 end
-    if spawn.ID() and spawn.ID() > 0 and not state.getRunconfig().FTEList[spawn.ID()] then
-        state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 1, timer = mq.gettime() + 10000 }
-    elseif state.getRunconfig().FTEList[spawn.ID()] and state.getRunconfig().FTEList[spawn.ID()].hitcount == 1 then
-        state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 2, timer = mq.gettime() + 30000 }
-    elseif state.getRunconfig().FTEList[spawn.ID()] and state.getRunconfig().FTEList[spawn.ID()].hitcount >= 2 then
-        state.getRunconfig().FTEList[spawn.ID()] = { id = spawn.ID(), hitcount = 3, timer = mq.gettime() + 90500 }
+    if displayName and displayName ~= '' then
+        printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', displayName)
+    end
+    if rc.fteRecheckProbeId and spawnId and rc.fteRecheckProbeId == spawnId then
+        rc.fteRecheckProbeId = nil
+    end
+    if not spawnId then return end
+    if rc.FTECount == 0 then rc.FTECount = rc.FTECount + 1 end
+    spawnutils.recordFTE(rc, spawnId, { combat = true, pull = rc.dopull == true })
+    if rc.engageTargetId == spawnId then
+        rc.engageTargetId = nil
+        rc.attackCommandEngage = nil
+    end
+    if rc.dopull then
+        print('clearing pull target because FTELock detected') -- not debug, real error message
+        botpull.AbortPullForFTE('FTE lock detected')
     end
     mq.cmd('/multiline ; /squelch /mqtarget myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
-    if state.getRunconfig().dopull then
-        print('clearing pull target because FTELock detected') -- not debug, real error message
-        APTarget = false
-    end
 end
 
 function botevents.Event_GMDetected()

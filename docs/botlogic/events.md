@@ -82,12 +82,18 @@ CharState sets `runState = 'dead'` when DEAD/HOVER and sets `HoverEchoTimer`; wh
 
 Target is Encounter Locked (FTE) to someone else.
 
+- Resolves **NPC spawn id** only (ignores PC/self target; falls back to `engageTargetId` or `pullAPTargetID` when the chat event fires while targeted on yourself).
 - Echoes message; increments `FTECount` if it was 0.
-- Updates `FTEList[spawn.ID()]` with hitcount (1→2→3) and timer (10s, 30s, 90.5s).
+- Records `FTEList[spawnId]` via `spawnutils.recordFTE`: short **combat** block (15s + escalation), **in-camp recheck** every 5s, and **pull unpullable** for 5 minutes when `dopull` is on.
+- Clears `engageTargetId` when it matches the FTE spawn.
 - Runs: `/mqtarget myself`, `/attack off`, `/stopcast`, `/nav stop`, `/stick off`.
-- If `dopull` is true: clears pull target (sets global `APTarget = false`).
+- If `dopull` is true: `botpull.AbortPullForFTE` (return to camp when mid-pull).
 
-Pull and AddSpawnCheck use FTE list to avoid pulling or listing FTE-locked mobs.
+**Camp list** (`AddSpawnCheck` / `buildCampMobList`) excludes spawns while `combatBlockedUntil` is active; `tickCombatFTERechecks` re-targets in-camp entries every 5s and clears the combat block when no new FTE message arrives.
+
+**Pull list** uses `pullUnpullableUntil` only (5 min), not the combat block — so a false in-camp FTE does not block pull selection for the full combat window.
+
+Manual reset: `/cz fte clear` (current NPC target) or `/cz fte clear all`.
 
 ---
 

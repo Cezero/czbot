@@ -26,8 +26,10 @@
 ---@field pullNavStartHP number|nil PctHPs when we started navigating (for add-abort on damage)
 ---@field pullXTargetIdsAtStart table|nil set of XTarget spawn IDs at pull start (id -> true), for add detection while navigating
 ---@field pullarc number|nil
----@field FTEList table
+---@field FTEList table spawnId -> { id, strikes?, combatBlockedUntil?, nextCombatRecheckAt?, pullUnpullableUntil?, lastStrikeAt? }
 ---@field FTECount number
+---@field fteRecheckProbeId number|nil spawn id being probed for in-camp FTE recheck
+---@field fteRecheckInProgress boolean|nil true while AddSpawnCheck is running a recheck target probe
 ---@field CurSpell table When casting: phase (e.g. casting, precast, precast_wait_move), sub, spell (index), target, targethit, spellcheckResume; casting backend fields: viaCastingLib (alias viaMQ2Cast for compatibility), spellid, castToken.
 ---@field HoverTimer number
 ---@field DragHack boolean
@@ -240,6 +242,8 @@ function M.resetRunconfig()
         pullarc = nil,
         FTEList = {},
         FTECount = 0,
+        fteRecheckProbeId = nil,
+        fteRecheckInProgress = nil,
         CurSpell = {},
         HoverTimer = 0,
         DragHack = false,

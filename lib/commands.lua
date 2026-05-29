@@ -24,6 +24,7 @@ local charinfo = require("plugin.charinfo")
 local utils = require('lib.utils')
 local command_dispatcher = require('lib.command_dispatcher')
 local follow = require('lib.follow')
+local spawnutils = require('lib.spawnutils')
 local unpack = unpack
 
 local TOGGLELIST = {
@@ -271,6 +272,27 @@ local function cmd_exclude(args)
         mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
         mobfilter.process('exclude', 'save')
     end
+end
+
+local function cmd_fte(args)
+    local rc = state.getRunconfig()
+    local sub = args[2] and string.lower(args[2]) or ''
+    if sub == 'clear' then
+        if args[3] and string.lower(args[3]) == 'all' then
+            spawnutils.clearFTE(rc, nil)
+            printf('\ayCZBot:\ax Cleared all FTE entries')
+            return
+        end
+        local tid = mq.TLO.Target.ID()
+        if tid and tid > 0 and mq.TLO.Target.Type() == 'NPC' then
+            spawnutils.clearFTE(rc, tid)
+            printf('\ayCZBot:\ax Cleared FTE entry for %s (%s)', mq.TLO.Target.CleanName() or mq.TLO.Target.Name(), tid)
+        else
+            printf('\ayCZBot:\ax Usage: /cz fte clear [all] — or target an NPC')
+        end
+        return
+    end
+    printf('\ayCZBot:\ax Usage: /cz fte clear [all]')
 end
 
 local function cmd_xarc(args)
@@ -872,6 +894,7 @@ local handlers = {
     travel = cmd_travel,
     stop = cmd_stop,
     exclude = cmd_exclude,
+    fte = cmd_fte,
     xarc = cmd_xarc,
     priority = cmd_priority,
     charm = cmd_charm,

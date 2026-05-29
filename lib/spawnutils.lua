@@ -1,4 +1,4 @@
--- Centralized add/spawn detection, counting, and filtering.
+﻿-- Centralized add/spawn detection, counting, and filtering.
 -- AddSpawnCheck hook, buildCampMobList, buildPullMobList, and shared helpers.
 
 local mq = require('mq')
@@ -9,6 +9,14 @@ local utils = require('lib.utils')
 local bardtwist = require('lib.bardtwist')
 
 local spawnutils = {}
+
+-- FTE (First To Engage) tracking: combat block + in-camp recheck vs pull unpullable window.
+local COMBAT_FTE_RECHECK_MS = 5000
+local PULL_UNPULLABLE_MS = 300000
+local COMBAT_FTE_INITIAL_BLOCK_MS = 15000
+local COMBAT_FTE_STRIKE_BLOCK_EXTRA_MS = 5000
+local FTE_STRIKE_DEBOUNCE_MS = 2000
+local FTE_RECHECK_TARGET_DELAY_MS = 300
 
 -- ---------------------------------------------------------------------------
 -- Local helpers (DRY)
@@ -39,30 +47,207 @@ local function getSpawnsInArea(rc, radius2DSq, radiusZ)
     return mq.getFilteredSpawns(predicate)
 end
 
-function spawnutils.FTECheck(spawnId, rc)
-    if not spawnId then return true end
+local function isFTEEligibleSpawnType(spawnType)
+    if spawnType == 'NPC' then return true end
+    if spawnType == 'Pet' then return true end
+    return false
+end
+
+local function getCampAnchor(rc)
     rc = rc or state.getRunconfig()
-    if rc.engagetracker then
-        for k, v in pairs(rc.engagetracker) do
-            if mq.gettime() > v then rc.engagetracker[k] = nil end
-            if k == spawnId then return true end
-        end
+    if rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
+        return rc.makecamp.x, rc.makecamp.y, rc.makecamp.z
     end
-    -- Within 60s of our FTE tag: treat as FTE (exclude from camp list).
-    if spawnId and rc.FTEList and rc.FTEList[spawnId] and mq.gettime() < (rc.FTEList[spawnId].timer + 60000) then
-        return true
+    return mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+end
+
+function spawnutils.isEngageTracked(spawnId, rc)
+    if not spawnId then return false end
+    rc = rc or state.getRunconfig()
+    if not rc.engagetracker then return false end
+    local now = mq.gettime()
+    for k, v in pairs(rc.engagetracker) do
+        if now > v then rc.engagetracker[k] = nil end
+        if k == spawnId then return true end
     end
     return false
 end
 
-function spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
+function spawnutils.getFTEEntry(rc, spawnId)
+    rc = rc or state.getRunconfig()
+    if not spawnId or not rc.FTEList then return nil end
+    return rc.FTEList[spawnId]
+end
+
+function spawnutils.isCombatFTEBlocked(spawnId, rc)
+    if not spawnId then return false end
+    rc = rc or state.getRunconfig()
+    local entry = spawnutils.getFTEEntry(rc, spawnId)
+    if not entry or not entry.combatBlockedUntil then return false end
+    return mq.gettime() < entry.combatBlockedUntil
+end
+
+function spawnutils.isPullUnpullable(spawnId, rc)
+    if not spawnId then return false end
+    rc = rc or state.getRunconfig()
+    local entry = spawnutils.getFTEEntry(rc, spawnId)
+    if not entry or not entry.pullUnpullableUntil then return false end
+    return mq.gettime() < entry.pullUnpullableUntil
+end
+
+--- Legacy: combat FTE block or engagetracker (pull uses isPullUnpullable separately).
+function spawnutils.FTECheck(spawnId, rc)
+    if not spawnId then return true end
+    return spawnutils.isEngageTracked(spawnId, rc) or spawnutils.isCombatFTEBlocked(spawnId, rc)
+end
+
+function spawnutils.isSpawnInCampRadius(spawn, rc)
+    if not spawn then return false end
+    rc = rc or state.getRunconfig()
+    local myconfig = botconfig.config
+    local acleashSq = myconfig.settings.acleashSq
+    local zradius = myconfig.settings.zradius or 75
+    local cx, cy, cz = getCampAnchor(rc)
+    return spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
+end
+
+function spawnutils.isSpawnInCampRadiusById(spawnId, rc)
+    if not spawnId or spawnId == 0 then return false end
+    local spawn = mq.TLO.Spawn(spawnId)
+    if not spawn or not spawn.ID() or spawn.ID() == 0 then return false end
+    return spawnutils.isSpawnInCampRadius(spawn, rc)
+end
+
+local function combatBlockMsForStrikes(strikes)
+    strikes = strikes or 1
+    if strikes < 1 then strikes = 1 end
+    return COMBAT_FTE_INITIAL_BLOCK_MS + (strikes - 1) * COMBAT_FTE_STRIKE_BLOCK_EXTRA_MS
+end
+
+--- Record FTE on an NPC spawn. opts.combat (default true), opts.pull (5 min unpullable).
+function spawnutils.recordFTE(rc, spawnId, opts)
+    if not spawnId or spawnId == 0 then return end
+    rc = rc or state.getRunconfig()
+    if not rc.FTEList then rc.FTEList = {} end
+    opts = opts or {}
+    local now = mq.gettime()
+    local entry = rc.FTEList[spawnId]
+    if not entry then
+        entry = { id = spawnId, strikes = 0 }
+        rc.FTEList[spawnId] = entry
+    end
+    if opts.combat ~= false then
+        if not entry.lastStrikeAt or (now - entry.lastStrikeAt) >= FTE_STRIKE_DEBOUNCE_MS then
+            entry.strikes = (entry.strikes or 0) + 1
+            entry.lastStrikeAt = now
+        end
+        entry.combatBlockedUntil = now + combatBlockMsForStrikes(entry.strikes)
+        entry.nextCombatRecheckAt = now + COMBAT_FTE_RECHECK_MS
+    end
+    if opts.pull then
+        entry.pullUnpullableUntil = now + PULL_UNPULLABLE_MS
+    end
+end
+
+function spawnutils.markPullUnpullable(rc, spawnId)
+    if not spawnId or spawnId == 0 then return end
+    rc = rc or state.getRunconfig()
+    if not rc.FTEList then rc.FTEList = {} end
+    local now = mq.gettime()
+    local entry = rc.FTEList[spawnId]
+    if not entry then
+        entry = { id = spawnId, strikes = 0 }
+        rc.FTEList[spawnId] = entry
+    end
+    entry.pullUnpullableUntil = now + PULL_UNPULLABLE_MS
+end
+
+function spawnutils.clearCombatFTE(rc, spawnId)
+    rc = rc or state.getRunconfig()
+    if not rc.FTEList or not spawnId then return end
+    local entry = rc.FTEList[spawnId]
+    if not entry then return end
+    entry.combatBlockedUntil = nil
+    entry.nextCombatRecheckAt = nil
+    local pullActive = entry.pullUnpullableUntil and mq.gettime() < entry.pullUnpullableUntil
+    if not pullActive then
+        rc.FTEList[spawnId] = nil
+    end
+end
+
+function spawnutils.clearFTE(rc, spawnId)
+    rc = rc or state.getRunconfig()
+    if not rc.FTEList then return end
+    if spawnId then
+        rc.FTEList[spawnId] = nil
+    else
+        rc.FTEList = {}
+    end
+end
+
+function spawnutils.pruneFTEList(rc)
+    rc = rc or state.getRunconfig()
+    if not rc.FTEList then return end
+    local now = mq.gettime()
+    for spawnId, entry in pairs(rc.FTEList) do
+        local combatActive = entry.combatBlockedUntil and now < entry.combatBlockedUntil
+        local pullActive = entry.pullUnpullableUntil and now < entry.pullUnpullableUntil
+        local spawn = mq.TLO.Spawn(spawnId)
+        local gone = not spawn.ID() or spawn.ID() == 0 or spawn.Type() == 'Corpse'
+        if gone or (not combatActive and not pullActive) then
+            rc.FTEList[spawnId] = nil
+        end
+    end
+end
+
+local function resolveFTESpawnIdFromTarget(rc)
+    local targetId = mq.TLO.Target.ID()
+    local targetType = mq.TLO.Target.Type()
+    if targetId and targetId > 0 and isFTEEligibleSpawnType(targetType) then
+        return targetId
+    end
+    if targetType == 'PC' then
+        if rc.engageTargetId and rc.engageTargetId > 0 then
+            local t = mq.TLO.Spawn(rc.engageTargetId).Type()
+            if isFTEEligibleSpawnType(t) then return rc.engageTargetId end
+        end
+        if rc.pullAPTargetID and rc.pullAPTargetID > 0 then
+            local t = mq.TLO.Spawn(rc.pullAPTargetID).Type()
+            if isFTEEligibleSpawnType(t) then return rc.pullAPTargetID end
+        end
+    end
+    return nil
+end
+
+--- Called from botevents when FTE chat line fires. Returns resolved NPC spawn id or nil.
+function spawnutils.resolveFTELockedSpawnId(rc)
+    rc = rc or state.getRunconfig()
+    return resolveFTESpawnIdFromTarget(rc)
+end
+
+function spawnutils.filterSpawnExclude(spawn, rc)
     rc = rc or state.getRunconfig()
     local spawnname = spawn.CleanName() or 'none'
     local list = rc.ExcludeList or {}
     for _, n in ipairs(list) do
         if n == spawnname then return false end
     end
-    if spawnutils.FTECheck(spawn.ID(), rc) then return false end
+    return true
+end
+
+function spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
+    if not spawnutils.filterSpawnExclude(spawn, rc) then return false end
+    local sid = spawn.ID()
+    if spawnutils.isEngageTracked(sid, rc) then return false end
+    if spawnutils.isCombatFTEBlocked(sid, rc) then return false end
+    return true
+end
+
+function spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc)
+    if not spawnutils.filterSpawnExclude(spawn, rc) then return false end
+    local sid = spawn.ID()
+    if spawnutils.isEngageTracked(sid, rc) then return false end
+    if spawnutils.isPullUnpullable(sid, rc) then return false end
     return true
 end
 
@@ -151,7 +336,7 @@ local function filterSpawnForPull(spawn, rc)
     local cz = (rc.makecamp and rc.makecamp.z) or mq.TLO.Me.Z()
     if not spawnInArea(spawn, cx, cy, cz, radiusSq, zrange) then return false end
     if not spawnInPullArc(spawn, rc) then return false end
-    if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
+    if not spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc) then return false end
     if not mq.TLO.Navigation.PathExists('id ' .. spawn.ID())() then return false end
     if rc.MobList then
         for _, v in pairs(rc.MobList) do
@@ -247,9 +432,59 @@ function spawnutils.mergeKillTargetIntoMobList(rc)
     table.insert(rc.MobList, mq.TLO.Spawn(KillTarget))
 end
 
+local function shouldSkipFTERecheck(rc)
+    if state.getRunState() == state.STATES.pulling then return true end
+    if state.getRunState() == state.STATES.casting then return true end
+    if rc.fteRecheckInProgress then return true end
+    return false
+end
+
+function spawnutils.tickCombatFTERechecks(rc)
+    rc = rc or state.getRunconfig()
+    if shouldSkipFTERecheck(rc) then return end
+    if not rc.FTEList then return end
+    local now = mq.gettime()
+    for spawnId, entry in pairs(rc.FTEList) do
+        if entry.nextCombatRecheckAt and now >= entry.nextCombatRecheckAt then
+            if not spawnutils.isSpawnInCampRadiusById(spawnId, rc) then
+                entry.nextCombatRecheckAt = nil
+            elseif entry.combatBlockedUntil and now < entry.combatBlockedUntil then
+                entry.nextCombatRecheckAt = now + COMBAT_FTE_RECHECK_MS
+            else
+                local engageId = rc.engageTargetId
+                local curTar = mq.TLO.Target.ID()
+                local busyOnOther = mq.TLO.Me.Combat()
+                    and (
+                        (engageId and engageId ~= spawnId and mq.TLO.Spawn(engageId).ID() and mq.TLO.Spawn(engageId).Type() == 'NPC')
+                        or (curTar and curTar > 0 and curTar ~= spawnId and mq.TLO.Target.Type() == 'NPC')
+                    )
+                if busyOnOther then
+                    entry.nextCombatRecheckAt = now + COMBAT_FTE_RECHECK_MS
+                else
+                    rc.fteRecheckInProgress = true
+                    rc.fteRecheckProbeId = spawnId
+                    mq.cmdf('/squelch /tar id %s', spawnId)
+                    mq.delay(FTE_RECHECK_TARGET_DELAY_MS, function()
+                        return mq.TLO.Target.ID() == spawnId
+                    end)
+                    if rc.fteRecheckProbeId == spawnId and mq.TLO.Target.ID() == spawnId and isFTEEligibleSpawnType(mq.TLO.Target.Type()) then
+                        spawnutils.clearCombatFTE(rc, spawnId)
+                    else
+                        entry.nextCombatRecheckAt = now + COMBAT_FTE_RECHECK_MS
+                    end
+                    rc.fteRecheckProbeId = nil
+                    rc.fteRecheckInProgress = false
+                end
+            end
+        end
+    end
+end
+
 function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
+    spawnutils.pruneFTEList(rc)
     if not spawnutils.validateAcmTarget(rc) then return end
+    spawnutils.tickCombatFTERechecks(rc)
     spawnutils.buildAndSetCampMobList(rc)
     spawnutils.mergeKillTargetIntoMobList(rc)
     spellstates.PruneDebuffStateNotInMobList(rc.MobList)
