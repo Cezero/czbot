@@ -1,4 +1,4 @@
-# Tanking Configuration
+﻿# Tanking Configuration
 
 This document explains how to configure the bot when it is the **Main Tank (MT)** or a melee character: stick command, assist threshold, and camp/leash. For who the MT is, how the MT picks targets, and how the Puller interacts, see [Tank and Assist Roles](tank-and-assist-roles.md).
 
@@ -26,6 +26,8 @@ Under **`config.melee`**:
 | Option | Default | Purpose |
 |--------|--------|---------|
 | **stickcmd** | `'hold uw 7'` | Stick command used when engaging (e.g. `hold`, `hold uw 7`, `snaproll`). |
+| **stayBehind** | `false` | When on and this bot is **not** the Main Tank, append `!front` to the stick command while engaging. |
+| **behindAggroPct** | 90 | With **stayBehind** on: above this **Me.PctAggro** (level 20+), engage without `!front` until aggro drops; stick is re-issued when crossing the threshold. |
 | **assistpct** | 99 | MA’s target HP % at or below which this bot will sync to the MA’s target (for DPS/MA logic). |
 | **offtank** | `false` | When true, this bot is an offtank (see [Offtank configuration](offtank-configuration.md)). |
 | **otoffset** | 0 | Used when offtank: which add to pick when MT and MA are on the same mob. |

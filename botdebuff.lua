@@ -8,6 +8,7 @@ local bothooks = require('lib.bothooks')
 local charm = require('lib.charm')
 local castutils = require('lib.castutils')
 local tankrole = require('lib.tankrole')
+local aggro = require('lib.aggro')
 
 local botdebuff = {}
 local DebuffBands = {}
@@ -91,6 +92,8 @@ local function DebuffEvalBuildContext(index)
     local db = DebuffBands[index]
     local mobMin = db and db.mobMin or 0
     local mobMax = db and db.mobMax or 100
+    local aggroMin = db and db.aggroMin or 0
+    local aggroMax = db and db.aggroMax or 100
     return {
         entry = entry,
         spell = spell,
@@ -114,6 +117,8 @@ local function DebuffEvalBuildContext(index)
         mobList = state.getRunconfig().MobList or {},
         mobMin = mobMin,
         mobMax = mobMax,
+        aggroMin = aggroMin,
+        aggroMax = aggroMax,
         mintar = db and db.mintar,
         maxtar = db and db.maxtar,
     }
@@ -247,6 +252,7 @@ local function DebuffEval(index)
     if not entry then return nil, nil end
     local db = DebuffBands[index]
     if not campCountOk(state.getMobCount(), db and db.mintar, db and db.maxtar) then return nil, nil end
+    if not aggro.inBand(db and db.aggroMin, db and db.aggroMax) then return nil, nil end
     local id, hit = charm.GetRecastRequestForIndex(index)
     if id then
         charm.ClearRecastRequest()
@@ -335,6 +341,9 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     if not entry then return nil, nil end
     local db = DebuffBands[spellIndex]
     if not campCountOk(state.getMobCount(), db and db.mintar, db and db.maxtar) then
+        return nil, nil
+    end
+    if not aggro.inBand(db and db.aggroMin, db and db.aggroMax) then
         return nil, nil
     end
     local rc = state.getRunconfig()

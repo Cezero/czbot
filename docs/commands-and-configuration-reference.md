@@ -1,4 +1,4 @@
-# Commands and Configuration Reference
+﻿# Commands and Configuration Reference
 
 This document is a single reference for all **/cz** commands and the **configuration file** structure. For detailed behavior and examples, see the topic-specific docs (healing, tanking, buffing, etc.).
 
@@ -124,6 +124,7 @@ StoredConfig = {
     dosit = true,
     sitmana = 90,
     sitendur = 90,
+    sitaggro = 60,
     TankName = "manual",
     AssistName = nil,
     TargetFilter = 0,
@@ -161,6 +162,7 @@ return StoredConfig
 | **dosit**          | `true`        | Sit when not in combat.                                                                                                 |
 | **sitmana**        | 90            | Sit when mana % below this; stand when above this + 3 (hysteresis).                                                      |
 | **sitendur**       | 90            | Sit when endurance % below this; stand when above this + 3 (hysteresis).                                                |
+| **sitaggro**       | 60            | When mobs are in camp and level 20+, only sit when `Me.PctAggro` is below this (no hysteresis).                          |
 | **TankName**       | `"manual"`    | Main Tank name or `"automatic"` / `"manual"`.                                                                           |
 | **AssistName**     | (unset)       | Main Assist name or `"automatic"` / `"manual"`.                                                                         |
 | **TargetFilter**   | `0`           | Mob list filter (0/1/2).                                                                                                |
@@ -183,6 +185,8 @@ See [Pull Configuration and Logic](pull-configuration.md) for the full pull tabl
 | ------------- | ------------- | --------------------------------------------- |
 | **assistpct** | 99            | MA target HP % at or below which to sync.     |
 | **stickcmd**  | `'hold uw 7'` | Stick command when engaging.                  |
+| **stayBehind** | `false`    | Non-MT: append `!front` to stick while engaging. |
+| **behindAggroPct** | 90     | With stayBehind: above this PctAggro, stick without `!front`. |
 | **offtank**   | `false`       | This bot is an offtank.                       |
 | **otoffset**  | 0             | Which add to pick when MT and MA on same mob. |
 | **minmana**   | 0             | Min mana % to engage.                         |

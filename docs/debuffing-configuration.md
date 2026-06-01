@@ -1,4 +1,4 @@
-# Debuffing Configuration
+﻿# Debuffing Configuration
 
 This document explains how to configure the bot’s **debuffing** behavior: which detrimental spells are cast on which mobs (tank target, adds, named) and options such as charm, recast, and delay. **Nuking**, **mezzing**, and **melee combat abilities** use this same debuff system; see [Nuking configuration](nuking-configuration.md), [Mezzing configuration](mezzing-configuration.md), and [Melee combat abilities](melee-combat-abilities.md) for those use cases.
 
@@ -53,6 +53,7 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff u
   - **named** — Named mobs. With `matar`, the chosen `matar` target is required to be named (MA by default, MT when `onlyMT=true`).
 - **Migration note:** Legacy `tanktar`/`notanktar` tokens are accepted as aliases for `matar`/`notmatar` so existing configs keep working. New configurations should use the canonical `matar`/`notmatar` names.
 - **min** / **max:** Mob HP % range (0–100). The mob’s HP must be in this range to be considered.
+- **aggroMin** / **aggroMax:** Optional. Your **Me.PctAggro** range (0–100). Default 0 / 100 (no gate). Only applies at level 20+; below level 20 the gate is ignored. Bands are merged across the spell like HP %.
 
 - **mintar** / **maxtar:** Optional. Camp mob-count gate (total mobs in camp). Omit the field or set to **0** for no limit. **mintar = X, maxtar = nil** — only consider this spell when camp mob count ≥ X (X &gt; 0). **mintar = nil, maxtar = X** — effective minimum is 1; only consider when 1 ≤ mob count ≤ X (X &gt; 0). **mintar = X, maxtar = Y** — only consider when X ≤ mob count ≤ Y. For **targeted AE** spells (auto-detected when spell TargetType is "Targeted AE" and AERange > 0), **mintar** is also the minimum number of mobs **within the spell's AERange of the candidate target** (so the spell is not cast on a lone add with no other mobs in AE range). If a spell has only **notmatar** in its bands and neither **mintar** nor **maxtar** is set in any band, the bot defaults **mintar** to 2 so the spell is only considered when there is at least one add (optimization).
 

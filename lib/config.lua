@@ -12,6 +12,7 @@
 ---@field doforage boolean|nil
 ---@field sitmana number|nil
 ---@field sitendur number|nil
+---@field sitaggro number|nil
 ---@field TankName string|nil
 ---@field AssistName string|nil
 ---@field TargetFilter number|nil
@@ -55,6 +56,8 @@
 ---@class ConfigMelee
 ---@field assistpct number|nil
 ---@field stickcmd string|nil
+---@field stayBehind boolean|nil
+---@field behindAggroPct number|nil
 ---@field offtank boolean|nil
 ---@field mtSticky boolean|nil
 ---@field minmana number|nil
@@ -109,9 +112,9 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
-    melee = { 'assistpct', 'stickcmd', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
+    melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
@@ -471,6 +474,12 @@ local function writeConfigToFile(config, filename)
                 if band.max ~= nil then
                     file:write(indent .. "    " .. formatKey('max') .. " = " .. tonumber(band.max) .. ",\n")
                 end
+                if band.aggroMin ~= nil and tonumber(band.aggroMin) ~= 0 then
+                    file:write(indent .. "    " .. formatKey('aggroMin') .. " = " .. tonumber(band.aggroMin) .. ",\n")
+                end
+                if band.aggroMax ~= nil and tonumber(band.aggroMax) ~= 100 then
+                    file:write(indent .. "    " .. formatKey('aggroMax') .. " = " .. tonumber(band.aggroMax) .. ",\n")
+                end
                 if band.mintar ~= nil and band.mintar > 0 then
                     file:write(indent .. "    " .. formatKey('mintar') .. " = " .. tonumber(band.mintar) .. ",\n")
                 end
@@ -720,6 +729,7 @@ function M.Load(path)
     if (M.config.settings.doforage == nil) then M.config.settings.doforage = false end
     if (M.config.settings.sitmana == nil) then M.config.settings.sitmana = 90 end
     if (M.config.settings.sitendur == nil) then M.config.settings.sitendur = 90 end
+    if (M.config.settings.sitaggro == nil) then M.config.settings.sitaggro = 60 end
     if (M.config.settings.acleash == nil) then M.config.settings.acleash = 75 end
     if (M.config.settings.followdistance == nil) then M.config.settings.followdistance = 35 end
     M.config.settings.acleashSq = (M.config.settings.acleash or 0) * (M.config.settings.acleash or 0)
@@ -772,7 +782,8 @@ function M.Load(path)
     M.config.pull.leashSq = (M.config.pull.leash or 0) * (M.config.pull.leash or 0)
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
-        stickcmd = 'hold uw 7', offtank = false, mtSticky = false, otoffset = 0, minmana = 0, assistpct = 99,
+        stickcmd = 'hold uw 7', stayBehind = false, behindAggroPct = 90, offtank = false, mtSticky = false,
+        otoffset = 0, minmana = 0, assistpct = 99,
     })
     applySectionDefaults('heal', { rezoffset = 0, interruptlevel = 0.80, xttargets = 0 })
 end

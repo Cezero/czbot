@@ -1,4 +1,4 @@
--- Debuff tab: dedicated panel for debuff config (On/Off toggle + one spell_entry per debuff).
+﻿-- Debuff tab: dedicated panel for debuff config (On/Off toggle + one spell_entry per debuff).
 
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
@@ -162,6 +162,7 @@ function M.draw()
             targetphaseOptions = TARGETPHASE_OPTIONS_DEBUFF,
             validtargetsOptions = {},
             showBandMinMax = true,
+            showBandAggroMinMax = true,
             showBandMinTarMaxtar = true,
             onDelete = function()
                 table.remove(debuff.spells, i); runConfigLoaders()

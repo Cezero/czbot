@@ -1,4 +1,4 @@
--- Single parse/apply for spell bands across heal, buff, cure, event, debuff.
+﻿-- Single parse/apply for spell bands across heal, buff, cure, event, debuff.
 -- entry.bands = { { targetphase = { 'tank', 'pc' }, validtargets = { 'war', 'clr' }, min = 0, max = 80 }, ... }
 -- targetphase = priority stages; validtargets = within-phase types (classes, or all/bots/raid for corpse).
 
@@ -25,7 +25,7 @@ function spellbands.applyBands(section, entry, index)
     if not bands or type(bands) ~= 'table' then
         if section == 'heal' then return {} end
         if section == 'buff' or section == 'cure' then return {} end
-        if section == 'debuff' then return { mobMin = 0, mobMax = 100, matar = false, notmatar = false, named = false } end
+        if section == 'debuff' then return { mobMin = 0, mobMax = 100, aggroMin = 0, aggroMax = 100, matar = false, notmatar = false, named = false } end
         return {}
     end
 
@@ -144,6 +144,7 @@ function spellbands.applyBands(section, entry, index)
 
     if section == 'debuff' then
         local mobMin, mobMax = nil, nil
+        local aggroMin, aggroMax = nil, nil
         local mintar, maxtar = nil, nil
         local matar, notmatar, named = false, false, false
         for _, band in ipairs(bands) do
@@ -156,6 +157,14 @@ function spellbands.applyBands(section, entry, index)
                 end
                 if mx ~= nil then
                     if mobMax == nil then mobMax = mx else mobMax = math.max(mobMax, mx) end
+                end
+                local amn = band.aggroMin
+                local amx = band.aggroMax
+                if amn ~= nil then
+                    if aggroMin == nil then aggroMin = amn else aggroMin = math.min(aggroMin, amn) end
+                end
+                if amx ~= nil then
+                    if aggroMax == nil then aggroMax = amx else aggroMax = math.max(aggroMax, amx) end
                 end
                 if band.mintar ~= nil and (mintar == nil or band.mintar > mintar) then mintar = band.mintar end
                 if band.maxtar ~= nil and (maxtar == nil or band.maxtar < maxtar) then maxtar = band.maxtar end
@@ -170,8 +179,10 @@ function spellbands.applyBands(section, entry, index)
         end
         if mobMin == nil then mobMin = 0 end
         if mobMax == nil then mobMax = 100 end
+        if aggroMin == nil then aggroMin = 0 end
+        if aggroMax == nil then aggroMax = 100 end
         if not matar and not notmatar and not named and mintar == nil and maxtar == nil then mintar = 2 end
-        return { mobMin = mobMin, mobMax = mobMax, mintar = mintar, maxtar = maxtar, matar = matar, notmatar = notmatar, named = named }
+        return { mobMin = mobMin, mobMax = mobMax, aggroMin = aggroMin, aggroMax = aggroMax, mintar = mintar, maxtar = maxtar, matar = matar, notmatar = notmatar, named = named }
     end
 
     return {}

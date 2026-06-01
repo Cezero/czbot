@@ -10,6 +10,7 @@ local spellutils = require('lib.spellutils')
 local botevents = require('botevents')
 local utils = require('lib.utils')
 local tankrole = require('lib.tankrole')
+local aggro = require('lib.aggro')
 local charinfo = require('plugin.charinfo')
 local botpull = require('botpull')
 
@@ -98,6 +99,13 @@ local function charState_Always()
         if not mustStand and not sitBlockedByHit then
             if (mq.TLO.Me.PctMana() < sitmana and mq.TLO.Me.MaxMana() > 0) or mq.TLO.Me.PctEndurance() < sitendur then
                 wantToSit = true
+                local sitaggro = tonumber(botconfig.config.settings.sitaggro) or 60
+                if state.getMobCount() > 0 and aggro.pctAggroAvailable() then
+                    local pct = aggro.getPctAggro()
+                    if pct ~= nil and pct >= sitaggro then
+                        wantToSit = false
+                    end
+                end
             end
         end
         aboveSitHysteresis = (mq.TLO.Me.MaxMana() == 0 or mq.TLO.Me.PctMana() > sitmana + SIT_HYSTERESIS_PCT) and

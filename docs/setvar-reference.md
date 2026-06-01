@@ -1,4 +1,4 @@
-# setvar reference
+﻿# setvar reference
 
 Use **`/cz setvar <path> <value>`** to set a config value at runtime. The value is written to your character config file (**`cz_<CharName>.lua`**). Values are parsed as: a **number** (if `tonumber(value)` succeeds), **`true`** / **`false`** (boolean), or a **string** otherwise.
 
@@ -25,6 +25,7 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.doforage** | boolean | `false` | Enable forage. |
 | **settings.sitmana** | number | 90 | Sit when mana % below this; stand when above this + 3 (hysteresis). |
 | **settings.sitendur** | number | 90 | Sit when endurance % below this; stand when above this + 3 (hysteresis). |
+| **settings.sitaggro** | number | 60 | When mobs in camp and level 20+, only sit when Me.PctAggro is below this. |
 | **settings.TankName** | string | `"manual"` | Main Tank name or `"automatic"` / `"manual"`. |
 | **settings.AssistName** | string | (unset) | Main Assist name or `"automatic"` / `"manual"`. |
 | **settings.TargetFilter** | number | 0 | Mob list filter: 0 = NPC + aggressive + LOS, 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
@@ -67,6 +68,8 @@ Scalar pull options can be set via setvar. **pull.spell** (table: gem, spell, ra
 |------|------|---------|---------|
 | **melee.assistpct** | number | 99 | MA target HP % at or below which to sync. |
 | **melee.stickcmd** | string | `'hold uw 7'` | Stick command when engaging. |
+| **melee.stayBehind** | boolean | `false` | Non-MT: append `!front` to stick while engaging. |
+| **melee.behindAggroPct** | number | 90 | Non-MT with stayBehind: above this PctAggro, stick without `!front`. |
 | **melee.offtank** | boolean | `false` | This bot is an offtank. |
 | **melee.minmana** | number | 0 | Min mana % to engage. |
 | **melee.otoffset** | number | 0 | Which add to pick when MT and MA on same mob. |

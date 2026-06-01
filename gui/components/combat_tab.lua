@@ -103,6 +103,28 @@ function M.draw()
     local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, flags)
     if stickCh and stickNew ~= nil then melee.stickcmd = stickNew; runConfigLoaders() end
 
+    ImGui.Spacing()
+    ImGui.Text('Stay behind')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('When on and this bot is not the Main Tank, append !front to stick while engaging.')
+    end
+    ImGui.SameLine()
+    local stayBehindChecked = (melee.stayBehind == true)
+    local sbVal, sbPressed = ImGui.Checkbox('##combat_stayBehind', stayBehindChecked)
+    if sbPressed then melee.stayBehind = sbVal; runConfigLoaders() end
+    if melee.stayBehind then
+        ImGui.SameLine()
+        ImGui.Text('Behind aggro %')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Above this Me.PctAggro (level 20+), stick without !front until aggro drops.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local baVal = melee.behindAggroPct or 90
+        local baNew, baCh = inputs.boundedInt('combat_behindAggroPct', baVal, 0, 100, 5, '##combat_behindAggroPct')
+        if baCh then melee.behindAggroPct = baNew; runConfigLoaders() end
+    end
+
     -- Line 3: Min Mana (if class has mana pool)
     if mq.TLO.Me.MaxMana() and mq.TLO.Me.MaxMana() > 0 then
         ImGui.Spacing()

@@ -1,4 +1,4 @@
-# Spell targeting and bands
+﻿# Spell targeting and bands
 
 This page explains **how** spell targeting works for all spell types (heal, buff, debuff, cure) and how band tags interact: evaluation order, count gates like **mintar**/**maxtar** (debuff), and combining tags. Healing and debuffing have the most complex logic and are covered in the most detail; buff and cure are covered fully but in proportion. Section-specific docs ([Healing configuration](healing-configuration.md), [Buffing configuration](buffing-configuration.md), [Debuffing configuration](debuffing-configuration.md), [Curing configuration](curing-configuration.md)) list the actual band tokens and config examples.
 
@@ -92,7 +92,7 @@ A spell can have **multiple** valid target types (e.g. both **matar** and **notm
 
 ### HP band
 
-Each band’s **min** / **max** define mob HP %. For debuff, all bands for that spell are merged into one effective HP range per spell (see `applyBands` in the code). The mob’s HP must be in that range to be considered.
+Each band’s **min** / **max** define mob HP %. For debuff, all bands for that spell are merged into one effective HP range per spell (see `applyBands` in the code). The mob’s HP must be in that range to be considered. **aggroMin** / **aggroMax** on debuff bands merge the same way and gate on **Me.PctAggro** (level 20+; default 0–100).
 
 ---
 

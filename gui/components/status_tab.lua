@@ -383,6 +383,17 @@ function M.draw()
         end
         if ImGui.IsItemHovered() then ImGui.SetTooltip(
             'If Sit is on, sit when endurance is below this %%; stand when above this %% + 3 (hysteresis).') end
+        ImGui.Spacing()
+        ImGui.TextColored(WHITE, '%s', 'Sit Aggro %: ')
+        ImGui.SameLine(0, 2)
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local sitaggroVal = botconfig.config.settings.sitaggro or 60
+        local sitaggroNew, sitaggroCh = inputs.boundedInt('sit_aggro_pct', sitaggroVal, 0, 100, 5, '##sit_aggro_pct')
+        if sitaggroCh then
+            botconfig.config.settings.sitaggro = sitaggroNew; runConfigLoaders()
+        end
+        if ImGui.IsItemHovered() then ImGui.SetTooltip(
+            'If Sit is on, only sit when your aggro %% is below this value. Applies when mobs are in camp and you are level 20+.') end
         -- Mount: type dropdown + click-to-edit name (spellbook/item validation)
         ImGui.Spacing()
         ImGui.TextColored(WHITE, '%s', 'Mount: ')

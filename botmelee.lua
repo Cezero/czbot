@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
@@ -8,6 +8,7 @@ local botmove = require('botmove')
 local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
 local tankrole = require('lib.tankrole')
+local aggro = require('lib.aggro')
 local spawnutils = require('lib.spawnutils')
 local myconfig = botconfig.config
 local botmelee = {}
@@ -18,6 +19,37 @@ end
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee then botmelee.LoadMeleeConfig() end end)
 
 state.getRunconfig().mobprobtimer = 0
+local _lastEngageStickCmd = nil
+
+local function stickCmdHasFrontToken(cmd)
+    return cmd and cmd:find('!front', 1, true) ~= nil
+end
+
+local function stripFrontToken(cmd)
+    if not cmd then return '' end
+    local s = cmd:gsub('%s+!front%s*', ' '):gsub('!front%s+', ''):gsub('%s+!front$', ''):gsub('^!front%s*', '')
+    return (s:match('^%s*(.-)%s*$')) or s
+end
+
+local function withFrontToken(cmd)
+    if not cmd or cmd == '' then return '!front' end
+    if stickCmdHasFrontToken(cmd) then return cmd end
+    return cmd .. ' !front'
+end
+
+local function getEngageStickCmd()
+    local cmd = myconfig.melee.stickcmd or 'hold uw 7'
+    if tankrole.AmIMainTank() then return cmd end
+    if myconfig.melee.stayBehind ~= true then return cmd end
+    local behindPct = tonumber(myconfig.melee.behindAggroPct) or 90
+    if aggro.pctAggroAvailable() then
+        local pct = aggro.getPctAggro()
+        if pct ~= nil and pct > behindPct then
+            return stripFrontToken(cmd)
+        end
+    end
+    return withFrontToken(cmd)
+end
 
 -- When I am MT and my target is a PC: clear combat state.
 local function clearTankCombatState()
@@ -202,8 +234,19 @@ local function engageTarget()
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop') end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
     if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
-    if not mq.TLO.Stick.Active() or (mq.TLO.Stick.StickTarget() ~= engageTargetId) then
-        mq.cmdf('/squelch /multiline ; /attack on ; /stick %s', myconfig.melee.stickcmd)
+    local stickCmd = getEngageStickCmd()
+    local needRestick = false
+    if mq.TLO.Stick.Active() and mq.TLO.Stick.StickTarget() == engageTargetId then
+        if _lastEngageStickCmd ~= stickCmd then
+            mq.cmd('/squelch /stick off')
+            needRestick = true
+        end
+    else
+        needRestick = true
+    end
+    if needRestick then
+        mq.cmdf('/squelch /multiline ; /attack on ; /stick %s', stickCmd)
+        _lastEngageStickCmd = stickCmd
     end
 
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
@@ -215,6 +258,7 @@ end
 
 -- When no engageTargetId: stick off, attack off, pet back, clear NPC target.
 local function disengageCombat()
+    _lastEngageStickCmd = nil
     if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
     combat.ResetCombatState()
     if state.getRunState() == state.STATES.melee then state.clearRunState() end

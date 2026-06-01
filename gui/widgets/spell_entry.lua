@@ -403,6 +403,7 @@ function M.draw(spell, opts)
         local validtargetsOptions = opts.validtargetsOptions or {}
         local targetsColumns = opts.targetsColumns or 6
         local showBandMinMax = opts.showBandMinMax == true
+        local showBandAggroMinMax = opts.showBandAggroMinMax == true
         local showBandMinTarMaxtar = opts.showBandMinTarMaxtar == true
         if not spell.bands or #spell.bands == 0 then
             spell.bands = { { targetphase = {}, validtargets = {} } }
@@ -537,6 +538,33 @@ function M.draw(spell, opts)
                         '##' .. id .. '_band' .. bi .. '_max')
                     if maxCh then
                         band.max = newMax; if onChanged then onChanged() end
+                    end
+                end
+                if showBandAggroMinMax then
+                    ImGui.Text('Aggro %:')
+                    if ImGui.IsItemHovered() then ImGui.SetTooltip(
+                        'Your Me.PctAggro range for this band (level 20+; below 20 the gate is ignored).') end
+                    ImGui.SameLine()
+                    ImGui.Text('Min')
+                    ImGui.SameLine()
+                    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+                    local bamin = band.aggroMin
+                    if bamin == nil then bamin = 0 end
+                    local newAMin, aMinCh = inputs.boundedInt(id .. '_band' .. bi .. '_aggroMin', bamin, 0, 100, 1,
+                        '##' .. id .. '_band' .. bi .. '_aggroMin')
+                    if aMinCh then
+                        band.aggroMin = newAMin; if onChanged then onChanged() end
+                    end
+                    ImGui.SameLine()
+                    ImGui.Text('Max')
+                    ImGui.SameLine()
+                    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+                    local bamax = band.aggroMax
+                    if bamax == nil then bamax = 100 end
+                    local newAMax, aMaxCh = inputs.boundedInt(id .. '_band' .. bi .. '_aggroMax', bamax, 0, 100, 1,
+                        '##' .. id .. '_band' .. bi .. '_aggroMax')
+                    if aMaxCh then
+                        band.aggroMax = newAMax; if onChanged then onChanged() end
                     end
                 end
                 if showBandMinTarMaxtar then
