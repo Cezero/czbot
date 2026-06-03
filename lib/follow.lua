@@ -10,6 +10,31 @@ local charinfo = require("plugin.charinfo")
 
 local follow = {}
 
+--- Stop follow and travel mode; clear movement state. No-op if neither is active.
+---@param reason string|nil e.g. death, command, gui
+---@return boolean true if follow or travel was cleared
+function follow.StopFollow(reason)
+    local rc = state.getRunconfig()
+    local hadFollow = (rc.followid and rc.followid > 0) or (rc.followname and rc.followname ~= '')
+    local wasTravelMode = rc.travelMode == true
+    if not hadFollow and not wasTravelMode then return false end
+
+    botmove.ClearFollowMovementState()
+    rc.followid = 0
+    rc.followname = ''
+    rc.travelMode = false
+    if wasTravelMode then
+        local ok, bardtwist = pcall(require, 'lib.bardtwist')
+        if ok and bardtwist and bardtwist.EnsureDefaultTwistRunning then
+            bardtwist.EnsureDefaultTwistRunning()
+        end
+    end
+    if reason == 'death' then
+        printf('\ayCZBot:\ax\arFollow OFF (death)\ax')
+    end
+    return true
+end
+
 function follow.StartFollow(name)
     if not mq.TLO.Navigation.MeshLoaded then
         mq.cmd('/echo No Mesh for this zone, cannot use CZFollow+!!')

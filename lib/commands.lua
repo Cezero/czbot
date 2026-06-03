@@ -204,17 +204,7 @@ local function cmd_follow(args, str)
 end
 
 local function cmd_stop(args)
-    local rc = state.getRunconfig()
-    local wasTravelMode = (rc.travelMode == true)
-    botmove.ClearFollowMovementState()
-    if rc.followid or rc.followname then
-        rc.followid = 0
-        rc.followname = ''
-    end
-    rc.travelMode = false
-    if wasTravelMode then
-        refreshBardTwistMode()
-    end
+    follow.StopFollow('command')
     if state.getRunconfig().campstatus then botmove.MakeCamp('off') end
     printf('\ayCZBot:\ax\arDisabling makecamp and follow')
 end

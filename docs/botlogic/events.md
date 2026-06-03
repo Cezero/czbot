@@ -70,7 +70,7 @@ See [Run state machine](run-state-machine.md) and [hook AddSpawnCheck](hook-adds
 
 Runs when the character is slain or "Returning to Bind Location" or "You died." (hover).
 
-- **charState** also calls `botpull.DisablePull('death')` each tick while dead/hover.
+- **charState** also calls `botpull.DisablePull('death')`, `follow.StopFollow('death')`, and `botmove.ClearCamp('death')` each tick while dead/hover.
 - Prints remaining hover time; runs `/consent group`, `/consent raid`, `/consent guild`.
 - Sets `HoverTimer = mq.gettime() + 30000` so CharState can throttle calling Event_Slain again.
 

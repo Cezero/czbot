@@ -13,6 +13,7 @@ local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
 local charinfo = require('plugin.charinfo')
 local botpull = require('botpull')
+local follow = require('lib.follow')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -172,6 +173,8 @@ end
 local function charState_DeadOrHover()
     if mq.TLO.Me.State() ~= 'DEAD' and (mq.TLO.Me.State() ~= 'HOVER' or not mq.TLO.Me.Hovering()) then return false end
     botpull.DisablePull('death')
+    follow.StopFollow('death')
+    botmove.ClearCamp('death')
     state.clearRunState()
     state.getRunconfig().CurSpell = {}
     state.getRunconfig().statusMessage = ''

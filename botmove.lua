@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
@@ -611,6 +611,25 @@ end
 
 function botmove.SetCampHere()
     setCampHere()
+end
+
+--- Clear camp status and stored anchor. Always nils makecamp (including hunter anchor).
+---@param reason string|nil e.g. death, zone
+---@return boolean true if camp was cleared
+function botmove.ClearCamp(reason)
+    local rc = state.getRunconfig()
+    local hadCampStatus = rc.campstatus == true
+    local hadCoords = rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z)
+    if not hadCampStatus and not hadCoords then return false end
+
+    if mq.TLO.Stick.Active() then mq.cmd('/stick off') end
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    rc.campstatus = false
+    rc.makecamp = { x = nil, y = nil, z = nil }
+    if reason == 'death' then
+        printf('\ayCZBot:\ax\arCamp cleared (death)\ax')
+    end
+    return true
 end
 
 --- Set or clear camp. mode: 'on' | 'off' | 'return' or nil (toggle).

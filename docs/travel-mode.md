@@ -1,4 +1,4 @@
-# Travel Mode
+﻿# Travel Mode
 
 This document explains **travel mode**: a follow-only state where the bot disables melee, buff, debuff, heal, cure, sit, mount, and pull. It is intended for operators who want the bot to follow a character across zones without engaging in normal combat or support logic.
 
@@ -39,6 +39,7 @@ Travel mode is cleared when:
 
 - You run **`/cz stop`** (disables make camp and follow, and travel mode).
 - You stop following (e.g. the Stop button in the GUI next to the Follow section).
+- The bot **dies** or is hovering over corpse (follow and travel mode are turned off automatically).
 
 ---
 
