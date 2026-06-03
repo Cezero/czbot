@@ -89,6 +89,30 @@ local function cmd_toggle(args)
         isDopull and tostring(rc.dopull) or tostring(botconfig.config.settings[args[1]]))
 end
 
+local function cmd_togglesongs(args)
+    if not bardtwist.IsBard() then
+        printf('\ayCZBot:\ax togglesongs is bard-only.')
+        return
+    end
+    local rc = state.getRunconfig()
+    local function songsOn()
+        return rc.dosongs ~= false
+    end
+    if args[2] == 'on' then
+        rc.dosongs = true
+    elseif args[2] == 'off' then
+        rc.dosongs = false
+    else
+        rc.dosongs = not songsOn()
+    end
+    if rc.dosongs == false then
+        bardtwist.StopTwist()
+    elseif botconfig.config.settings.dobuff then
+        bardtwist.EnsureDefaultTwistRunning()
+    end
+    printf('\ayCZBot:\ax Songs %s', rc.dosongs ~= false and 'on' or 'off')
+end
+
 local function cmd_addjunk(args, str)
     local zone = mq.TLO.Zone.ShortName()
     if not zone or zone == '' then
@@ -942,6 +966,7 @@ local handlers = {
     spread = cmd_spread,
     raid = cmd_raid,
     togglenuke = cmd_togglenuke,
+    togglesongs = cmd_togglesongs,
     addjunk = cmd_addjunk,
     foragezone = cmd_foragezone,
     quit = cmd_quit,

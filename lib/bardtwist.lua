@@ -76,6 +76,12 @@ function bardtwist.IsBard()
     return mq.TLO.Me.Class.ShortName() == 'BRD'
 end
 
+function bardtwist.SongsEnabled()
+    if not bardtwist.IsBard() then return false end
+    local rc = state.getRunconfig()
+    return rc.dosongs ~= false
+end
+
 --- Idle twist list: buffs where inIdle is true (or legacy idle/self in bands). Config order.
 function bardtwist.BuildNoncombatTwistList()
     if not bardtwist.IsBard() then return {} end
@@ -204,7 +210,7 @@ end
 
 --- Set twist list for mode. Only issue /twist when not twisting or list differs (avoid restart every tick). For travel with no song, stop twist.
 function bardtwist.EnsureTwistForMode(mode)
-    if not bardtwist.IsBard() then return end
+    if not bardtwist.SongsEnabled() then return end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
     if not desiredGems or #desiredGems == 0 then
         if mode == 'travel' and mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
@@ -241,7 +247,7 @@ end
 
 --- Restore twist for current mode (e.g. after single cast). Set list if needed then start.
 function bardtwist.ResumeTwist()
-    if not bardtwist.IsBard() then return end
+    if not bardtwist.SongsEnabled() then return end
     local mode = bardtwist.GetCurrentTwistMode()
     if not mode then return end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
@@ -257,6 +263,7 @@ function bardtwist.ResumeTwist()
 end
 
 function bardtwist.SetTwistOnce(gemList)
+    if not bardtwist.SongsEnabled() then return end
     if not gemList or #gemList == 0 then return end
     twistOnceActive = true
     lastTwistOnceGem = gemList[1]

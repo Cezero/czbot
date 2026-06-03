@@ -25,6 +25,14 @@ These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or 
 | **domount**  | Mount when not in combat.                                                                                                                                              |
 | **dodrag**   | Corpse drag: automatically find and drag peer corpses within range. See [Corpse dragging](corpse-dragging.md).                                                         |
 
+### Bard session toggles
+
+These affect runtime only (not saved to the config file). They reset when the bot restarts.
+
+| Command         | Arguments              | Purpose                                                                                                                                 |
+| --------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **togglesongs** | `on` / `off` or toggle | **Bard only.** Turn MQ2Twist singing on or off without pausing the bot. Default **on** at start. When off, the bot issues `/twist stop` and sends no further `/twist` commands (including twist-once for mez or pull engage). Status tab **Songs** toggle is the same setting. See [Bard configuration](bard-configuration.md). |
+
 ### Movement and camp
 
 | Command      | Arguments                | Purpose                                                                                                                                                                                                                                                   |
@@ -223,5 +231,5 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 ## Where to configure
 
 - **Config file:** Edit **`cz_<CharName>.lua`** in your MQ config directory. Reload by re-running the bot or using **import** / **setvar**.
-- **Runtime only (not in config file):** **ExcludeList**, **PriorityList**, **CharmList** (pull exclude/priority and charm targets), and **pullarc** (directional pull) are set at runtime via **/cz exclude**, **/cz priority**, **/cz charm** (add/remove), and **/cz xarc**. These lists are stored per zone in the common config file **cz_common.lua** in a zone-first layout: **zones**[*zoneShortName*] holds **excludelist**, **prioritylist**, **charmlist**, **nukeFlavors**, **nukeFlavorsAutoDisabled**, and **immune** for that zone. Changes are saved automatically when you add or remove entries.
+- **Runtime only (not in config file):** **ExcludeList**, **PriorityList**, **CharmList** (pull exclude/priority and charm targets), **pullarc** (directional pull), and bard **dosongs** (twist on/off via **/cz togglesongs** or Status **Songs**) are set at runtime via **/cz exclude**, **/cz priority**, **/cz charm** (add/remove), **/cz xarc**, and **/cz togglesongs**. These lists are stored per zone in the common config file **cz_common.lua** in a zone-first layout: **zones**[*zoneShortName*] holds **excludelist**, **prioritylist**, **charmlist**, **nukeFlavors**, **nukeFlavorsAutoDisabled**, and **immune** for that zone. Changes are saved automatically when you add or remove entries.
 - **Both:** Most options can be set in the config file or at runtime via **/cz setvar** (e.g. **setvar settings.petassist true**), which writes back to the config file.

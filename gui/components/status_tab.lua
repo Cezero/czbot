@@ -10,6 +10,7 @@ local follow = require('lib.follow')
 local utils = require('lib.utils')
 local spellutils = require('lib.spellutils')
 local tankrole = require('lib.tankrole')
+local bardtwist = require('lib.bardtwist')
 local inputs = require('gui.widgets.inputs')
 local combos = require('gui.widgets.combos')
 local labeled_grid = require('gui.widgets.labeled_grid')
@@ -75,6 +76,8 @@ local DO_FLAGS = {
     { key = 'dosit',    label = 'Sit' },
     { key = 'doforage', label = 'Forage' },
 }
+
+local SONGS_FLAG = { key = 'dosongs', label = 'Songs' }
 
 local function hasForageAbility()
     local ok, v = pcall(function()
@@ -504,6 +507,9 @@ function M.draw()
                     flagsToShow[#flagsToShow + 1] = entry
                 end
             end
+            if bardtwist.IsBard() then
+                flagsToShow[#flagsToShow + 1] = SONGS_FLAG
+            end
             for i, entry in ipairs(flagsToShow) do
                 if (i - 1) % 2 == 0 then
                     ImGui.TableNextRow()
@@ -512,6 +518,8 @@ function M.draw()
                 local value
                 if entry.key == 'dopull' then
                     value = (state.getRunconfig().dopull == true)
+                elseif entry.key == 'dosongs' then
+                    value = (state.getRunconfig().dosongs ~= false)
                 else
                     value = botconfig.config.settings[entry.key] == true
                 end
@@ -521,6 +529,14 @@ function M.draw()
                 if ImGui.SmallButton(icon .. '##' .. entry.key) then
                     if entry.key == 'dopull' then
                         state.getRunconfig().dopull = not value
+                    elseif entry.key == 'dosongs' then
+                        local rc = state.getRunconfig()
+                        rc.dosongs = not value
+                        if rc.dosongs == false then
+                            bardtwist.StopTwist()
+                        elseif botconfig.config.settings.dobuff then
+                            bardtwist.EnsureDefaultTwistRunning()
+                        end
                     else
                         botconfig.config.settings[entry.key] = not value
                         botconfig.ApplyAndPersist()

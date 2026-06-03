@@ -1,4 +1,4 @@
-# Bard Configuration
+﻿# Bard Configuration
 
 This document explains the nuances and considerations when configuring a **bard (BRD)** bot. The bot treats bards differently in several subsystems (buff targeting, casting, movement, melee, and MQ2Twist integration). This page summarizes what matters for configuration and what is automatic.
 
@@ -10,6 +10,7 @@ This document explains the nuances and considerations when configuring a **bard 
 - **Movement and casting:** Bards can move, use nav, and stick while "casting"; the bot does not force a stop before casting.
 - **Melee:** Before casting, if **domelee** is on and the bard is not in combat, the bot re-engages melee. Set **settings.domelee** if the bard should melee when not casting.
 - **Debuffs:** **matar** debuffs are part of the **combat twist**. **notmatar** debuffs (mez, add-only) use a twist-once flow: target add → sing once → wait → re-target MA; optional re-apply timer (e.g. mez before duration ends).
+- **Songs on/off:** **`/cz togglesongs`** or the Status tab **Songs** toggle stops all twist (session-only; default on when the bot starts). Use this to silence the bard without **`/czp`** (full bot pause). Not saved to the config file.
 
 ---
 

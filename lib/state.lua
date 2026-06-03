@@ -19,6 +19,7 @@
 ---@field charmid number|nil
 ---@field domelee boolean|nil
 ---@field dopull boolean|nil
+---@field dosongs boolean|nil session-only bard twist; default on at start, not saved to config
 ---@field pulledmob number|nil
 ---@field pullreturntimer number|nil
 ---@field pulledmobLastDistSq number|nil cached distance-squared from puller to pulled mob when last saw it closer
@@ -234,6 +235,7 @@ function M.resetRunconfig()
         charmid = nil,
         domelee = nil,
         dopull = false,
+        dosongs = true,
         pulledmob = nil,
         pullreturntimer = nil,
         pulledmobLastDistSq = nil,
