@@ -58,6 +58,7 @@
 ---@field stickcmd string|nil
 ---@field stayBehind boolean|nil
 ---@field behindAggroPct number|nil
+---@field evadePct number|nil
 ---@field offtank boolean|nil
 ---@field mtSticky boolean|nil
 ---@field minmana number|nil
@@ -114,7 +115,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'addAbortRadius', 'usepriority', 'hunter' },
-    melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
+    melee = { 'assistpct', 'stickcmd', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
     heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
@@ -283,6 +284,16 @@ end
 
 function M.saveCommon()
     if M._common then mq.pickle(COMMON_FILENAME, M._common) end
+end
+
+--- Reload cz_common from disk and refresh current-zone exclude/priority/charm lists and nuke flavors.
+function M.refreshZoneStateFromCommon()
+    M.loadCommon()
+    local mobfilter = require('lib.mobfilter')
+    mobfilter.process('exclude', 'zone')
+    mobfilter.process('priority', 'zone')
+    mobfilter.process('charm', 'zone')
+    M.loadNukeFlavorsFromZone()
 end
 
 --- Load nuke flavor state for current zone from cz_common into runconfig. Call on zone change.
@@ -782,7 +793,7 @@ function M.Load(path)
     M.config.pull.leashSq = (M.config.pull.leash or 0) * (M.config.pull.leash or 0)
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
-        stickcmd = 'hold uw 7', stayBehind = false, behindAggroPct = 90, offtank = false, mtSticky = false,
+        stickcmd = 'hold uw 7', stayBehind = false, behindAggroPct = 90, evadePct = 90, offtank = false, mtSticky = false,
         otoffset = 0, minmana = 0, assistpct = 99,
     })
     applySectionDefaults('heal', { rezoffset = 0, interruptlevel = 0.80, xttargets = 0 })

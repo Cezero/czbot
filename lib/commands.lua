@@ -85,6 +85,9 @@ local function cmd_toggle(args)
     end
     botconfig.RunConfigLoaders()
     if botconfig.config.settings.doraid then botraid.LoadRaidConfig() end
+    if isDopull and rc.dopull == true then
+        botpull.syncPullMapFilter(true)
+    end
     printf('\ayCZBot:\axTurning %s to %s', args[1],
         isDopull and tostring(rc.dopull) or tostring(botconfig.config.settings[args[1]]))
 end
@@ -355,11 +358,7 @@ end
 -- Reload shared common config from disk, then refresh current-zone runtime derived lists/state.
 -- This is useful when multiple bots share `cz_common.lua` and one bot edits via UI.
 local function cmd_reloadcommon(args)
-    botconfig.loadCommon()
-    mobfilter.process('exclude', 'zone')
-    mobfilter.process('priority', 'zone')
-    mobfilter.process('charm', 'zone')
-    botconfig.loadNukeFlavorsFromZone()
+    botconfig.refreshZoneStateFromCommon()
     local zone = mq.TLO.Zone.ShortName()
     zone = zone and zone ~= '' and zone or '<unknown>'
     printf('\ayCZBot:\ax Reloaded \agcz_common.lua\ax and refreshed zone state (zone=%s).', zone)
@@ -478,6 +477,18 @@ local function cmd_acleash(args)
     botconfig.config.settings.acleashSq = (botconfig.config.settings.acleash or 0) *
         (botconfig.config.settings.acleash or 0)
     printf('\ayCZBot:\axSetting acleash to %s', botconfig.config.settings.acleash)
+end
+
+local function cmd_evadepct(args)
+    local val = tonumber(args[2])
+    if val == nil or val < 0 or val > 100 then
+        printf('\ayCZBot:\ax Usage: /cz evadepct <0-100>')
+        return
+    end
+    if not botconfig.config.melee then botconfig.config.melee = {} end
+    botconfig.config.melee.evadePct = val
+    botconfig.ApplyAndPersist()
+    printf('\ayCZBot:\axSetting evadePct to %d', val)
 end
 
 local function cmd_camprestdistance(args)
@@ -948,6 +959,7 @@ local handlers = {
     assist = cmd_assist,
     stickcmd = cmd_stickcmd,
     acleash = cmd_acleash,
+    evadepct = cmd_evadepct,
     camprestdistance = cmd_camprestdistance,
     targetfilter = cmd_targetfilter,
     offtank = cmd_offtank,

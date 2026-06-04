@@ -51,6 +51,40 @@ local function getEngageStickCmd()
     return withFrontToken(cmd)
 end
 
+local function isCastingBusy()
+    if state.getRunState() == state.STATES.casting then return true end
+    if mq.TLO.Me.CastTimeLeft() > 0 then return true end
+    local cs = state.getRunconfig().CurSpell
+    if cs and cs.sub and cs.phase then
+        if cs.phase == 'precast' or cs.phase == 'precast_wait_move' or cs.phase == 'casting'
+            or cs.phase == 'cast_complete_pending_resist' then
+            return true
+        end
+    end
+    return false
+end
+
+--- Rogue: dump aggro with Hide when PctAggro is high. Returns true if evade was attempted.
+local function tryRogueEvade()
+    if mq.TLO.Me.Class.ShortName() ~= 'ROG' then return false end
+    if not aggro.pctAggroAvailable() then return false end
+    if not mq.TLO.Me.Combat() then return false end
+    if tankrole.AmIMainTank() then return false end
+    if mq.TLO.Me.Invis() then return false end
+    if isCastingBusy() then return false end
+    if not mq.TLO.Me.AbilityReady('Hide')() then return false end
+    local pct = aggro.getPctAggro()
+    local threshold = tonumber(myconfig.melee.evadePct) or 90
+    if pct == nil or pct < threshold then return false end
+    mq.cmd('/squelch /attack off')
+    mq.cmd('/squelch /doability hide')
+    mq.cmd('/squelch /attack on')
+    if state.getRunState() ~= state.STATES.casting then
+        state.getRunconfig().statusMessage = string.format('Evading (PctAggro %d%%)', pct)
+    end
+    return true
+end
+
 -- When I am MT and my target is a PC: clear combat state.
 local function clearTankCombatState()
     state.getRunconfig().engageTargetId = nil
@@ -387,6 +421,7 @@ function botmelee.getHookFn(name)
                 if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
                 return
             end
+            tryRogueEvade()
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
             state.setRunState(state.STATES.melee, payload and payload or { phase = 'idle', priority = bothooks.getPriority('doMelee') })
             if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then

@@ -3,7 +3,6 @@ local botconfig = require('lib.config')
 local charm = require('lib.charm')
 local state = require('lib.state')
 local spellstates = require('lib.spellstates')
-local mobfilter = require('lib.mobfilter')
 local chchain = require('lib.chchain')
 local follow = require('lib.follow')
 local casting = require('lib.casting')
@@ -29,10 +28,7 @@ local function DelayOnZone()
     if state.getRunconfig().engageTargetId then state.getRunconfig().engageTargetId = nil end
     if APTarget then APTarget = nil end
     botpull.DisablePull('zone')
-    mobfilter.process('exclude', 'zone')
-    mobfilter.process('priority', 'zone')
-    mobfilter.process('charm', 'zone')
-    botconfig.loadNukeFlavorsFromZone()
+    botconfig.refreshZoneStateFromCommon()
     spellstates.CleanMobList()
     MountCastFailed = false
 end

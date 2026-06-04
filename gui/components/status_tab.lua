@@ -11,6 +11,7 @@ local utils = require('lib.utils')
 local spellutils = require('lib.spellutils')
 local tankrole = require('lib.tankrole')
 local bardtwist = require('lib.bardtwist')
+local botpull = require('botpull')
 local inputs = require('gui.widgets.inputs')
 local combos = require('gui.widgets.combos')
 local labeled_grid = require('gui.widgets.labeled_grid')
@@ -528,7 +529,11 @@ function M.draw()
                 ImGui.PushStyleColor(ImGuiCol.Text, value and GREEN or RED)
                 if ImGui.SmallButton(icon .. '##' .. entry.key) then
                     if entry.key == 'dopull' then
-                        state.getRunconfig().dopull = not value
+                        local rc = state.getRunconfig()
+                        rc.dopull = not value
+                        if rc.dopull == true then
+                            botpull.syncPullMapFilter(true)
+                        end
                     elseif entry.key == 'dosongs' then
                         local rc = state.getRunconfig()
                         rc.dosongs = not value

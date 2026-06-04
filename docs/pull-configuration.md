@@ -26,7 +26,7 @@ All pull options live under **`config.pull`**. If a value is omitted, the defaul
 | Option                      | Default           | Purpose                                                                                                                                   |
 | --------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | **spell**                   | see below         | Single pull spell block: `{ gem, spell, range? }`. How to aggro. Omit or leave empty for melee.                                           |
-| **radius**                  | 400               | Max horizontal distance from camp (X,Y) for pullable mobs.                                                                                |
+| **radius**                  | 400               | Max horizontal distance from camp (X,Y) for pullable mobs. When **dopull** is on, MQ2Map **SpellRadius** (green ring) is kept at this value. |
 | **zrange**                  | 150               | Max vertical (Z) difference from camp; mobs outside this are ignored.                                                                     |
 | **pullMinCon**              | 2 (Green)         | Minimum consider (con) color index (1–7: Grey, Green, Light Blue, Blue, White, Yellow, Red) for a valid pull target. Used when **usePullLevels** is `false`. |
 | **pullMaxCon**              | 5 (White)         | Maximum consider color index for a valid pull target.                                                                                     |
@@ -154,7 +154,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 ## Runtime control (commands)
 
-- **Toggle pulling:** `/cz dopull on` or `/cz dopull off`. You can also toggle without arguments (e.g. `/cz dopull`). Turning **off** clears target, stops nav/stick/attack; if **hunter** is true, it also clears the makecamp anchor.
+- **Toggle pulling:** `/cz dopull on` or `/cz dopull off`. You can also toggle without arguments (e.g. `/cz dopull`). Turning **on** syncs the map green ring (**SpellRadius**) to **pull.radius** immediately; turning **off** clears target, stops nav/stick/attack, and stops map radius updates from czbot; if **hunter** is true, turning off also clears the makecamp anchor.
 - **Auto-disable:** Pull (`dopull`) is turned off automatically when you **die**, **zone**, or start **follow** (`/cz follow`, chat follow, or `/cz travel`).
 - **Directional pulling:** `/cz xarc <degrees>` — Restrict pulls to an arc in front of the bot (e.g. `90` for a 90° cone). Use with no argument to turn directional pulling off.
 - **Exclude / priority:** **ExcludeList** and **PriorityList** are **runtime** (runconfig), not in the pull config file. Use **`/cz exclude <name>`** to add a mob to the exclude list (pull target selection will skip it) and **`/cz exclude remove [name]`** to remove one; use **`/cz priority <name>`** to add and **`/cz priority remove [name]`** to remove. When **pull.usepriority** is `true`, the bot prefers priority mobs over path distance. You can target a mob and use `/cz exclude` or `/cz priority` (or their remove forms) without a name to use the target’s name. The GUI **Mob lists** tab also lets you view and edit both lists for the current zone. All changes are saved automatically to **cz_common.lua** in the per-zone block **zones**[*zone*] (excludelist, prioritylist, charmlist, nuke flavors, immune).

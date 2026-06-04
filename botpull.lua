@@ -75,6 +75,26 @@ local function getEffectiveAbilityRange()
     return getPullRange(entry)
 end
 
+local lastAppliedSpellRadius = nil
+local lastAppliedCastRadius = nil
+
+--- Sync MQ2Map SpellRadius (green ring) and CastRadius while dopull is on.
+---@param force boolean|nil when true, re-apply even if last-applied values match
+function botpull.syncPullMapFilter(force)
+    local rc = state.getRunconfig()
+    if rc.dopull ~= true then return end
+    local desiredSpell = myconfig.pull.radius or 0
+    local desiredCast = getEffectiveAbilityRange() or 0
+    if force or desiredSpell ~= lastAppliedSpellRadius then
+        mq.cmdf('/squelch /mapfilter SpellRadius %s', desiredSpell)
+        lastAppliedSpellRadius = desiredSpell
+    end
+    if force or desiredCast ~= lastAppliedCastRadius then
+        mq.cmdf('/squelch /mapfilter CastRadius %s', desiredCast)
+        lastAppliedCastRadius = desiredCast
+    end
+end
+
 --- Builds a set (id -> true) of current XTarget spawn IDs, excluding dead/corpse.
 local function getCurrentXTargetIdSet()
     local set = {}
@@ -143,6 +163,8 @@ function botpull.DisablePull(reason)
     if not wasOn and not activePull then return end
 
     rc.dopull = false
+    lastAppliedSpellRadius = nil
+    lastAppliedCastRadius = nil
     if APTarget and APTarget.ID() then APTarget = nil end
     if activePull then
         clearPullState(reason)
@@ -379,9 +401,7 @@ end
 
 -- Camp/hunter setup and mapfilter; no mq.delay.
 local function ensureCampAndAnchor(rc)
-    mq.cmdf('/squelch /mapfilter SpellRadius %s', myconfig.pull.radius)
-    local castRadius = getEffectiveAbilityRange()
-    mq.cmdf('/squelch /mapfilter CastRadius %s', castRadius)
+    botpull.syncPullMapFilter(false)
     if not myconfig.pull.hunter and not rc.campstatus then botmove.MakeCamp('on') end
     if myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
         print('\ayCZBot:\ax setting HunterMode anchor')
@@ -959,11 +979,12 @@ end
 function botpull.getHookFn(name)
     if name == 'doPull' then
         return function(hookName)
+            local rc = state.getRunconfig()
+            if not rc.dopull then return end
+            botpull.syncPullMapFilter(false)
             if state.isTravelMode() then return end
-            if not state.getRunconfig().dopull then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             if state.getRunState() == state.STATES.raid_mechanic then return end
-            local rc = state.getRunconfig()
             if state.getRunState() == state.STATES.pulling then
                 botpull.PullTick()
                 return

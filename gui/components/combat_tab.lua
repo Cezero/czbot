@@ -125,6 +125,19 @@ function M.draw()
         if baCh then melee.behindAggroPct = baNew; runConfigLoaders() end
     end
 
+    if mq.TLO.Me.Class.ShortName() == 'ROG' then
+        ImGui.Spacing()
+        ImGui.Text('Evade aggro %')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('At or above this Me.PctAggro (level 20+), use Hide to dump aggro during combat. Requires Hide ready.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local evVal = melee.evadePct or 90
+        local evNew, evCh = inputs.boundedInt('combat_evadePct', evVal, 0, 100, 5, '##combat_evadePct')
+        if evCh then melee.evadePct = evNew; runConfigLoaders() end
+    end
+
     -- Line 3: Min Mana (if class has mana pool)
     if mq.TLO.Me.MaxMana() and mq.TLO.Me.MaxMana() > 0 then
         ImGui.Spacing()
