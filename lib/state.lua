@@ -56,6 +56,8 @@
 ---@field pullDeadline number|nil
 ---@field pullAggroingStartTime number|nil mq.gettime() when entered aggroing state (for timeout)
 ---@field pullAtCampSince number|nil mq.gettime() when we reached camp in returning_after_abort (for wait before next pull)
+---@field pullSpawnWaitSince number|nil mq.gettime() when a new spawn appeared in pull.radius (FTE wait)
+---@field pullRadiusHadTarget boolean|nil true once a pull target was seen in radius this idle cycle
 ---@field pullAbortReturnDeadline number|nil mq.gettime() failsafe deadline for returning_after_abort
 ---@field pullRangedStoredItem string|nil item name swapped out of Ranged slot during pull (restored on return)
 ---@field stucktimer number|nil

@@ -19,9 +19,10 @@ local PULLEDMOB_NO_CLOSER_MS = 10000
 local RETURNING_AFTER_ABORT_WAIT_MS = 5000
 local PULL_RETURN_EXTRA_WAIT_MS = 5000
 local RETURNING_AFTER_ABORT_TIMEOUT_MS = 30000
+local PULL_SPAWN_FTE_WAIT_MS = 5000
 
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
--- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullHealerManaWait, pullRangedStoredItem;
+-- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullSpawnWaitSince, pullRadiusHadTarget, pullHealerManaWait, pullRangedStoredItem;
 -- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
 botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat', 'roam_navigating', 'roam_aggroing', 'roam_fighting' }
 
@@ -137,6 +138,8 @@ local function clearPullState(reason)
     rc.pullXTargetIdsAtStart = nil
     rc.pullAggroingStartTime = nil
     rc.pullAtCampSince = nil
+    rc.pullRadiusHadTarget = nil
+    rc.pullSpawnWaitSince = nil
     rawset(rc, 'pullAbortReturnDeadline', nil)
     rc.pullHealerManaWait = nil
     rc.pullRangedStoredItem = nil
@@ -473,6 +476,26 @@ local function selectPullTarget(apmoblist, rc)
     return candidates[1]
 end
 
+local function gatePullSpawnWait(rc, hasTarget)
+    if not hasTarget then
+        rc.pullRadiusHadTarget = nil
+        rc.pullSpawnWaitSince = nil
+        return true
+    end
+    if not rc.pullRadiusHadTarget then
+        rc.pullRadiusHadTarget = true
+        rc.pullSpawnWaitSince = mq.gettime()
+    end
+    if rc.pullSpawnWaitSince and (mq.gettime() - rc.pullSpawnWaitSince) < PULL_SPAWN_FTE_WAIT_MS then
+        if not rc.pullHealerManaWait then
+            rc.statusMessage = 'Waiting before pull...'
+        end
+        return true
+    end
+    rc.pullSpawnWaitSince = nil
+    return false
+end
+
 function botpull.StartPull()
     local rc = state.getRunconfig()
     if not canStartPull(rc) then return end
@@ -480,6 +503,7 @@ function botpull.StartPull()
 
     ensureCampAndAnchor(rc)
     local apmoblist = spawnutils.buildPullMobList(rc)
+    if gatePullSpawnWait(rc, apmoblist[1] ~= nil) then return end
     local spawn = selectPullTarget(apmoblist, rc)
     if not spawn then return end
 
@@ -1078,6 +1102,8 @@ function botpull.getHookFn(name)
                     if apmoblist[1] then
                         botpull.StartPull()
                     else
+                        rc.pullRadiusHadTarget = nil
+                        rc.pullSpawnWaitSince = nil
                         tickRoamIdleWait(rc)
                     end
                 else
