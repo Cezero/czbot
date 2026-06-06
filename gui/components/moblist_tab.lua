@@ -122,10 +122,10 @@ end
 function M.draw()
     ImGui.TextColored(YELLOW, 'Current zone: %s', mq.TLO.Zone.ShortName() or '')
     ImGui.Spacing()
-    drawNoCombatZonesSection()
     drawMobListSection('exclude', 'ExcludeList', 'Exclude list')
     drawMobListSection('priority', 'PriorityList', 'Priority list')
     drawMobListSection('charm', 'CharmList', 'Charm list')
+    drawNoCombatZonesSection()
 end
 
 return M

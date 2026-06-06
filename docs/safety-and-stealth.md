@@ -71,7 +71,7 @@ Healing and curing are **not** gated by no-combat zones.
 
 Open the GUI (**`/czshow`**) → **Mob lists** tab.
 
-**No combat zones** appears at the top (global; not per-zone like exclude/priority/charm):
+**No combat zones** appears below the per-zone exclude, priority, and charm lists (global; not per-zone):
 
 | Control | Behavior |
 | -------- | -------- |
