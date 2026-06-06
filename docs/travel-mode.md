@@ -31,6 +31,8 @@ While in travel mode, the following are **off**:
 
 **doBuff remains off** during this override—only melee, heal, cure, and debuff are temporarily allowed.
 
+**Safety overrides:** Travel attack override does **not** bypass [bind-point stealth](safety-and-stealth.md) (no melee/debuff near primary bind) or **protected NPC** rules (no offense vs soulbinder/translocator).
+
 ---
 
 ## Turning off travel

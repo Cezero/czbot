@@ -20,7 +20,7 @@ When **MQ2Twist** is loaded and you are a bard, the bot maintains a default twis
 
 | Mode       | When used                             | Contents                                                                                                   |
 | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **idle**   | No mobs in camp                       | All buffs with **inIdle** checked (config order).                                                          |
+| **idle**   | No mobs in camp                       | All buffs with **inIdle** checked (config order). Skipped near primary bind (bind stealth). |
 | **combat** | Mobs in camp, assisting (not pulling) | Buffs with **inCombat** checked (config order) then all debuff entries with **matar** and numeric gem (config order). |
 | **pull**   | Pull state (navigating / returning)   | Buffs with **self** and **pull** (e.g. Selo's) in bands.                                                   |
 | **travel** | Travel mode active (`/cz travel`)     | Single song: buff with alias `travel`, else `selos`; if neither, no twist. Config order.                   |
@@ -167,7 +167,7 @@ The "already on target" and resist handling for debuffs treat bards specially (e
 | Area              | What to do                                                                                                                                                                                                                                         |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Buffs**         | Use **self**, **cbt**, **idle**, and **pull** in bands as needed. Tank, groupbuff, groupmember, pc, mypet, pet have no effect for bards. Self buffs are sustained by the default twist.                                                            |
-| **Default twist** | Noncombat = all self buffs; combat = cbt buffs + matar debuffs; pull = buffs with **pull**. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI.                                                                            |
+| **Default twist** | Noncombat = all self buffs (not near bind); combat = cbt buffs + matar debuffs; pull = buffs with **pull**. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI. Bind stealth stops idle twist near primary bind. |
 | **Pull**          | Add **pull** to buff bands for pull twist (e.g. Selo's). Use **pull.spell** with a numeric **gem** (and **spell** name) for the agro song.                                                                                                         |
 | **Debuffs**       | **matar** → in combat twist. **notmatar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
 | **Cures**         | No special config; twist stops then resumes after cast.                                                                                                                                                                                            |

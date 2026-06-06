@@ -7,7 +7,7 @@
 
 Runs the phase-first spell check for the **buff** section. Phase order: self, byname, tank, groupbuff, groupmember, pc, mypet, pet.
 
-**Guards:** doBuff is skipped when travel mode is on, when `dobuff` is off or there is no buff config, or when the bot is a **cleric** in a group and a **group member** has a PC corpse within **acleash**—so clerics focus on heal/rez for downed groupmates. Nearby corpses that are not group members (or any corpses when not grouped) do not defer buffing. **Buffs remain skipped during travel even when `/cz attack` is active** (only melee/heal/cure/debuff are temporarily enabled).
+**Guards:** doBuff is skipped when travel mode is on, when near the **primary bind point** (bind stealth; see [Safety and stealth](../safety-and-stealth.md)), when `dobuff` is off or there is no buff config, or when the bot is a **cleric** in a group and a **group member** has a PC corpse within **acleash**—so clerics focus on heal/rez for downed groupmates. Nearby corpses that are not group members (or any corpses when not grouped) do not defer buffing. **Buffs remain skipped during travel even when `/cz attack` is active** (only melee/heal/cure/debuff are temporarily enabled). Bards do not start idle twist near bind.
 
 ```mermaid
 flowchart TB
@@ -23,6 +23,7 @@ BuffCheck calls RunPhaseFirstSpellCheck with buff-specific getTargetsForPhase an
 ## See also
 
 - [README](README.md)
+- [Safety and stealth](../safety-and-stealth.md)
 - [Spell casting flow](spell-casting-flow.md)
 - [Buffing configuration](../buffing-configuration.md)
 - [Spell targeting and bands](../spell-targeting-and-bands.md)

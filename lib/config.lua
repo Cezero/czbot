@@ -280,6 +280,8 @@ function M.loadCommon()
         M._common = {}
     end
     local migrated = migrateOldCommonToZones(M._common) or migrateCzimmuneIntoZones(M._common)
+    local nocombatzones = require('lib.nocombatzones')
+    if nocombatzones.seedDefaultsIfEmpty() then migrated = true end
     if migrated or not commonData then M.saveCommon() end
     return M._common
 end

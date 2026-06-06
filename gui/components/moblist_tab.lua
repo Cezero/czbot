@@ -1,9 +1,10 @@
--- Mob Lists tab: exclude, priority, and charm lists for the current zone.
+﻿-- Mob Lists tab: exclude, priority, and charm lists for the current zone.
 
 local mq = require('mq')
 local ImGui = require('ImGui')
 local state = require('lib.state')
 local mobfilter = require('lib.mobfilter')
+local nocombatzones = require('lib.nocombatzones')
 
 local M = {}
 
@@ -83,9 +84,45 @@ local function drawMobListSection(listType, runconfigKey, label)
     ImGui.Spacing()
 end
 
+local function drawNoCombatZonesSection()
+    local list = nocombatzones.getConfiguredZones()
+    ImGui.TextColored(YELLOW, 'No combat zones')
+    if ImGui.BeginTable('No combat zones table', 3, bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersOuter), -1, 0) then
+        ImGui.TableSetupColumn('Enabled', 0, 0.15)
+        ImGui.TableSetupColumn('Zone', 0, 0.70)
+        ImGui.TableSetupColumn('', 0, 0.15)
+        ImGui.TableHeadersRow()
+        for i = #list, 1, -1 do
+            local name = list[i]
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            local enabled = nocombatzones.isZoneEnabled(name)
+            local checked, toggled = ImGui.Checkbox('##nocombat_enabled' .. i, enabled)
+            if toggled then
+                nocombatzones.setZoneEnabled(name, checked)
+            end
+            ImGui.TableNextColumn()
+            ImGui.Text('%s', name)
+            ImGui.TableNextColumn()
+            if ImGui.SmallButton('Remove##nocombat' .. i) then
+                nocombatzones.removeZone(name)
+            end
+        end
+        ImGui.EndTable()
+    end
+    if ImGui.Button('Add current zone') then
+        local zone = mq.TLO.Zone.ShortName()
+        if zone and zone ~= '' then
+            nocombatzones.addZone(zone)
+        end
+    end
+    ImGui.Spacing()
+end
+
 function M.draw()
     ImGui.TextColored(YELLOW, 'Current zone: %s', mq.TLO.Zone.ShortName() or '')
     ImGui.Spacing()
+    drawNoCombatZonesSection()
     drawMobListSection('exclude', 'ExcludeList', 'Exclude list')
     drawMobListSection('priority', 'PriorityList', 'Priority list')
     drawMobListSection('charm', 'CharmList', 'Charm list')

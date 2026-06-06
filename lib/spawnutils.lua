@@ -265,6 +265,10 @@ function spawnutils.filterSpawnExclude(spawn, rc)
     return true
 end
 
+function spawnutils.filterSpawnProtected(spawn)
+    return not utils.isProtectedSpawn(spawn)
+end
+
 function spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
     if not spawnutils.filterSpawnExclude(spawn, rc) then return false end
     local sid = spawn.ID()
@@ -305,6 +309,7 @@ local function filterSpawnForCamp(spawn, rc)
         cx, cy, cz = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
     end
     if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
+    if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
     local tfNum = myconfig.settings.TargetFilter or 0
     return filterSpawnTargetFilter(spawn, tfNum)
@@ -365,6 +370,7 @@ local function filterSpawnForPull(spawn, rc)
     local cy = (rc.makecamp and rc.makecamp.y) or mq.TLO.Me.Y()
     local cz = (rc.makecamp and rc.makecamp.z) or mq.TLO.Me.Z()
     if not spawnInArea(spawn, cx, cy, cz, radiusSq, zrange) then return false end
+    if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnInPullArc(spawn, rc) then return false end
     if not spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc) then return false end
     if not mq.TLO.Navigation.PathExists('id ' .. spawn.ID())() then return false end
@@ -460,6 +466,7 @@ function spawnutils.mergeKillTargetIntoMobList(rc)
         _G.KillTarget = nil
         return
     end
+    if utils.isProtectedSpawn(mq.TLO.Spawn(KillTarget)) then return end
     for _, v in ipairs(rc.MobList) do
         if v.ID() == KillTarget then return end
     end
@@ -537,7 +544,11 @@ function spawnutils.AddSpawnCheck()
     spawnutils.mergeKillTargetIntoMobList(rc)
     spellstates.PruneDebuffStateNotInMobList(rc.MobList)
     if mq.TLO.Me.Class.ShortName() == 'BRD' and #(rc.MobList or {}) == 0 then
-        bardtwist.EnsureDefaultTwistRunning()
+        if utils.isNearPrimaryBindPoint() then
+            bardtwist.StopTwist()
+        else
+            bardtwist.EnsureDefaultTwistRunning()
+        end
     end
 end
 

@@ -1086,6 +1086,7 @@ end
 function botpull.getHookFn(name)
     if name == 'doPull' then
         return function(hookName)
+            if utils.isNearPrimaryBindPoint() then return end
             local rc = state.getRunconfig()
             if not rc.dopull then return end
             botpull.syncPullMapFilter(false)

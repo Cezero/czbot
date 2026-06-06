@@ -247,6 +247,14 @@ local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
 
+    if utils.isProtectedSpawn(mq.TLO.Spawn(engageTargetId)) then
+        local rc = state.getRunconfig()
+        rc.engageTargetId = nil
+        rc.attackCommandEngage = nil
+        disengageCombat()
+        return
+    end
+
     if state.getRunState() == state.STATES.melee then
         local p = state.getRunStatePayload()
         if p and p.phase == 'moving_closer' then
@@ -319,6 +327,11 @@ function botmelee.AdvCombat()
     local rc = state.getRunconfig()
 
     if myconfig.pull and myconfig.pull.roam and rc.pullState == 'roam_fighting' and rc.pullAPTargetID then
+        if utils.isProtectedSpawn(mq.TLO.Spawn(rc.pullAPTargetID)) then
+            rc.engageTargetId = nil
+            disengageCombat()
+            return
+        end
         rc.engageTargetId = rc.pullAPTargetID
         local name = mq.TLO.Spawn(rc.pullAPTargetID).CleanName() or tostring(rc.pullAPTargetID)
         rc.statusMessage = string.format('Fighting %s (%s)', name, rc.pullAPTargetID)
@@ -375,6 +388,7 @@ function botmelee.AdvCombat()
             id = resolveMeleeAssistTarget(assistName, assistpct)
         end
     end
+    if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
     rc.engageTargetId = id
 
     if rc.engageTargetId then
@@ -420,6 +434,13 @@ function botmelee.getHookFn(name)
     if name == 'doMelee' then
         return function(hookName)
             if state.isDeadOrHover() then return end
+            if utils.isNearPrimaryBindPoint() then
+                utils.enforceBindStealth()
+                if state.getRunState() == state.STATES.melee then state.clearRunState() end
+                local rc = state.getRunconfig()
+                if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
+                return
+            end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             if state.getRunState() == state.STATES.engage_return_follow then
                 botmove.TickReturnToFollowAfterEngage()

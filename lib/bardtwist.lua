@@ -5,6 +5,7 @@ local mq = require('mq')
 
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local utils = require('lib.utils')
 
 local bardtwist = {}
 local twistOnceActive = false
@@ -233,6 +234,10 @@ function bardtwist.EnsureTwistForMode(mode)
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
+    if utils.isNearPrimaryBindPoint() then
+        bardtwist.StopTwist()
+        return
+    end
     local mode = bardtwist.GetCurrentTwistMode()
     if mode then bardtwist.EnsureTwistForMode(mode) end
 end

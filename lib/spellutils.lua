@@ -933,6 +933,7 @@ function spellutils.isSpellHookActive(hookName)
         if not state.isTravelAttackOverriding() then return false end
     end
     if hookName == 'doDebuff' and utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return false end
+    if (hookName == 'doDebuff' or hookName == 'doBuff') and utils.isNearPrimaryBindPoint() then return false end
     local settingOn = myconfig.settings[cfg.setting] or state.isTravelAttackOverriding()
     if hookName == 'doBuff' and state.isTravelMode() then return false end
     if not settingOn then return false end

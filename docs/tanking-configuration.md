@@ -16,7 +16,7 @@ This document explains how to configure the bot when it is the **Main Tank (MT)*
 | Option | Default | Purpose |
 |--------|--------|---------|
 | **TankName** | `"manual"` | Main Tank name or `"automatic"` / `"manual"`. See [Tank and Assist Roles](tank-and-assist-roles.md). |
-| **acleash** | 75 | Max horizontal distance (X,Y) from camp for valid targets and mob list. Also used for corpse rez range. |
+| **acleash** | 75 | Max horizontal distance (X,Y) from camp for valid targets and mob list. Also used for corpse rez range and **bind-point stealth** radius (distance from primary bind coordinates). See [Safety and stealth](safety-and-stealth.md). |
 | **zradius** | 75 | Max vertical (Z) difference from camp; mobs outside this are ignored for the mob list. |
 
 ### Melee section
@@ -69,4 +69,4 @@ To use **disciplines** or **combat abilities** (e.g. kick, bash, backstab), enab
 
 ## Camp and leash
 
-When **make camp** is on, the bot’s camp location is used as the center. **acleash** and **zradius** limit which mobs are considered in the mob list (and thus what the MT can pick). If the bot moves beyond that distance from camp, leash/camp-return behavior can run (e.g. return to camp). For pulling, see [Pull Configuration and Logic](pull-configuration.md).
+When **make camp** is on, the bot’s camp location is used as the center. **acleash** and **zradius** limit which mobs are considered in the mob list (and thus what the MT can pick). If the bot moves beyond that distance from camp, leash/camp-return behavior can run (e.g. return to camp). The same **acleash** value defines how close you must be to your primary bind point before bind stealth suppresses offense and buffing. For pulling, see [Pull Configuration and Logic](pull-configuration.md). For no-combat zones and protected NPCs, see [Safety and stealth](safety-and-stealth.md).

@@ -432,6 +432,10 @@ local function cmd_attack(args)
         return
     end
     local KillTarget = maInfo.Target and maInfo.Target.ID or nil
+    if KillTarget and utils.isProtectedSpawn(mq.TLO.Spawn(KillTarget)) then
+        printf('\ayCZBot:\ax\ar Cannot engage protected NPC\ax')
+        return
+    end
     local rc = state.getRunconfig()
     rc.engageTargetId = KillTarget
     rc.attackCommandEngage = (KillTarget ~= nil)

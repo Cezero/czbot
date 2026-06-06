@@ -1,4 +1,4 @@
-# Hook: doMelee
+﻿# Hook: doMelee
 
 **Priority:** 600  
 **Provider:** botmelee
@@ -11,7 +11,9 @@ DoMelee resolves who to engage (MT, MA, offtank, or DPS) and then either engages
 flowchart TB
     Start[doMelee] --> EngageReturn{runState == engage_return_follow?}
     EngageReturn -->|Yes| TickReturn[TickReturnToFollowAfterEngage, return]
-    EngageReturn -->|No| Guards{!domelee or non-combat zone or !MobList 1?}
+    EngageReturn -->|No| Bind{near primary bind?}
+    Bind -->|Yes| ClearBind[enforceBindStealth, return]
+    Bind -->|No| Guards{!domelee or non-combat zone or !MobList 1?}
     Guards -->|Yes| ClearMelee[clear melee state if set, return]
     Guards -->|No| SetMelee[setRunState melee phase idle priority]
     SetMelee --> Role{AmIMainTank?}
@@ -38,7 +40,7 @@ flowchart TB
 - **MA (selectMATarget):** Pick from MobList: first named in LOS, else MT's target. Set engageTargetId.
 - **Offtank (resolveOfftankTarget):** If MT and MA same target, pick Nth add (not that target) from MobList, else set engageTargetId to MA target. If same target and MA target HP <= assistpct, can use MA target.
 - **DPS (resolveMeleeAssistTarget):** Sync to MA target when MA is engaging (MA target HP <= assistpct). Clear engageTargetId if MA has no target; else set from MobList when MA target in list and HP in range.
-- **engageTarget:** If melee phase is moving_closer and in melee range or deadline, set phase idle and return. Pet attack engageTargetId if petassist. TargetAndWait, stand, attack on, stick. Set melee state with phase moving_closer and 5s deadline (non-BRD).
+- **engageTarget:** If target is a protected NPC (soulbinder/translocator), disengage and clear engageTargetId. If melee phase is moving_closer and in melee range or deadline, set phase idle and return. Pet attack engageTargetId if petassist. TargetAndWait, stand, attack on, stick. Set melee state with phase moving_closer and 5s deadline (non-BRD).
 - **disengageCombat:** statusMessage clear, ResetCombatState (stick off, attack off, pet back, target clear).
 
 Non-MT/MA: minmana gate — only run AdvCombat if minmana is 0 or current mana above minmana.
@@ -46,6 +48,7 @@ Non-MT/MA: minmana gate — only run AdvCombat if minmana is 0 or current mana a
 ## See also
 
 - [README](README.md)
+- [Safety and stealth](../safety-and-stealth.md) — bind stealth, protected NPCs, no-combat zones
 - [Run state machine](run-state-machine.md) — melee, engage_return_follow
 - [Tank and assist roles](../tank-and-assist-roles.md)
 - [Offtank configuration](../offtank-configuration.md)

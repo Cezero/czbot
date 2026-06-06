@@ -128,6 +128,7 @@ end
 -- Performs mez skip messages (level, already mezzed) when applicable.
 -- phase: 'matar' | 'notmatar' (named uses same rules as matar).
 local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
+    if utils.isProtectedSpawn(spawn) then return false end
     local gem = entry.gem
     local myrangeSq = ctx.myrangeSq
     local spawnId = spawn and spawn.ID and spawn.ID() or nil
@@ -401,6 +402,7 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     local myconfig = botconfig.config
     local entry = botconfig.getSpellEntry('debuff', i)
     if not entry then return false end
+    if EvalID and utils.isProtectedSpawn(mq.TLO.Spawn(EvalID)) then return false end
     if not spellutils.CheckGemReadiness('debuff', i, entry) then return false end
     if not spellutils.IsConcussionSpell(entry) and entry.recast ~= nil and entry.recast > 0 and spellstates.GetRecastCounter(EvalID, i) >= entry.recast then
         return false
@@ -659,6 +661,19 @@ end
 function botdebuff.getHookFn(name)
     if name == 'doDebuff' then
         return function(hookName)
+            if utils.isNearPrimaryBindPoint() then
+                local rc = state.getRunconfig()
+                if state.getRunState() == state.STATES.resume_doDebuff then
+                    state.clearRunState()
+                    rc.CurSpell = {}
+                    rc.statusMessage = ''
+                end
+                if state.getRunState() == state.STATES.casting and rc.CurSpell and rc.CurSpell.sub == 'debuff' then
+                    spellutils.clearCastingStateOrResume()
+                end
+                utils.enforceBindStealth()
+                return
+            end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local myconfig = botconfig.config

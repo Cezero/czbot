@@ -292,7 +292,7 @@ end
 function botbuff.BuffCheck(runPriority)
     local myconfig = botconfig.config
     local hasMob = state.getMobCount() > 0
-    if mq.TLO.Me.Class.ShortName() == 'BRD' and myconfig.settings.dobuff then
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and myconfig.settings.dobuff and not utils.isNearPrimaryBindPoint() then
         bardtwist.EnsureDefaultTwistRunning()
     end
     local ctx = buffBuildContext()
@@ -344,6 +344,7 @@ end
 function botbuff.getHookFn(name)
     if name == 'doBuff' then
         return function(hookName)
+            if utils.isNearPrimaryBindPoint() then return end
             if state.isTravelMode() then return end
             local myconfig = botconfig.config
             if not myconfig.settings.dobuff or not (myconfig.buff.spells and #myconfig.buff.spells > 0) then return end

@@ -168,7 +168,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 - **Toggle pulling:** `/cz dopull on` or `/cz dopull off`. You can also toggle without arguments (e.g. `/cz dopull`). Turning **on** syncs the map green ring (**SpellRadius**) to **pull.radius** immediately; turning **off** clears target, stops nav/stick/attack, and stops map radius updates from czbot; if **hunter** or **roam** is true, turning off also clears the makecamp anchor.
 - **Auto-disable:** Pull (`dopull`) is turned off automatically when you **die**, **zone**, or start **follow** (`/cz follow`, chat follow, or `/cz travel`).
 - **Directional pulling:** `/cz xarc <degrees>` — Restrict pulls to an arc in front of the bot (e.g. `90` for a 90° cone). Use with no argument to turn directional pulling off.
-- **Exclude / priority:** **ExcludeList** and **PriorityList** are **runtime** (runconfig), not in the pull config file. Use **`/cz exclude <name>`** to add a mob to the exclude list (pull target selection will skip it) and **`/cz exclude remove [name]`** to remove one; use **`/cz priority <name>`** to add and **`/cz priority remove [name]`** to remove. When **pull.usepriority** is `true`, the bot prefers priority mobs over path distance. You can target a mob and use `/cz exclude` or `/cz priority` (or their remove forms) without a name to use the target’s name. The GUI **Mob lists** tab also lets you view and edit both lists for the current zone. All changes are saved automatically to **cz_common.lua** in the per-zone block **zones**[*zone*] (excludelist, prioritylist, charmlist, nuke flavors, immune).
+- **Exclude / priority / no combat zones:** **ExcludeList** and **PriorityList** are **runtime** (runconfig), not in the pull config file. Use **`/cz exclude <name>`** to add a mob to the exclude list (pull target selection will skip it) and **`/cz exclude remove [name]`** to remove one; use **`/cz priority <name>`** to add and **`/cz priority remove [name]`** to remove. When **pull.usepriority** is `true`, the bot prefers priority mobs over path distance. You can target a mob and use `/cz exclude` or `/cz priority` (or their remove forms) without a name to use the target’s name. The GUI **Mob lists** tab also lets you view and edit exclude, priority, and charm lists for the **current zone**, and the global **no combat zones** list (**Add current zone**, **Enabled** checkbox, **Remove**). Per-zone lists are saved to **cz_common.lua** under **zones**[*zone*] (excludelist, prioritylist, charmlist, nuke flavors, immune). **noCombatZones** is a top-level array in **cz_common.lua**. See [Safety and stealth](safety-and-stealth.md).
 
 ---
 
@@ -194,6 +194,7 @@ The bot builds a list of candidate mobs that:
 - Pass the level/con filter: if **usePullLevels** is `true`, mob level must be between **pullMinLevel** and **pullMaxLevel**; otherwise the mob’s consider (con) color must be between **pullMinCon** and **pullMaxCon**, and the mob’s level must be at most **Me.Level() + maxLevelDiff** (so “levels into red” is capped).
 - Have a valid navigation path (MQ2Nav).
 - Are not in the runtime **ExcludeList**.
+- Are not soulbinders or translocators (protected NPC prefix filter).
 - Are not on the FTE (first-to-engage) list.
 - If **pullarc** is set, lie within the chosen arc in front of the bot.
 

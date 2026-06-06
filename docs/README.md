@@ -1,4 +1,4 @@
-# CZBot Documentation Index
+﻿# CZBot Documentation Index
 
 Short index of all documentation pages. Use this to find the right doc for configuring healing, tanking, pulling, buffing, debuffing, curing, pets, nuking, mezzing, and melee combat abilities.
 
@@ -12,6 +12,7 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | [Tank and Assist Roles](tank-and-assist-roles.md) | How to configure Main Tank (MT), Main Assist (MA), and Puller; who gets heals, who picks targets, and how DPS/offtank follow. |
 | [Tanking configuration](tanking-configuration.md) | Melee/tank settings: stick command, assist %, camp leash, and links to roles and pull.                                        |
 | [Offtank configuration](offtank-configuration.md) | How to configure an offtank: same target (pick add) vs different target (tank MA’s target).                                   |
+| [Safety and stealth](safety-and-stealth.md) | Protected NPCs (soulbinder/translocator), bind-point stealth, and configurable no-combat zones in cz_common.                |
 
 
 ## Pulling and movement

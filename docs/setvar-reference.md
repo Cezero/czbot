@@ -30,7 +30,7 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.AssistName** | string | (unset) | Main Assist name or `"automatic"` / `"manual"`. |
 | **settings.TargetFilter** | number | 0 | Mob list filter: 0 = NPC + aggressive + LOS, 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
 | **settings.petassist** | boolean | `false` | When true, send pet on engage target. |
-| **settings.acleash** | number | 75 | Camp leash distance (max distance from camp for mob list / targeting). |
+| **settings.acleash** | number | 75 | Camp leash distance (max distance from camp for mob list / targeting). Also bind-point stealth radius. See [Safety and stealth](safety-and-stealth.md). |
 | **settings.followdistance** | number | 35 | Follow distance: beyond this the bot runs follow; within it, sit allowed when mana below sitmana. |
 | **settings.zradius** | number | 75 | Vertical range from camp for mob list. |
 | **settings.campRestDistance** | number | 15 | Distance (units) to consider "at camp" for leash and return. |

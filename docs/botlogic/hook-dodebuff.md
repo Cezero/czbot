@@ -1,4 +1,4 @@
-# Hook: doDebuff
+﻿# Hook: doDebuff
 
 **Priority:** 1000  
 **Provider:** botdebuff
@@ -9,7 +9,9 @@ Runs the phase-first spell check for the **debuff** section. Phase order: charm,
 
 ```mermaid
 flowchart TB
-    Start[doDebuff] --> Guards{!dodebuff or no debuff spells or !MobList 1?}
+    Start[doDebuff] --> Bind{near primary bind?}
+    Bind -->|Yes| EndBind[enforceBindStealth, return]
+    Bind -->|No| Guards{!dodebuff or no debuff spells or !MobList 1?}
     Guards -->|Yes| End[return]
     Guards -->|No| Zone{non-combat zone?}
     Zone -->|No| Status[statusMessage = Debuff Check]
@@ -18,7 +20,9 @@ flowchart TB
     RunPhase --> PhaseLoop[phase order: charm notmatar matar named]
 ```
 
-DebuffEval (per spell index): charm recast request → charm.EvalTarget → DebuffEvalMatar → DebuffEvalNotmatar → DebuffEvalNamedMatar. Bands control matar, notmatar, named, mobMin/mobMax. BeforeCast: recast check; for matar set engageTargetId (if not offtank) and pet attack. afterCast can increment resist counter and disable spell for spawn after N resists. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md); see charm module for charm-specific logic.
+DebuffEval (per spell index): charm recast request → charm.EvalTarget → DebuffEvalMatar → DebuffEvalNotmatar → DebuffEvalNamedMatar. Protected NPCs (soulbinder/translocator) are never debuffed. Bands control matar, notmatar, named, mobMin/mobMax. BeforeCast: recast check; skip protected targets; for matar set engageTargetId (if not offtank) and pet attack. afterCast can increment resist counter and disable spell for spawn after N resists. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md); see charm module for charm-specific logic.
+
+Non-combat zones and bind-point stealth: see [Safety and stealth](../safety-and-stealth.md).
 
 ## See also
 

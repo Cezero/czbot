@@ -1,22 +1,67 @@
--- Generic helpers (table copy, list membership, distance).
+﻿-- Generic helpers (table copy, list membership, distance).
 -- Non-combat zones: hooks (AddSpawnCheck, doPull, doMelee, etc.) can skip combat logic when zone is in this list.
+
+local mq = require('mq')
+local botconfig = require('lib.config')
+local state = require('lib.state')
+local combat = require('lib.combat')
 
 local utils = {}
 
-local NONCOMBAT_ZONES = { 'GuildHall', 'GuildLobby', 'PoKnowledge', 'Nexus', 'Bazaar', 'AbysmalSea', 'potranquility' }
+local PROTECTED_NPC_PREFIXES = { 'soulbinder', 'translocator' }
+
+local nocombatzones = require('lib.nocombatzones')
 
 function utils.getNonCombatZones()
-    return NONCOMBAT_ZONES
+    return nocombatzones.getConfiguredZones()
 end
 
 ---@param zone string|nil Zone short name (e.g. mq.TLO.Zone.ShortName()). If nil, returns false.
 function utils.isNonCombatZone(zone)
-    if not zone then return false end
-    local z = string.lower(zone)
-    for _, v in ipairs(NONCOMBAT_ZONES) do
-        if z == string.lower(v) then return true end
+    return nocombatzones.isActiveNoCombatZone(zone)
+end
+
+--- True when spawn CleanName starts with soulbinder or translocator (case-insensitive).
+---@param name string|nil
+function utils.isProtectedNpcName(name)
+    if not name or name == '' then return false end
+    local lower = string.lower(name)
+    for _, prefix in ipairs(PROTECTED_NPC_PREFIXES) do
+        if string.sub(lower, 1, #prefix) == prefix then return true end
     end
     return false
+end
+
+--- True when spawn is a protected NPC (soulbinder/translocator).
+function utils.isProtectedSpawn(spawn)
+    if not spawn then return false end
+    return utils.isProtectedNpcName(spawn.CleanName())
+end
+
+--- True when in primary bind zone and within acleash of bind coordinates.
+function utils.isNearPrimaryBindPoint()
+    if not mq.TLO.Me.ZoneBound() then return false end
+    local bindZoneId = mq.TLO.Me.ZoneBound.ID()
+    if not bindZoneId or bindZoneId == 0 then return false end
+    local bindZone = mq.TLO.Me.ZoneBound.ShortName()
+    local currentZone = mq.TLO.Zone.ShortName()
+    if not bindZone or bindZone == '' or not currentZone or currentZone == '' then return false end
+    if string.lower(currentZone) ~= string.lower(bindZone) then return false end
+    local bindX = mq.TLO.Me.ZoneBoundX()
+    local bindY = mq.TLO.Me.ZoneBoundY()
+    if bindX == nil or bindY == nil then return false end
+    local acleashSq = botconfig.config.settings.acleashSq
+    if not acleashSq then return false end
+    local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), bindX, bindY)
+    return distSq ~= nil and distSq <= acleashSq
+end
+
+--- Disengage combat and clear engage state when near bind (stealth at bind point).
+function utils.enforceBindStealth()
+    local rc = state.getRunconfig()
+    rc.engageTargetId = nil
+    rc.attackCommandEngage = nil
+    combat.ResetCombatState({ clearTarget = true, clearPet = true })
 end
 
 -- Create full copy of a table instead of a reference (recursive, including metatable).
