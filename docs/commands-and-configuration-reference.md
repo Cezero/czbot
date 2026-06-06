@@ -180,7 +180,7 @@ return StoredConfig
 | **TargetFilter**   | `0`           | Mob list filter (0/1/2).                                                                                                |
 | **petassist**      | `false`       | Boolean. When true, send pet on engage target; when false, pet does not engage. Default `false`.                                                                                      |
 | **acleash**        | 75            | Camp leash distance.                                                                                                    |
-| **followdistance** | 35            | Follow distance: beyond this distance the bot stands and runs follow; within it, sit is allowed when mana below sitmana; stand when above sitmana + 3 (hysteresis). |
+| **followdistance** | 35            | Follow distance: beyond this the bot runs follow and defers combat, buffs, heals, debuffs, cures, mount, and forage until within range; within it, sit is allowed when mana below sitmana; stand when above sitmana + 3 (hysteresis). |
 | **zradius**        | 75            | Vertical range from camp for mob list.                                                                                  |
 | **campRestDistance** | 15          | Distance (units) to consider "at camp" for leash and return.                                                            |
 | **spelldb**        | `'spells.db'` | Spell database file.                                                                                                    |

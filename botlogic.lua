@@ -71,17 +71,15 @@ local function charState_Always()
     local rc = state.getRunconfig()
     local mustStand = false
     local wantToSit = false
-    -- Stand if follow on and target beyond follow distance
-    if rc.followid and rc.followid > 0 then
-        local followSpawn = mq.TLO.Spawn(rc.followid)
-        local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
-        local fx, fy = followSpawn.X(), followSpawn.Y()
-        if meX and meY and fx and fy then
-            local dSq = utils.getDistanceSquared2D(meX, meY, fx, fy)
-            local followdistanceSq = botconfig.config.settings.followdistanceSq
-            if dSq and followdistanceSq and dSq >= followdistanceSq then
-                mustStand = true
+    local beyondFollow = follow.isBeyondFollowDistance()
+    -- Stand if follow on and target beyond follow distance; abort casts/mem to keep moving
+    if beyondFollow then
+        mustStand = true
+        if state.getRunState() == state.STATES.casting then
+            if spellutils.IsMemorizing() or mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0 then
+                mq.cmd('/interrupt')
             end
+            spellutils.clearCastingStateOrResume()
         end
     end
     -- Stand if camp is active and we are outside camp range
@@ -126,6 +124,7 @@ local function charState_Always()
     if not _G._czForageLastTime then _G._czForageLastTime = 0 end
     if state.getRunState() == state.STATES.idle
         and botconfig.config.settings.doforage
+        and not beyondFollow
         and mq.TLO.Me.AbilityReady and mq.TLO.Me.AbilityReady('Forage') and mq.TLO.Me.AbilityReady('Forage')()
         and not mq.TLO.Cursor.ID()
         and mq.TLO.Me.FreeInventory() and mq.TLO.Me.FreeInventory() > 0
@@ -165,7 +164,8 @@ local function charState_Always()
         rc.forageSawCursor = nil
         rc.forageCursorUntil = nil
     end
-    if botconfig.config.settings.domount and not state.isTravelMode() and botconfig.config.settings.mountcast then
+    if botconfig.config.settings.domount and not state.isTravelMode() and botconfig.config.settings.mountcast
+        and not beyondFollow then
         spellutils.MountCheck() end
 end
 

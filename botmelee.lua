@@ -10,6 +10,7 @@ local charinfo = require('plugin.charinfo')
 local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
 local spawnutils = require('lib.spawnutils')
+local follow = require('lib.follow')
 local myconfig = botconfig.config
 local botmelee = {}
 
@@ -442,6 +443,13 @@ function botmelee.getHookFn(name)
                 return
             end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
+            if follow.isBeyondFollowDistance() then
+                local rc = state.getRunconfig()
+                rc.engageTargetId = nil
+                rc.attackCommandEngage = nil
+                disengageCombat()
+                return
+            end
             if state.getRunState() == state.STATES.engage_return_follow then
                 botmove.TickReturnToFollowAfterEngage()
                 return

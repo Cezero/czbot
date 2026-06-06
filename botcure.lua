@@ -1,4 +1,4 @@
-local mq = require('mq')
+﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
@@ -6,6 +6,7 @@ local state = require('lib.state')
 local charinfo = require('plugin.charinfo')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
+local follow = require('lib.follow')
 
 local botcure = {}
 local CureClass = {}
@@ -281,6 +282,7 @@ function botcure.getHookFn(name)
         return function(hookName)
             local myconfig = botconfig.config
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
+            if follow.isBeyondFollowDistance() then return end
             if not (myconfig.settings.docure or state.isTravelAttackOverriding()) or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
             local count = botconfig.getSpellCount('cure')
             if count <= 0 then return end
@@ -294,6 +296,7 @@ function botcure.getHookFn(name)
         return function(hookName)
             local myconfig = botconfig.config
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
+            if follow.isBeyondFollowDistance() then return end
             if not (myconfig.settings.docure or state.isTravelAttackOverriding()) or not (myconfig.cure.spells and #myconfig.cure.spells > 0) then return end
             if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Cure Check' end
             botcure.CureCheck(bothooks.getPriority(hookName), CURE_PHASE_ORDER, 'doCure')

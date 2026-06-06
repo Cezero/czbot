@@ -9,6 +9,7 @@ local charm = require('lib.charm')
 local castutils = require('lib.castutils')
 local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
+local follow = require('lib.follow')
 
 local botdebuff = {}
 local DebuffBands = {}
@@ -675,6 +676,7 @@ function botdebuff.getHookFn(name)
                 return
             end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
+            if follow.isBeyondFollowDistance() then return end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local myconfig = botconfig.config
             if not (myconfig.settings.dodebuff or state.isTravelAttackOverriding()) or not (myconfig.debuff.spells and #myconfig.debuff.spells > 0) then return end
