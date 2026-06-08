@@ -287,18 +287,17 @@ function spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc)
     return true
 end
 
-local function filterSpawnTargetFilter(spawn, targetFilterNum)
+local function isCampNpcSpawn(spawn)
     local spawnType = spawn and spawn.Type()
     if not spawnType or spawnType == '' then return false end
-    if targetFilterNum == 2 then
-        return not string.find('pc,banner,campfire,mercenary,mount,aura,corpse', string.lower(spawnType))
-    end
-    if targetFilterNum == 1 then
-        return (spawnType == 'NPC' or (spawnType == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.LineOfSight()
-    end
-    if targetFilterNum == 0 then
-        return (spawnType == 'NPC' or (spawnType == 'Pet' and spawn.Master.Type() ~= 'PC')) and spawn.Aggressive() and spawn.LineOfSight()
-    end
+    return spawnType == 'NPC' or (spawnType == 'Pet' and spawn.Master.Type() ~= 'PC')
+end
+
+local function filterSpawnTargetFilter(spawn, targetFilterNum)
+    if not isCampNpcSpawn(spawn) then return false end
+    if targetFilterNum == 2 then return true end
+    if targetFilterNum == 1 then return spawn.LineOfSight() end
+    if targetFilterNum == 0 then return spawn.Aggressive() and spawn.LineOfSight() end
     return false
 end
 

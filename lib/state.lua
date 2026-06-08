@@ -3,6 +3,7 @@
 ---@field SubOrder table
 ---@field zonename string
 ---@field engageTargetId number|nil
+---@field allMezzedEngageId number|nil spawn id locked while entire camp is mezzed (shortest remaining mez)
 ---@field attackCommandEngage boolean|nil when true, engageTargetId was set by /cz attack; do not overwrite in AdvCombat for DPS/OT.
 ---@field AlertList number
 ---@field followid number
@@ -225,6 +226,7 @@ function M.resetRunconfig()
         SubOrder = {},
         zonename = '',
         engageTargetId = nil,
+        allMezzedEngageId = nil,
         attackCommandEngage = nil,
         AlertList = 20,
         followid = 0,

@@ -10,6 +10,8 @@ local charinfo = require('plugin.charinfo')
 local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
 local spawnutils = require('lib.spawnutils')
+local spellstates = require('lib.spellstates')
+local spellutils = require('lib.spellutils')
 local myconfig = botconfig.config
 local botmelee = {}
 
@@ -100,11 +102,159 @@ end
 
 -- When I am MT and my target is a PC: clear combat state.
 local function clearTankCombatState()
-    state.getRunconfig().engageTargetId = nil
+    local rc = state.getRunconfig()
+    rc.engageTargetId = nil
+    rc.allMezzedEngageId = nil
     combat.ResetCombatState()
 end
 
--- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Skip mezzed; if all mezzed, return closest.
+local MEZ_UNKNOWN_MS = 999999999
+
+local function clearAllMezzedLock(rc)
+    rc.allMezzedEngageId = nil
+end
+
+local function spawnIdInLosList(losList, id)
+    if not id then return false end
+    for _, v in ipairs(losList) do
+        if v.ID() == id then return true end
+    end
+    return false
+end
+
+local _mezSpellIdsCache = nil
+
+local function getMezSpellIds()
+    if _mezSpellIdsCache then return _mezSpellIdsCache end
+    local ids = {}
+    local debuff = myconfig.debuff
+    if debuff and debuff.spells then
+        for _, entry in ipairs(debuff.spells) do
+            if entry and spellutils.IsMezSpell(entry) and entry.spell then
+                local ok, spellid = pcall(function()
+                    if entry.gem == 'item' then
+                        return mq.TLO.FindItem(entry.spell).Spell.ID()
+                    end
+                    return mq.TLO.Spell(entry.spell).ID()
+                end)
+                if ok and spellid then ids[#ids + 1] = spellid end
+            end
+        end
+    end
+    _mezSpellIdsCache = ids
+    return ids
+end
+
+botconfig.RegisterConfigLoader(function() _mezSpellIdsCache = nil end)
+
+local function getTargetMezRemainingMs()
+    if not mq.TLO.Target.Mezzed() then return 0 end
+    local maxSlots = (mq.TLO.Target.MaxBuffSlots and mq.TLO.Target.MaxBuffSlots()) or 40
+    local minDur = nil
+    for i = 1, maxSlots do
+        local b = mq.TLO.Target.Buff(i)
+        if b and b() then
+            local ok, sub = pcall(function() return b.Subcategory and b.Subcategory() end)
+            if ok and sub == 'Enthrall' then
+                local ok2, dur = pcall(function() return b.Duration and b.Duration() or 0 end)
+                local d = (ok2 and dur) or 0
+                if d > 0 and (not minDur or d < minDur) then minDur = d end
+            end
+        end
+    end
+    return minDur or MEZ_UNKNOWN_MS
+end
+
+local function getSpawnMezRemainingMs(spawnId)
+    local now = mq.gettime()
+    local best = nil
+    for _, spellid in ipairs(getMezSpellIds()) do
+        local expire = spellstates.GetDebuffExpire(spawnId, spellid)
+        if expire then
+            local rem = expire - now
+            if rem > 0 and (not best or rem < best) then best = rem end
+        end
+    end
+    return best
+end
+
+local function targetSpawnAndGetMezRemaining(spawnId)
+    if not targeting.TargetAndWaitBuffsPopulated(spawnId, 1000) then return nil, nil end
+    if not mq.TLO.Target.Mezzed() then return false, 0 end
+    local tracked = getSpawnMezRemainingMs(spawnId)
+    return true, tracked or getTargetMezRemainingMs()
+end
+
+local function pickShortestMezzedFromCandidates(candidates)
+    if not candidates[1] then return nil end
+    local bestId = candidates[1].id
+    local bestRem = candidates[1].rem
+    for i = 2, #candidates do
+        local c = candidates[i]
+        if c.rem < bestRem then
+            bestRem = c.rem
+            bestId = c.id
+        end
+    end
+    return bestId
+end
+
+-- Shared MA/MT target pick from a sorted LOS list. Skip mezzed; if all mezzed, pick shortest remaining mez and stick.
+local function selectEngageTargetFromLosList(losList, engageId)
+    local rc = state.getRunconfig()
+    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+        engageId = nil
+    end
+
+    local lockId = rc.allMezzedEngageId
+    if lockId then
+        if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(lockId)) or not spawnIdInLosList(losList, lockId) then
+            clearAllMezzedLock(rc)
+            lockId = nil
+        end
+    end
+
+    if lockId then
+        local mezzed, _ = targetSpawnAndGetMezRemaining(lockId)
+        if mezzed == false then
+            clearAllMezzedLock(rc)
+            return lockId
+        elseif mezzed == true then
+            return lockId
+        end
+    end
+
+    if engageId and spawnIdInLosList(losList, engageId) then
+        local mezzed, _ = targetSpawnAndGetMezRemaining(engageId)
+        if mezzed == false then
+            clearAllMezzedLock(rc)
+            return engageId
+        end
+    end
+
+    local mezzedCandidates = {}
+    for _, spawn in ipairs(losList) do
+        local sid = spawn.ID()
+        local mezzed, rem = targetSpawnAndGetMezRemaining(sid)
+        if mezzed == false then
+            clearAllMezzedLock(rc)
+            return sid
+        elseif mezzed == true then
+            mezzedCandidates[#mezzedCandidates + 1] = { id = sid, rem = rem or MEZ_UNKNOWN_MS }
+        end
+    end
+
+    if #mezzedCandidates == 0 then
+        clearAllMezzedLock(rc)
+        return losList[1] and losList[1].ID() or nil
+    end
+
+    local bestId = pickShortestMezzedFromCandidates(mezzedCandidates)
+    rc.allMezzedEngageId = bestId
+    return bestId
+end
+
+-- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Skip mezzed; if all mezzed, return shortest remaining mez.
 -- Returns mtPick spawn, engageTargetRefound.
 local function selectTankTarget(mainTankName)
     if mainTankName ~= mq.TLO.Me.Name() then return nil, false end
@@ -134,15 +284,8 @@ local function selectTankTarget(mainTankName)
         local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
         return (da or 0) < (db or 0)
     end)
-    for _, spawn in ipairs(losList) do
-        if targeting.TargetAndWaitBuffsPopulated(spawn.ID(), 1000) then
-            if not mq.TLO.Target.Mezzed() then
-                return spawn.ID(), (spawn.ID() == engageId)
-            end
-        end
-    end
-    local first = losList[1]
-    return first and first.ID() or nil, (first and first.ID() == engageId)
+    local id = selectEngageTargetFromLosList(losList, engageId)
+    return id, (id and id == engageId) or false
 end
 
 -- Offtank: if MT target == MA target pick add (Nth other mob); else tank MA's target. Returns chosen id or nil.
@@ -237,16 +380,17 @@ local function selectMATarget()
         return (da or 0) < (db or 0)
     end)
 
-    for _, spawn in ipairs(losList) do
-        if targeting.TargetAndWaitBuffsPopulated(spawn.ID(), 1000) then
-            if not mq.TLO.Target.Mezzed() then
-                return spawn.ID()
-            end
-        end
-    end
+    return selectEngageTargetFromLosList(losList, engageId)
+end
 
-    -- Fallback: if everything failed mez checks/targeting, take the first.
-    return losList[1] and losList[1].ID() or nil
+-- When no engageTargetId: stick off, attack off, pet back, clear NPC target.
+local function disengageCombat()
+    _lastEngageStickCmd = nil
+    local rc = state.getRunconfig()
+    rc.allMezzedEngageId = nil
+    if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
+    combat.ResetCombatState()
+    if state.getRunState() == state.STATES.melee then state.clearRunState() end
 end
 
 -- When engageTargetId is set: pet attack, target (blocking TargetAndWait), stand, attack on, stick. Uses melee phase moving_closer.
@@ -324,14 +468,6 @@ local function engageTarget()
             state.setRunState(state.STATES.melee, { phase = 'moving_closer', deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMelee') })
         end
     end
-end
-
--- When no engageTargetId: stick off, attack off, pet back, clear NPC target.
-local function disengageCombat()
-    _lastEngageStickCmd = nil
-    if state.getRunState() ~= state.STATES.casting then state.getRunconfig().statusMessage = '' end
-    combat.ResetCombatState()
-    if state.getRunState() == state.STATES.melee then state.clearRunState() end
 end
 
 -- Resolve engageTargetId from role (MT/MA/OT/DPS), then engage or disengage. Only sets melee busy state via canStartBusyState.

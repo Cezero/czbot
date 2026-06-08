@@ -255,15 +255,14 @@ local function campDistanceOk(rc)
 end
 
 local function campLOSOk(rc)
-    if not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then
-        return false
-    end
+    local makecamp = rc and rc.makecamp
+    if not makecamp then return false end
+    local campX, campY, campZ = makecamp.x, makecamp.y, makecamp.z
+    if not campX or not campY or not campZ then return false end
     local meX, meY, meZ = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
-    if not meX or not meY or not meZ then
-        return false
-    end
-    return mq.TLO.LineOfSight(meX ..
-        ',' .. meY .. ',' .. meZ .. ':' .. rc.makecamp.x .. ',' .. rc.makecamp.y .. ',' .. rc.makecamp.z)()
+    if not meX or not meY or not meZ then return false end
+    local losStr = string.format('%s,%s,%s:%s,%s,%s', meX, meY, meZ, campX, campY, campZ)
+    return mq.TLO.LineOfSight(losStr)()
 end
 
 local function hasCampSet(rc)
@@ -331,8 +330,11 @@ local function makeCampOn()
 end
 
 local function makeCampOff()
-    if not myconfig.pull.hunter and not myconfig.pull.roam then state.getRunconfig().makecamp = { x = nil, y = nil, z = nil } end
-    state.getRunconfig().campstatus = false
+    local rc = state.getRunconfig()
+    rc.campstatus = false
+    if not myconfig.pull.hunter and not myconfig.pull.roam then
+        rc.makecamp = { x = nil, y = nil, z = nil }
+    end
     printf('\ayCZBot:\axmakecamp \aroff\ax')
 end
 
@@ -613,13 +615,12 @@ end
 
 -- Camp return and leash. Called from doMovementCheck (runWhenBusy).
 function botmove.MakeCampLeashCheck()
-    if not state.getRunconfig().campstatus then return end
-    if state.getRunconfig().engageTargetId then return end
+    local rc = state.getRunconfig()
+    if not hasCampSet(rc) then return end
+    if rc.engageTargetId then return end
     if isCampDragWorkflowActive() then return end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     if state.getRunState() == state.STATES.pulling then return end
-    local rc = state.getRunconfig()
-    if not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then return end
     if campDistanceOk(rc) and campLOSOk(rc) then return end
     print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
     doLeashResetCombat()
@@ -633,7 +634,7 @@ end
 --- Returns true when the current position is at camp (within camp-close distance and LOS).
 function botmove.AtCamp()
     local rc = state.getRunconfig()
-    if not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then return false end
+    if not hasCampSet(rc) then return false end
     return campDistanceOk(rc) and campLOSOk(rc)
 end
 

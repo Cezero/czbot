@@ -37,10 +37,11 @@ local function DelayOnZone()
     local rc = state.getRunconfig()
     local zonename = mq.TLO.Zone.ShortName()
     if zonename then rc.zonename = zonename end
-    if rc.campstatus == true then
+    local wasCamp = rc.campstatus == true
+    rc.campstatus = false
+    if wasCamp then
         rc.makecamp = { x = nil, y = nil, z = nil }
     end
-    rc.campstatus = false
     botpull.DisablePull('zone')
     botconfig.refreshZoneStateFromCommon()
     MountCastFailed = false
