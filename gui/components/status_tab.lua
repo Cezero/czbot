@@ -255,35 +255,59 @@ function M.draw()
             local campX = select(1, ImGui.GetCursorScreenPos())
             ImGui.SetCursorScreenPos(campX, rowStartScreenY - CAMP_CELL_Y_OFFSET)
             availX = select(1, ImGui.GetContentRegionAvail())
-            local campLabel = 'Camp'
+            local pullCfg = botconfig.config.pull
+            local mobilePullMode = pullCfg and (pullCfg.roam == true or pullCfg.hunter == true)
+            local campCoordsSet = rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z)
+            local fixedCamp = rc.campstatus == true
+            local mobileAnchorActive = mobilePullMode and campCoordsSet and not fixedCamp
+            local campLabel = mobilePullMode and 'Anchor' or 'Camp'
             textW, textH = ImGui.CalcTextSize(campLabel)
             startX = ImGui.GetCursorPosX()
             ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
             ImGui.Text('%s', campLabel)
             ImGui.SameLine()
-            local campSet = rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z)
             local campIcon = Icons.FA_FREE_CODE_CAMP
             local campIconW = (select(1, ImGui.CalcTextSize(campIcon)) or 0) + style.FramePadding.x * 2
             local campAvail = select(1, ImGui.GetContentRegionAvail())
             if campAvail > 0 then
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW)
             end
+            local campIconColor = GREEN
+            if fixedCamp then
+                campIconColor = RED
+            elseif mobileAnchorActive then
+                campIconColor = YELLOW
+            end
             ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
-            ImGui.PushStyleColor(ImGuiCol.Text, campSet and RED or GREEN)
+            ImGui.PushStyleColor(ImGuiCol.Text, campIconColor)
             if ImGui.SmallButton(campIcon .. '##camp_toggle') then
-                botmove.MakeCamp(campSet and 'off' or 'on')
+                if fixedCamp then
+                    botmove.MakeCamp('off')
+                elseif mobileAnchorActive then
+                    botmove.ClearCamp()
+                elseif not mobilePullMode then
+                    botmove.MakeCamp('on')
+                end
             end
             if ImGui.IsItemHovered() then
-                ImGui.SetTooltip(campSet and 'Clear camp' or 'Set camp here')
+                if fixedCamp then
+                    ImGui.SetTooltip('Makecamp is on. Click to turn off.')
+                elseif mobileAnchorActive then
+                    ImGui.SetTooltip('Mobile hunt anchor (not makecamp). Click to clear anchor.')
+                elseif mobilePullMode then
+                    ImGui.SetTooltip('No anchor yet. Set automatically when pulling starts.')
+                else
+                    ImGui.SetTooltip('Set camp here')
+                end
             end
             ImGui.PopStyleColor(2)
             local locationStr = 'unset'
-            if rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z) then
+            if campCoordsSet then
                 locationStr = string.format('%.1f, %.1f, %.1f', rc.makecamp.x or 0, rc.makecamp.y or 0,
                     rc.makecamp.z or 0)
             end
             ImGui.Spacing()
-            ImGui.TextColored(WHITE, '%s', 'Location: ')
+            ImGui.TextColored(WHITE, '%s', mobilePullMode and 'Anchor: ' or 'Location: ')
             ImGui.SameLine(0, 2)
             ImGui.TextColored(LIGHT_GREY, '%s', locationStr)
             ImGui.TextColored(WHITE, '%s', 'Radius: ')
@@ -331,7 +355,13 @@ function M.draw()
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + math.max(0, distAvail - distW))
             end
             ImGui.TextColored(LIGHT_GREY, '%s', distStr)
-            if ImGui.IsItemHovered() then ImGui.SetTooltip('Distance from camp (units)') end
+            if ImGui.IsItemHovered() then
+                if mobileAnchorActive then
+                    ImGui.SetTooltip('Distance from hunt anchor (units)')
+                else
+                    ImGui.SetTooltip('Distance from camp (units)')
+                end
+            end
             ImGui.TextColored(WHITE, '%s', 'Filter: ')
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(120)
