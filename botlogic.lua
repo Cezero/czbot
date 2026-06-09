@@ -77,7 +77,7 @@ local function charState_Always()
         mustStand = true
         if state.getRunState() == state.STATES.casting then
             if spellutils.IsMemorizing() or mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0 then
-                mq.cmd('/interrupt')
+                spellutils.interruptActiveCast(rc)
             end
             spellutils.clearCastingStateOrResume()
         end

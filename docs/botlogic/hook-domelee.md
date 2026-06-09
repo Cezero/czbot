@@ -20,7 +20,7 @@ flowchart TB
     Role -->|Yes| MT[selectTankTarget: puller priority LOS, set engageTargetId]
     MT --> StartReturn[engageTargetRefound? StartReturnToFollowAfterEngage]
     Role -->|No| MA{AmIMainAssist?}
-    MA -->|Yes| MATarget[selectMATarget: named then MT target]
+    MA -->|Yes| MATarget[selectMATarget: sticky; named override]
     Role -->|No| OT{offtank?}
     OT -->|Yes| OTResolve[resolveOfftankTarget: same target Nth add else MA target]
     OT -->|No| DPS[resolveMeleeAssistTarget: MA target assistpct]
@@ -37,7 +37,7 @@ flowchart TB
 ```
 
 - **MT (selectTankTarget):** Only if I am group MT. Pick closest LOS mob from MobList; prefer puller's target, then current engageTargetId, then closest. Set engageTargetId; if we refound the same engage target, call StartReturnToFollowAfterEngage.
-- **MA (selectMATarget):** Pick from MobList: first named in LOS, else MT's target. Set engageTargetId.
+- **MA (selectMATarget):** Sticky engage: keep alive `engageTargetId` unless a named enters camp while on a non-named mob. Initial pick only (no current target): closest named, else closest engageable with mez/distance rules via `selectEngageTargetFromLosList`.
 - **Offtank (resolveOfftankTarget):** If MT and MA same target, pick Nth add (not that target) from MobList, else set engageTargetId to MA target. If same target and MA target HP <= assistpct, can use MA target.
 - **DPS (resolveMeleeAssistTarget):** Sync to MA target when MA is engaging (MA target HP <= assistpct). Clear engageTargetId if MA has no target; else set from MobList when MA target in list and HP in range.
 - **engageTarget:** If target is a protected NPC (soulbinder/translocator), disengage and clear engageTargetId. If melee phase is moving_closer and in melee range or deadline, set phase idle and return. Pet attack engageTargetId if petassist. TargetAndWait, stand, attack on, stick. Set melee state with phase moving_closer and 5s deadline (non-BRD).

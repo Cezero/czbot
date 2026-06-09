@@ -364,17 +364,11 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
     return botmelee.GetPCTarget(assistName)
 end
 
--- MA bot only: choose target from MobList independent of MT.
--- Returns chosen id or nil.
-local function selectMATarget()
-    local rc = state.getRunconfig()
-    if not rc.MobList or not rc.MobList[1] then return nil end
-
+-- Closest engageable named in mobList, or nil.
+local function findClosestEngageableNamed(mobList)
     local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
-
-    -- 1) Prefer named (closest engageable named).
     local namedSpawn = nil
-    for _, v in ipairs(rc.MobList) do
+    for _, v in ipairs(mobList) do
         if isEngageableMobListSpawn(v) and v.Named() then
             if not namedSpawn then
                 namedSpawn = v
@@ -385,23 +379,39 @@ local function selectMATarget()
             end
         end
     end
-    if namedSpawn then return namedSpawn.ID() end
+    return namedSpawn and namedSpawn.ID() or nil
+end
 
-    -- 2) Otherwise pick the closest engageable mob (prefer the existing engage target to avoid thrash).
+-- MA bot only: choose target from MobList independent of MT.
+-- Sticky: keep current alive target unless a named appears while on a non-named.
+-- Returns chosen id or nil.
+local function selectMATarget()
+    local rc = state.getRunconfig()
+    if not rc.MobList or not rc.MobList[1] then return nil end
+
+    local engageId = rc.engageTargetId
+    if engageId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+        local currentSpawn = mq.TLO.Spawn(engageId)
+        if not currentSpawn.Named() then
+            local namedId = findClosestEngageableNamed(rc.MobList)
+            if namedId then return namedId end
+        end
+        return engageId
+    end
+
+    -- Initial pick: named first, then closest engageable (mez/distance rules).
+    local namedId = findClosestEngageableNamed(rc.MobList)
+    if namedId then return namedId end
+
+    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
     local losList = {}
     for _, v in ipairs(rc.MobList) do
         if isEngageableMobListSpawn(v) then losList[#losList + 1] = v end
     end
     if #losList == 0 then return nil end
 
-    local engageId = rc.engageTargetId
-    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
-        engageId = nil
-    end
+    engageId = nil
     table.sort(losList, function(a, b)
-        local aId, bId = a.ID(), b.ID()
-        if engageId and aId == engageId and bId ~= engageId then return true end
-        if engageId and aId ~= engageId and bId == engageId then return false end
         local da = utils.getDistanceSquared2D(meX, meY, a.X(), a.Y())
         local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
         return (da or 0) < (db or 0)

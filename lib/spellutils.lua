@@ -1445,6 +1445,16 @@ function spellutils.RunScript(script, Sub, ID)
     end
 end
 
+--- Stop the in-game cast bar. Uses casting lib (/stopcast) when viaCastingLib; legacy path uses /stopcast directly.
+function spellutils.interruptActiveCast(rc)
+    rc = rc or state.getRunconfig()
+    if rc.CurSpell and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) then
+        casting.interrupt()
+    else
+        mq.cmd('/stopcast')
+    end
+end
+
 function spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
     if mq.TLO.Me.Class.ShortName() == 'BRD' then return end
     if not targetSpawn.ID() or string.lower(spelltartype) == 'self' then return end
@@ -1454,7 +1464,7 @@ function spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltar
     mq.cmd('/squelch /multiline; /stick off ; /mqtarget clear')
     if mq.TLO.Me.CastTimeLeft() > 0 and rc.CurSpell.target ~= mq.TLO.Me.ID() and criteria ~= 'groupheal' and criteria ~= 'groupbuff' and criteria ~= 'groupcure' then
         mq.cmd('/echo I lost my target, interrupting')
-        if rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib then casting.interrupt() else mq.cmd('/stopcast') end
+        spellutils.interruptActiveCast(rc)
         if mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Me.Combat() then mq.cmd('/attack off') end
     end
     if state.getRunconfig().domelee and _deps.AdvCombat then _deps.AdvCombat() end
@@ -1468,8 +1478,8 @@ function spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, target
     if not th or not targetSpawn.PctHPs() or targetSpawn.ID() ~= target then return end
     local maxVal = type(th) == 'table' and th.max or th
     if (maxVal + (math.abs(maxVal - 100) * botconfig.config.heal.interruptlevel)) <= targetSpawn.PctHPs() then
-        mq.cmdf('/multiline ; /interrupt ; /echo Interrupting Spell %s, target is above the threshold', entry.spell)
-        mq.cmd('/interrupt')
+        printf('\ayCZBot:\axInterrupting Spell %s, target is above the threshold', entry.spell)
+        spellutils.interruptActiveCast(rc)
         spellutils.clearCastingStateOrResume()
     end
 end
@@ -1481,7 +1491,7 @@ function spellutils.InterruptCheckDontStack(entry, target, spellname)
     if not tag then return end
     printf('\ayCZBot:\axInterrupt %s, target already %s', spellname, tag)
     spellutils.RecordDontStackDebuffFromTarget(target, entry.spell, tag)
-    mq.cmd('/interrupt')
+    spellutils.interruptActiveCast(state.getRunconfig())
     spellutils.clearCastingStateOrResume()
 end
 
@@ -1534,14 +1544,14 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     if sub == 'buff' then
         if not stacks and spellTargetType ~= 'Self' then
             printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, targetname)
-            mq.cmd('/interrupt')
+            spellutils.interruptActiveCast(rc)
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
             spellutils.clearCastingStateOrResume()
         elseif buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS and not isSelfGroupBuff then
             -- Buff present with enough time left: interrupt. Below threshold we allow refresh cast to complete.
             printf('\ayCZBot:\axInterrupt %s, buff already present', spellname)
-            mq.cmd('/interrupt')
+            spellutils.interruptActiveCast(rc)
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
             spellutils.clearCastingStateOrResume()
@@ -1557,7 +1567,7 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
             end
             local expire = (mq.TLO.Target.Buff(spellname).Duration() or 0) + mq.gettime()
             spellstates.DebuffListUpdate(target, spellid, expire)
-            mq.cmd('/interrupt')
+            spellutils.interruptActiveCast(rc)
             spellutils.clearCastingStateOrResume()
         end
     end
@@ -1587,7 +1597,7 @@ function spellutils.InterruptCheck()
         local botheal = require('botheal')
         local gid, _ghit = botheal.EvalGroupHealIfNeeded(spell)
         if not gid then
-            mq.cmd('/interrupt')
+            spellutils.interruptActiveCast(rc)
             spellutils.clearCastingStateOrResume()
             return
         end
@@ -1604,7 +1614,10 @@ function spellutils.InterruptCheck()
 
     spellutils.InterruptCheckTargetLost(rc, targetSpawn, criteria, spelltartype)
     if criteria ~= 'corpse' and targetSpawn.Type() == 'Corpse' then
-        mq.cmd('/multiline ; /interrupt ; /squelch /mqtarget clear ; /echo My target is dead, interrupting')
+        printf('\ayCZBot:\axMy target is dead, interrupting')
+        spellutils.interruptActiveCast(rc)
+        mq.cmd('/squelch /mqtarget clear')
+        spellutils.clearCastingStateOrResume()
     end
     spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
     if sub == 'debuff' then
@@ -1849,6 +1862,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         return true
     end
     if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
+        spellutils.clearCastingStateOrResume()
         return false
     end
     invokePrepareImmediateCast(sub, index, EvalID, targethit)

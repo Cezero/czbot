@@ -1,4 +1,4 @@
-# Tank and Assist Roles
+﻿# Tank and Assist Roles
 
 This document explains how to configure **Main Tank (MT)**, **Main Assist (MA)**, and **Puller**, and how each bot behaves in different scenarios.
 
@@ -84,14 +84,14 @@ flowchart TB
         Heal[Healer]
     end
     MTBot -->|"Pick from MobList, puller priority"| Engage
-    MABot -->|"Pick named then MT target"| Engage
+    MABot -->|"Sticky target; named override"| Engage
     DPS -->|"Assist MA target"| Engage
     OT -->|"Add or tank MA target"| Engage
     Heal -->|"Always heal MT"| MT
 ```
 
 - **MT bot:** Picks which mob to engage from the mob list (closest LOS, puller’s target preferred when applicable).
-- **MA bot:** Chooses its own target: **named** mobs first, then **MT’s target**.
+- **MA bot:** Chooses its own target from the mob list. On initial pick: **named** mobs first, then closest engageable (with mez/distance rules). Once engaged, **sticks** to that target until it dies; the only mid-fight switch is when a **named** enters camp while the MA is on a non-named mob.
 - **DPS bot:** Syncs to the MA’s target (assists the MA).
 - **Offtank bot:** See next diagram.
 - **Healer:** Always prioritizes the MT (no MA in heal logic).
@@ -136,7 +136,7 @@ flowchart LR
 ### Bot is Main Assist (different from MT)
 
 - Set **AssistName** to this bot’s name (or `"automatic"` and assign this bot as group/raid MA).
-- This bot chooses its own target: **named** mobs first, then **MT’s target**. Other DPS and offtank follow this bot’s target.
+- This bot chooses its own target from the mob list (**named** first on initial pick, then closest engageable). It **sticks** to that target until it dies, switching mid-fight only when a **named** enters camp while on a non-named mob. Other DPS and offtank follow this bot’s target.
 
 ### Offtank bot
 
