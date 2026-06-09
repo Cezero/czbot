@@ -156,7 +156,7 @@ function botevents.Event_FTELocked()
     end
     if rc.dopull then
         print('clearing pull target because FTELock detected') -- not debug, real error message
-        botpull.AbortPullForFTE('FTE lock detected')
+        botpull.AbortPullForFTE('FTE lock detected', spawnId)
     end
     mq.cmd('/multiline ; /squelch /mqtarget myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
 end

@@ -96,7 +96,9 @@ Target is Encounter Locked (FTE) to someone else.
 
 **Pull list** uses `pullUnpullableUntil` only (`pull.fteLockoutSec`, default 120s), not the combat block — so a false in-camp FTE does not block pull selection for the full combat window.
 
-**Hunter pull:** When `pull.hunter` is active with `dopull`, FTE records only the pull-unpullable window (no `nextCombatRecheckAt`). The bot tries backup candidates from the same outing queue when available; otherwise clears pull state without return nav. It does not run the 2s in-camp FTE recheck loop during hunter pull states. **Roam** uses normal idle FTE recheck; unpullable mobs are skipped on the next nav target pick.
+**Hunter pull:** When `pull.hunter` is active with `dopull`, FTE records only the pull-unpullable window (no `nextCombatRecheckAt`). The bot tries backup candidates from the same outing queue when available; otherwise clears pull state without return nav. It does not run the 2s in-camp FTE recheck loop during hunter pull states.
+
+**Roam pull:** When `pull.roam` is active with `dopull`, FTE sets only `pullUnpullableUntil` for `pull.fteLockoutSec` (default 120s) and clears any short combat FTE block. The locked mob is excluded from **MobList** and melee engage for the full lockout (not the 2s combat recheck). `AbortPullForFTE` clears `roamNavTargetId` and stops nav; the next `tickRoamNav` tick picks another pullable mob.
 
 Manual reset: `/cz fte clear` (current NPC target) or `/cz fte clear all`.
 

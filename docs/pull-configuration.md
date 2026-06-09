@@ -163,7 +163,9 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 **Roam buff timing:** When **dobuff** is on, one buff check cycle runs after the mob bubble clears and before the bot picks the next nav target. Buff checks are skipped while status shows **Roaming to...** (active roam nav).
 
-**FTE (hunter):** Encounter-locked pull targets are marked unpullable for **fteLockoutSec** (default 120 seconds) and the bot moves to the next target. The in-camp 2s FTE recheck loop does **not** run during hunter pull states. Roam uses normal camp FTE recheck when idle (no pull state machine).
+**FTE (roam):** Encounter-locked mobs are marked unpullable for **fteLockoutSec** (default 120 seconds). The short 2s combat FTE block does **not** apply — the mob is excluded from **# Mobs** and melee engage for the full lockout. Roam nav stops and the bot picks another pull target on the next tick.
+
+**FTE (hunter):** Encounter-locked pull targets are marked unpullable for **fteLockoutSec** (default 120 seconds) and the bot moves to the next target. The in-camp 2s FTE recheck loop does **not** run during hunter pull states.
 
 ---
 

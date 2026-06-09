@@ -87,6 +87,13 @@ function spawnutils.isMobilePullMode(rc)
     return rc.dopull == true and pull and (pull.roam == true or pull.hunter == true)
 end
 
+--- True when dopull uses simplified roam hunt (player-centered nav + melee).
+function spawnutils.isRoamPullMode(rc)
+    rc = rc or state.getRunconfig()
+    local pull = botconfig.config.pull
+    return rc.dopull == true and pull and pull.roam == true
+end
+
 function spawnutils.isEngageTracked(spawnId, rc)
     if not spawnId then return false end
     rc = rc or state.getRunconfig()
@@ -180,6 +187,12 @@ function spawnutils.recordFTE(rc, spawnId, opts)
         entry = { id = spawnId, strikes = 0 }
         rc.FTEList[spawnId] = entry
     end
+    if opts.pull and spawnutils.isRoamPullMode(rc) then
+        entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
+        entry.combatBlockedUntil = nil
+        entry.nextCombatRecheckAt = nil
+        return
+    end
     if opts.pull and spawnutils.isMobilePullMode(rc) then
         entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
         return
@@ -263,6 +276,14 @@ local function resolveFTESpawnIdFromTarget(rc)
             local t = mq.TLO.Spawn(rc.pullAPTargetID).Type()
             if isFTEEligibleSpawnType(t) then return rc.pullAPTargetID end
         end
+        if rc.roamNavTargetId and rc.roamNavTargetId > 0 then
+            local t = mq.TLO.Spawn(rc.roamNavTargetId).Type()
+            if isFTEEligibleSpawnType(t) then return rc.roamNavTargetId end
+        end
+    end
+    if rc.roamNavTargetId and rc.roamNavTargetId > 0 then
+        local t = mq.TLO.Spawn(rc.roamNavTargetId).Type()
+        if isFTEEligibleSpawnType(t) then return rc.roamNavTargetId end
     end
     return nil
 end
@@ -345,6 +366,8 @@ local function filterSpawnForCamp(spawn, rc)
     end
     if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
+    local sid = spawn.ID()
+    if spawnutils.isRoamPullMode(rc) and sid and spawnutils.isPullUnpullable(sid, rc) then return false end
     local tfNum = myconfig.settings.TargetFilter or 0
     return filterSpawnTargetFilter(spawn, tfNum)
 end
@@ -526,7 +549,10 @@ function spawnutils.tickCombatFTERechecks(rc)
     if not rc.FTEList then return end
     local now = mq.gettime()
     for spawnId, entry in pairs(rc.FTEList) do
-        if spawnutils.isMobilePullMode(rc) and entry.pullUnpullableUntil and now < entry.pullUnpullableUntil then
+        if spawnutils.isRoamPullMode(rc) and entry.pullUnpullableUntil and now < entry.pullUnpullableUntil then
+            entry.nextCombatRecheckAt = nil
+            entry.combatBlockedUntil = nil
+        elseif spawnutils.isMobilePullMode(rc) and entry.pullUnpullableUntil and now < entry.pullUnpullableUntil then
             entry.nextCombatRecheckAt = nil
         elseif entry.nextCombatRecheckAt and now >= entry.nextCombatRecheckAt then
             if not spawnutils.isSpawnInCampRadiusById(spawnId, rc) then

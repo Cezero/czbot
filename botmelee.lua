@@ -257,6 +257,9 @@ end
 -- MobList entry is eligible for MA/MT engage selection (matches TargetFilter camp rules).
 local function isEngageableMobListSpawn(spawn)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
+    local rc = state.getRunconfig()
+    local sid = spawn.ID()
+    if sid and spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(sid, rc) then return false end
     local tfNum = tonumber(myconfig.settings.TargetFilter) or 0
     if tfNum == 2 then return true end
     return spawn.LineOfSight()

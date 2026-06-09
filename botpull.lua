@@ -1256,9 +1256,22 @@ function botpull.getHookFn(name)
 end
 
 --- Abort active pull when FTE lock fires (clears APTarget and returns to camp when navigating/aggroing).
-function botpull.AbortPullForFTE(reason)
+---@param reason string|nil
+---@param spawnId number|nil FTE-locked NPC spawn id
+function botpull.AbortPullForFTE(reason, spawnId)
     local rc = state.getRunconfig()
     if APTarget then APTarget = false end
+    if isRoamMode() and rc.dopull then
+        if spawnId and rc.roamNavTargetId == spawnId then
+            clearRoamNav(rc)
+        elseif spawnId and rc.roamNavTargetId then
+            clearRoamNav(rc)
+        end
+        if not rc.pullHealerManaWait then
+            rc.statusMessage = 'FTE locked, finding another target'
+        end
+        return
+    end
     if state.getRunState() == state.STATES.pulling and rc.pullAPTargetID then
         abortPullSoftFailure(reason or 'FTE lock detected')
     elseif rc.pullAPTargetID then
