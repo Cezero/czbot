@@ -1,4 +1,4 @@
-# Hook: doMovementCheck
+﻿# Hook: doMovementCheck
 
 **Priority:** 1350  
 **Provider:** Built-in (botlogic.lua)  
@@ -18,10 +18,10 @@ flowchart TB
     SetLast --> End
 ```
 
-- **FollowAndStuckCheck:** TickReturnToFollowAfterEngage (engage_return_follow phases). Refresh followid; if shouldCallFollow (followid, distance >= followdistance, no engage) then FollowCall (UnStuck if stucktimer passed, stand, /nav to followid). Update stucktimer when within leash.
+- **FollowAndStuckCheck:** TickReturnToFollowAfterEngage (engage_return_follow phases). TickUnstuck (unstuck phases; runs unconditionally so follow success can clear the busy state even when `shouldCallFollow` is false). Refresh followid; if shouldCallFollow (followid, distance >= followdistance, no engage) then FollowCall (UnStuck if stucktimer passed, stand, /nav to followid). Update stucktimer when within leash (also clears unstuck when within acleash).
 - **MakeCampLeashCheck:** If campstatus and no engageTargetId and not casting (non-BRD): if over leash (distance or LOS), doLeashResetCombat and MakeCamp('return').
 
-UnStuck (called from FollowCall) sets runState **unstuck** with phases nav_wait5, wiggle_wait, back_wait. MakeCamp('return') sets **camp_return**. StartReturnToFollowAfterEngage (from doMelee) sets **engage_return_follow**; TickReturnToFollowAfterEngage clears it when nav done or deadline.
+UnStuck (called from FollowCall on entry) sets runState **unstuck** with phases nav_wait5, nudge_wait. TickUnstuck clears it when follow recovers (within acleash, or close with nav inactive). MakeCamp('return') sets **camp_return**. StartReturnToFollowAfterEngage (from doMelee) sets **engage_return_follow**; TickReturnToFollowAfterEngage clears it when nav done or deadline.
 
 ## See also
 

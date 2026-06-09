@@ -93,13 +93,6 @@ local function shouldCallFollow(rc)
         followdistance >= myconfig.settings.followdistance
 end
 
-local function updateStuckTimerWithinLeash(rc)
-    local d3 = mq.TLO.Spawn(rc.followid).Distance3D()
-    if d3 and d3 <= myconfig.settings.acleash and (not rc.stucktimer or rc.stucktimer < mq.gettime() + 60000) then
-        rc.stucktimer = mq.gettime() + 60000
-    end
-end
-
 -- ---------------------------------------------------------------------------
 -- UnStuck phase handlers
 -- ---------------------------------------------------------------------------
@@ -125,6 +118,36 @@ local function clearUnstuckIfFollowInactive(rc)
     rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
     state.clearRunState()
     return true
+end
+
+local function clearUnstuckOnFollowSuccess(rc, followid)
+    if state.getRunState() ~= state.STATES.unstuck then return false end
+    if not followid or followid == 0 then return false end
+    local d3 = mq.TLO.Spawn(followid).Distance3D()
+    local acleash = myconfig.settings.acleash
+    if d3 and acleash and d3 <= acleash then
+        rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
+        state.clearRunState()
+        return true
+    end
+    local d2 = mq.TLO.Spawn(followid).Distance()
+    local followdist = myconfig.settings.followdistance
+    if d2 and followdist and d2 < followdist and not mq.TLO.Navigation.Active() then
+        rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
+        state.clearRunState()
+        return true
+    end
+    return false
+end
+
+local function updateStuckTimerWithinLeash(rc)
+    local d3 = mq.TLO.Spawn(rc.followid).Distance3D()
+    if d3 and d3 <= myconfig.settings.acleash then
+        if not rc.stucktimer or rc.stucktimer < mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS then
+            rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
+        end
+        clearUnstuckOnFollowSuccess(rc, rc.followid)
+    end
 end
 
 local function normalizeHeading360(heading)
@@ -159,6 +182,7 @@ end
 
 local function tickUnstuckPhase(p, followid, stuckdistance)
     local rc = state.getRunconfig()
+    if clearUnstuckOnFollowSuccess(rc, followid) then return true end
     if not p or p.followid ~= followid then
         rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
         state.clearRunState()
@@ -167,7 +191,7 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
     if mq.gettime() < (p.deadline or 0) then return true end
     local nowdist = mq.TLO.Spawn(followid).Distance3D()
     if p.phase == 'nav_wait5' then
-        if nowdist and stuckdistance >= nowdist + 10 then
+        if nowdist and p.stuckdistance and p.stuckdistance >= nowdist + 10 then
             rc.stucktimer = mq.gettime() + UNSTUCK_EXIT_COOLDOWN_MS
             state.clearRunState()
             return true
@@ -180,7 +204,7 @@ local function tickUnstuckPhase(p, followid, stuckdistance)
             return true
         end
 
-        beginUnstuckNudge(followid, stuckdistance, attempts)
+        beginUnstuckNudge(followid, nowdist or p.stuckdistance, attempts)
     elseif p.phase == 'nudge_wait' then
         mq.cmd('/squelch /keypress forward')
         mq.cmdf('/squelch /nav id %s los=on dist=15 log=off', followid)
@@ -545,15 +569,16 @@ function botmove.UnStuck()
     local followid = rc.followid
     if not followid or followid == 0 then return false end
     if not isValidFollowTarget(followid) then return false end
+
+    if state.getRunState() == state.STATES.unstuck then
+        botmove.TickUnstuck()
+        return false
+    end
+
     if not mq.TLO.Navigation.Active() then return false end
     local stuckdistance = mq.TLO.Spawn(followid).Distance3D() or 100
     local acleash = myconfig.settings.acleash
     if stuckdistance < acleash then return false end
-
-    if state.getRunState() == state.STATES.unstuck then
-        local p = state.getRunStatePayload()
-        if tickUnstuckPhase(p, followid, stuckdistance) then return false end
-    end
 
     if tryPathExistsUnstuck(followid) then return false end
 
@@ -594,9 +619,23 @@ function botmove.TickReturnToFollowAfterEngage()
     end
 end
 
+function botmove.TickUnstuck()
+    if state.getRunState() ~= state.STATES.unstuck then return end
+    local rc = state.getRunconfig()
+    local followid = rc.followid
+    if not followid or followid == 0 then
+        state.clearRunState()
+        return
+    end
+    if clearUnstuckOnFollowSuccess(rc, followid) then return end
+    local p = state.getRunStatePayload()
+    tickUnstuckPhase(p, followid, mq.TLO.Spawn(followid).Distance3D() or 100)
+end
+
 -- Follow nav + stuck detection and unstuck state machine. Called from doMovementCheck (runWhenBusy).
 function botmove.FollowAndStuckCheck()
     botmove.TickReturnToFollowAfterEngage()
+    botmove.TickUnstuck()
     local rc = state.getRunconfig()
     if (rc.followid and rc.followid > 0) or (rc.followname and rc.followname ~= '') then
         refreshFollowId()

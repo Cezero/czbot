@@ -1,4 +1,4 @@
-# Movement and misc state machines
+﻿# Movement and misc state machines
 
 Pull, unstuck, dragging, camp return, and engage-return-follow are driven from **doPull**, **doMovementCheck**, and **doMiscTimer** (and from **doMelee** for engage_return_follow). This page summarizes their state machines and conditions. Implementation: `botpull.lua`, `botmove.lua`.
 
@@ -31,24 +31,26 @@ See [hook-dopull](hook-dopull.md) for when doPull decides to call StartPull (cha
 
 ---
 
-## Unstuck (doMovementCheck → FollowAndStuckCheck → UnStuck)
+## Unstuck (doMovementCheck → FollowAndStuckCheck → TickUnstuck / UnStuck)
 
-runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, nudge_wait. If pathing stalls, unstuck now escalates into repeated nudge + re-nav attempts before applying cooldown.
+runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, nudge_wait. If pathing stalls, unstuck escalates into repeated nudge + re-nav attempts before applying cooldown.
 
 ```mermaid
 stateDiagram-v2
     direction LR
     [*] --> tryPathExists: UnStuck, followid far
     tryPathExists --> nav_wait5: PathExists, /nav to followid
-    nav_wait5 --> [*]: 5s and distance improved
+    nav_wait5 --> [*]: follow success or distance improved
     nav_wait5 --> nudge_wait: 5s deadline and no progress
     nudge_wait --> nav_wait5: release forward, /nav to followid
     nav_wait5 --> [*]: retries exhausted -> cooldown
     [*] --> nudge_wait: PathExists failed
 ```
 
-- **UnStuck:** Only runs when followid is set and distance >= acleash. If already in unstuck, `tickUnstuckPhase` runs. Then try PathExists → nav to followid and set `nav_wait5` (5s). If PathExists fails, immediately start nudge recovery.
-- **tickUnstuckPhase:** `nav_wait5`: on deadline, if distance improved set cooldown and clear; if no progress, increment retry count, stop nav, turn left/right relative to current heading, hold forward briefly, then transition to `nudge_wait`. `nudge_wait`: release forward and reissue `/nav id ...`, then return to `nav_wait5`. After retry limit, apply 60s cooldown and clear.
+- **TickUnstuck:** Called unconditionally at the start of `FollowAndStuckCheck` (alongside `TickReturnToFollowAfterEngage`), so the phase machine keeps advancing even when `shouldCallFollow` is false. Clears unstuck on follow success: 3D distance <= acleash, or 2D distance < followdistance with nav inactive.
+- **UnStuck:** Entry only when followid is set, nav is active, and distance >= acleash. If already in unstuck, delegates to `TickUnstuck` before entry guards. Otherwise try PathExists → nav to followid and set `nav_wait5` (5s). If PathExists fails, immediately start nudge recovery.
+- **tickUnstuckPhase:** Checks `clearUnstuckOnFollowSuccess` first. `nav_wait5`: on deadline, if distance improved by 10 vs phase-start `p.stuckdistance`, set cooldown and clear; if no progress, increment retry count, nudge, then transition to `nudge_wait`. `nudge_wait`: release forward and reissue `/nav id ...`, then return to `nav_wait5`. After retry limit, apply 60s cooldown and clear.
+- **updateStuckTimerWithinLeash:** When within acleash, extends stucktimer and also clears unstuck if still set.
 - **MQ2AutoSize dependency removed:** unstuck no longer changes character size and no longer requires MQ2AutoSize to perform recovery movement.
 
 ---
