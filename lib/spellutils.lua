@@ -483,46 +483,80 @@ function spellutils.SpawnDetrimentalsForCure(spawnId, cureTypeList)
     return false
 end
 
+local function buffSlotHasSpell(b)
+    if not b then return false end
+    local ok, id = pcall(function() return b.ID and b.ID() or 0 end)
+    return ok and id and id > 0
+end
+
 local function isBuffDetrimental(b)
     if not b then return false end
+    -- SpellType is authoritative; some debuffs (e.g. rez sickness) mis-report Beneficial().
+    local okType, spellType = pcall(function() return b.SpellType and b.SpellType() or '' end)
+    if okType and spellType ~= '' then
+        if spellType:find('Detrimental') then return true end
+        if spellType:find('Beneficial') then return false end
+    end
     local ok, beneficial = pcall(function() return b.Beneficial and b.Beneficial() end)
     if ok and beneficial ~= nil then return not beneficial end
-    local ok2, spellType = pcall(function() return b.SpellType and b.SpellType() or '' end)
-    if ok2 and spellType ~= '' then return spellType:find('Detrimental') ~= nil end
     return false
 end
 
-local function buffSlotIsNonCurableDebuff(b)
-    if not b then return false end
-    local ok, active = pcall(function() return b() end)
-    if not ok or not active then return false end
-    if not isBuffDetrimental(b) then return false end
-    local ok2, total = pcall(function() return b.TotalCounters and b.TotalCounters() or 0 end)
-    return ok2 and (total or 0) == 0
+local function nonCurableDebuffNameFromBuff(b)
+    if not buffSlotHasSpell(b) then return nil end
+    if not isBuffDetrimental(b) then return nil end
+    local ok, total = pcall(function() return b.TotalCounters and b.TotalCounters() or 0 end)
+    if not ok or (total or 0) > 0 then return nil end
+    local okName, name = pcall(function() return b.Name and b.Name() or nil end)
+    return (okName and name) or 'debuff'
 end
+
+local ME_REZ_SICKNESS_NAMES = { 'Resurrection Sickness', 'Revival Sickness' }
+local ME_CATEGORY_DEBUFFS = { 'Snared', 'Rooted', 'Mezzed', 'Slowed', 'Feared', 'Silenced', 'Charmed', 'Crippled' }
 
 --- True when the player has a detrimental without counters (snare, rez sickness, etc.).
 --- Curable debuffs (poison/disease/curse/corruption with counters) return false.
---- Fail-open when Me.BuffsPopulated() is false.
 ---@return boolean hasDebuff
 ---@return string|nil debuffName
 function spellutils.MeHasNonCurableDebuff()
+    -- Rez sickness is a long buff with no counters; Me.Beneficial can be wrong — match by name first.
+    for _, sicknessName in ipairs(ME_REZ_SICKNESS_NAMES) do
+        local b = mq.TLO.Me.Buff(sicknessName)
+        if buffSlotHasSpell(b) then return true, sicknessName end
+        local ok, has = pcall(function() return mq.TLO.Me.Buff(sicknessName)() end)
+        if ok and has then return true, sicknessName end
+        b = mq.TLO.Me.FindBuff(sicknessName)
+        if buffSlotHasSpell(b) then return true, sicknessName end
+        ok, has = pcall(function() return mq.TLO.Me.FindBuff(sicknessName)() end)
+        if ok and has then return true, sicknessName end
+    end
+
+    for _, cat in ipairs(ME_CATEGORY_DEBUFFS) do
+        local ok, b = pcall(function()
+            local m = mq.TLO.Me[cat]
+            return m and m()
+        end)
+        if ok and b then
+            if type(b) == 'string' and b ~= '' then return true, b end
+            if buffSlotHasSpell(b) then
+                local okName, name = pcall(function() return b.Name and b.Name() or nil end)
+                return true, (okName and name) or cat
+            end
+            return true, cat
+        end
+    end
+
     if not mq.TLO.Me.BuffsPopulated or not mq.TLO.Me.BuffsPopulated() then return false end
+
     local maxBuff = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
     for i = 1, maxBuff do
-        local b = mq.TLO.Me.Buff(i)
-        if buffSlotIsNonCurableDebuff(b) then
-            local ok, name = pcall(function() return b.Name and b.Name() or nil end)
-            return true, (ok and name) or 'debuff'
-        end
+        local name = nonCurableDebuffNameFromBuff(mq.TLO.Me.Buff(i))
+        if name then return true, name end
     end
     local maxSong = (mq.TLO.Me.MaxSongSlots and mq.TLO.Me.MaxSongSlots()) or 20
     for i = 1, maxSong do
-        local b = mq.TLO.Me.Song(i)
-        if buffSlotIsNonCurableDebuff(b) then
-            local ok, name = pcall(function() return b.Name and b.Name() or nil end)
-            return true, (ok and name) or 'debuff'
-        end
+        local name = nonCurableDebuffNameFromBuff(mq.TLO.Me.Song(i))
+        if name then return true, name end
     end
     return false
 end
