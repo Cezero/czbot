@@ -140,6 +140,15 @@ function spawnutils.isCampAcleashEnforced(rc)
     return rc.doCampAcleash ~= false
 end
 
+--- True when an alive engageTargetId should be kept outside MobList (doCampAcleash off + camp set).
+function spawnutils.shouldChaseOutsideCamp(rc)
+    if spawnutils.isCampAcleashEnforced(rc) then return false end
+    rc = rc or state.getRunconfig()
+    local id = rc.engageTargetId
+    if not id or id <= 0 then return false end
+    return spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id))
+end
+
 function spawnutils.isSpawnInCampRadius(spawn, rc)
     if not spawn then return false end
     rc = rc or state.getRunconfig()

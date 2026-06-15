@@ -303,11 +303,8 @@ end
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if not mainTankName or mainTankName == '' then return nil end
     local rc = state.getRunconfig()
-    local maInfo = charinfo.GetInfo(assistName)
-    local maTarId = (maInfo and maInfo.ID and maInfo.Target) and maInfo.Target.ID or nil
-    if not maTarId and mq.TLO.Spawn('pc =' .. assistName).ID() then
-        maTarId = botmelee.GetPCTarget(assistName)
-    end
+    local _, _, maTarId, maTarHp, maFromCache = spellutils.GetAssistInfo(true, assistpct)
+    if maTarId == 0 then maTarId = nil end
     local mtInfo = charinfo.GetInfo(mainTankName)
     local mtTarId = (mtInfo and mtInfo.ID and mtInfo.Target) and mtInfo.Target.ID or nil
     if not mtTarId and mq.TLO.Spawn('pc =' .. mainTankName).ID() then
@@ -323,8 +320,8 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
             end
             return actarid
         end
-        if maInfo and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) and maTarId and maTarId > 0 then
-            return maTarId
+        if maFromCache or (maTarHp and maTarHp <= assistpct) then
+            if maTarId and maTarId > 0 then return maTarId end
         end
     elseif maTarId and maTarId > 0 then
         return maTarId
@@ -332,24 +329,29 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     return nil
 end
 
--- DPS: return MA's target when MA is engaging and in MobList at assistpct; else GetPCTarget. Returns id or nil.
+-- DPS: return MA's target when MA is engaging and in MobList at assistpct; else cached target when MA dead/hover.
 local function resolveMeleeAssistTarget(assistName, assistpct)
     local rc = state.getRunconfig()
-    local maInfo = charinfo.GetInfo(assistName)
-    local maTarId = maInfo and maInfo.Target and maInfo.Target.ID or nil
-    if maInfo and maInfo.ID then
-        if not spawnutils.isCampAcleashEnforced(rc) and maTarId and maTarId > 0
-            and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) then
+    local _, _, maTarId, maTarHp, fromCache = spellutils.GetAssistInfo(true, assistpct)
+    if not maTarId or maTarId <= 0 then return nil end
+
+    if fromCache then
+        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then
             return maTarId
-        end
-        for _, v in ipairs(rc.MobList) do
-            if v.ID() == maTarId and maInfo.TargetHP and (maInfo.TargetHP <= assistpct) then
-                return maTarId
-            end
         end
         return nil
     end
-    return botmelee.GetPCTarget(assistName)
+
+    local hp = maTarHp or mq.TLO.Spawn(maTarId).PctHPs()
+    if not spawnutils.isCampAcleashEnforced(rc) and hp and (hp <= assistpct) then
+        return maTarId
+    end
+    for _, v in ipairs(rc.MobList) do
+        if v.ID() == maTarId and hp and (hp <= assistpct) then
+            return maTarId
+        end
+    end
+    return nil
 end
 
 -- Closest engageable named in mobList, or nil.
@@ -622,8 +624,8 @@ function botmelee.getHookFn(name)
                 return
             end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
-            if botmove.isBeyondFollowDistance() then
-                local rc = state.getRunconfig()
+            local rc = state.getRunconfig()
+            if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil
                 disengageCombat()
@@ -643,10 +645,7 @@ function botmelee.getHookFn(name)
                 return
             end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
-            local rc = state.getRunconfig()
-            local chaseEngage = not spawnutils.isCampAcleashEnforced(rc)
-                and rc.engageTargetId
-                and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId))
+            local chaseEngage = spawnutils.shouldChaseOutsideCamp(rc)
             if not rc.MobList[1] and not chaseEngage then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 rc.engageTargetId = nil

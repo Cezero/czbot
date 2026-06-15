@@ -3,6 +3,7 @@
 ---@field SubOrder table
 ---@field zonename string
 ---@field engageTargetId number|nil
+---@field lastAssistTargetId number|nil session-only MA target remembered while MA is dead/hovering
 ---@field allMezzedEngageId number|nil spawn id locked while entire camp is mezzed (shortest remaining mez)
 ---@field attackCommandEngage boolean|nil when true, engageTargetId was set by /cz attack; do not overwrite in AdvCombat for DPS/OT.
 ---@field AlertList number
@@ -73,6 +74,7 @@
 ---@field spellNotInBook table|nil
 ---@field statusMessage string User-facing activity line for GUI
 ---@field pullHealerManaWait { name: string, pct: number, current?: number }|nil when set, puller is waiting on this healer's mana before next pull; status tab shows it
+---@field pullDebuffWait { name: string }|nil when set, puller has a non-curable debuff and will not pull until it fades
 ---@field OutOfSpace boolean|nil true when inventory was full (cursor item); cleared when space available again
 ---@field forageExpectCursor boolean|nil after /doability Forage: expect item on cursor; CharState /autoinv only while set
 ---@field forageCursorUntil number|nil mq.gettime() deadline for stale clear when forage yields nothing
@@ -229,6 +231,7 @@ function M.resetRunconfig()
         SubOrder = {},
         zonename = '',
         engageTargetId = nil,
+        lastAssistTargetId = nil,
         allMezzedEngageId = nil,
         attackCommandEngage = nil,
         AlertList = 20,
@@ -295,6 +298,7 @@ function M.resetRunconfig()
         spellNotInBook = {},
         statusMessage = '',
         pullHealerManaWait = nil,
+        pullDebuffWait = nil,
         OutOfSpace = false,
         doChchain = false,
         chchainCurtank = 1,

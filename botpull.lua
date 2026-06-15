@@ -22,7 +22,7 @@ local RETURNING_AFTER_ABORT_TIMEOUT_MS = 30000
 local PULL_SPAWN_FTE_WAIT_MS = 5000
 
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullCandidateIds, pullCandidateIndex, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
--- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullSpawnWaitSince, pullRadiusHadTarget, pullHealerManaWait, pullRangedStoredItem;
+-- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullSpawnWaitSince, pullRadiusHadTarget, pullHealerManaWait, pullDebuffWait, pullRangedStoredItem;
 -- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
 botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat' }
 
@@ -172,6 +172,10 @@ local function clearEngageIfPullTargetGone(rc, pullTargetId)
     combat.ResetCombatState({ clearTarget = true, clearPet = false })
 end
 
+local function pullWaitBlocksStatus(rc)
+    return rc.pullHealerManaWait ~= nil or rc.pullDebuffWait ~= nil
+end
+
 local function clearPullState(reason)
     local rc = state.getRunconfig()
     local endingPullId = rc.pullAPTargetID
@@ -191,6 +195,7 @@ local function clearPullState(reason)
     rc.pullCandidateIds = nil
     rc.pullCandidateIndex = nil
     rc.pullHealerManaWait = nil
+    rc.pullDebuffWait = nil
     rc.pullRangedStoredItem = nil
     rc.pulledmob = nil
     rc.pullreturntimer = nil
@@ -377,6 +382,7 @@ end
 -- Pre-checks: return false if we should not start a pull.
 local function canStartPull(rc)
     rc.pullHealerManaWait = nil
+    rc.pullDebuffWait = nil
     if not isRoamMode() and rc.pulledmob then
         local pmob = mq.TLO.Spawn(rc.pulledmob)
         if not pmob or not pmob.ID() or pmob.Type() == 'Corpse' then
@@ -429,6 +435,11 @@ local function canStartPull(rc)
         return false
     end
     if groupBlocksPull(rc) then return false end
+    local hasDebuff, debuffName = spellutils.MeHasNonCurableDebuff()
+    if hasDebuff then
+        rc.pullDebuffWait = { name = debuffName or 'debuff' }
+        return false
+    end
     return true
 end
 
@@ -455,6 +466,7 @@ local function shouldStartPull(rc)
 
     if not wantToPull then
         rc.pullHealerManaWait = nil
+        rc.pullDebuffWait = nil
         return false
     end
     if not canStartPull(rc) then return false end
@@ -569,10 +581,13 @@ local function tickRoamNav(rc)
         clearRoamNav(rc)
         return
     end
-    if not canStartPull(rc) then return end
+    if not canStartPull(rc) then
+        if rc.pullDebuffWait then clearRoamNav(rc) end
+        return
+    end
 
     if roamNavDeferredForBuff(rc) then
-        if state.getRunState() == state.STATES.idle and not rc.pullHealerManaWait then
+        if state.getRunState() == state.STATES.idle and not pullWaitBlocksStatus(rc) then
             rc.statusMessage = 'Buff Check'
         end
         return
@@ -590,7 +605,7 @@ local function tickRoamNav(rc)
             local now = mq.gettime()
             if now - _roamNoTargetStatusLast >= ROAM_NO_TARGET_STATUS_MS then
                 _roamNoTargetStatusLast = now
-                if not rc.pullHealerManaWait then
+                if not pullWaitBlocksStatus(rc) then
                     rc.statusMessage = 'No pull targets nearby'
                 end
             end
@@ -607,7 +622,7 @@ local function tickRoamNav(rc)
         clearRoamNav(rc)
         return
     end
-    if not rc.pullHealerManaWait then
+    if not pullWaitBlocksStatus(rc) then
         rc.statusMessage = string.format('Roaming to %s (%s)', spawn.CleanName() or spawn.Name(), targetId)
     end
     if not mq.TLO.Navigation.Active() then
@@ -626,7 +641,7 @@ local function gatePullSpawnWait(rc, hasTarget)
         rc.pullSpawnWaitSince = mq.gettime()
     end
     if rc.pullSpawnWaitSince and (mq.gettime() - rc.pullSpawnWaitSince) < PULL_SPAWN_FTE_WAIT_MS then
-        if not rc.pullHealerManaWait then
+        if not pullWaitBlocksStatus(rc) then
             rc.statusMessage = 'Waiting before pull...'
         end
         return true
@@ -1209,6 +1224,12 @@ function botpull.PullTick()
         clearPullState('PullTick: MasterPause')
         return
     end
+    if rc.pullState == 'navigating' or rc.pullState == 'aggroing' then
+        if spellutils.MeHasNonCurableDebuff() then
+            abortNavDuringPull('Non-curable debuff')
+            return
+        end
+    end
 
     if rc.pullState == 'navigating' then
         tickNavigating(rc, spawn)
@@ -1267,7 +1288,7 @@ function botpull.AbortPullForFTE(reason, spawnId)
         elseif spawnId and rc.roamNavTargetId then
             clearRoamNav(rc)
         end
-        if not rc.pullHealerManaWait then
+        if not rc.pullHealerManaWait and not rc.pullDebuffWait then
             rc.statusMessage = 'FTE locked, finding another target'
         end
         return

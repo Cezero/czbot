@@ -523,7 +523,9 @@ end
 local function cmd_assist(args)
     if not args[2] then return end
     local name = (args[2] == 'automatic') and 'automatic' or (args[2]:sub(1, 1):upper() .. args[2]:sub(2))
-    state.getRunconfig().AssistName = name
+    local rc = state.getRunconfig()
+    rc.AssistName = name
+    rc.lastAssistTargetId = nil
     printf('\ayCZBot:\axSetting assist to %s', name)
 end
 

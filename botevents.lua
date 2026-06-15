@@ -24,6 +24,7 @@ function botevents.ResetCombatSession(reason)
     rc.statusMessage = ''
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
+    rc.lastAssistTargetId = nil
     rc.MobList = {}
     spellstates.CleanMobList()
     if APTarget then APTarget = nil end

@@ -12,6 +12,7 @@ local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
 local botmove = require('botmove')
+local spawnutils = require('lib.spawnutils')
 local spellutils = {}
 local _deps = {}
 local _instantDebuffCastPending = nil
@@ -482,6 +483,50 @@ function spellutils.SpawnDetrimentalsForCure(spawnId, cureTypeList)
     return false
 end
 
+local function isBuffDetrimental(b)
+    if not b then return false end
+    local ok, beneficial = pcall(function() return b.Beneficial and b.Beneficial() end)
+    if ok and beneficial ~= nil then return not beneficial end
+    local ok2, spellType = pcall(function() return b.SpellType and b.SpellType() or '' end)
+    if ok2 and spellType ~= '' then return spellType:find('Detrimental') ~= nil end
+    return false
+end
+
+local function buffSlotIsNonCurableDebuff(b)
+    if not b then return false end
+    local ok, active = pcall(function() return b() end)
+    if not ok or not active then return false end
+    if not isBuffDetrimental(b) then return false end
+    local ok2, total = pcall(function() return b.TotalCounters and b.TotalCounters() or 0 end)
+    return ok2 and (total or 0) == 0
+end
+
+--- True when the player has a detrimental without counters (snare, rez sickness, etc.).
+--- Curable debuffs (poison/disease/curse/corruption with counters) return false.
+--- Fail-open when Me.BuffsPopulated() is false.
+---@return boolean hasDebuff
+---@return string|nil debuffName
+function spellutils.MeHasNonCurableDebuff()
+    if not mq.TLO.Me.BuffsPopulated or not mq.TLO.Me.BuffsPopulated() then return false end
+    local maxBuff = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
+    for i = 1, maxBuff do
+        local b = mq.TLO.Me.Buff(i)
+        if buffSlotIsNonCurableDebuff(b) then
+            local ok, name = pcall(function() return b.Name and b.Name() or nil end)
+            return true, (ok and name) or 'debuff'
+        end
+    end
+    local maxSong = (mq.TLO.Me.MaxSongSlots and mq.TLO.Me.MaxSongSlots()) or 20
+    for i = 1, maxSong do
+        local b = mq.TLO.Me.Song(i)
+        if buffSlotIsNonCurableDebuff(b) then
+            local ok, name = pcall(function() return b.Name and b.Name() or nil end)
+            return true, (ok and name) or 'debuff'
+        end
+    end
+    return false
+end
+
 -- Default class order for bot list: healers, tanks, casters, DPS. Used when config does not override.
 -- Config: botconfig.getCommon().botListClassOrder = { 'clr', 'shm', 'dru', ... } (lowercase class short names).
 spellutils.DEFAULT_BOTLIST_CLASS_ORDER = { 'clr', 'shm', 'dru', 'war', 'shd', 'pal', 'enc', 'wiz', 'mag', 'nec', 'brd',
@@ -806,21 +851,45 @@ function spellutils.GetTankInfo(includeTarget)
     return mainTankName, tankid, tanktar, tanktarhp
 end
 
+--- True when the MA spawn is missing, dead, or hovering (no reliable live target).
+local function isAssistUnavailable(assistName, assistid)
+    if not assistid or assistid == 0 then
+        assistid = assistName and mq.TLO.Spawn('pc =' .. assistName).ID() or nil
+    end
+    if not assistid or assistid == 0 then return true end
+    local spawn = mq.TLO.Spawn(assistid)
+    return spawn.Dead() or spawn.Hovering()
+end
+
+--- Clear lastAssistTargetId when the cached spawn is no longer alive.
+local function clearLastAssistTargetIfDead(rc)
+    local cached = rc.lastAssistTargetId
+    if cached and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+        rc.lastAssistTargetId = nil
+    end
+end
+
 -- Assist = Main Assist only (whose target DPS/OT follow).
 -- Mirrors GetTankInfo but resolves from AssistName (and does not depend on MT).
-function spellutils.GetAssistInfo(includeTarget)
+-- Optional assistpct updates the last-target cache when MA is actively assisting.
+-- Returns fromCache (5th value) when the target came from lastAssistTargetId (MA dead/hover).
+function spellutils.GetAssistInfo(includeTarget, assistpct)
     local assistName = tankrole.GetAssistTargetName()
     if not assistName or assistName == '' then return nil, nil, nil, nil end
 
     local assistid = mq.TLO.Spawn('pc =' .. assistName).ID()
     if not includeTarget then return assistName, assistid, nil, nil end
 
+    local rc = state.getRunconfig()
+    clearLastAssistTargetIfDead(rc)
+
+    local unavailable = isAssistUnavailable(assistName, assistid)
     local assistar, assistarhp
     local info = charinfo.GetInfo(assistName)
     if info and info.ID then
         assistar = info.Target and info.Target.ID or nil
         assistarhp = info.TargetHP
-    elseif assistid then
+    elseif assistid and not unavailable then
         local botmelee = require('botmelee')
         assistar = botmelee.GetPCTarget(assistName)
         assistarhp = assistar and mq.TLO.Spawn(assistar).PctHPs() or nil
@@ -831,7 +900,31 @@ function spellutils.GetAssistInfo(includeTarget)
     end
 
     if assistar == 0 then assistar = nil end
-    return assistName, assistid, assistar, assistarhp
+
+    local pct = assistpct
+    if pct == nil then
+        pct = (botconfig.config.melee and botconfig.config.melee.assistpct) or 99
+    end
+
+    if assistar and assistar > 0 then
+        local hp = assistarhp or mq.TLO.Spawn(assistar).PctHPs()
+        if hp and hp <= pct then
+            rc.lastAssistTargetId = assistar
+        end
+    end
+
+    local fromCache = false
+    if unavailable and (not assistar or assistar == 0) then
+        local cached = rc.lastAssistTargetId
+        if cached and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+            assistar = cached
+            assistarhp = mq.TLO.Spawn(cached).PctHPs()
+            fromCache = true
+        end
+    end
+
+    if assistar == 0 then assistar = nil end
+    return assistName, assistid, assistar, assistarhp, fromCache
 end
 
 -- Canonicalize debuff targetphase tokens.

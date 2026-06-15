@@ -14,6 +14,7 @@ local aggro = require('lib.aggro')
 local charinfo = require('plugin.charinfo')
 local botpull = require('botpull')
 local follow = require('lib.follow')
+local spawnutils = require('lib.spawnutils')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -221,12 +222,8 @@ local function charState_PostDead()
             -- Disengaged: keep the existing behavior to ensure pet isn't fighting stale targets.
             if mq.TLO.Me.Pet.Aggressive() then
                 local desiredPetTargetId = nil
-                local maName = tankrole.GetAssistTargetName()
-                if maName and maName ~= '' then
-                    local maInfo = charinfo.GetInfo(maName)
-                    local maTargetId = (maInfo and maInfo.ID and maInfo.Target) and maInfo.Target.ID or nil
-                    if maTargetId and maTargetId ~= 0 then desiredPetTargetId = maTargetId end
-                end
+                local _, _, maTargetId = spellutils.GetAssistInfo(true)
+                if maTargetId and maTargetId ~= 0 then desiredPetTargetId = maTargetId end
                 if not desiredPetTargetId then
                     -- If MA has no target, do not fall back to MT target.
                     -- Only allow MT->pet fallback when MT sticky mode is enabled.
@@ -262,9 +259,19 @@ local function charState_PostDead()
             end
         end
     end
-    if not rc.attackCommandEngage
-        and not (rc.MobList and rc.MobList[1] and rc.engageTargetId) then
-        rc.engageTargetId = nil
+    if not rc.attackCommandEngage and not spawnutils.shouldChaseOutsideCamp(rc) then
+        local keepEngage = false
+        if rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
+            for _, v in ipairs(rc.MobList or {}) do
+                if v.ID() == rc.engageTargetId then
+                    keepEngage = true
+                    break
+                end
+            end
+        end
+        if not keepEngage then
+            rc.engageTargetId = nil
+        end
     end
     if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and (---@diagnostic disable-next-line: undefined-field
         mq.TLO.GMCheck() == 'TRUE') then
