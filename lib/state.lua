@@ -421,6 +421,23 @@ function M.getMobCount(rc)
     return #(rc.MobList or {})
 end
 
+---True when the buff loop should treat context as combat (not idle).
+---@param rc RunConfig|nil Optional; defaults to getRunconfig().
+---@return boolean
+function M.isCombatContextForBuff(rc)
+    rc = rc or M.getRunconfig()
+    if M.getMobCount(rc) > 0 then return true end
+    local mq = require('mq')
+    local id = rc.engageTargetId
+    if id and id > 0 then
+        local spawnutils = require('lib.spawnutils')
+        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then return true end
+    end
+    if M.getRunState() == M.STATES.melee then return true end
+    if mq.TLO.Me.Combat() then return true end
+    return false
+end
+
 ---Toggle or set global MasterPause (pause CZBot). Used by status tab Pause button and /czp.
 ---@param ... string|nil 'on' = pause, 'off' = resume, none = toggle
 function M.czpause(...)

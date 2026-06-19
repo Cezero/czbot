@@ -292,7 +292,7 @@ end
 
 function botbuff.BuffCheck(runPriority)
     local myconfig = botconfig.config
-    local hasMob = state.getMobCount() > 0
+    local inCombatContext = state.isCombatContextForBuff()
     if mq.TLO.Me.Class.ShortName() == 'BRD' and myconfig.settings.dobuff and not utils.isNearPrimaryBindPoint() then
         bardtwist.EnsureDefaultTwistRunning()
     end
@@ -310,9 +310,9 @@ function botbuff.BuffCheck(runPriority)
             if not ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') then return false end
             local bc = BuffClass[i]
             if mq.TLO.Me.Class.ShortName() ~= 'BRD' and bc and bc.combatOnly == true then
-                return hasMob
+                return inCombatContext
             end
-            return (not hasMob) or (hasMob and bc and bc.inCombat == true)
+            return (not inCombatContext) or (inCombatContext and bc and bc.inCombat == true)
         end,
     }
     local function getSpellIndices(phase, _target)

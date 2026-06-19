@@ -599,6 +599,9 @@ function botmelee.AdvCombat()
     else
         disengageCombat()
     end
+    if rc.engageTargetId then
+        spawnutils.mergeEngageTargetIntoMobList(rc)
+    end
 end
 
 -- Return target ID of PC pcName (used for MA's or MT's target depending on caller). Uses charinfo when peer, else /assist + blocking delay until target set.
