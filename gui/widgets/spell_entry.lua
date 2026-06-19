@@ -132,6 +132,7 @@ local _entryState = setmetatable({}, { __mode = 'k' })
 
 local TYPE_COMBO_WIDTH = 100
 local SPELL_SELECTABLE_WIDTH = 140
+local MIN_SPELL_SELECTABLE_WIDTH = 70
 local NUMERIC_INPUT_WIDTH = 80
 local ALIAS_INPUT_WIDTH = 100
 
@@ -150,6 +151,30 @@ end
 local GREEN = ImVec4(0, 0.8, 0, 1)
 local RED = ImVec4(1, 0, 0, 1)
 local BLACK = ImVec4(0, 0, 0, 1)
+
+local function calcRightControlsWidth(opts)
+    local enabledIconW = select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_ON))
+    local enabledButtonWidth = (enabledIconW or 0) + 24
+    local deleteButtonWidth = 0
+    if opts.onDelete then
+        local trashW = select(1, ImGui.CalcTextSize(Icons.FA_TRASH))
+        deleteButtonWidth = (trashW or 0) + 24
+    end
+    local entryCount = opts.entryCount or 0
+    local showMoveUp = entryCount > 1 and opts.onMoveUp
+    local showMoveDown = entryCount > 1 and opts.onMoveDown
+    local moveUpIconW = showMoveUp and select(1, ImGui.CalcTextSize(Icons.FA_CARET_UP)) or 0
+    local moveDownIconW = showMoveDown and select(1, ImGui.CalcTextSize(Icons.FA_CARET_DOWN)) or 0
+    local moveUpButtonWidth = showMoveUp and ((moveUpIconW or 0) + 24) or 0
+    local moveDownButtonWidth = showMoveDown and ((moveDownIconW or 0) + 24) or 0
+    local reorderButtonWidth = moveUpButtonWidth + moveDownButtonWidth
+    if reorderButtonWidth > 0 and (showMoveUp and showMoveDown) then
+        reorderButtonWidth = reorderButtonWidth + 4
+    end
+    return enabledButtonWidth
+        + (opts.onDelete and (deleteButtonWidth + 4) or 0)
+        + (reorderButtonWidth > 0 and (reorderButtonWidth + 4) or 0)
+end
 
 --- Draw spell entry: label, type combo, spell/item/ability selectable; optionally range, common fields, customSection.
 --- @param spell table spell entry to read/write
@@ -277,9 +302,16 @@ function M.draw(spell, opts)
         else
             displayName = spell.spell
         end
-        ImGui.SetNextItemWidth(SPELL_SELECTABLE_WIDTH)
+        local reservedRight = displayCommonFields and calcRightControlsWidth(opts) or 0
+        local availSpell = ImGui.GetContentRegionAvail()
+        local spellWidth = SPELL_SELECTABLE_WIDTH
+        if reservedRight > 0 and availSpell then
+            spellWidth = math.min(SPELL_SELECTABLE_WIDTH,
+                math.max(MIN_SPELL_SELECTABLE_WIDTH, availSpell - reservedRight - 4))
+        end
+        ImGui.SetNextItemWidth(spellWidth)
         ---@diagnostic disable-next-line: undefined-global
-        if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(SPELL_SELECTABLE_WIDTH, 0)) then
+        if ImGui.Selectable(displayName .. '##' .. id .. '_ro', false, 0, ImVec2(spellWidth, 0)) then
             if not isUnused then
                 state.open = true
                 state.buffer = spell.spell or ''
@@ -325,27 +357,10 @@ function M.draw(spell, opts)
         local enabled = spell.enabled ~= false
         local enabledIcon = enabled and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
         local enabledColor = enabled and GREEN or RED
-        local enabledIconW = select(1, ImGui.CalcTextSize(enabledIcon))
-        local enabledButtonWidth = (enabledIconW or 0) + 24
-        local deleteButtonWidth = 0
-        if opts.onDelete then
-            local trashW = select(1, ImGui.CalcTextSize(Icons.FA_TRASH))
-            deleteButtonWidth = (trashW or 0) + 24
-        end
         local entryCount = opts.entryCount or 0
         local showMoveUp = entryCount > 1 and opts.onMoveUp
         local showMoveDown = entryCount > 1 and opts.onMoveDown
-        local moveUpIconW = showMoveUp and select(1, ImGui.CalcTextSize(Icons.FA_CARET_UP)) or 0
-        local moveDownIconW = showMoveDown and select(1, ImGui.CalcTextSize(Icons.FA_CARET_DOWN)) or 0
-        local moveUpButtonWidth = showMoveUp and ((moveUpIconW or 0) + 24) or 0
-        local moveDownButtonWidth = showMoveDown and ((moveDownIconW or 0) + 24) or 0
-        local reorderButtonWidth = moveUpButtonWidth + moveDownButtonWidth
-        if reorderButtonWidth > 0 and (showMoveUp and showMoveDown) then
-            reorderButtonWidth = reorderButtonWidth + 4
-        end
-        local totalRightWidth = enabledButtonWidth
-            + (opts.onDelete and (deleteButtonWidth + 4) or 0)
-            + (reorderButtonWidth > 0 and (reorderButtonWidth + 4) or 0)
+        local totalRightWidth = calcRightControlsWidth(opts)
         local availEnabled = ImGui.GetContentRegionAvail()
         if availEnabled and availEnabled > totalRightWidth then
             ImGui.SameLine(ImGui.GetCursorPosX() + availEnabled - totalRightWidth)

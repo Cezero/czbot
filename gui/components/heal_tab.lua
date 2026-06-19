@@ -186,14 +186,16 @@ function M.draw()
             deleteEntryLabel = 'Heal',
             entryIndex = i,
             entryCount = #spells,
-            onMoveUp = i > 1 and function()
-                spells[i], spells[i - 1] = spells[i - 1], spells[i]
-                runConfigLoaders()
-            end or nil,
-            onMoveDown = i < #spells and function()
-                spells[i], spells[i + 1] = spells[i + 1], spells[i]
-                runConfigLoaders()
-            end or nil,
+            onMoveUp = (function(idx)
+                return idx > 1 and function()
+                    botconfig.swapSpellEntries('heal', idx, idx - 1)
+                end or nil
+            end)(i),
+            onMoveDown = (function(idx)
+                return idx < #spells and function()
+                    botconfig.swapSpellEntries('heal', idx, idx + 1)
+                end or nil
+            end)(i),
         })
         ImGui.Separator()
     end

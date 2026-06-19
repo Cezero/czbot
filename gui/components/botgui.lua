@@ -30,7 +30,13 @@ local TABS = {
 }
 
 local function updateImGui()
-    if not isOpen then return end
+    if not isOpen then
+        if botconfig.IsDirty() then
+            botconfig.Save(botconfig.getPath())
+            botconfig.ClearDirty()
+        end
+        return
+    end
     if not czgui then return end
     ImGui.SetNextWindowPos(ImVec2(200, 200), ImGuiCond.FirstUseEver)
     ImGui.SetNextWindowSize(ImVec2(600, 800), ImGuiCond.FirstUseEver)

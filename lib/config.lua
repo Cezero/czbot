@@ -408,6 +408,14 @@ function M.ApplyAndPersist()
     M.MarkDirty()
 end
 
+--- Swap two spell entries in a section array and persist.
+function M.swapSpellEntries(section, fromIndex, toIndex)
+    local spells = M.config[section] and M.config[section].spells
+    if not spells or fromIndex == toIndex then return end
+    spells[fromIndex], spells[toIndex] = spells[toIndex], spells[fromIndex]
+    M.ApplyAndPersist()
+end
+
 local function sanitizeConfigFile(filepath)
     local file, err = io.open(filepath, "r")
     if not file then
