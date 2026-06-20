@@ -136,7 +136,7 @@ For **BRD**, **notmatar** debuffs (mez or any add-only debuff) do **not** use a 
 4. Updates debuff state and optionally sets a **re-apply timer** (see below).
 5. Re-targets the MA.
 
-**matar** debuffs are part of the **combat** twist and play in the normal twist cycle; no special flow.
+**matar** debuffs are part of the **combat** twist and play in the normal twist cycle; no special flow. A matar gem is included **only while the MA (or MT when `onlyMT`) target still needs that debuff** — same rules as the debuff loop (**dontStack**, **stopWhen**, range, stacks, duration). Example: `dontStack = { 'Snared' }` on a snare song drops the gem from twist when the mob is already snared; `stopWhen = { 'Slowed' }` on **Occlusion of Sound** drops it once any slow is on the target.
 
 ### Re-apply timer (mez_remez_sec)
 
@@ -167,7 +167,7 @@ The "already on target" and resist handling for debuffs treat bards specially (e
 | **Buffs**         | Use **self** in bands. Tank, groupbuff, groupmember, pc, mypet, pet have no effect for bards. Self buffs are sustained by the default twist. Use **inIdle** / **inCombat** (GUI) to control twist lists.                                                            |
 | **Default twist** | Idle = inIdle buffs (not near bind; includes pull travel); combat = inCombat buffs + matar debuffs. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI. Bind stealth stops idle twist near primary bind. |
 | **Pull**          | Idle twist continues during pull travel. Use **pull.spell** with a numeric **gem** (and **spell** name) for the agro song.                                                                                                         |
-| **Debuffs**       | **matar** → in combat twist. **notmatar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
+| **Debuffs**       | **matar** → in combat twist (only while still needed; **dontStack** / **stopWhen** apply). **notmatar** (mez, add-only) → twist-once flow; optional **bard.mez_remez_sec** (default 6) to re-apply before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
 | **Cures**         | No special config; twist stops then resumes after cast.                                                                                                                                                                                            |
 | **Interrupts**    | Automatic; the bot does not interrupt bard casts.                                                                                                                                                                                                  |
 | **Movement**      | Automatic; bards can move while casting.                                                                                                                                                                                                           |

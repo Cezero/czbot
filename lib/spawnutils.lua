@@ -780,8 +780,8 @@ function spawnutils.AddSpawnCheck()
     spawnutils.mergeKillTargetIntoMobList(rc)
     spawnutils.mergeEngageTargetIntoMobList(rc)
     spellstates.PruneDebuffStateNotInMobList(rc.MobList)
-    if mq.TLO.Me.Class.ShortName() == 'BRD' and #(rc.MobList or {}) == 0 then
-        if utils.isNearPrimaryBindPoint() then
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        if utils.isNearPrimaryBindPoint() and #(rc.MobList or {}) == 0 then
             bardtwist.StopTwist()
         else
             bardtwist.EnsureDefaultTwistRunning()

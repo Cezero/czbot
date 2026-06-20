@@ -119,11 +119,22 @@ function bardtwist.BuildCombatTwistList()
     end
     local debuffs = botconfig.config.debuff and botconfig.config.debuff.spells
     if debuffs then
+        local botdebuff = package.loaded['botdebuff']
+        if not botdebuff then
+            local ok, mod = pcall(require, 'botdebuff')
+            if ok then botdebuff = mod end
+        end
         for i = 1, #debuffs do
             local entry = debuffs[i]
             if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
                 if debuffHasMatar(entry) then
-                    out[#out + 1] = entry.gem
+                    local needed = true
+                    if botdebuff and botdebuff.MatarDebuffNeededForTwist then
+                        needed = botdebuff.MatarDebuffNeededForTwist(i)
+                    end
+                    if needed then
+                        out[#out + 1] = entry.gem
+                    end
                 end
             end
         end

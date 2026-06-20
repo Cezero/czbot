@@ -106,6 +106,8 @@ M.config = {}
 
 -- Allowed category names for debuff dontStack (MQ Target TLO members). Slowed excluded so stronger slow can overwrite weaker.
 M.DEBUFF_DONTSTACK_ALLOWED = { Charmed = true, Crippled = true, Feared = true, Maloed = true, Mezzed = true, Rooted = true, Snared = true, Tashed = true }
+-- stopWhen: omit from twist / skip cast when target already has category (e.g. Slowed for resist setup debuffs).
+M.DEBUFF_STOPWHEN_ALLOWED = { Slowed = true, Snared = true, Rooted = true, Mezzed = true, Charmed = true, Crippled = true, Feared = true, Maloed = true, Tashed = true }
 M._configLoaders = {}
 M._common = nil
 M._guiDirty = false
@@ -131,7 +133,7 @@ local subOrder = {
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
     buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition' },
-    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack' },
+    debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
 }
@@ -154,7 +156,7 @@ end
 local defaultSpellEntries = {
     heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, inCombat = false, bands = { { targetphase = { 'self', 'tank', 'groupmember' }, validtargets = { 'all' }, min = 0, max = 60 } }, healResource = 'hp', precondition = nil },
     buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, combatOnly = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
-    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'matar', 'notmatar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, onlyMT = false },
+    debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'matar', 'notmatar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, stopWhen = nil, onlyMT = false },
     cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = { 'all' }, enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
 
@@ -537,6 +539,19 @@ local function writeConfigToFile(config, filename)
                     end
                     if #parts > 0 then
                         file:write(indent .. formatKey('dontStack') .. " = { ")
+                        file:write(table.concat(parts, ", "))
+                        file:write(" },\n")
+                        file:flush()
+                    end
+                elseif key == 'stopWhen' and type(value) == "table" and #value > 0 then
+                    local allowed = M.DEBUFF_STOPWHEN_ALLOWED
+                    local parts = {}
+                    for _, c in ipairs(value) do
+                        local tag = tostring(c)
+                        if allowed[tag] then parts[#parts + 1] = "'" .. tag:gsub("'", "\\'") .. "'" end
+                    end
+                    if #parts > 0 then
+                        file:write(indent .. formatKey('stopWhen') .. " = { ")
                         file:write(table.concat(parts, ", "))
                         file:write(" },\n")
                         file:flush()

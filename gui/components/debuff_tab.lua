@@ -25,6 +25,22 @@ local function buildDontStackOptions()
 end
 local DONTSTACK_OPTIONS = buildDontStackOptions()
 
+local function buildStopWhenOptions()
+    local allowed = botconfig.DEBUFF_STOPWHEN_ALLOWED
+    local keys = {}
+    for k in pairs(allowed) do keys[#keys + 1] = k end
+    table.sort(keys)
+    local opts = {}
+    for _, key in ipairs(keys) do
+        local tip = (key == 'Slowed')
+            and 'Stop when target is slowed (e.g. resist setup debuff no longer needed).'
+            or ('Stop when target already has ' .. key .. '.')
+        opts[#opts + 1] = { key = key, label = key, tooltip = tip }
+    end
+    return opts
+end
+local STOPWHEN_OPTIONS = buildStopWhenOptions()
+
 local PRIMARY_OPTIONS_DEBUFF = {
     { value = 'gem',     label = 'Gem' },
     { value = 'item',    label = 'Item' },
@@ -98,6 +114,31 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
                     end
                 end
                 if #entry.dontStack == 0 then entry.dontStack = nil end
+            end
+            if onChanged then onChanged() end
+        end,
+    })
+
+    labeled_grid.checkboxGrid({
+        id = idPrefix .. '_stopwhen',
+        label = 'Stop when:',
+        labelTooltip =
+        'Omit from bard combat twist / skip cast when target already has any of these (e.g. Slowed for Occlusion of Sound after slow lands).',
+        options = STOPWHEN_OPTIONS,
+        value = entry.stopWhen or {},
+        columns = 4,
+        onToggle = function(key, isChecked)
+            if entry.stopWhen == nil then entry.stopWhen = {} end
+            if isChecked then
+                entry.stopWhen[#entry.stopWhen + 1] = key
+            else
+                for i = #entry.stopWhen, 1, -1 do
+                    if entry.stopWhen[i] == key then
+                        table.remove(entry.stopWhen, i)
+                        break
+                    end
+                end
+                if #entry.stopWhen == 0 then entry.stopWhen = nil end
             end
             if onChanged then onChanged() end
         end,

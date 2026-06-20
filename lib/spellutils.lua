@@ -50,6 +50,10 @@ function spellutils.GetDebuffDontStackAllowlist()
     return botconfig.DEBUFF_DONTSTACK_ALLOWED
 end
 
+function spellutils.GetDebuffStopWhenAllowlist()
+    return botconfig.DEBUFF_STOPWHEN_ALLOWED
+end
+
 --- Returns the first category from the list that is present on the current target (Target[tag].ID() > 0), or nil. Only considers tags in the allowlist.
 function spellutils.TargetHasDebuffCategory(categories)
     if not categories or #categories == 0 then return nil end
@@ -107,6 +111,54 @@ end
 --- True when spawn has an Enthrall buff with more than minRemMs left (default 3s).
 function spellutils.SpawnMezActive(spawnId, minRemMs)
     return spellutils.SpawnEnthrallRemainingMs(spawnId) > (minRemMs or getMezActiveThresholdMs())
+end
+
+--- True when spawn has any active attack-slow detrimental (walk buff slots; Spawn.Slowed is unreliable).
+function spellutils.SpawnSlowActive(spawnId, minRemMs)
+    if not spawnId or spawnId <= 0 then return false end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
+    local threshold = minRemMs or MEZ_ACTIVE_MIN_MS
+    local okSlow, slowRef = pcall(function() return sp.Slowed and sp.Slowed() end)
+    if okSlow and slowRef then
+        if type(slowRef) == 'string' and slowRef ~= '' then return true end
+        if slowRef.ID and slowRef.ID() and slowRef.ID() > 0 then
+            local okDur, dur = pcall(function() return slowRef.Duration and slowRef.Duration() or 0 end)
+            local d = (okDur and dur) or 0
+            if d <= 0 or d > threshold then return true end
+        end
+    end
+    local maxSlots = (sp.MaxBuffSlots and sp.MaxBuffSlots()) or 40
+    for i = 1, maxSlots do
+        local b = sp.Buff(i)
+        if b and b() then
+            local okSub, sub = pcall(function() return b.Subcategory and b.Subcategory() end)
+            if okSub and sub == 'Slow' then
+                local okDur, dur = pcall(function() return b.Duration and b.Duration() or 0 end)
+                local d = (okDur and dur) or 0
+                if d <= 0 or d > threshold then return true end
+            end
+        end
+    end
+    return false
+end
+
+--- Returns first stopWhen category present on spawn, or nil.
+function spellutils.SpawnHasStopWhenCategory(spawnId, categories)
+    if not spawnId or spawnId <= 0 or not categories or #categories == 0 then return nil end
+    for _, tag in ipairs(categories) do
+        if botconfig.DEBUFF_STOPWHEN_ALLOWED[tag] then
+            if tag == 'Slowed' then
+                if spellutils.SpawnSlowActive(spawnId) then return tag end
+            elseif tag == 'Mezzed' then
+                if spellutils.SpawnMezActive(spawnId) then return tag end
+            elseif botconfig.DEBUFF_DONTSTACK_ALLOWED[tag] then
+                local found = spellutils.SpawnHasDebuffCategory(spawnId, { tag })
+                if found then return found end
+            end
+        end
+    end
+    return nil
 end
 
 --- Same as TargetHasDebuffCategory but uses Spawn TLO (no retarget required).
@@ -176,6 +228,101 @@ function spellutils.RecordDontStackDebuffFromTarget(targetSpawnId, ourSpell, cat
         end
     end
     spellutils.RecordDontStackDebuffFromSpawn(targetSpawnId, ourSpell, categoryTag)
+end
+
+--- True when spawn still needs this debuff (range, dontStack, stopWhen, stacks, duration). phase: 'matar' | 'notmatar'.
+function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
+    if utils.isProtectedSpawn(spawn) then return false end
+    local gem = entry.gem
+    local myrangeSq = ctx.myrangeSq
+    local spawnId = spawn and spawn.ID and spawn.ID() or nil
+    local isMez = spellutils.IsMezSpell(entry)
+    local function mezSkip(reason)
+        if isMez and phase == 'notmatar' and spawnId then
+            local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawnId))
+            spellutils.DbgMezTrace('skip %s (id %s) - %s', name, spawnId, reason)
+        end
+        return false
+    end
+
+    if phase == 'notmatar' and isMez and ctx.mtTargetId and spawnId == ctx.mtTargetId then
+        return mezSkip('MT target')
+    end
+
+    if entry.gem == 'ability' then
+        local mr = spawn.MaxRangeTo and spawn.MaxRangeTo()
+        local e = mr and math.max(0, mr - 2)
+        myrangeSq = e and (e * e)
+    end
+    local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
+    if ctx.minCastDistSq and distSq and distSq < ctx.minCastDistSq then
+        return mezSkip('too close for targeted AE')
+    end
+    if myrangeSq and distSq and distSq > myrangeSq then
+        return mezSkip('out of range')
+    end
+    local spawnLevel = spawn.Level and spawn.Level()
+    if phase == 'matar' and spawnId then
+        if ctx.maTargetId and spawnId == ctx.maTargetId and ctx.maTargetLvl then
+            spawnLevel = ctx.maTargetLvl
+        elseif ctx.mtTargetId and spawnId == ctx.mtTargetId and ctx.mtTargetLvl then
+            spawnLevel = ctx.mtTargetLvl
+        end
+    end
+    if ctx.spellid and spawnLevel and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < spawnLevel and isMez then
+        local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
+        printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - target level %s exceeds spell max level %s', name, spawn.ID(), spawnLevel, ctx.spellmaxlvl)
+        return false
+    end
+    if entry.stopWhen and spawnId then
+        local stopTag = spellutils.SpawnHasStopWhenCategory(spawnId, entry.stopWhen)
+        if stopTag then
+            return mezSkip('stopWhen ' .. stopTag)
+        end
+    end
+    if entry.dontStack and spawnId then
+        local dontTag = spellutils.SpawnHasDebuffCategory(spawnId, entry.dontStack)
+        if dontTag then
+            spellutils.RecordDontStackDebuffFromSpawn(spawnId, entry.spell, dontTag)
+            if isMez and phase == 'notmatar' then
+                return mezSkip('spawn already ' .. dontTag)
+            end
+            return false
+        end
+    end
+    if isMez and phase == 'notmatar' and entry.spell and spawnId
+        and spellutils.SpawnHasDebuffSpell(entry.spell, spawnId) then
+        return mezSkip('our mez on spawn')
+    end
+    local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
+    if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
+        if phase == 'notmatar' and isMez then
+            local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawn.ID()))
+            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player', name, spawn.ID())
+            return false
+        end
+        if phase == 'matar' and not spellutils.IsConcussionSpell(entry) then
+            return false
+        end
+    end
+    local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
+    if tonumber(ctx.spelldur) and tonumber(ctx.spelldur) > 0 and spawn.ID() and ctx.spellid
+        and spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs) then
+        if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
+            spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
+            spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
+        else
+            return mezSkip('debuff still active')
+        end
+    end
+    if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
+        return mezSkip('not enough mobs in AE range')
+    end
+    if isMez and phase == 'notmatar' and spawnId then
+        local name = (spawn.CleanName and spawn.CleanName()) or ('id ' .. tostring(spawnId))
+        spellutils.MezLog('needs cast on %s (id %s)', name, spawnId)
+    end
+    return true
 end
 
 function spellutils.Init(deps)
