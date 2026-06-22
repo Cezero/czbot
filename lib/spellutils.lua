@@ -1305,8 +1305,11 @@ local function shouldSetHookResumeAfterCast(sr)
 end
 
 --- Debuff casts use CurSpell.target; Target TLO is often cleared mid-cast — do not abort completion polling.
+--- Corpse rez and memorization may clear Target TLO; CurSpell.target is retargeted before /cast.
 local function castTargetDriftBlocksReentry(rc)
     if not rc.CurSpell or not rc.CurSpell.target then return false end
+    if spellutils.IsMemorizing() then return false end
+    if rc.CurSpell.targethit == 'corpse' then return false end
     if rc.CurSpell.target == mq.TLO.Me.ID() then return false end
     if mq.TLO.Target.ID() == rc.CurSpell.target then return false end
     if rc.CurSpell.sub == 'debuff' then return false end
@@ -2409,7 +2412,26 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         rc.CurSpell.viaCastingLib = true
         rc.CurSpell.spellid = castSpellId
         spellutils.AutoinvIfCursorBlockingCast()
+        if rc.CurSpell.phase == 'casting' and casting.isMemorizing() then
+            state.setRunState(state.STATES.casting,
+                {
+                    deadline = mq.gettime() + CASTING_STUCK_MS,
+                    priority = runPriority,
+                    spellcheckResume = rc.CurSpell.spellcheckResume
+                })
+            return true
+        end
         if not casting.start(castRequest) then
+            if casting.isMemorizing() then
+                rc.CurSpell.phase = 'casting'
+                state.setRunState(state.STATES.casting,
+                    {
+                        deadline = mq.gettime() + CASTING_STUCK_MS,
+                        priority = runPriority,
+                        spellcheckResume = rc.CurSpell.spellcheckResume
+                    })
+                return true
+            end
             mezBlocked('casting.start failed')
             rc.CurSpell = {}
             rc.statusMessage = ''
