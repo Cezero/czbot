@@ -191,6 +191,7 @@ local function clearPullState(reason)
     rc.pullAtCampSince = nil
     rc.pullRadiusHadTarget = nil
     rc.pullSpawnWaitSince = nil
+    rawset(rc, 'pullListSignature', nil)
     rawset(rc, 'pullAbortReturnDeadline', nil)
     rc.pullCandidateIds = nil
     rc.pullCandidateIndex = nil
@@ -498,6 +499,17 @@ function botpull.ensurePullCampState(rc)
     ensureCampAndAnchor(rc or state.getRunconfig())
 end
 
+local function pullListSignature(apmoblist)
+    if not apmoblist or not apmoblist[1] then return '' end
+    local ids = {}
+    for _, v in ipairs(apmoblist) do
+        local id = v.ID()
+        if id and id > 0 then ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    return table.concat(ids, ',')
+end
+
 -- Rank spawns by path length; if usepriority, filter to PriorityList first; skip pullAttemptedIds.
 local function selectPullTargets(apmoblist, rc, maxCount)
     if not apmoblist or not apmoblist[1] then return {} end
@@ -513,6 +525,15 @@ local function selectPullTargets(apmoblist, rc, maxCount)
         if #filtered > 0 then candidates = filtered end
     end
     local attempted = rawget(rc, 'pullAttemptedIds') or {}
+    local pullable = {}
+    for _, v in ipairs(candidates) do
+        local sid = v.ID()
+        if sid and sid > 0 and not spawnutils.isPullUnpullable(sid, rc) then
+            pullable[#pullable + 1] = v
+        end
+    end
+    if #pullable == 0 then return {} end
+    candidates = pullable
     local unattempted = {}
     local skippedAttemptedCount = 0
     for _, v in ipairs(candidates) do
@@ -527,6 +548,18 @@ local function selectPullTargets(apmoblist, rc, maxCount)
     end
     if #unattempted > 0 then
         candidates = unattempted
+    else
+        -- Before retrying attempted targets, prefer any never-attempted pullable spawn in the full list.
+        local freshUnattempted = {}
+        for _, v in ipairs(apmoblist) do
+            local sid = v.ID()
+            if sid and sid > 0 and not spawnutils.isPullUnpullable(sid, rc) and not attempted[sid] then
+                freshUnattempted[#freshUnattempted + 1] = v
+            end
+        end
+        if #freshUnattempted > 0 then
+            candidates = freshUnattempted
+        end
     end
     local ranked = {}
     for _, v in ipairs(candidates) do
@@ -630,11 +663,20 @@ local function tickRoamNav(rc)
     end
 end
 
-local function gatePullSpawnWait(rc, hasTarget)
+local function gatePullSpawnWait(rc, apmoblist)
+    local sig = pullListSignature(apmoblist)
+    local hasTarget = apmoblist and apmoblist[1] ~= nil
     if not hasTarget then
         rc.pullRadiusHadTarget = nil
         rc.pullSpawnWaitSince = nil
+        rawset(rc, 'pullListSignature', nil)
         return true
+    end
+    local prevSig = rawget(rc, 'pullListSignature')
+    if prevSig ~= sig then
+        rc.pullRadiusHadTarget = nil
+        rc.pullSpawnWaitSince = nil
+        rawset(rc, 'pullListSignature', sig)
     end
     if not rc.pullRadiusHadTarget then
         rc.pullRadiusHadTarget = true
@@ -657,7 +699,7 @@ function botpull.StartPull()
 
     ensureCampAndAnchor(rc)
     local apmoblist = spawnutils.buildPullMobList(rc)
-    if gatePullSpawnWait(rc, apmoblist[1] ~= nil) then return end
+    if gatePullSpawnWait(rc, apmoblist) then return end
     local maxCandidates = tonumber(myconfig.pull.backupCandidates) or 3
     local targets = selectPullTargets(apmoblist, rc, maxCandidates)
     if not targets[1] then return end
@@ -738,6 +780,22 @@ local function abortPullAndReturnToCamp(reason)
     if reason then printf('\ayCZBot:\ax [Pull] abort: %s', reason) end
 end
 
+local function ensurePullingRunState()
+    if state.getRunState() ~= state.STATES.pulling then
+        state.setRunState(state.STATES.pulling, { priority = bothooks.getPriority('doPull') })
+    end
+end
+
+local function isQueueEntryViable(spawnId, rc)
+    if not spawnId or spawnId <= 0 then return false end
+    local spawn = mq.TLO.Spawn(spawnId)
+    if not spawn or not spawn.ID() or spawn.ID() == 0 or spawn.Type() == 'Corpse' then return false end
+    if spawnutils.isPullUnpullable(spawnId, rc) then return false end
+    local attempted = rawget(rc, 'pullAttemptedIds') or {}
+    if attempted[spawnId] then return false end
+    return true
+end
+
 local function beginPullCandidate(rc, spawn, reason)
     local spawnId = spawn.ID()
     rc.pullAPTargetID = spawnId
@@ -745,6 +803,8 @@ local function beginPullCandidate(rc, spawn, reason)
     rc.pullPhase = nil
     rc.pullDeadline = nil
     rc.pullAggroingStartTime = nil
+    rc.pullNavStartHP = mq.TLO.Me.PctHPs()
+    rc.pullXTargetIdsAtStart = getCurrentXTargetIdSet()
     rc.pullState = 'navigating'
     mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /mqtarget clear')
     mq.cmdf('/nav id %s dist= 7 log=off los=on', spawnId)
@@ -761,10 +821,10 @@ local function advanceToNextPullCandidate(rc, reason)
     local idx = (rc.pullCandidateIndex or 1) + 1
     while idx <= #queue do
         local spawnId = queue[idx]
-        local spawn = mq.TLO.Spawn(spawnId)
-        if spawn and spawn.ID() and spawn.ID() > 0 and spawn.Type() ~= 'Corpse' then
+        if isQueueEntryViable(spawnId, rc) then
             rc.pullCandidateIndex = idx
-            beginPullCandidate(rc, spawn, reason)
+            beginPullCandidate(rc, mq.TLO.Spawn(spawnId), reason)
+            ensurePullingRunState()
             return true
         end
         idx = idx + 1
@@ -772,14 +832,41 @@ local function advanceToNextPullCandidate(rc, reason)
     return false
 end
 
+local function rebuildPullCandidatesFromArea(rc, reason)
+    local excludeId = rc.pullAPTargetID
+    local apmoblist = spawnutils.buildPullMobList(rc)
+    local maxCandidates = tonumber(myconfig.pull.backupCandidates) or 3
+    local targets = selectPullTargets(apmoblist, rc, maxCandidates)
+    local filtered = {}
+    for _, s in ipairs(targets) do
+        local sid = s.ID()
+        if sid and sid > 0 and sid ~= excludeId and isQueueEntryViable(sid, rc) then
+            filtered[#filtered + 1] = s
+        end
+    end
+    if not filtered[1] then return false end
+    local candidateIds = {}
+    for i, s in ipairs(filtered) do
+        candidateIds[i] = s.ID()
+    end
+    rc.pullCandidateIds = candidateIds
+    rc.pullCandidateIndex = 1
+    beginPullCandidate(rc, filtered[1], reason)
+    ensurePullingRunState()
+    return true
+end
+
+---@return boolean true when a backup pull was started (no camp return)
 local function abortPullSoftFailure(reason)
     local rc = state.getRunconfig()
-    if advanceToNextPullCandidate(rc, reason) then return end
+    if advanceToNextPullCandidate(rc, reason) then return true end
+    if rebuildPullCandidatesFromArea(rc, reason) then return true end
     if myconfig.pull.hunter then
         abortRoamHunt(reason)
     else
         abortPullAndReturnToCamp(reason)
     end
+    return false
 end
 
 local function hasCampAnchor(rc)
@@ -1279,6 +1366,7 @@ end
 --- Abort active pull when FTE lock fires (clears APTarget and returns to camp when navigating/aggroing).
 ---@param reason string|nil
 ---@param spawnId number|nil FTE-locked NPC spawn id
+---@return boolean true when a backup pull was started instead of returning to camp
 function botpull.AbortPullForFTE(reason, spawnId)
     local rc = state.getRunconfig()
     if APTarget then APTarget = false end
@@ -1291,13 +1379,15 @@ function botpull.AbortPullForFTE(reason, spawnId)
         if not rc.pullHealerManaWait and not rc.pullDebuffWait then
             rc.statusMessage = 'FTE locked, finding another target'
         end
-        return
+        return false
     end
-    if state.getRunState() == state.STATES.pulling and rc.pullAPTargetID then
-        abortPullSoftFailure(reason or 'FTE lock detected')
+    local inActivePull = rc.pullState == 'navigating' or rc.pullState == 'aggroing'
+    if inActivePull and rc.pullAPTargetID then
+        return abortPullSoftFailure(reason or 'FTE lock detected')
     elseif rc.pullAPTargetID then
         rc.pullAPTargetID = nil
     end
+    return false
 end
 
 return botpull

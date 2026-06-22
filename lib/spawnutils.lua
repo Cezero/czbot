@@ -407,6 +407,13 @@ function spawnutils.isAliveEngageSpawn(spawn)
     return true
 end
 
+--- True when spawn is a valid melee engage target (NPC or non-PC pet; excludes self/PC).
+function spawnutils.isNpcEngageTarget(spawn)
+    if not spawnutils.isAliveEngageSpawn(spawn) then return false end
+    local t = spawn.Type()
+    return t == 'NPC' or (t == 'Pet' and spawn.Master.Type() ~= 'PC')
+end
+
 local function filterSpawnForCamp(spawn, rc)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
     local myconfig = botconfig.config
@@ -417,7 +424,7 @@ local function filterSpawnForCamp(spawn, rc)
     if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
     local sid = spawn.ID()
-    if spawnutils.isRoamPullMode(rc) and sid and spawnutils.isPullUnpullable(sid, rc) then return false end
+    if rc.dopull == true and sid and spawnutils.isPullUnpullable(sid, rc) then return false end
     local tfNum = myconfig.settings.TargetFilter or 0
     return filterSpawnTargetFilter(spawn, tfNum)
 end
@@ -544,7 +551,7 @@ end
 function spawnutils.validateAcmTarget(rc)
     rc = rc or state.getRunconfig()
     if rc.engageTargetId then
-        if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
+        if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(rc.engageTargetId)) then
             rc.engageTargetId = nil
             rc.attackCommandEngage = nil
             if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
@@ -583,7 +590,7 @@ function spawnutils.mergeEngageTargetIntoMobList(rc)
     rc = rc or state.getRunconfig()
     local id = rc.engageTargetId
     if not id or id <= 0 then return end
-    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then return end
+    if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(id)) then return end
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == id then return end
     end
@@ -764,6 +771,11 @@ function spawnutils.tickCombatFTERechecks(rc)
                     end
                     rc.fteRecheckProbeId = nil
                     rc.fteRecheckInProgress = false
+                    if engageId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) then
+                        mq.cmdf('/squelch /tar id %s', engageId)
+                    else
+                        mq.cmd('/squelch /mqtarget clear')
+                    end
                 end
             end
         end

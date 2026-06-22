@@ -202,7 +202,7 @@ end
 -- Shared MA/MT target pick from a sorted LOS list. Skip mezzed; if all mezzed, pick shortest remaining mez and stick.
 local function selectEngageTargetFromLosList(losList, engageId)
     local rc = state.getRunconfig()
-    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+    if engageId and not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) then
         engageId = nil
     end
 
@@ -378,7 +378,7 @@ end
 local function selectMATarget()
     local rc = state.getRunconfig()
     local engageId = rc.engageTargetId
-    if engageId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+    if engageId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) then
         if not spawnutils.isCampAcleashEnforced(rc) then
             local inMobList = false
             for _, v in ipairs(rc.MobList or {}) do
@@ -396,7 +396,8 @@ local function selectMATarget()
 
     if mq.TLO.Me.Combat() then
         local curId = mq.TLO.Target.ID()
-        if curId and curId > 0 and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(curId)) then
+        local meId = mq.TLO.Me.ID()
+        if curId and curId > 0 and curId ~= meId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(curId)) then
             local curSpawn = mq.TLO.Spawn(curId)
             if curSpawn.Named() then
                 return curId
@@ -445,7 +446,7 @@ local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
 
-    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageTargetId)) then
+    if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageTargetId)) then
         local rc = state.getRunconfig()
         rc.engageTargetId = nil
         rc.attackCommandEngage = nil
@@ -666,10 +667,9 @@ function botmelee.getHookFn(name)
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local chaseEngage = spawnutils.shouldChaseOutsideCamp(rc)
             if not rc.MobList[1] and not chaseEngage then
-                if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil
-                if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
+                disengageCombat()
                 return
             end
             tryRogueEvade()

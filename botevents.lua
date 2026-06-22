@@ -146,21 +146,35 @@ function botevents.Event_FTELocked()
     if displayName and displayName ~= '' then
         printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', displayName)
     end
-    if rc.fteRecheckProbeId and spawnId and rc.fteRecheckProbeId == spawnId then
+    if not spawnId then return end
+    local isProbe = rc.fteRecheckProbeId and rc.fteRecheckProbeId == spawnId
+    if isProbe then
         rc.fteRecheckProbeId = nil
     end
-    if not spawnId then return end
     if rc.FTECount == 0 then rc.FTECount = rc.FTECount + 1 end
-    spawnutils.recordFTE(rc, spawnId, { combat = true, pull = rc.dopull == true })
+    spawnutils.recordFTE(rc, spawnId, { combat = true, pull = rc.dopull == true and not isProbe })
+    if isProbe then
+        if rc.engageTargetId == spawnId then
+            rc.engageTargetId = nil
+            rc.attackCommandEngage = nil
+        end
+        return
+    end
     if rc.engageTargetId == spawnId then
         rc.engageTargetId = nil
         rc.attackCommandEngage = nil
     end
     if rc.dopull then
         print('clearing pull target because FTELock detected') -- not debug, real error message
-        botpull.AbortPullForFTE('FTE lock detected', spawnId)
+        local backupStarted = botpull.AbortPullForFTE('FTE lock detected', spawnId)
+        if backupStarted then
+            mq.cmd('/multiline ; /squelch /mqtarget clear ; /attack off ; /stopcast ; /stick off')
+        else
+            mq.cmd('/multiline ; /squelch /mqtarget clear ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
+        end
+        return
     end
-    mq.cmd('/multiline ; /squelch /mqtarget myself ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
+    mq.cmd('/multiline ; /squelch /mqtarget clear ; /attack off ; /stopcast ; /nav stop log=off; /stick off')
 end
 
 function botevents.Event_GMDetected()
