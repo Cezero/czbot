@@ -6,7 +6,6 @@ local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local botmove = require('botmove')
 local utils = require('lib.utils')
-local charinfo = require('plugin.charinfo')
 local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
 local spawnutils = require('lib.spawnutils')
@@ -273,51 +272,13 @@ local function isEngageableMobListSpawn(spawn)
     return spawn.LineOfSight()
 end
 
--- MT only: pick from MobList (closest LOS). Prefer Puller's target when present. Skip mezzed; if all mezzed, return shortest remaining mez.
--- Returns mtPick spawn, engageTargetRefound.
-local function selectTankTarget(mainTankName)
-    if mainTankName ~= mq.TLO.Me.Name() then return nil, false end
-    local gmt = mq.TLO.Group.MainTank
-    local groupMTName = (gmt and gmt.Name) and gmt.Name() or nil
-    if not (mq.TLO.Raid.Members() or not mq.TLO.Group() or groupMTName == mq.TLO.Me.Name()) then return nil, false end
-    if mq.TLO.Me.Combat() then return nil, false end
-    local pullerTarID = tankrole.GetPullerTargetID()
-    local rc = state.getRunconfig()
-    local losList = {}
-    for _, v in ipairs(rc.MobList) do
-        if isEngageableMobListSpawn(v) then table.insert(losList, v) end
-    end
-    if #losList == 0 then return nil, false end
-    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
-    local engageId = rc.engageTargetId
-    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
-        engageId = nil
-    end
-    table.sort(losList, function(a, b)
-        local aId, bId = a.ID(), b.ID()
-        if aId == pullerTarID and bId ~= pullerTarID then return true end
-        if aId ~= pullerTarID and bId == pullerTarID then return false end
-        if engageId and aId == engageId and bId ~= engageId then return true end
-        if engageId and aId ~= engageId and bId == engageId then return false end
-        local da = utils.getDistanceSquared2D(meX, meY, a.X(), a.Y())
-        local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
-        return (da or 0) < (db or 0)
-    end)
-    local id = selectEngageTargetFromLosList(losList, engageId)
-    return id, (id and id == engageId) or false
-end
-
--- Offtank: if MT target == MA target pick add (Nth other mob); else tank MA's target. Returns chosen id or nil.
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if not mainTankName or mainTankName == '' then return nil end
     local rc = state.getRunconfig()
     local _, _, maTarId, maTarHp, maFromCache = spellutils.GetAssistInfo(true, assistpct)
     if maTarId == 0 then maTarId = nil end
-    local mtInfo = charinfo.GetInfo(mainTankName)
-    local mtTarId = (mtInfo and mtInfo.ID and mtInfo.Target) and mtInfo.Target.ID or nil
-    if not mtTarId and mq.TLO.Spawn('pc =' .. mainTankName).ID() then
-        mtTarId = botmelee.GetPCTarget(mainTankName)
-    end
+    local _, _, mtTarId = spellutils.GetTankInfo(true)
+    if mtTarId == 0 then mtTarId = nil end
     if mtTarId == maTarId then
         local otoffset = myconfig.melee.otoffset or 0
         local nthSpawn = spawnutils.selectNthAdd(rc.MobList, maTarId, otoffset + 1)
@@ -334,6 +295,42 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     elseif maTarId and maTarId > 0 then
         return maTarId
     end
+    return nil
+end
+
+local function hasAliveEngageTarget(rc)
+    local engageId = rc.engageTargetId
+    if not engageId or engageId <= 0 then return false end
+    return spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId))
+        and not charm.isCharmSkipped(engageId, rc)
+end
+
+-- MA target for MT immediate follow (no assistpct gate).
+local function getMaFollowTargetId()
+    local rc = state.getRunconfig()
+    local _, _, maTarId, _, fromCache = spellutils.GetAssistInfo(true)
+    if not maTarId or maTarId <= 0 then return nil end
+    if charm.isCharmSkipped(maTarId, rc) then return nil end
+    if fromCache then
+        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then return maTarId end
+        return nil
+    end
+    if not spawnutils.isCampAcleashEnforced(rc) then return maTarId end
+    for _, v in ipairs(rc.MobList or {}) do
+        if v.ID() == maTarId then return maTarId end
+    end
+    return nil
+end
+
+-- Separate MT bot: follow MA immediately; mtSticky keeps current target once engaged.
+local function resolveMtFollowTarget()
+    local rc = state.getRunconfig()
+    if hasAliveEngageTarget(rc) and myconfig.melee.mtSticky then
+        return rc.engageTargetId
+    end
+    local maTarId = getMaFollowTargetId()
+    if maTarId then return maTarId end
+    if hasAliveEngageTarget(rc) then return rc.engageTargetId end
     return nil
 end
 
@@ -425,6 +422,7 @@ local function selectMATarget()
     if namedId then return namedId end
 
     local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+    local pullerTarID = tankrole.GetPullerTargetID()
     local losList = {}
     for _, v in ipairs(rc.MobList) do
         if isEngageableMobListSpawn(v) then losList[#losList + 1] = v end
@@ -433,6 +431,11 @@ local function selectMATarget()
 
     engageId = nil
     table.sort(losList, function(a, b)
+        local aId, bId = a.ID(), b.ID()
+        if pullerTarID then
+            if aId == pullerTarID and bId ~= pullerTarID then return true end
+            if aId ~= pullerTarID and bId == pullerTarID then return false end
+        end
         local da = utils.getDistanceSquared2D(meX, meY, a.X(), a.Y())
         local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
         return (da or 0) < (db or 0)
@@ -441,13 +444,20 @@ local function selectMATarget()
     return selectEngageTargetFromLosList(losList, engageId)
 end
 
--- When no engageTargetId: stick off, attack off, pet back, clear NPC target.
+local function resolveMaBotTarget(rc)
+    if rc.attackCommandEngage and rc.engageTargetId then
+        return rc.engageTargetId
+    end
+    return selectMATarget()
+end
+
+-- When no engageTargetId: stick off, attack off, pet back. Clear NPC target only when auto-attack is on (releasing a fight).
 local function disengageCombat()
     _lastEngageStickCmd = nil
     local rc = state.getRunconfig()
     rc.allMezzedEngageId = nil
     if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
-    combat.ResetCombatState()
+    combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
     if state.getRunState() == state.STATES.melee then state.clearRunState() end
 end
 
@@ -530,14 +540,14 @@ local function engageTarget()
     end
 end
 
--- Resolve engageTargetId from role (MT/MA/OT/DPS), then engage or disengage. Only sets melee busy state via canStartBusyState.
+-- Resolve engageTargetId from role (MA picker / MT follower / OT / DPS), then engage or disengage.
 function botmelee.AdvCombat()
     local assistName = tankrole.GetAssistTargetName()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
     local rc = state.getRunconfig()
 
-    if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Master.Type() == 'PC' then
+    if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Type() == 'PC' then
         clearTankCombatState()
     end
     if tankrole.AmIMainAssist() and not rc.attackCommandEngage then
@@ -545,66 +555,21 @@ function botmelee.AdvCombat()
         if tid and tid > 0 and charm.isCharmSkipped(tid, rc) then
             rc.engageTargetId = nil
             rc.allMezzedEngageId = nil
-            combat.ResetCombatState()
+            combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
         end
     end
 
     local id = nil
-    local engageTargetRefound = false
-    if tankrole.AmIMainTank() then
-        if myconfig.melee.offtank and assistName and mainTankName then
-            -- An offtank MT does not follow MA (this bot's melee is independent).
-            id = resolveOfftankTarget(assistName, mainTankName, assistpct)
-        elseif tankrole.AmIMainAssist() and not myconfig.melee.offtank then
-            if rc.attackCommandEngage and rc.engageTargetId then
-                id = rc.engageTargetId
-            else
-                id = selectMATarget()
-            end
-        elseif myconfig.melee.mtSticky and not myconfig.melee.offtank then
-            -- Sticky MT: keep tanking its own target.
-            id, engageTargetRefound = selectTankTarget(mainTankName)
-            -- selectTankTarget returns nil in combat; preserve engageTargetId so we don't disengage.
-            if id == nil and rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId))
-                and not charm.isCharmSkipped(rc.engageTargetId, rc) then
-                if not spawnutils.isCampAcleashEnforced(rc) then
-                    id = rc.engageTargetId
-                elseif mq.TLO.Me.Combat() and rc.MobList then
-                    for _, v in ipairs(rc.MobList) do
-                        if v.ID() == rc.engageTargetId and spawnutils.isAliveEngageSpawn(v) then
-                            id = rc.engageTargetId
-                            break
-                        end
-                    end
-                end
-            end
-            if engageTargetRefound then
-                botmove.StartReturnToFollowAfterEngage()
-            end
-        else
-            -- Default MT behavior: assist MA like other melee bots.
-            if assistName then
-                id = resolveMeleeAssistTarget(assistName, assistpct)
-            end
-            -- If MA isn't set/resolvable, fall back to legacy behavior so we can still engage.
-            if not id and not assistName then
-                id, engageTargetRefound = selectTankTarget(mainTankName)
-            end
-        end
+    if rc.attackCommandEngage and rc.engageTargetId then
+        id = rc.engageTargetId
     elseif tankrole.AmIMainAssist() then
-        if rc.attackCommandEngage and rc.engageTargetId then
-            id = rc.engageTargetId
-        else
-            id = selectMATarget()
-        end
-    else
-        if rc.attackCommandEngage and rc.engageTargetId then
-            id = rc.engageTargetId
-        elseif myconfig.melee.offtank and assistName and mainTankName then
-            id = resolveOfftankTarget(assistName, mainTankName, assistpct)
-        elseif assistName then
-            id = resolveMeleeAssistTarget(assistName, assistpct)
-        end
+        id = resolveMaBotTarget(rc)
+    elseif myconfig.melee.offtank and assistName and mainTankName then
+        id = resolveOfftankTarget(assistName, mainTankName, assistpct)
+    elseif tankrole.AmIMainTank() and assistName and not tankrole.AmIMainAssist() then
+        id = resolveMtFollowTarget()
+    elseif assistName then
+        id = resolveMeleeAssistTarget(assistName, assistpct)
     end
     if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
@@ -617,7 +582,8 @@ function botmelee.AdvCombat()
             (cs.phase == 'precast' or cs.phase == 'precast_wait_move' or cs.phase == 'casting' or cs.phase == 'cast_complete_pending_resist')
         local skipAssistStatus = state.getRunState() == state.STATES.casting or curSpellBusy
         if not skipAssistStatus then
-            if tankrole.AmIMainTank() and myconfig.melee.mtSticky == true and not myconfig.melee.offtank then
+            if tankrole.AmIMainTank() and myconfig.melee.mtSticky == true and not myconfig.melee.offtank
+                and not tankrole.AmIMainAssist() then
                 rc.statusMessage = string.format('Tanking %s (%s)', name, rc.engageTargetId)
             elseif myconfig.melee.offtank then
                 rc.statusMessage = string.format('Off-tanking %s (%s)', name, rc.engageTargetId)

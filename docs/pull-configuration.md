@@ -182,7 +182,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 ## Relation to Group.Puller
 
 - **No gating:** The bot does **not** check whether this character is the **Group.Puller**. Any character with **dopull** `true` will run the pull loop. You can have multiple pullers or a single designated puller; the config does not restrict who pulls.
-- **MT target preference:** When this bot is the **Main Tank** (and TankName is set to `"automatic"`), the bot uses **Group.Puller** only to **prefer the Puller’s current target** when choosing which mob from the camp list to engage. So: the puller brings a mob to camp → the MT picks a target and prefers that mob. For how to set up MT, MA, and Puller, see [Tank and Assist Roles](tank-and-assist-roles.md).
+- **MA target preference:** When this bot is the **Main Assist**, it **prefers the Puller’s current target** when choosing which mob from the camp list to engage. For MT, MA, and Puller setup, see [Tank and Assist Roles](tank-and-assist-roles.md).
 
 ---
 

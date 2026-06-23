@@ -418,7 +418,8 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     if targethit == 'matar' and EvalID and EvalID > 0 then
         local rc = state.getRunconfig()
         local desiredPetTargetId = EvalID
-        if tankrole.AmIMainTank() and myconfig.melee['mtSticky'] == true and not myconfig.melee.offtank then
+        if tankrole.AmIMainTank() and myconfig.melee['mtSticky'] == true and not myconfig.melee.offtank
+            and not tankrole.AmIMainAssist() then
             -- Sticky MT: keep melee/pets on MT target even if the matar debuff is aimed at MA target.
             local _, _, mtTargetId = spellutils.GetTankInfo(true)
             if mtTargetId and mtTargetId ~= 0 then
@@ -483,8 +484,15 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
         local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
         if stillSinging then
             w.singingStarted = true
-            return true
         end
+        return true
+    end
+    if not w.singingStarted then
+        rc.bardNotmatarWait = nil
+        state.clearRunState()
+        retargetMaTargetAfterBardMez()
+        bardtwist.RestoreCombatTwistAfterNotmatar()
+        return true
     end
     rc.bardNotmatarWait = nil
     state.clearRunState()
@@ -717,7 +725,8 @@ function botdebuff.DebuffCheck(runPriority)
 
         -- Sticky MT mode: pets stay on MT's target even when a tanktar debuff is aimed at MA.
         if not (desiredPetTargetId and desiredPetTargetId > 0) then
-            if tankrole.AmIMainTank() and botconfig.config.melee and botconfig.config.melee['mtSticky'] == true and not botconfig.config.melee.offtank then
+            if tankrole.AmIMainTank() and botconfig.config.melee and botconfig.config.melee['mtSticky'] == true
+                and not botconfig.config.melee.offtank and not tankrole.AmIMainAssist() then
                 desiredPetTargetId = mtTargetId
             else
                 desiredPetTargetId = maTargetId

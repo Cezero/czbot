@@ -51,6 +51,21 @@ local function leaderContextFromCharinfo(name, peer)
     }
 end
 
+local PLAYERSTATE_AGGRESSIVE = 4
+local PLAYERSTATE_FORCED_AGGRESSIVE = 8
+
+local function spawnInAttack(spawn)
+    if not spawn then return false end
+    local psFn = spawn.PlayerState
+    if psFn then
+        local ps = psFn()
+        if ps then return (ps & (PLAYERSTATE_AGGRESSIVE | PLAYERSTATE_FORCED_AGGRESSIVE)) ~= 0 end
+    end
+    local aggFn = spawn.Aggressive
+    if aggFn then return aggFn() == true end
+    return false
+end
+
 local function leaderContextFromSpawn(name)
     local spawn = mq.TLO.Spawn('pc =' .. name)
     local spawnId = spawn and spawn.ID()
@@ -70,7 +85,7 @@ local function leaderContextFromSpawn(name)
         z = sz,
         distance = distance,
         targetId = targetId,
-        inAttack = spawn.Combat() == true,
+        inAttack = spawnInAttack(spawn),
         alive = alive,
         sameZone = true,
         peer = nil,

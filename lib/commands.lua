@@ -2,6 +2,13 @@
 -- Uses globals and modules from the CZBot environment (state.getRunconfig(), botconfig, etc.).
 
 local M = {}
+
+--- Normalize a tank/assist command name argument ('automatic' or capitalized PC name).
+function M.normalizeRoleNameArg(raw)
+    if raw == 'automatic' then return 'automatic' end
+    return raw:sub(1, 1):upper() .. raw:sub(2)
+end
+
 local mq = require('mq')
 local botconfig = require('lib.config')
 local botgui = require('gui.components.botgui')
@@ -467,8 +474,7 @@ local function cmd_attack(args)
     local assistName
     local overrideName -- used for messages when args[2] was a specific player name
     if args[2] and args[2]:match('%S') then
-        local raw = args[2]
-        local normalized = (raw == 'automatic') and 'automatic' or (raw:sub(1, 1):upper() .. raw:sub(2))
+        local normalized = M.normalizeRoleNameArg(args[2])
         if normalized == 'automatic' then
             assistName = tankrole.GetAssistTargetName()
         else
@@ -482,12 +488,12 @@ local function cmd_attack(args)
         printf('\ayCZBot:\ax\ar No Main Assist set, cannot engage')
         return
     end
-    local maInfo = charinfo.GetInfo(assistName)
-    if not maInfo then
+    local _, assistid, KillTarget = spellutils.GetAssistInfo(true)
+    if not assistid or assistid == 0 then
         printf('\ayCZBot:\ax\ar Could not find %s\ax', assistName)
         return
     end
-    local KillTarget = maInfo.Target and maInfo.Target.ID or nil
+    if KillTarget == 0 then KillTarget = nil end
     if KillTarget and utils.isProtectedSpawn(mq.TLO.Spawn(KillTarget)) then
         printf('\ayCZBot:\ax\ar Cannot engage protected NPC\ax')
         return
@@ -517,7 +523,7 @@ end
 -- Set MT (Main Tank).
 local function cmd_tank(args)
     if not args[2] then return end
-    local name = (args[2] == 'automatic') and 'automatic' or (args[2]:sub(1, 1):upper() .. args[2]:sub(2))
+    local name = M.normalizeRoleNameArg(args[2])
     state.getRunconfig().TankName = name
     printf('\ayCZBot:\axSetting tank to %s', name)
     mq.TLO.Target.TargetOfTarget()
@@ -526,7 +532,7 @@ end
 -- Set MA (Main Assist).
 local function cmd_assist(args)
     if not args[2] then return end
-    local name = (args[2] == 'automatic') and 'automatic' or (args[2]:sub(1, 1):upper() .. args[2]:sub(2))
+    local name = M.normalizeRoleNameArg(args[2])
     local rc = state.getRunconfig()
     rc.AssistName = name
     rc.lastAssistTargetId = nil
@@ -934,7 +940,8 @@ local function cmd_chchain(args)
         if args[3] == mq.TLO.Me.Name() then chchain.OnGo('start', mq.TLO.Me.Name()) end
     end
     if args[2] == 'tank' then
-        if mq.TLO.Spawn('=' .. args[3]) then
+        local sp = mq.TLO.Spawn('=' .. args[3])
+        if sp and sp.Type() == 'PC' and sp.ID() and sp.ID() > 0 then
             rc.chchainTank = args[3]
             rc.chchainTanklist = {}
         end

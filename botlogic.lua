@@ -227,7 +227,8 @@ local function charState_PostDead()
                 if not desiredPetTargetId then
                     -- If MA has no target, do not fall back to MT target.
                     -- Only allow MT->pet fallback when MT sticky mode is enabled.
-                    if tankrole.AmIMainTank() and myconfig.melee and myconfig.melee.mtSticky == true and not myconfig.melee.offtank then
+                    if tankrole.AmIMainTank() and myconfig.melee and myconfig.melee.mtSticky == true
+                        and not myconfig.melee.offtank and not tankrole.AmIMainAssist() then
                         local _, _, tanktar = spellutils.GetTankInfo(true)
                         if tanktar and tanktar ~= 0 then desiredPetTargetId = tanktar end
                     end

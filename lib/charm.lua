@@ -87,12 +87,14 @@ function charm.EvalTarget(index, ctx)
         (gem == 'item' and mq.TLO.FindItem(entry.spell)() and mq.TLO.FindItem(entry.spell).Spell.ID())
     _charmindex = index
     local rc = state.getRunconfig()
-    if not mq.TLO.Me.Pet.ID() and not mq.TLO.Me.Pet.IsSummoned() and rc.charmid then rc.charmid = nil end
-    if mq.TLO.Me.Pet.ID() and mq.TLO.Me.Pet.ID() > 0 and not mq.TLO.Me.Pet.IsSummoned() and not rc.charmid then
-        rc.charmid = mq.TLO.Me.Pet.ID()
-        charm.trackCharmSkip(rc.charmid, rc)
-    end
-    if mq.TLO.Me.Pet.ID() and mq.TLO.Me.Pet.ID() > 0 and rc.charmid and mq.TLO.Me.Pet.ID() == rc.charmid then
+    local petId = mq.TLO.Me.Pet.ID() or 0
+    local isSummoned = mq.TLO.Me.Pet.IsSummoned()
+    if petId == 0 and not isSummoned and rc.charmid then rc.charmid = nil end
+    if petId > 0 and not isSummoned then
+        if not rc.charmid or rc.charmid ~= petId then
+            rc.charmid = petId
+            charm.trackCharmSkip(rc.charmid, rc)
+        end
         charm.trackCharmSkip(rc.charmid, rc)
         return nil, nil
     end
@@ -102,7 +104,7 @@ function charm.EvalTarget(index, ctx)
         local overLevel = ctx.spellid and v.Level() and ctx.spellmaxlvl and ctx.spellmaxlvl ~= 0 and ctx.spellmaxlvl < v.Level()
         local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), v.X(), v.Y())
         local outOfRange = ctx.myrange and distSq and distSq > (ctx.myrange * ctx.myrange)
-        if not overLevel and not outOfRange and tarstacks and tonumber(ctx.spelldur) > 0 then
+        if not overLevel and not outOfRange and tarstacks and (tonumber(ctx.spelldur) or 0) > 0 then
             local mobhp = v.PctHPs()
             if ctx.mobMin ~= nil and (mobhp == nil or mobhp < ctx.mobMin) then
                 -- skip: mob below band

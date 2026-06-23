@@ -1,6 +1,6 @@
 -- Resolves Main Tank (MT) vs Main Assist (MA) for the bot.
--- MT = who gets heals and who may pick from MobList when they are a bot.
--- MA = who DPS and offtank follow (whose target to attack).
+-- MT = who gets heals, mtSticky follow rules, and onlyMT abilities (taunt). MT never picks camp mobs.
+-- MA = who selects targets from MobList (named-first, puller priority); DPS/offtank/non-sticky MT follow MA.
 -- "automatic" uses Group/Raid window roles: Group.MainTank, Group.MainAssist, Group.Puller.
 -- Raid has MainAssist only; MainTank and Puller always come from Group.
 -- When primary is unavailable, falls back to cz_common ma_list / mt_list (proximity-gated).
@@ -13,10 +13,12 @@ local charinfoutils = require('lib.charinfoutils')
 
 local tankrole = {}
 
-local function getAnchorLeash()
+function tankrole.getAnchorLeash()
     local settings = botconfig.config.settings
     return tonumber(settings.maAnchorLeash) or tonumber(settings.acleash) or 75
 end
+
+local getAnchorLeash = tankrole.getAnchorLeash
 
 local function isCandidateAvailable(name, requireLeash)
     if not name or name == '' then return false end
@@ -82,7 +84,7 @@ function tankrole.GetAssistTargetName()
     return name
 end
 
---- Return the Main Tank's character name (who gets heals; who may pick from MobList). Reads TankName from runconfig.
+--- Return the Main Tank's character name (who gets heals). Reads TankName from runconfig.
 ---@return string|nil
 function tankrole.GetMainTankName()
     local name = state.getRunconfig().TankName
@@ -93,10 +95,10 @@ function tankrole.GetMainTankName()
     return name
 end
 
---- Return the Puller's current target ID when this toon is the MT (for puller priority in selectTankTarget). Group only; Raid has no Puller.
+--- Return the Puller's current target ID when this toon is the MA (puller priority in selectMATarget). Group only; Raid has no Puller.
 ---@return number|nil
 function tankrole.GetPullerTargetID()
-    if tankrole.GetMainTankName() ~= mq.TLO.Me.Name() then return nil end
+    if not tankrole.AmIMainAssist() then return nil end
     local puller = mq.TLO.Group.Puller
     if not puller or not puller.Name then return nil end
     local pullerName = puller.Name()

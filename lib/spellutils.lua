@@ -408,10 +408,10 @@ function spellutils.SpellCheck(Sub, ID)
         if (spellmana > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < spellmana) or (mq.TLO.Me.PctMana() < minmana)) then return false end
     end
     if gem == 'alt' then
-        if not mq.TLO.Me.AltAbilityReady(spell) then return false end
+        if not mq.TLO.Me.AltAbilityReady(spell)() then return false end
     end
     if gem == 'disc' and spellend then
-        if not mq.TLO.Me.CombatAbilityReady(spell) then return false end
+        if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
         if (spellend and ((mq.TLO.Me.CurrentEndurance() - (mq.TLO.Me.EnduranceRegen() * 2)) < spellend) or (mq.TLO.Me.PctMana() < minmana)) then return false end
     end
     return true
@@ -1141,32 +1141,34 @@ local function selfTargetIdFromMobList()
     return nil, nil
 end
 
+--- Resolve a leader PC's spawn id and optional NPC target (charinfo, /assist fallback, self MobList).
+local function getLeaderPcTargetInfo(leaderName, includeTarget)
+    if not leaderName or leaderName == '' then return nil, nil, nil, nil end
+    local leaderid = mq.TLO.Spawn('pc =' .. leaderName).ID()
+    if not includeTarget then return leaderName, leaderid, nil, nil end
+    local tartar, tartarhp
+    local info = charinfo.GetInfo(leaderName)
+    if info and info.ID then
+        tartar = info.Target and info.Target.ID or nil
+        tartarhp = info.TargetHP
+    elseif leaderid then
+        local botmelee = require('botmelee')
+        tartar = botmelee.GetPCTarget(leaderName)
+        tartarhp = tartar and mq.TLO.Spawn(tartar).PctHPs() or nil
+    end
+    if includeTarget and leaderName == mq.TLO.Me.Name() and (not tartar or tartar == 0) then
+        local t, h = selfTargetIdFromMobList()
+        if t then tartar, tartarhp = t, h end
+    end
+    if tartar == 0 then tartar = nil end
+    return leaderName, leaderid, tartar, tartarhp
+end
+
 -- Tank = Main Tank only (heals). Uses GetPCTarget for MT's target when needed. Assist/MA is not used here.
 function spellutils.GetTankInfo(includeTarget)
-    local mainTankName = state.getRunconfig().TankName
-    if mainTankName == 'automatic' then
-        local mtn = tankrole.GetMainTankName()
-        if mtn then mainTankName = mtn end
-    end
+    local mainTankName = tankrole.GetMainTankName()
     if not mainTankName or mainTankName == '' then return nil, nil, nil, nil end
-    local tankid = mq.TLO.Spawn('pc =' .. mainTankName).ID()
-    if not includeTarget then return mainTankName, tankid, nil, nil end
-    local tanktar, tanktarhp
-    local info = charinfo.GetInfo(mainTankName)
-    if info and info.ID then
-        tanktar = info.Target and info.Target.ID or nil
-        tanktarhp = info.TargetHP
-    elseif tankid then
-        local botmelee = require('botmelee')
-        tanktar = botmelee.GetPCTarget(mainTankName)
-        tanktarhp = tanktar and mq.TLO.Spawn(tanktar).PctHPs() or nil
-    end
-    if includeTarget and mainTankName == mq.TLO.Me.Name() and (not tanktar or tanktar == 0) then
-        local t, h = selfTargetIdFromMobList()
-        if t then tanktar, tanktarhp = t, h end
-    end
-    if tanktar == 0 then tanktar = nil end
-    return mainTankName, tankid, tanktar, tanktarhp
+    return getLeaderPcTargetInfo(mainTankName, includeTarget)
 end
 
 --- True when the MA spawn is missing, dead, or hovering (no reliable live target).
@@ -1210,16 +1212,10 @@ function spellutils.GetAssistInfo(includeTarget, assistpct)
 
     local unavailable = isAssistUnavailable(assistName, assistid)
     local assistar, assistarhp
-    local info = charinfo.GetInfo(assistName)
-    if info and info.ID then
-        assistar = info.Target and info.Target.ID or nil
-        assistarhp = info.TargetHP
-    elseif assistid and not unavailable then
-        local botmelee = require('botmelee')
-        assistar = botmelee.GetPCTarget(assistName)
-        assistarhp = assistar and mq.TLO.Spawn(assistar).PctHPs() or nil
-    end
-    if includeTarget and assistName == mq.TLO.Me.Name() and (not assistar or assistar == 0) then
+    if not unavailable then
+        local _, _, t, h = getLeaderPcTargetInfo(assistName, true)
+        assistar, assistarhp = t, h
+    elseif assistName == mq.TLO.Me.Name() then
         local t, h = selfTargetIdFromMobList()
         if t then assistar, assistarhp = t, h end
     end

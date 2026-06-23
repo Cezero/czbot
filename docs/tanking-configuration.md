@@ -1,6 +1,6 @@
 ﻿# Tanking Configuration
 
-This document explains how to configure the bot when it is the **Main Tank (MT)** or a melee character: stick command, assist threshold, and camp/leash. For who the MT is, how the MT picks targets, and how the Puller interacts, see [Tank and Assist Roles](tank-and-assist-roles.md).
+This document explains how to configure the bot when it is the **Main Tank (MT)** or a melee character: stick command, assist threshold, and camp/leash. For who the MT is, how the MA selects targets, and how the Puller interacts, see [Tank and Assist Roles](tank-and-assist-roles.md).
 
 ## Overview
 

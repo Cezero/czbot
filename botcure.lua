@@ -50,38 +50,40 @@ local CureTypeToPeerKey = {
 local function CureEvalForTarget(index, botname, botid, botclass, targethit, spelltartype, resumePhase, resumeGroupIndex)
     local cureindex = CureClass[index]
     if not cureindex then return nil, nil end
+    if not botname then
+        local meId = mq.TLO.Me.ID()
+        if not spellutils.EnsureSpawnBuffsPopulated(meId, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then
+            return nil, nil
+        end
+        if spellutils.SpawnDetrimentalsForCure(meId, CureTypeList(index)) and targethit == 'self' then
+            return meId, 'self'
+        end
+        return nil, nil
+    end
     for _, v in pairs(CureType[index] or {}) do
-        if not botname then
-            local curetype = mq.TLO.Me[v] and mq.TLO.Me[v]()
-            if string.lower(v) ~= 'all' and curetype then
-                if spelltartype == 'Self' then return mq.TLO.Me.ID(), 'self' end
-                return mq.TLO.Me.ID(), 'self'
-            end
-        else
-            local peer = charinfo.GetInfo(botname)
-            if peer then
-                local detrimentals = peer.Detrimentals or nil
-                local key = (string.lower(v) ~= 'all') and CureTypeToPeerKey[string.lower(v)]
-                local curetype = key and (peer[key] or nil) or nil
-                if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
-                    if targethit == 'tank' then return botid, 'tank' end
-                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then
-                        return botid, 'groupmember'
-                    end
-                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
-                        return botid, botclass
-                    end
+        local peer = charinfo.GetInfo(botname)
+        if peer then
+            local detrimentals = peer.Detrimentals or nil
+            local key = (string.lower(v) ~= 'all') and CureTypeToPeerKey[string.lower(v)]
+            local curetype = key and (peer[key] or nil) or nil
+            if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
+                if targethit == 'tank' then return botid, 'tank' end
+                if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, 'groupmember'
                 end
-                if string.lower(v) ~= 'all' and curetype and curetype > 0 then
-                    if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then
-                        return botid, 'tank'
-                    end
-                    if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then
-                        return botid, 'groupmember'
-                    end
-                    if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
-                        return botid, botclass
-                    end
+                if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, botclass
+                end
+            end
+            if string.lower(v) ~= 'all' and curetype and curetype > 0 then
+                if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, 'tank'
+                end
+                if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, 'groupmember'
+                end
+                if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, botclass
                 end
             end
         end

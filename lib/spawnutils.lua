@@ -19,10 +19,6 @@ local COMBAT_FTE_STRIKE_BLOCK_EXTRA_MS = 5000
 local FTE_STRIKE_DEBOUNCE_MS = 2000
 local FTE_RECHECK_TARGET_DELAY_MS = 300
 
--- ---------------------------------------------------------------------------
--- Local helpers (DRY)
--- ---------------------------------------------------------------------------
-
 local function spawnInArea(spawn, x, y, z, radius2DSq, radiusZ)
     if not spawn or not x or not y then return false end
     local sx, sy, sz = spawn.X(), spawn.Y(), spawn.Z()
@@ -35,9 +31,17 @@ local function spawnInArea(spawn, x, y, z, radius2DSq, radiusZ)
     return true
 end
 
+--- True when an XTarget slot is a live hostile NPC (Auto Hater).
+function spawnutils.isAutoHaterXTarget(xt)
+    if not xt or not xt.ID() or xt.ID() <= 0 then return false end
+    if xt.Type() == 'Corpse' or xt.Dead() then return false end
+    if xt.Type() ~= 'NPC' then return false end
+    return xt.TargetType() == 'Auto Hater'
+end
+
 local function getMaAnchorLeash()
-    local settings = botconfig.config.settings
-    return tonumber(settings.maAnchorLeash) or tonumber(settings.acleash) or 75
+    local tankrole = require('lib.tankrole')
+    return tankrole.getAnchorLeash()
 end
 
 local function isMaCampAnchorEnabled()
@@ -196,7 +200,8 @@ function spawnutils.shouldPreserveStickyEngage(rc)
     local tankrole = require('lib.tankrole')
     local botconfig = require('lib.config')
     if tankrole.AmIMainAssist() then return true end
-    if tankrole.AmIMainTank() and botconfig.config.melee.mtSticky and mq.TLO.Me.Combat() then
+    if tankrole.AmIMainTank() and not tankrole.AmIMainAssist()
+        and botconfig.config.melee.mtSticky then
         return true
     end
     for _, v in ipairs(rc.MobList or {}) do

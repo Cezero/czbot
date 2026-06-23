@@ -58,8 +58,15 @@ local function HPEvalContext(index)
     local tank, tankid = spellutils.GetTankInfo(false)
     local botcount = charinfo.GetPeerCnt()
     local bots = spellutils.GetBotListOrdered()
-    local botstr = table.concat(charinfo.GetPeers(), " ")
-    local tanknbid = tank and string.find(botstr, tank)
+    local tanknbid = false
+    if tank then
+        for _, peer in ipairs(charinfo.GetPeers()) do
+            if peer == tank then
+                tanknbid = true
+                break
+            end
+        end
+    end
     local spell, spellrange = spellutils.GetSpellInfo(entry)
     if not spell then return nil end
     local spellEntity = spellutils.GetSpellEntity(entry)

@@ -8,8 +8,52 @@ local targeting = require('lib.targeting')
 local spellutils = require('lib.spellutils')
 local command_dispatcher = require('lib.command_dispatcher')
 local casting = require('lib.casting')
+local utils = require('lib.utils')
 
 local chchain = {}
+
+local function deferChchainGo(rc, deadline)
+    state.setRunState(state.STATES.chchain, {
+        deadline = deadline or chchain.getDeadline(rc),
+        chnextclr = rc.chnextClr,
+        priority = bothooks.getPriority('chchainTick'),
+    })
+end
+
+local function castCompleteHeal(rc)
+    spellutils.AutoinvIfCursorBlockingCast()
+    mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', rc.chchainTank, rc.chchainPause,
+        mq.TLO.Me.PctMana())
+end
+
+local function isTankInCHRange(tankid)
+    local spellRange = mq.TLO.Spell('Complete Heal').MyRange()
+    if not spellRange or spellRange <= 0 then return true end
+    local sp = mq.TLO.Spawn(tankid)
+    if not sp or not sp.ID() or sp.ID() == 0 then return false end
+    local distSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), sp.X(), sp.Y(), sp.Z())
+    return distSq and distSq <= (spellRange * spellRange)
+end
+
+local function findLiveTankId(rc)
+    local tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
+    if tankid and tankid > 0 and mq.TLO.Spawn(tankid).Type() ~= 'Corpse' then
+        return tankid
+    end
+    while rc.chchainTanklist do
+        rc.chchainCurtank = rc.chchainCurtank + 1
+        local name = rc.chchainTanklist[rc.chchainCurtank]
+        if not name then break end
+        local sp = mq.TLO.Spawn('=' .. name)
+        if sp and sp.Type() == 'PC' and sp.ID() and sp.ID() > 0 then
+            mq.cmdf('/rs Tank DIED or ZONED, moving to tank %s, %s', rc.chchainCurtank, name)
+            rc.chchainTank = name
+            return sp.ID()
+        end
+        mq.cmdf('/rs Tank %s is not in zone or dead, skipping', rc.chchainCurtank)
+    end
+    return nil
+end
 
 local function event_CHChain(line, arg1)
     return chchain.OnGo(line, arg1)
@@ -59,39 +103,29 @@ function chchain.OnGo(line, arg1)
     if not rc.doChchain then return false end
     rc.chchainCurtank = 1
     local chtimer = chchain.getDeadline(rc)
-    local tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
-    if not tankid or tankid == 0 or mq.TLO.Spawn(tankid).Type() == 'Corpse' then
-        rc.chchainCurtank = rc.chchainCurtank + 1
-        if rc.chchainTanklist[rc.chchainCurtank] and mq.TLO.Spawn('=' .. rc.chchainTanklist[rc.chchainCurtank]).Type() == 'PC' and mq.TLO.Spawn('=' .. rc.chchainTanklist[rc.chchainCurtank]).ID() then
-            mq.cmdf('/rs Tank DIED or ZONED, moving to tank %s, %s', rc.chchainCurtank, rc.chchainTanklist[rc.chchainCurtank])
-            rc.chchainTank = rc.chchainTanklist[rc.chchainCurtank]
-            tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
-        else
-            mq.cmdf('/rs Tank %s is not in zone or dead, skipping', rc.chchainCurtank)
-            -- Defer /rs <<Go>> until chchainpause expires; chchainTick will do it.
-            state.setRunState(state.STATES.chchain, { deadline = chchain.getDeadline(rc), chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
-            return
-        end
+    local tankid = findLiveTankId(rc)
+    if not tankid or tankid == 0 then
+        deferChchainGo(rc)
+        return
     end
-    if not tankid or tankid == 0 then return end
     if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
         targeting.TargetAndWait(tankid, 500)
     end
     if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
+        deferChchainGo(rc)
         return
     end
     if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < 400 then
         mq.cmdf('/rs SKIP ME (out of mana)')
-        state.setRunState(state.STATES.chchain, { deadline = mq.gettime() + (rc.chchainPause or 0) * 100, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
+        deferChchainGo(rc, mq.gettime() + (rc.chchainPause or 0) * 100)
         return
     end
-    if not spellutils.DistanceCheck('complete heal', 0, tankid) then
-        mq.cmdf(
-            '/rs Tank %s is out of range of complete heal!', rc.chchainTank)
+    if not isTankInCHRange(tankid) then
+        mq.cmdf('/rs Tank %s is out of range of complete heal!', rc.chchainTank)
+        deferChchainGo(rc)
+        return
     end
-    spellutils.AutoinvIfCursorBlockingCast()
-    mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', rc.chchainTank, rc.chchainPause,
-        mq.TLO.Me.PctMana())
+    castCompleteHeal(rc)
     state.setRunState(state.STATES.chchain, { deadline = chtimer, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
 end
 
@@ -101,12 +135,8 @@ function chchain.Tick()
     if not p or not p.chnextclr then state.clearRunState() return end
     if casting.result() == 'CAST_FIZZLE' then
         spellutils.AutoinvIfCursorBlockingCast()
-        casting.start({
-            spellName = 'Complete Heal',
-            gemType = 5,
-            targetId = mq.TLO.Target.ID() or 0,
-            maxTries = 1,
-        })
+        casting.clear()
+        castCompleteHeal(state.getRunconfig())
         return
     end
     if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
@@ -121,7 +151,7 @@ function chchain.Tick()
         state.clearRunState()
         return
     end
-    if not mq.TLO.Me.Sitting() and not mq.TLO.Me.CastTimeLeft() then
+    if not mq.TLO.Me.Sitting() and (mq.TLO.Me.CastTimeLeft() or 0) == 0 then
         mq.cmd('/sit on')
     end
 end
