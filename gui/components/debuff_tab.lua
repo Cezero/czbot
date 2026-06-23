@@ -1,5 +1,6 @@
 ﻿-- Debuff tab: dedicated panel for debuff config (On/Off toggle + one spell_entry per debuff).
 
+local mq = require('mq')
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spellutils = require('lib.spellutils')
@@ -119,30 +120,32 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
         end,
     })
 
-    labeled_grid.checkboxGrid({
-        id = idPrefix .. '_stopwhen',
-        label = 'Stop when:',
-        labelTooltip =
-        'Omit from bard combat twist / skip cast when target already has any of these (e.g. Slowed for Occlusion of Sound after slow lands).',
-        options = STOPWHEN_OPTIONS,
-        value = entry.stopWhen or {},
-        columns = 4,
-        onToggle = function(key, isChecked)
-            if entry.stopWhen == nil then entry.stopWhen = {} end
-            if isChecked then
-                entry.stopWhen[#entry.stopWhen + 1] = key
-            else
-                for i = #entry.stopWhen, 1, -1 do
-                    if entry.stopWhen[i] == key then
-                        table.remove(entry.stopWhen, i)
-                        break
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
+        labeled_grid.checkboxGrid({
+            id = idPrefix .. '_stopwhen',
+            label = 'Stop when:',
+            labelTooltip =
+            'Omit from bard combat twist / skip cast when target already has any of these (e.g. Slowed for Occlusion of Sound after slow lands).',
+            options = STOPWHEN_OPTIONS,
+            value = entry.stopWhen or {},
+            columns = 4,
+            onToggle = function(key, isChecked)
+                if entry.stopWhen == nil then entry.stopWhen = {} end
+                if isChecked then
+                    entry.stopWhen[#entry.stopWhen + 1] = key
+                else
+                    for i = #entry.stopWhen, 1, -1 do
+                        if entry.stopWhen[i] == key then
+                            table.remove(entry.stopWhen, i)
+                            break
+                        end
                     end
+                    if #entry.stopWhen == 0 then entry.stopWhen = nil end
                 end
-                if #entry.stopWhen == 0 then entry.stopWhen = nil end
-            end
-            if onChanged then onChanged() end
-        end,
-    })
+                if onChanged then onChanged() end
+            end,
+        })
+    end
 
     if entryHasMatarOrNamed(entry) then
         ImGui.Text('When MT Only')

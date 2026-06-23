@@ -249,6 +249,13 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         return false
     end
 
+    if phase == 'notmatar' and spawnId then
+        local charm = require('lib.charm')
+        if charm.isCharmSkipped(spawnId, state.getRunconfig()) then
+            return mezSkip('charm skip')
+        end
+    end
+
     if phase == 'notmatar' and isMez and ctx.mtTargetId and spawnId == ctx.mtTargetId then
         return mezSkip('MT target')
     end
@@ -2329,7 +2336,10 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
             resisted = false,
             spellcheckResume = spellcheckResume,
         }
-        if targethit == 'charmtar' then rc.charmid = EvalID end
+        if targethit == 'charmtar' then
+            rc.charmid = EvalID
+            require('lib.charm').trackCharmSkip(EvalID, rc)
+        end
     else
         if spellcheckResume then rc.CurSpell.spellcheckResume = spellcheckResume end
     end

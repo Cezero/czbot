@@ -493,6 +493,10 @@ local function cmd_attack(args)
         return
     end
     local rc = state.getRunconfig()
+    if KillTarget then
+        local charm = require('lib.charm')
+        charm.releaseCharmTarget(KillTarget, rc)
+    end
     rc.engageTargetId = KillTarget
     rc.attackCommandEngage = (KillTarget ~= nil)
     if KillTarget then

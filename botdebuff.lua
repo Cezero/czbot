@@ -196,7 +196,9 @@ local function DebuffEvalNotmatar(index, ctx)
     for _, v in ipairs(ctx.mobList) do
         local vid = v.ID and v.ID() or nil
         if vid and vid ~= maTargetId then
-            if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
+            if charm.isCharmSkipped(vid, state.getRunconfig()) then
+                -- skip: charmed pet or post-charm hold
+            elseif castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) then
                 if DebuffSpawnNeedsSpell(entry, ctx, v, 'notmatar') then
                     return v.ID(), 'notmatar'
                 end

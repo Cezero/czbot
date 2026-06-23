@@ -1,4 +1,5 @@
--- Charm logic: target selection, before-cast (pet leave), and charm-broke recast request.
+-- Charm logic: target selection, before-cast (pet leave), charm-broke recast request,
+-- and session charm-skip tracking (melee/mez exclusion until dead or /cz attack override).
 -- Used by botdebuff (debuff eval/beforeCast) and botevents (CharmBroke handler).
 
 local mq = require('mq')
@@ -15,6 +16,67 @@ local _charmindex = nil
 -- Recast request set when charm breaks; consumed by debuff loop for that index.
 local _recastRequest = nil
 
+--- True when spawn is a PC-owned pet that is charmed (not summoned).
+function charm.isCharmedPcPet(spawn)
+    if not spawn or not spawn.ID or not spawn.ID() or spawn.ID() == 0 then return false end
+    if spawn.Type() ~= 'Pet' then return false end
+    local masterType = spawn.Master and spawn.Master.Type and spawn.Master.Type()
+    if masterType ~= 'PC' then return false end
+    local ok, summoned = pcall(function() return spawn.IsSummoned and spawn.IsSummoned() end)
+    if ok and summoned then return false end
+    return true
+end
+
+function charm.clearCharmSkip(spawnId, rc)
+    if not spawnId or not rc or not rc.charmSkipIds then return end
+    rc.charmSkipIds[spawnId] = nil
+end
+
+function charm.trackCharmSkip(spawnId, rc)
+    if not spawnId or spawnId <= 0 then return end
+    rc = rc or state.getRunconfig()
+    if not rc.charmSkipIds then rc.charmSkipIds = {} end
+    rc.charmSkipIds[spawnId] = true
+end
+
+--- True when spawn should be excluded from engage/mez/add selection (charmed or post-charm skip).
+function charm.isCharmSkipped(spawnId, rc)
+    if not spawnId or spawnId <= 0 then return false end
+    rc = rc or state.getRunconfig()
+    if rc.attackCommandEngage and rc.engageTargetId == spawnId then return false end
+    if rc.charmSkipIds and rc.charmSkipIds[spawnId] then return true end
+    local sp = mq.TLO.Spawn(spawnId)
+    return charm.isCharmedPcPet(sp)
+end
+
+function charm.pruneCharmSkipIds(rc)
+    rc = rc or state.getRunconfig()
+    if not rc.charmSkipIds then return end
+    for sid, _ in pairs(rc.charmSkipIds) do
+        local sp = mq.TLO.Spawn(sid)
+        if not sp or not sp.ID() or sp.ID() ~= sid or sp.Dead() or sp.Type() == 'Corpse' then
+            rc.charmSkipIds[sid] = nil
+        end
+    end
+end
+
+function charm.syncCharmSkipFromSpawn(spawn, rc)
+    if not charm.isCharmedPcPet(spawn) then return end
+    local sid = spawn.ID()
+    if sid and sid > 0 then charm.trackCharmSkip(sid, rc) end
+end
+
+--- Manual kill override (/cz attack): clear skip list, charmid, and pending recast for this spawn.
+function charm.releaseCharmTarget(spawnId, rc)
+    if not spawnId or spawnId <= 0 then return end
+    rc = rc or state.getRunconfig()
+    charm.clearCharmSkip(spawnId, rc)
+    if rc.charmid == spawnId then rc.charmid = nil end
+    if _recastRequest and _recastRequest.spawnId == spawnId then
+        _recastRequest = nil
+    end
+end
+
 function charm.EvalTarget(index, ctx)
     local entry = ctx.entry
     if not spellutils.IsCharmSpell(entry) then return nil, nil end
@@ -28,8 +90,10 @@ function charm.EvalTarget(index, ctx)
     if not mq.TLO.Me.Pet.ID() and not mq.TLO.Me.Pet.IsSummoned() and rc.charmid then rc.charmid = nil end
     if mq.TLO.Me.Pet.ID() and mq.TLO.Me.Pet.ID() > 0 and not mq.TLO.Me.Pet.IsSummoned() and not rc.charmid then
         rc.charmid = mq.TLO.Me.Pet.ID()
+        charm.trackCharmSkip(rc.charmid, rc)
     end
     if mq.TLO.Me.Pet.ID() and mq.TLO.Me.Pet.ID() > 0 and rc.charmid and mq.TLO.Me.Pet.ID() == rc.charmid then
+        charm.trackCharmSkip(rc.charmid, rc)
         return nil, nil
     end
     for _, v in ipairs(ctx.mobList) do
@@ -90,6 +154,7 @@ function charm.OnCharmBroke(line, spellNameFromEvent)
     local charmspellname = mq.TLO.Spell(_charmspellid).Name()
     if spellNameFromEvent ~= charmspellname then return end
     spellstates.ClearDebuffOnSpawn(rc.charmid, _charmspellid)
+    charm.trackCharmSkip(rc.charmid, rc)
     printf('\ayCZBot:\ax\arCHARM %s wore off!', spellNameFromEvent)
     _recastRequest = { index = _charmindex, spawnId = rc.charmid }
 end

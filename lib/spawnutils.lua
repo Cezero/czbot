@@ -8,6 +8,7 @@ local state = require('lib.state')
 local utils = require('lib.utils')
 local bardtwist = require('lib.bardtwist')
 local charinfoutils = require('lib.charinfoutils')
+local charm = require('lib.charm')
 
 local spawnutils = {}
 
@@ -414,8 +415,21 @@ function spawnutils.isNpcEngageTarget(spawn)
     return t == 'NPC' or (t == 'Pet' and spawn.Master.Type() ~= 'PC')
 end
 
+--- True when melee may engage spawn (normal NPC rules, or /cz attack override on a PC pet).
+function spawnutils.isEngageAllowedSpawn(spawn, rc)
+    rc = rc or state.getRunconfig()
+    if not spawn or not spawn.ID() or spawn.ID() == 0 then return false end
+    local sid = spawn.ID()
+    if rc.attackCommandEngage and rc.engageTargetId == sid and spawnutils.isAliveEngageSpawn(spawn) then
+        return true
+    end
+    return spawnutils.isNpcEngageTarget(spawn)
+end
+
 local function filterSpawnForCamp(spawn, rc)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
+    local sid = spawn.ID()
+    if sid and charm.isCharmSkipped(sid, rc) then return false end
     local myconfig = botconfig.config
     local zradius = myconfig.settings.zradius or 75
     local cx, cy, cz = spawnutils.getMobListAnchor(rc)
@@ -537,10 +551,11 @@ end
 
 function spawnutils.selectNthAdd(mobList, excludeId, n)
     if not mobList or not n or n < 1 then return nil end
+    local rc = state.getRunconfig()
     local idx = 0
     for _, v in ipairs(mobList) do
         local id = v.ID and v.ID() or v
-        if id and id ~= excludeId then
+        if id and id ~= excludeId and not charm.isCharmSkipped(id, rc) then
             idx = idx + 1
             if idx == n then return v end
         end
@@ -551,7 +566,7 @@ end
 function spawnutils.validateAcmTarget(rc)
     rc = rc or state.getRunconfig()
     if rc.engageTargetId then
-        if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(rc.engageTargetId)) then
+        if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(rc.engageTargetId), rc) then
             rc.engageTargetId = nil
             rc.attackCommandEngage = nil
             if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
@@ -590,7 +605,7 @@ function spawnutils.mergeEngageTargetIntoMobList(rc)
     rc = rc or state.getRunconfig()
     local id = rc.engageTargetId
     if not id or id <= 0 then return end
-    if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(id)) then return end
+    if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(id), rc) then return end
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == id then return end
     end
@@ -612,6 +627,8 @@ local function leaderInjectEligible(rc, ctx, targetId)
     if not ctx.sameZone or not ctx.distance or ctx.distance > leash then return false end
     local sp = mq.TLO.Spawn(targetId)
     if not spawnutils.isAliveEngageSpawn(sp) then return false end
+    if not spawnutils.isEngageAllowedSpawn(sp, rc) then return false end
+    if charm.isCharmSkipped(targetId, rc) then return false end
     if utils.isProtectedSpawn(sp) then return false end
     if not spawnutils.filterSpawnExclude(sp, rc) then return false end
     if spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(targetId, rc) then return false end
@@ -784,6 +801,7 @@ end
 
 function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
+    charm.pruneCharmSkipIds(rc)
     spawnutils.pruneFTEList(rc)
     if not spawnutils.validateAcmTarget(rc) then return end
     spawnutils.tickCombatFTERechecks(rc)

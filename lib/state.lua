@@ -20,6 +20,7 @@
 ---@field makecamp {x:number|nil, y:number|nil, z:number|nil}
 ---@field doCampAcleash boolean|nil when false and makecamp on, allow chase/assist outside Radius; MobList still uses Radius; session-only, default on
 ---@field charmid number|nil
+---@field charmSkipIds table|nil spawnId -> true; session charm pets to exclude from engage/mez until dead or /cz attack
 ---@field domelee boolean|nil
 ---@field dopull boolean|nil
 ---@field dosongs boolean|nil session-only bard twist; default on at start, not saved to config
@@ -250,6 +251,7 @@ function M.resetRunconfig()
         makecamp = { x = nil, y = nil, z = nil },
         doCampAcleash = true,
         charmid = nil,
+        charmSkipIds = {},
         domelee = nil,
         dopull = false,
         dosongs = true,

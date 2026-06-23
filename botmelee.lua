@@ -10,6 +10,7 @@ local charinfo = require('plugin.charinfo')
 local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
 local spawnutils = require('lib.spawnutils')
+local charm = require('lib.charm')
 local spellstates = require('lib.spellstates')
 local spellutils = require('lib.spellutils')
 local myconfig = botconfig.config
@@ -202,7 +203,7 @@ end
 -- Shared MA/MT target pick from a sorted LOS list. Skip mezzed; if all mezzed, pick shortest remaining mez and stick.
 local function selectEngageTargetFromLosList(losList, engageId)
     local rc = state.getRunconfig()
-    if engageId and not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) then
+    if engageId and (not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) or charm.isCharmSkipped(engageId, rc)) then
         engageId = nil
     end
 
@@ -218,13 +219,13 @@ local function selectEngageTargetFromLosList(losList, engageId)
         local mezzed, _ = targetSpawnAndGetMezRemaining(lockId)
         if mezzed == false then
             clearAllMezzedLock(rc)
-            return lockId
+            if not charm.isCharmSkipped(lockId, rc) then return lockId end
         elseif mezzed == true then
             return lockId
         end
     end
 
-    if engageId and spawnIdInLosList(losList, engageId) then
+    if engageId and spawnIdInLosList(losList, engageId) and not charm.isCharmSkipped(engageId, rc) then
         local mezzed, _ = targetSpawnAndGetMezRemaining(engageId)
         if mezzed == false then
             clearAllMezzedLock(rc)
@@ -235,18 +236,24 @@ local function selectEngageTargetFromLosList(losList, engageId)
     local mezzedCandidates = {}
     for _, spawn in ipairs(losList) do
         local sid = spawn.ID()
-        local mezzed, rem = targetSpawnAndGetMezRemaining(sid)
-        if mezzed == false then
-            clearAllMezzedLock(rc)
-            return sid
-        elseif mezzed == true then
-            mezzedCandidates[#mezzedCandidates + 1] = { id = sid, rem = rem or MEZ_UNKNOWN_MS }
+        if sid and not charm.isCharmSkipped(sid, rc) then
+            local mezzed, rem = targetSpawnAndGetMezRemaining(sid)
+            if mezzed == false then
+                clearAllMezzedLock(rc)
+                return sid
+            elseif mezzed == true then
+                mezzedCandidates[#mezzedCandidates + 1] = { id = sid, rem = rem or MEZ_UNKNOWN_MS }
+            end
         end
     end
 
     if #mezzedCandidates == 0 then
         clearAllMezzedLock(rc)
-        return losList[1] and losList[1].ID() or nil
+        for _, spawn in ipairs(losList) do
+            local sid = spawn.ID()
+            if sid and not charm.isCharmSkipped(sid, rc) then return sid end
+        end
+        return nil
     end
 
     local bestId = pickShortestMezzedFromCandidates(mezzedCandidates)
@@ -259,6 +266,7 @@ local function isEngageableMobListSpawn(spawn)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
     local rc = state.getRunconfig()
     local sid = spawn.ID()
+    if sid and charm.isCharmSkipped(sid, rc) then return false end
     if sid and spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(sid, rc) then return false end
     local tfNum = tonumber(myconfig.settings.TargetFilter) or 0
     if tfNum == 2 then return true end
@@ -334,6 +342,7 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
     local rc = state.getRunconfig()
     local _, _, maTarId, maTarHp, fromCache = spellutils.GetAssistInfo(true, assistpct)
     if not maTarId or maTarId <= 0 then return nil end
+    if charm.isCharmSkipped(maTarId, rc) then return nil end
 
     if fromCache then
         if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then
@@ -378,7 +387,7 @@ end
 local function selectMATarget()
     local rc = state.getRunconfig()
     local engageId = rc.engageTargetId
-    if engageId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) then
+    if engageId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) and not charm.isCharmSkipped(engageId, rc) then
         if not spawnutils.isCampAcleashEnforced(rc) then
             local inMobList = false
             for _, v in ipairs(rc.MobList or {}) do
@@ -397,7 +406,8 @@ local function selectMATarget()
     if mq.TLO.Me.Combat() then
         local curId = mq.TLO.Target.ID()
         local meId = mq.TLO.Me.ID()
-        if curId and curId > 0 and curId ~= meId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(curId)) then
+        if curId and curId > 0 and curId ~= meId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(curId))
+            and not charm.isCharmSkipped(curId, rc) then
             local curSpawn = mq.TLO.Spawn(curId)
             if curSpawn.Named() then
                 return curId
@@ -446,7 +456,7 @@ local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
 
-    if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageTargetId)) then
+    if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(engageTargetId), state.getRunconfig()) then
         local rc = state.getRunconfig()
         rc.engageTargetId = nil
         rc.attackCommandEngage = nil
@@ -530,6 +540,14 @@ function botmelee.AdvCombat()
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Master.Type() == 'PC' then
         clearTankCombatState()
     end
+    if tankrole.AmIMainAssist() and not rc.attackCommandEngage then
+        local tid = rc.engageTargetId or mq.TLO.Target.ID()
+        if tid and tid > 0 and charm.isCharmSkipped(tid, rc) then
+            rc.engageTargetId = nil
+            rc.allMezzedEngageId = nil
+            combat.ResetCombatState()
+        end
+    end
 
     local id = nil
     local engageTargetRefound = false
@@ -538,13 +556,17 @@ function botmelee.AdvCombat()
             -- An offtank MT does not follow MA (this bot's melee is independent).
             id = resolveOfftankTarget(assistName, mainTankName, assistpct)
         elseif tankrole.AmIMainAssist() and not myconfig.melee.offtank then
-            -- Combined MT+MA: MA target selection (resolveMeleeAssistTarget cannot /assist self).
-            id = selectMATarget()
+            if rc.attackCommandEngage and rc.engageTargetId then
+                id = rc.engageTargetId
+            else
+                id = selectMATarget()
+            end
         elseif myconfig.melee.mtSticky and not myconfig.melee.offtank then
             -- Sticky MT: keep tanking its own target.
             id, engageTargetRefound = selectTankTarget(mainTankName)
             -- selectTankTarget returns nil in combat; preserve engageTargetId so we don't disengage.
-            if id == nil and rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)) then
+            if id == nil and rc.engageTargetId and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId))
+                and not charm.isCharmSkipped(rc.engageTargetId, rc) then
                 if not spawnutils.isCampAcleashEnforced(rc) then
                     id = rc.engageTargetId
                 elseif mq.TLO.Me.Combat() and rc.MobList then
@@ -570,7 +592,11 @@ function botmelee.AdvCombat()
             end
         end
     elseif tankrole.AmIMainAssist() then
-        id = selectMATarget()
+        if rc.attackCommandEngage and rc.engageTargetId then
+            id = rc.engageTargetId
+        else
+            id = selectMATarget()
+        end
     else
         if rc.attackCommandEngage and rc.engageTargetId then
             id = rc.engageTargetId
@@ -580,6 +606,7 @@ function botmelee.AdvCombat()
             id = resolveMeleeAssistTarget(assistName, assistpct)
         end
     end
+    if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
     rc.engageTargetId = id
 
