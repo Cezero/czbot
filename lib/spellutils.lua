@@ -12,7 +12,6 @@ local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
 local botmove = require('botmove')
-local spawnutils = require('lib.spawnutils')
 local spellutils = {}
 local _deps = {}
 local _instantDebuffCastPending = nil
@@ -250,8 +249,7 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
     end
 
     if phase == 'notmatar' and spawnId then
-        local charm = require('lib.charm')
-        if charm.isCharmSkipped(spawnId, state.getRunconfig()) then
+        if utils.isCharmSkipped(spawnId, state.getRunconfig()) then
             return mezSkip('charm skip')
         end
     end
@@ -1184,7 +1182,7 @@ end
 --- Clear lastAssistTargetId when the cached spawn is no longer alive.
 local function clearLastAssistTargetIfDead(rc)
     local cached = rc.lastAssistTargetId
-    if cached and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+    if cached and not utils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
         rc.lastAssistTargetId = nil
     end
 end
@@ -1237,7 +1235,7 @@ function spellutils.GetAssistInfo(includeTarget, assistpct)
     local fromCache = false
     if unavailable and (not assistar or assistar == 0) then
         local cached = rc.lastAssistTargetId
-        if cached and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+        if cached and utils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
             assistar = cached
             assistarhp = mq.TLO.Spawn(cached).PctHPs()
             fromCache = true
@@ -2341,7 +2339,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         }
         if targethit == 'charmtar' then
             rc.charmid = EvalID
-            require('lib.charm').trackCharmSkip(EvalID, rc)
+            utils.trackCharmSkip(EvalID, rc)
         end
     else
         if spellcheckResume then rc.CurSpell.spellcheckResume = spellcheckResume end

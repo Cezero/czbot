@@ -441,8 +441,8 @@ function M.isCombatContextForBuff(rc)
     local mq = require('mq')
     local id = rc.engageTargetId
     if id and id > 0 then
-        local spawnutils = require('lib.spawnutils')
-        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then return true end
+        local utils = require('lib.utils')
+        if utils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then return true end
     end
     if M.getRunState() == M.STATES.melee then return true end
     if mq.TLO.Me.Combat() then return true end

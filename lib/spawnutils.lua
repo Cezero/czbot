@@ -8,7 +8,6 @@ local state = require('lib.state')
 local utils = require('lib.utils')
 local bardtwist = require('lib.bardtwist')
 local charinfoutils = require('lib.charinfoutils')
-local charm = require('lib.charm')
 
 local spawnutils = {}
 
@@ -405,12 +404,7 @@ end
 
 --- True when spawn is a valid live combat target (not corpse, not dead).
 function spawnutils.isAliveEngageSpawn(spawn)
-    if not spawn or not spawn.ID() or spawn.ID() == 0 then return false end
-    local spawnType = spawn.Type()
-    if not spawnType or spawnType == '' then return false end
-    if spawnType == 'Corpse' then return false end
-    if spawn.Dead() then return false end
-    return true
+    return utils.isAliveEngageSpawn(spawn)
 end
 
 --- True when spawn is a valid melee engage target (NPC or non-PC pet; excludes self/PC).
@@ -434,7 +428,7 @@ end
 local function filterSpawnForCamp(spawn, rc)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
     local sid = spawn.ID()
-    if sid and charm.isCharmSkipped(sid, rc) then return false end
+    if sid and utils.isCharmSkipped(sid, rc) then return false end
     local myconfig = botconfig.config
     local zradius = myconfig.settings.zradius or 75
     local cx, cy, cz = spawnutils.getMobListAnchor(rc)
@@ -560,7 +554,7 @@ function spawnutils.selectNthAdd(mobList, excludeId, n)
     local idx = 0
     for _, v in ipairs(mobList) do
         local id = v.ID and v.ID() or v
-        if id and id ~= excludeId and not charm.isCharmSkipped(id, rc) then
+        if id and id ~= excludeId and not utils.isCharmSkipped(id, rc) then
             idx = idx + 1
             if idx == n then return v end
         end
@@ -633,7 +627,7 @@ local function leaderInjectEligible(rc, ctx, targetId)
     local sp = mq.TLO.Spawn(targetId)
     if not spawnutils.isAliveEngageSpawn(sp) then return false end
     if not spawnutils.isEngageAllowedSpawn(sp, rc) then return false end
-    if charm.isCharmSkipped(targetId, rc) then return false end
+    if utils.isCharmSkipped(targetId, rc) then return false end
     if utils.isProtectedSpawn(sp) then return false end
     if not spawnutils.filterSpawnExclude(sp, rc) then return false end
     if spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(targetId, rc) then return false end
@@ -806,7 +800,7 @@ end
 
 function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
-    charm.pruneCharmSkipIds(rc)
+    utils.pruneCharmSkipIds(rc)
     spawnutils.pruneFTEList(rc)
     if not spawnutils.validateAcmTarget(rc) then return end
     spawnutils.tickCombatFTERechecks(rc)

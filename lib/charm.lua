@@ -10,58 +10,21 @@ local utils = require('lib.utils')
 
 local charm = {}
 
+-- Re-export charm-skip helpers from utils (shared leaf; avoids spawnutils/charm/spellutils cycle).
+charm.isCharmedPcPet = utils.isCharmedPcPet
+charm.clearCharmSkip = utils.clearCharmSkip
+charm.trackCharmSkip = utils.trackCharmSkip
+charm.isCharmSkipped = utils.isCharmSkipped
+charm.pruneCharmSkipIds = utils.pruneCharmSkipIds
+
 -- Module state for charm-broke handler (set when EvalTarget picks a charm target).
 local _charmspellid = nil
 local _charmindex = nil
 -- Recast request set when charm breaks; consumed by debuff loop for that index.
 local _recastRequest = nil
 
---- True when spawn is a PC-owned pet that is charmed (not summoned).
-function charm.isCharmedPcPet(spawn)
-    if not spawn or not spawn.ID or not spawn.ID() or spawn.ID() == 0 then return false end
-    if spawn.Type() ~= 'Pet' then return false end
-    local masterType = spawn.Master and spawn.Master.Type and spawn.Master.Type()
-    if masterType ~= 'PC' then return false end
-    local ok, summoned = pcall(function() return spawn.IsSummoned and spawn.IsSummoned() end)
-    if ok and summoned then return false end
-    return true
-end
-
-function charm.clearCharmSkip(spawnId, rc)
-    if not spawnId or not rc or not rc.charmSkipIds then return end
-    rc.charmSkipIds[spawnId] = nil
-end
-
-function charm.trackCharmSkip(spawnId, rc)
-    if not spawnId or spawnId <= 0 then return end
-    rc = rc or state.getRunconfig()
-    if not rc.charmSkipIds then rc.charmSkipIds = {} end
-    rc.charmSkipIds[spawnId] = true
-end
-
---- True when spawn should be excluded from engage/mez/add selection (charmed or post-charm skip).
-function charm.isCharmSkipped(spawnId, rc)
-    if not spawnId or spawnId <= 0 then return false end
-    rc = rc or state.getRunconfig()
-    if rc.attackCommandEngage and rc.engageTargetId == spawnId then return false end
-    if rc.charmSkipIds and rc.charmSkipIds[spawnId] then return true end
-    local sp = mq.TLO.Spawn(spawnId)
-    return charm.isCharmedPcPet(sp)
-end
-
-function charm.pruneCharmSkipIds(rc)
-    rc = rc or state.getRunconfig()
-    if not rc.charmSkipIds then return end
-    for sid, _ in pairs(rc.charmSkipIds) do
-        local sp = mq.TLO.Spawn(sid)
-        if not sp or not sp.ID() or sp.ID() ~= sid or sp.Dead() or sp.Type() == 'Corpse' then
-            rc.charmSkipIds[sid] = nil
-        end
-    end
-end
-
 function charm.syncCharmSkipFromSpawn(spawn, rc)
-    if not charm.isCharmedPcPet(spawn) then return end
+    if not utils.isCharmedPcPet(spawn) then return end
     local sid = spawn.ID()
     if sid and sid > 0 then charm.trackCharmSkip(sid, rc) end
 end
