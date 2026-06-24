@@ -20,9 +20,10 @@ local RETURNING_AFTER_ABORT_WAIT_MS = 5000
 local PULL_RETURN_EXTRA_WAIT_MS = 5000
 local RETURNING_AFTER_ABORT_TIMEOUT_MS = 30000
 local PULL_SPAWN_FTE_WAIT_MS = 5000
+local PULL_RANGED_AGRO_WAIT_MS = 1500
 
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullCandidateIds, pullCandidateIndex, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
--- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullSpawnWaitSince, pullRadiusHadTarget, pullHealerManaWait, pullDebuffWait, pullRangedStoredItem;
+-- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullSpawnWaitSince, pullRadiusHadTarget, pullHealerManaWait, pullDebuffWait, pullRangedStoredItem, pullRangedAttempted;
 -- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
 botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat' }
 
@@ -163,6 +164,51 @@ local function isSpawnOnXTarget(spawnId)
     return false
 end
 
+-- Returns true when the pull target's current target is the player (confirmed agro). Nil-safe.
+-- Requires the puller to have the pull mob targeted so Me.TargetOfTarget is valid.
+local function pullMobHasAgroOnMe(spawn)
+    local meId = mq.TLO.Me.ID()
+    if not meId then return false end
+    if mq.TLO.Target.ID() == spawn.ID() then
+        local totId = mq.TLO.Me.TargetOfTarget.ID()
+        return totId and totId == meId
+    end
+    return false
+end
+
+local function pullTargetHasAgro(rc, spawn)
+    return isSpawnOnXTarget(rc.pullAPTargetID) or pullMobHasAgroOnMe(spawn)
+end
+
+---@param opts table|nil { clearTarget?: boolean }
+local function transitionPullToReturning(rc, spawn, opts)
+    if opts and opts.clearTarget then
+        mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
+    end
+    rawset(rc, 'pullAttemptedIds', {})
+    rc.pullState = 'returning'
+    rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
+    rc.pullPhase = nil
+    rc.pulledmob = rc.pullAPTargetID
+    rc.pullreturntimer = mq.gettime() + 60000
+    rc.pulledmobLastDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), spawn.X(),
+        spawn.Y(), spawn.Z())
+    rc.pulledmobLastCloserTime = mq.gettime()
+    if rc.pullRangedStoredItem and rc.pullRangedStoredItem ~= '' then
+        mq.cmdf('/exchange "%s" Ranged', rc.pullRangedStoredItem)
+        rc.pullRangedStoredItem = nil
+    end
+    combat.ResetCombatState({ clearTarget = false, clearPet = false })
+    botmove.NavToCamp({ dist = 0, echoMsg = 'Returning to camp' })
+end
+
+local function startRangedAggroWait(rc)
+    rc.pullPhase = 'aggro_wait_ranged'
+    rc.pullDeadline = mq.gettime() + PULL_RANGED_AGRO_WAIT_MS
+    rc.pullRangedAttempted = true
+    mq.cmd('/stick off')
+end
+
 local function clearEngageIfPullTargetGone(rc, pullTargetId)
     if not pullTargetId or pullTargetId <= 0 then return end
     if rc.engageTargetId ~= pullTargetId then return end
@@ -198,6 +244,7 @@ local function clearPullState(reason)
     rc.pullHealerManaWait = nil
     rc.pullDebuffWait = nil
     rc.pullRangedStoredItem = nil
+    rc.pullRangedAttempted = nil
     rc.pulledmob = nil
     rc.pullreturntimer = nil
     rc.pulledmobLastDistSq = nil
@@ -944,21 +991,7 @@ local function tickNavigating(rc, spawn)
         if not xtAtStart[id] then
             if id == rc.pullAPTargetID then
                 -- Pull target just appeared on XTarget: we have aggro, return to camp
-                mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
-                rawset(rc, 'pullAttemptedIds', {})
-                rc.pullState = 'returning'
-                rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
-                rc.pullPhase = nil
-                rc.pulledmob = rc.pullAPTargetID
-                rc.pullreturntimer = mq.gettime() + 60000
-                rc.pulledmobLastDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), spawn.X(), spawn.Y(), spawn.Z())
-                rc.pulledmobLastCloserTime = mq.gettime()
-                if rc.pullRangedStoredItem and rc.pullRangedStoredItem ~= '' then
-                    mq.cmdf('/exchange "%s" Ranged', rc.pullRangedStoredItem)
-                    rc.pullRangedStoredItem = nil
-                end
-                combat.ResetCombatState({ clearTarget = false, clearPet = false })
-                botmove.NavToCamp({ dist = 0, echoMsg = 'Returning to camp' })
+                transitionPullToReturning(rc, spawn, { clearTarget = true })
                 return
             else
                 abortNavDuringPull(myconfig.pull.hunter and 'Add aggro (XTarget), aborting hunt.' or 'Add aggro (XTarget), returning to camp.')
@@ -1056,19 +1089,7 @@ local function pullHasLoS(spawn)
     return mq.TLO.LineOfSight(losStr)()
 end
 
--- Returns true when the pull target's current target is the player (confirmed agro). Nil-safe.
--- Requires the puller to have the pull mob targeted so Me.TargetOfTarget is valid.
-local function pullMobHasAgroOnMe(spawn)
-    local meId = mq.TLO.Me.ID()
-    if not meId then return false end
-    if mq.TLO.Target.ID() == spawn.ID() then
-        local totId = mq.TLO.Me.TargetOfTarget.ID()
-        return totId and totId == meId
-    end
-    return false
-end
-
--- One tick of aggroing state (with sub-phases aggro_wait_target, aggro_wait_cast, aggro_wait_stop_moving).
+-- One tick of aggroing state (with sub-phases aggro_wait_target, aggro_wait_cast, aggro_wait_stop_moving, aggro_wait_ranged).
 local function tickAggroing(rc, spawn)
     -- Spawn gone or dead: clear immediately so we do not stay stuck in "Aggroing ...".
     if not spawn or not spawn.ID() or spawn.Type() == 'Corpse' then
@@ -1097,7 +1118,8 @@ local function tickAggroing(rc, spawn)
     end
     if rc.pullPhase == 'aggro_wait_cast' then
         if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 then return end
-        rc.pullPhase = nil
+        startRangedAggroWait(rc)
+        return
     end
     if rc.pullPhase == 'aggro_wait_stop_moving' then
         if mq.gettime() >= (rc.pullDeadline or 0) or not mq.TLO.Me.Moving() then
@@ -1105,6 +1127,16 @@ local function tickAggroing(rc, spawn)
         else
             return
         end
+    end
+    if rc.pullPhase == 'aggro_wait_ranged' then
+        if pullTargetHasAgro(rc, spawn) then
+            transitionPullToReturning(rc, spawn)
+            return
+        end
+        if mq.gettime() < (rc.pullDeadline or 0) then
+            return
+        end
+        rc.pullPhase = nil
     end
 
     -- Ensure puller has the pull mob targeted so Me.TargetOfTarget (aggro check) works.
@@ -1119,23 +1151,9 @@ local function tickAggroing(rc, spawn)
         abortPullSoftFailure(myconfig.pull.hunter and 'No agro after 15s, picking another target.' or 'No agro after 15s, returning to camp.')
         return
     end
-    -- XTarget authoritative: transition when pull target is on XTarget and min wait (1.5s) has passed
-    if isSpawnOnXTarget(rc.pullAPTargetID) and aggroingElapsed >= 1500 then
-        rawset(rc, 'pullAttemptedIds', {})
-        rc.pullState = 'returning'
-        rc.statusMessage = string.format('Returning to camp with %s (%s)', spawn.Name(), spawn.ID())
-        rc.pullPhase = nil
-        rc.pulledmob = rc.pullAPTargetID
-        rc.pullreturntimer = mq.gettime() + 60000
-        rc.pulledmobLastDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), spawn.X(),
-            spawn.Y(), spawn.Z())
-        rc.pulledmobLastCloserTime = mq.gettime()
-        if rc.pullRangedStoredItem and rc.pullRangedStoredItem ~= '' then
-            mq.cmdf('/exchange "%s" Ranged', rc.pullRangedStoredItem)
-            rc.pullRangedStoredItem = nil
-        end
-        combat.ResetCombatState({ clearTarget = false, clearPet = false })
-        botmove.NavToCamp({ dist = 0, echoMsg = 'Returning to camp' })
+    -- Transition when pull target has aggro (XTarget or ToT) and min wait (1.5s) has passed
+    if pullTargetHasAgro(rc, spawn) and aggroingElapsed >= 1500 then
+        transitionPullToReturning(rc, spawn)
         return
     end
 
@@ -1152,8 +1170,8 @@ local function tickAggroing(rc, spawn)
         return
     end
 
-    -- Melee (default or explicit)
-    if not entry or gem == 'melee' then
+    -- Melee (default or explicit), or melee fallback after ranged pull attempt
+    if not entry or gem == 'melee' or rc.pullRangedAttempted then
         if mq.TLO.Target.ID() ~= rc.pullAPTargetID then
             mq.cmdf('/squelch /tar id %s', rc.pullAPTargetID)
             return
@@ -1164,7 +1182,7 @@ local function tickAggroing(rc, spawn)
     end
 
     -- Ranged (bow): swap in bow if needed, ranged attack, swap back after (on returning)
-    if gem == 'ranged' and spell ~= '' then
+    if gem == 'ranged' and spell ~= '' and not rc.pullRangedAttempted then
         local rangeSlotName = mq.TLO.InvSlot('Ranged').Item.Name() and mq.TLO.InvSlot('Ranged').Item.Name() or ''
         if rangeSlotName ~= spell then
             if rangeSlotName ~= '' then
@@ -1175,11 +1193,12 @@ local function tickAggroing(rc, spawn)
             mq.cmdf('/exchange "%s" Ranged', spell)
         end
         mq.cmdf('/multiline ; /squelch /nav stop log=off ; /face fast ; /squelch attack off ; /ranged on')
+        startRangedAggroWait(rc)
         return
     end
 
     -- Gem-based cast dispatch (numeric gem = spell slot)
-    if type(gem) == 'number' and gem >= 1 and gem <= 12 then
+    if not rc.pullRangedAttempted and type(gem) == 'number' and gem >= 1 and gem <= 12 then
         local spellName = (spell and spell ~= '') and spell or mq.TLO.Me.Gem(gem)() or ''
         if spellName ~= '' and mq.TLO.Me.SpellReady(spellName)() then
             mq.cmd('/nav stop log=off')
@@ -1197,21 +1216,20 @@ local function tickAggroing(rc, spawn)
             })
             rc.pullPhase = 'aggro_wait_cast'
             rc.pullDeadline = mq.gettime() + 8000
-            if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end
             return
         end
     end
-    if gem == 'disc' and spell ~= '' and mq.TLO.Me.CombatAbilityReady(spell)() then
+    if not rc.pullRangedAttempted and gem == 'disc' and spell ~= '' and mq.TLO.Me.CombatAbilityReady(spell)() then
         mq.cmdf('/multiline ; /nav stop log=off ; /disc %s', spell)
-        if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end
+        startRangedAggroWait(rc)
         return
     end
-    if gem == 'ability' and spell ~= '' and mq.TLO.Me.AbilityReady(spell)() then
+    if not rc.pullRangedAttempted and gem == 'ability' and spell ~= '' and mq.TLO.Me.AbilityReady(spell)() then
         mq.cmdf('/multiline ; /nav stop log=off ; /attack on ; /doability %s', spell)
-        if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', spawn.ID()) end
+        startRangedAggroWait(rc)
         return
     end
-    if gem == 'alt' and spell ~= '' and mq.TLO.Me.AltAbilityReady(spell)() then
+    if not rc.pullRangedAttempted and gem == 'alt' and spell ~= '' and mq.TLO.Me.AltAbilityReady(spell)() then
         mq.cmd('/nav stop log=off')
         if mq.TLO.Me.Moving() then
             rc.pullPhase = 'aggro_wait_stop_moving'
@@ -1223,7 +1241,7 @@ local function tickAggroing(rc, spawn)
         rc.pullDeadline = mq.gettime() + 8000
         return
     end
-    if gem == 'item' and spell ~= '' and mq.TLO.Me.ItemReady(spell)() then
+    if not rc.pullRangedAttempted and gem == 'item' and spell ~= '' and mq.TLO.Me.ItemReady(spell)() then
         mq.cmd('/nav stop log=off')
         if mq.TLO.Me.Moving() then
             rc.pullPhase = 'aggro_wait_stop_moving'

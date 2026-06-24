@@ -72,6 +72,7 @@
 ---@field pullCandidateIds number[]|nil spawn IDs queued for current pull outing (backup targets)
 ---@field pullCandidateIndex number|nil 1-based index into pullCandidateIds for active target
 ---@field pullRangedStoredItem string|nil item name swapped out of Ranged slot during pull (restored on return)
+---@field pullRangedAttempted boolean|nil true after a ranged/disc/cast pull was used; blocks re-fire and enables melee fallback
 ---@field stucktimer number|nil
 ---@field unstuckWiggleIndex number|nil current step (1–9) in unstuck wiggle sequence; nil when not wiggling or after sequence
 ---@field mobprobtimer number
@@ -301,6 +302,7 @@ function M.resetRunconfig()
         pullAbortReturnDeadline = nil,
         pullXTargetIdsAtStart = nil,
         pullRangedStoredItem = nil,
+        pullRangedAttempted = nil,
         stucktimer = 0,
         unstuckWiggleIndex = nil,
         mobprobtimer = 0,
