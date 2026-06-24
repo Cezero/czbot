@@ -13,6 +13,7 @@
 local mq = require('mq')
 local ImGui = require('ImGui')
 local Icons = require('mq.ICONS')
+local spellutils = require('lib.spellutils')
 local combos = require('gui.widgets.combos')
 local inputs = require('gui.widgets.inputs')
 local labeled_grid = require('gui.widgets.labeled_grid')
@@ -79,10 +80,7 @@ end
 local function validateDiscipline(name)
     if not name or name:match('^%s*$') then return false, 'Enter a discipline name' end
     name = name:match('^%s*(.-)%s*$')
-    local ca = mq.TLO.Me and mq.TLO.Me.CombatAbility and mq.TLO.Me.CombatAbility(name)
-    if not ca then return false, 'Discipline not found' end
-    local ok, slot = pcall(function() return ca() end)
-    if ok and tonumber(slot) and tonumber(slot) > 0 then return true end
+    if spellutils.DisciplineExists(name) then return true end
     return false, 'Discipline not found'
 end
 

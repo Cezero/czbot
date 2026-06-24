@@ -416,7 +416,8 @@ function spellutils.SpellCheck(Sub, ID)
         if not mq.TLO.Me.AltAbilityReady(spell)() then return false end
     end
     if gem == 'disc' then
-        if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
+        local discName = spellutils.ResolveDisciplineCastName(spell)
+        if not mq.TLO.Me.CombatAbilityReady(discName)() then return false end
         if spellend and ((mq.TLO.Me.CurrentEndurance() - (mq.TLO.Me.EnduranceRegen() * 2)) < spellend) then return false end
     end
     return true
@@ -891,15 +892,96 @@ function spellutils.GetBotListShuffled()
 end
 
 -- Me.CombatAbility[name] returns slot index; Me.CombatAbility[slot] returns spell datatype.
-function spellutils.GetDisciplineSlot(name)
-    if not name or name == '' then return nil end
-    local slot = tonumber(mq.TLO.Me.CombatAbility(name)())
+local DISCIPLINE_SLOT_SCAN_MAX = 512
+
+local function normalizeDiscLookupName(name)
+    if not name or name == '' then return '' end
+    return string.lower((tostring(name):match('^%s*(.-)%s*$')))
+end
+
+local function titleCaseDiscName(name)
+    if not name or name == '' then return name end
+    return (name:gsub("(%a)([%w_']*)", function(first, rest)
+        return string.upper(first) .. string.lower(rest)
+    end))
+end
+
+local function disciplineSlotFromDirectLookup(lookup)
+    if not lookup or lookup == '' then return nil end
+    local slot = tonumber(mq.TLO.Me.CombatAbility(lookup)())
     if slot and slot > 0 then return slot end
     return nil
 end
 
+local function disciplineNamesAtSlot(slot)
+    local names = {}
+    local sp = mq.TLO.Me.CombatAbility(slot)
+    if not sp then return names end
+    local ok, primary = pcall(function() return sp() end)
+    if ok and primary and primary ~= '' and primary ~= 0 then
+        names[#names + 1] = tostring(primary)
+    end
+    if sp.Name then
+        local okName, n = pcall(function() return sp.Name() end)
+        if okName and n and n ~= '' then names[#names + 1] = n end
+    end
+    if sp.RankName then
+        local okRank, rn = pcall(function() return sp.RankName() end)
+        if okRank and rn and rn ~= '' then names[#names + 1] = rn end
+    end
+    return names
+end
+
+local function disciplineSlotFromScan(wantNorm)
+    if wantNorm == '' then return nil end
+    local emptyStreak = 0
+    for slot = 1, DISCIPLINE_SLOT_SCAN_MAX do
+        local names = disciplineNamesAtSlot(slot)
+        if #names == 0 then
+            emptyStreak = emptyStreak + 1
+            if emptyStreak >= 32 then break end
+        else
+            emptyStreak = 0
+            for _, discName in ipairs(names) do
+                if normalizeDiscLookupName(discName) == wantNorm then
+                    return slot
+                end
+            end
+        end
+    end
+    return nil
+end
+
+function spellutils.GetDisciplineSlot(name)
+    if not name or name == '' then return nil end
+    name = name:match('^%s*(.-)%s*$')
+    local slot = disciplineSlotFromDirectLookup(name)
+    if slot then return slot end
+    slot = disciplineSlotFromDirectLookup(titleCaseDiscName(name))
+    if slot then return slot end
+    if mq.TLO.Spell(name)() then
+        local rankName = mq.TLO.Spell(name).RankName()
+        if rankName and rankName ~= '' then
+            slot = disciplineSlotFromDirectLookup(rankName)
+            if slot then return slot end
+        end
+    end
+    return disciplineSlotFromScan(normalizeDiscLookupName(name))
+end
+
 function spellutils.DisciplineExists(name)
     return spellutils.GetDisciplineSlot(name) ~= nil
+end
+
+--- Name to pass to /disc and CombatAbilityReady (canonical list/rank name).
+function spellutils.ResolveDisciplineCastName(name)
+    local slot = spellutils.GetDisciplineSlot(name)
+    if not slot then return name end
+    local names = disciplineNamesAtSlot(slot)
+    for _, discName in ipairs(names) do
+        if discName and discName ~= '' then return discName end
+    end
+    return name
 end
 
 function spellutils.GetDisciplineSpellEntity(name)
@@ -2247,7 +2329,8 @@ function spellutils.CheckGemReadiness(sub, index, entry)
     elseif gem == 'item' then
         if not mq.TLO.Me.ItemReady(spell)() then return false end
     elseif gem == 'disc' then
-        if not mq.TLO.Me.CombatAbilityReady(spell)() then return false end
+        local discName = spellutils.ResolveDisciplineCastName(spell)
+        if not mq.TLO.Me.CombatAbilityReady(discName)() then return false end
     elseif gem == 'ability' then
         if not mq.TLO.Me.AbilityReady(spell)() then return false end
     elseif gem == 'alt' then
@@ -2356,8 +2439,11 @@ end
 function spellutils.ExecuteNativeCast(gem, spell, sub, index)
     if gem == 'script' then
         spellutils.RunScript(spell, sub, index)
-    elseif gem == 'disc' and mq.TLO.Me.CombatAbilityReady(spell)() then
-        mq.cmdf('/squelch /disc %s', spell)
+    elseif gem == 'disc' then
+        local discName = spellutils.ResolveDisciplineCastName(spell)
+        if mq.TLO.Me.CombatAbilityReady(discName)() then
+            mq.cmdf('/squelch /disc %s', discName)
+        end
     elseif gem == 'ability' then
         mq.cmdf('/squelch /face fast')
         mq.cmdf('/doability %s', spell)
@@ -2365,7 +2451,9 @@ function spellutils.ExecuteNativeCast(gem, spell, sub, index)
 end
 
 --- EvalID is the spawn ID of the cast target; for self/group it is Me.ID().
-function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellcheckResume)
+---@param opts table|nil Optional: fromInterrupt (boolean) skips dontStack gate for CH/Gate interrupt casts.
+function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellcheckResume, opts)
+    opts = opts or {}
     local rc = state.getRunconfig()
     local meId = mq.TLO.Me.ID()
     local entry = botconfig.getSpellEntry(sub, index)
@@ -2452,7 +2540,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
             })
         return true
     end
-    if sub == 'debuff' and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
+    if sub == 'debuff' and not opts.fromInterrupt and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
         mezBlocked('dontStack on target')
         spellutils.clearCastingStateOrResume()
         return false

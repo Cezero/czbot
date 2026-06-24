@@ -5,8 +5,13 @@ local state = require('lib.state')
 local spellutils = require('lib.spellutils')
 local spawnutils = require('lib.spawnutils')
 local bothooks = require('lib.bothooks')
+local tankrole = require('lib.tankrole')
 
 local castinterrupt = {}
+
+local INTERRUPT_REASON = 'Complete Heal/Gate'
+local _diagNextTime = 0
+local DIAG_THROTTLE_MS = 2000
 
 local function trim(s)
     return s and (s:match('^%s*(.-)%s*$') or s) or ''
@@ -18,6 +23,10 @@ local function aliasMatches(entry, token)
         if trim(value) == token then return true end
     end
     return false
+end
+
+local function isMezInterruptSpell(entry)
+    return entry and (spellutils.IsMezSpell(entry) or aliasMatches(entry, 'mez'))
 end
 
 local function normalizeArticle(name)
@@ -36,11 +45,34 @@ local function eventMobNameMatchesSpawn(spawnId, eventName)
     return stripped == clean or stripped == name
 end
 
-local function passesGates()
-    if not botconfig.config.settings.dodebuff then return false end
-    if state.getMobCount() <= 0 then return false end
-    if state.isTravelMode() then return false end
-    if mq.TLO.Me.Dead() or mq.TLO.Me.Hovering() then return false end
+local function diagFail(reason, mobName, extra)
+    local now = mq.gettime()
+    if now < _diagNextTime then return end
+    _diagNextTime = now + DIAG_THROTTLE_MS
+    local assistName = tankrole.GetAssistTargetName()
+    local _, _, maTargetId = spellutils.GetAssistInfo(true)
+    printf('\ayCZBot:\ax [CH interrupt] blocked: %s (mob=%s ma=%s maTarget=%s mobs=%s%s)',
+        reason, tostring(mobName), tostring(assistName), tostring(maTargetId), tostring(state.getMobCount()),
+        extra and (' ' .. extra) or '')
+end
+
+local function passesGates(mobName)
+    if not botconfig.config.settings.dodebuff then
+        diagFail('dodebuff off', mobName)
+        return false
+    end
+    if state.getMobCount() <= 0 then
+        diagFail('no mobs in camp', mobName)
+        return false
+    end
+    if state.isTravelMode() then
+        diagFail('travel mode', mobName)
+        return false
+    end
+    if mq.TLO.Me.Dead() or mq.TLO.Me.Hovering() then
+        diagFail('dead or hovering', mobName)
+        return false
+    end
     return true
 end
 
@@ -70,7 +102,7 @@ local function findInterruptSpellIndex(targetId)
     if not count or count <= 0 then return nil end
     for i = 1, count do
         local entry = botconfig.getSpellEntry('debuff', i)
-        if entry and entry.enabled ~= false and (spellutils.IsMezSpell(entry) or aliasMatches(entry, 'mez')) then
+        if entry and entry.enabled ~= false and isMezInterruptSpell(entry) then
             if spellEntryReady(i) and spellCanAffectTargetLevel(entry, targetId) then return i, entry end
         end
     end
@@ -83,11 +115,11 @@ local function findInterruptSpellIndex(targetId)
     return nil
 end
 
-local function isNonBardCastLaneBusy()
-    if mq.TLO.Me.Class.ShortName() == 'BRD' then return false end
-    if (mq.TLO.Me.CastTimeLeft() or 0) > 0 then return true end
+local function isInterruptCastLaneBusy()
+    if (mq.TLO.Me.CastTimeLeft() or 0) > 0 and mq.TLO.Me.Class.ShortName() ~= 'BRD' then return true end
     local rc = state.getRunconfig()
     if state.getRunState() == state.STATES.casting and rc.CurSpell and rc.CurSpell.sub then return true end
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and rc.bardNotmatarWait then return true end
     return false
 end
 
@@ -95,6 +127,7 @@ local function isCastLaneFree()
     if (mq.TLO.Me.CastTimeLeft() or 0) > 0 and mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
     local rc = state.getRunconfig()
     if state.getRunState() == state.STATES.casting and rc.CurSpell and rc.CurSpell.sub then return false end
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and rc.bardNotmatarWait then return false end
     return state.canStartBusyState(state.STATES.casting)
 end
 
@@ -107,10 +140,25 @@ local function executeInterrupt(targetId, spellIndex)
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry then return false end
     local runPriority = bothooks.getPriority('doDebuff')
-    local ok = spellutils.CastSpell(spellIndex, targetId, 'matar', 'debuff', runPriority)
+    local spellName = entry.spell or '?'
+    local targetName = targetDisplayName(targetId)
+
+    if mq.TLO.Me.Class.ShortName() == 'BRD' and isMezInterruptSpell(entry) then
+        local botdebuff = require('botdebuff')
+        local ok = botdebuff.CastBardMezOnce(spellIndex, targetId, runPriority, INTERRUPT_REASON)
+        if not ok then
+            printf('\ayCZBot:\ax [CH interrupt] failed: bard mez could not start \ag%s\ax on \at%s\ax', spellName,
+                targetName)
+        end
+        return ok
+    end
+
+    local ok = spellutils.CastSpell(spellIndex, targetId, 'matar', 'debuff', runPriority, nil, { fromInterrupt = true })
     if ok then
-        printf('\ayCZBot:\ax interrupting \ag%s\ax on \at%s\ax (Complete Heal/Gate)', entry.spell or '?',
-            targetDisplayName(targetId))
+        printf('\ayCZBot:\ax interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, INTERRUPT_REASON)
+    else
+        printf('\ayCZBot:\ax [CH interrupt] failed: CastSpell returned false for \ag%s\ax on \at%s\ax', spellName,
+            targetName)
     end
     return ok
 end
@@ -135,7 +183,7 @@ end
 
 local function validatePending(pending)
     if not pending or not pending.targetId or not pending.mobName then return nil, nil end
-    if not passesGates() then return nil, nil end
+    if not passesGates(pending.mobName) then return nil, nil end
     local _, _, maTargetId = spellutils.GetAssistInfo(true)
     if not maTargetId or maTargetId == 0 or maTargetId ~= pending.targetId then return nil, nil end
     if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTargetId)) then return nil, nil end
@@ -164,19 +212,37 @@ end
 
 function castinterrupt.tryInterruptMaCast(mobName)
     if not mobName or mobName == '' then return false end
-    if not passesGates() then return false end
-    local _, _, maTargetId = spellutils.GetAssistInfo(true)
-    if not maTargetId or maTargetId == 0 then return false end
-    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTargetId)) then return false end
-    if not eventMobNameMatchesSpawn(maTargetId, mobName) then return false end
-    local spellIndex = findInterruptSpellIndex(maTargetId)
-    if not spellIndex then return false end
+    if not passesGates(mobName) then return false end
+    local assistName, _, maTargetId = spellutils.GetAssistInfo(true)
+    if not maTargetId or maTargetId == 0 then
+        diagFail('no MA target', mobName, assistName and ('(ma=' .. assistName .. ')') or nil)
+        return false
+    end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTargetId)) then
+        diagFail('MA target not alive', mobName, 'id=' .. tostring(maTargetId))
+        return false
+    end
+    if not eventMobNameMatchesSpawn(maTargetId, mobName) then
+        local sp = mq.TLO.Spawn(maTargetId)
+        diagFail('event name mismatch', mobName,
+            string.format('spawn=%s/%s', sp.CleanName() or '', sp.Name() or ''))
+        return false
+    end
+    local spellIndex, entry = findInterruptSpellIndex(maTargetId)
+    if not spellIndex then
+        diagFail('no ready mez/stun', mobName, 'maTarget=' .. tostring(maTargetId))
+        return false
+    end
     local rc = state.getRunconfig()
-    if isNonBardCastLaneBusy() then
+    if isInterruptCastLaneBusy() then
         queuePending(rc, maTargetId, mobName)
         return true
     end
     if executeInterrupt(maTargetId, spellIndex) then return true end
+    if entry then
+        printf('\ayCZBot:\ax [CH interrupt] failed after executeInterrupt for \ag%s\ax on \at%s\ax', entry.spell or '?',
+            targetDisplayName(maTargetId))
+    end
     return false
 end
 

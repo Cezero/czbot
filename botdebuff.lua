@@ -502,8 +502,10 @@ local function DebuffCheckHandleBardNotmatarWait(rc)
     return true
 end
 
-local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, runPriority, _spellcheckResume)
-    if sub ~= 'debuff' or targethit ~= 'notmatar' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+--- Twist-once bard mez on a single target (notmatar debuff hook and CH/Gate interrupt).
+---@param reason string|nil When set, logs as interrupt (e.g. 'Complete Heal/Gate') instead of add mez.
+function botdebuff.CastBardMezOnce(spellIndex, EvalID, runPriority, reason)
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
     if not entry or type(entry.gem) ~= 'number' then return false end
@@ -520,7 +522,11 @@ local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, r
         bardtwist.RestoreCombatTwistAfterNotmatar()
         return true
     end
-    printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
+    if reason and reason ~= '' then
+        printf('\ayCZBot:\ax interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, reason)
+    else
+        printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
+    end
     bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
@@ -532,13 +538,20 @@ local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, r
         singingStarted = false,
         deadline = mq.gettime() + castTimeMs + 100,
     }
-    if state.canStartBusyState(state.STATES.casting) then
-        state.setRunState(state.STATES.casting, {
-            deadline = mq.gettime() + 20000,
-            priority = runPriority or bothooks.getPriority('doDebuff'),
-        })
+    if not state.canStartBusyState(state.STATES.casting) then
+        rc.bardNotmatarWait = nil
+        return false
     end
+    state.setRunState(state.STATES.casting, {
+        deadline = mq.gettime() + 20000,
+        priority = runPriority or bothooks.getPriority('doDebuff'),
+    })
     return true
+end
+
+local function DebuffCheckBardNotmatarCast(spellIndex, EvalID, targethit, sub, runPriority, _spellcheckResume)
+    if sub ~= 'debuff' or targethit ~= 'notmatar' or mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+    return botdebuff.CastBardMezOnce(spellIndex, EvalID, runPriority, nil)
 end
 
 local function DebuffEntryValid(i)
