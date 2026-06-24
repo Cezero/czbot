@@ -771,20 +771,16 @@ local function isBuffDetrimental(b)
     return false
 end
 
-local function nonCurableDebuffNameFromBuff(b)
-    if not buffSlotHasSpell(b) then return nil end
-    if not isBuffDetrimental(b) then return nil end
-    local ok, total = pcall(function() return b.TotalCounters and b.TotalCounters() or 0 end)
-    if not ok or (total or 0) > 0 then return nil end
-    local okName, name = pcall(function() return b.Name and b.Name() or nil end)
-    return (okName and name) or 'debuff'
-end
-
 local ME_REZ_SICKNESS_SET = {
     ['Resurrection Sickness'] = true,
     ['Revival Sickness'] = true,
 }
 local ME_CATEGORY_DEBUFFS = { 'Snared', 'Rooted', 'Mezzed', 'Slowed', 'Feared', 'Silenced', 'Charmed', 'Crippled' }
+-- Subcategories that impair movement/control; excludes stat debuffs (Malaise, Malo, Tash, etc.).
+local ME_PULL_BLOCKING_SUBCATEGORIES = {
+    Snare = true, Root = true, Enthrall = true, Slow = true,
+    Fear = true, Charm = true, Silence = true, Cripple = true,
+}
 
 local function meRezSicknessFromSlots()
     local maxBuff = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
@@ -806,8 +802,33 @@ local function meRezSicknessFromSlots()
     return false
 end
 
---- True when the player has a detrimental without counters (snare, rez sickness, etc.).
---- Curable debuffs (poison/disease/curse/corruption with counters) return false.
+local function meBlockingDebuffNameFromBuff(b)
+    if not buffSlotHasSpell(b) then return nil end
+    if not isBuffDetrimental(b) then return nil end
+    local okSub, sub = pcall(function() return b.Subcategory and b.Subcategory() end)
+    if not okSub or not sub or not ME_PULL_BLOCKING_SUBCATEGORIES[sub] then return nil end
+    local okName, name = pcall(function() return b.Name and b.Name() or nil end)
+    return (okName and name) or sub
+end
+
+--- Slot fallback when Me.Snared / Me.Slowed etc. do not fire (mirrors SpawnSlowActive pattern).
+local function meBlockingDebuffFromSlots()
+    if not mq.TLO.Me.BuffsPopulated or not mq.TLO.Me.BuffsPopulated() then return false end
+    local maxBuff = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
+    for i = 1, maxBuff do
+        local name = meBlockingDebuffNameFromBuff(mq.TLO.Me.Buff(i))
+        if name then return true, name end
+    end
+    local maxSong = (mq.TLO.Me.MaxSongSlots and mq.TLO.Me.MaxSongSlots()) or 20
+    for i = 1, maxSong do
+        local name = meBlockingDebuffNameFromBuff(mq.TLO.Me.Song(i))
+        if name then return true, name end
+    end
+    return false
+end
+
+--- True when the puller has a movement/CC-impairing debuff (snare, root, mez, slow, fear, etc.).
+--- Stat debuffs (Malaise, Malo, Tash) and curable debuffs (poison/disease/curse/corruption) return false.
 ---@return boolean hasDebuff
 ---@return string|nil debuffName
 function spellutils.MeHasNonCurableDebuff()
@@ -830,19 +851,7 @@ function spellutils.MeHasNonCurableDebuff()
         end
     end
 
-    if not mq.TLO.Me.BuffsPopulated or not mq.TLO.Me.BuffsPopulated() then return false end
-
-    local maxBuff = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
-    for i = 1, maxBuff do
-        local name = nonCurableDebuffNameFromBuff(mq.TLO.Me.Buff(i))
-        if name then return true, name end
-    end
-    local maxSong = (mq.TLO.Me.MaxSongSlots and mq.TLO.Me.MaxSongSlots()) or 20
-    for i = 1, maxSong do
-        local name = nonCurableDebuffNameFromBuff(mq.TLO.Me.Song(i))
-        if name then return true, name end
-    end
-    return false
+    return meBlockingDebuffFromSlots()
 end
 
 -- Default class order for bot list: healers, tanks, casters, DPS. Used when config does not override.

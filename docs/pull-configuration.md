@@ -147,7 +147,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 - **Your HP ≤ 45%** — No new pull is started; an in-progress pull may also abort.
 - **Group mana** — Disabled when **mana** is 0 or **manaclass** is empty. When enabled ( **mana** > 0 and at least one class checked), no new pull if any in-group member whose class is checked has mana **≤ mana** (must be strictly above **mana**). Unreadable mana is treated as 0. Checked classes not present in the group do not block.
 - **Group corpse** — Any group member is dead (corpse); no new pull.
-- **Non-curable debuff** — The puller has a detrimental effect without counters (e.g. rez sickness, snare, root). Curable debuffs (poison, disease, curse, corruption with counters) do not block. An in-progress pull in **navigating** or **aggroing** is aborted and the puller returns to camp (or picks a new roam target in hunter mode).
+- **Impairing debuff** — The puller has a movement/CC-impairing effect (e.g. rez sickness, snare, root, mez, slow, fear). Stat/resist debuffs (Malaise, Malo, Tash) and curable debuffs (poison, disease, curse, corruption with counters) do not block. An in-progress pull in **navigating** or **aggroing** is aborted and the puller returns to camp (or picks a new roam target in hunter mode).
 - **Return timer** — After pulling a mob, a short return timer blocks starting another pull until the previous pull’s mob is cleared (e.g. dead or out of range) or the timer expires.
 
 ---

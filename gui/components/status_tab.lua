@@ -118,7 +118,7 @@ local function getStatusLine()
         return string.format("Waiting on %s's mana (must be > %d%%)", w.name, w.pct)
     end
     if rc.pullDebuffWait and rc.pullDebuffWait.name then
-        return string.format('Waiting: non-curable debuff (%s)', rc.pullDebuffWait.name)
+        return string.format('Waiting: impairing debuff (%s)', rc.pullDebuffWait.name)
     end
     if rc.statusMessage and rc.statusMessage ~= '' then return rc.statusMessage end
     local runState = state.getRunState()
