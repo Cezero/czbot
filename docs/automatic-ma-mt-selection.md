@@ -81,7 +81,7 @@ When the game reports a Main Assist or Main Tank name:
 2. Candidate must be **alive** and in the **same zone** as this bot.
 3. **No distance check** — a primary who is alive in-zone but far away is still used.
 
-If the primary is dead, feigned, hovering, or in another zone, resolution skips to the fallback list.
+If the primary is dead, feigned, hovering, or in another zone, resolution skips to the fallback list. When no list entry qualifies, the **primary name is still retained** (even if dead) so DPS and nukers can continue on the last assisted target via `lastAssistTargetId`.
 
 ### Fallback (`ma_list` / `mt_list`)
 

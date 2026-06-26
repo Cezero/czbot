@@ -52,8 +52,13 @@ local function resolveAutomaticAssistName()
         local gma = mq.TLO.Group.MainAssist
         if gma and gma.Name then primary = gma.Name() end
     end
-    if primary and primary ~= '' and isCandidateAvailable(primary, false) then
-        return primary
+    if primary and primary ~= '' then
+        if isCandidateAvailable(primary, false) then
+            return primary
+        end
+        local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
+        if fallback then return fallback end
+        return primary -- dead/unavailable: keep identity for lastAssistTargetId / engage cache
     end
     return firstAvailableFromList(state.getRunconfig().MaList, true)
 end
