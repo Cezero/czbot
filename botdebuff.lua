@@ -17,6 +17,7 @@ local bardtwist = require('lib.bardtwist')
 local botmelee = require('botmelee')
 local targeting = require('lib.targeting')
 local castinterrupt = require('lib.castinterrupt')
+local spawnutils = require('lib.spawnutils')
 
 local function defaultDebuffEntry()
     return botconfig.getDefaultSpellEntry('debuff')
@@ -565,7 +566,51 @@ local function updateBardTwistOnceDebuffState(entry, evalId)
     end
 end
 
---- BRD twist-once wait: wait for song, update debuff state, re-target if needed, resume combat twist.
+--- True when a BRD twist-once wait should abort (target died, left camp, or fight ended).
+local function bardTwistOnceShouldAbort(w, rc)
+    local evalId = w.EvalID
+    if not evalId or evalId <= 0 then return true end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(evalId)) then return true end
+    if w.targethit == 'matar' and state.getMobCount() <= 0 then return true end
+    if w.targethit == 'notmatar' then
+        local found = false
+        for _, v in ipairs(rc.MobList or {}) do
+            if v.ID() == evalId then
+                found = true
+                break
+            end
+        end
+        if not found then return true end
+    end
+    return false
+end
+
+local function finishBardTwistOnceWait(rc, w, opts)
+    opts = opts or {}
+    local recordDebuff = opts.recordDebuff == true
+    if opts.stopTwist and (mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0) then
+        bardtwist.StopTwist()
+    end
+    rc.bardTwistOnceWait = nil
+    state.clearRunState()
+    rc.statusMessage = ''
+    if recordDebuff and w.singingStarted then
+        updateBardTwistOnceDebuffState(w.entry, w.EvalID)
+    end
+    if w.EvalID and (rc.engageTargetId == w.EvalID or not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID))) then
+        rc.engageTargetId = nil
+    end
+    if state.getMobCount() <= 0 then
+        rc.engageTargetId = nil
+        rc.attackCommandEngage = nil
+    end
+    if w.targethit == 'notmatar' then
+        retargetMaTargetAfterBardMez()
+    end
+    bardtwist.RestoreCombatTwistAfterTwistOnce()
+end
+
+--- BRD twist-once wait: wait for song, update debuff state, re-target if needed, resume twist for current mode.
 local function DebuffCheckHandleBardTwistOnceWait(rc)
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' or not rc.bardTwistOnceWait then
         return false
@@ -574,7 +619,12 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
     if not w or not w.entry or not w.EvalID then
         rc.bardTwistOnceWait = nil
         state.clearRunState()
+        rc.statusMessage = ''
         return false
+    end
+    if bardTwistOnceShouldAbort(w, rc) then
+        finishBardTwistOnceWait(rc, w, { stopTwist = true })
+        return true
     end
     local now = mq.gettime()
     local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0)
@@ -587,24 +637,13 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
             return true
         end
     end
-    local function finishTwistOnceWait()
-        rc.bardTwistOnceWait = nil
-        state.clearRunState()
-        if w.targethit == 'notmatar' then
-            retargetMaTargetAfterBardMez()
-        end
-        bardtwist.RestoreCombatTwistAfterTwistOnce()
-    end
     if not w.singingStarted then
-        finishTwistOnceWait()
+        finishBardTwistOnceWait(rc, w, {})
         return true
     end
     -- Only record the debuff if we actually sang it. A deadline that expires without ever singing is a
     -- failed cast: clean up and resume, but do not mark the debuff as landed.
-    if w.singingStarted then
-        updateBardTwistOnceDebuffState(w.entry, w.EvalID)
-    end
-    finishTwistOnceWait()
+    finishBardTwistOnceWait(rc, w, { recordDebuff = true })
     return true
 end
 
@@ -855,7 +894,7 @@ end
 local function refreshBardCombatTwistIfNeeded()
     local rc = state.getRunconfig()
     if rc.bardTwistOnceWait then return end
-    if mq.TLO.Me.Class.ShortName() == 'BRD' and state.getMobCount() > 0 then
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then
         bardtwist.EnsureDefaultTwistRunning()
     end
 end

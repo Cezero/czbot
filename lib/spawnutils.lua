@@ -586,7 +586,9 @@ function spawnutils.validateAcmTarget(rc)
         if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(rc.engageTargetId), rc) then
             rc.engageTargetId = nil
             rc.attackCommandEngage = nil
-            if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
+            if state.getRunState() ~= state.STATES.casting or rc.bardTwistOnceWait then
+                rc.statusMessage = ''
+            end
             if state.getRunState() == state.STATES.melee then state.clearRunState() end
         end
     end
