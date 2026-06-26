@@ -147,27 +147,33 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
         { aeRangeSq = aeRangeSq, includeMemberZero = true })
 end
 
-local function buffMemberClassAllowed(spellIndex, grpname, grpmember)
+local function resolveMemberClassShortName(grpmember, grpname, peer)
+    if grpmember and grpmember.Class then
+        return grpmember.Class.ShortName()
+    end
+    local info = peer or (grpname and charinfo.GetInfo(grpname))
+    if info and info.Class then
+        local sn = info.Class.ShortName
+        if type(sn) == 'string' then return sn end
+    end
+    if grpname then
+        local sp = mq.TLO.Spawn('pc =' .. grpname)
+        if sp and sp.Class then return sp.Class.ShortName() end
+    end
+    return nil
+end
+
+local function buffMemberClassAllowed(spellIndex, grpname, grpmember, peer)
     if BuffClass[spellIndex].classes == 'all' then return true end
     local classes = BuffClass[spellIndex].classes
     if not classes then return false end
-    local className
-    if grpmember and grpmember.Class then
-        className = grpmember.Class.ShortName()
-    else
-        local peer = charinfo.GetInfo(grpname)
-        if peer and peer.Class then className = peer.Class.ShortName() end
-        if not className then
-            local sp = mq.TLO.Spawn('pc =' .. grpname)
-            className = sp and sp.Class.ShortName()
-        end
-    end
+    local className = resolveMemberClassShortName(grpmember, grpname, peer)
     return className and classes[className:lower()] or false
 end
 
 local function buffGroupNeedFn(spellIndex, spell, spellid, entry)
     return function(grpmember, grpid, grpname, peer)
-        if not buffMemberClassAllowed(spellIndex, grpname, grpmember) then return false end
+        if not buffMemberClassAllowed(spellIndex, grpname, grpmember, peer) then return false end
         if peer then
             local hasBuff = spellutils.PeerHasBuff(peer, spellid)
             local stacks = peer:Stacks(spellid)
@@ -180,7 +186,7 @@ end
 
 local function peerPersonallyNeedsBuff(spellIndex, grpname, spellid, peer)
     if not peer then return false end
-    if not buffMemberClassAllowed(spellIndex, grpname, nil) then return false end
+    if not buffMemberClassAllowed(spellIndex, grpname, nil, peer) then return false end
     local hasBuff = spellutils.PeerHasBuff(peer, spellid)
     local stacks = peer:Stacks(spellid)
     local free = peer.FreeBuffSlots
