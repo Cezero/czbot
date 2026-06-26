@@ -292,8 +292,13 @@ end
 local function cmd_followme(args)
     local rc = state.getRunconfig()
     local sub = args[2] and string.lower(args[2]) or 'group'
+    local third = args[3] and string.lower(args[3]) or nil
 
-    if sub == 'off' then
+    if sub == 'off' or sub == 'stop' then
+        if third then
+            printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off|stop]')
+            return
+        end
         if not rc.followmeMode then
             printf('\ayCZBot:\ax Followme not active')
             return
@@ -304,8 +309,23 @@ local function cmd_followme(args)
         return
     end
 
-    if sub ~= 'group' and sub ~= 'raid' then
-        printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off]')
+    if sub == 'group' or sub == 'raid' then
+        if third == 'stop' or third == 'off' then
+            if args[4] then
+                printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off|stop]')
+                return
+            end
+            mq.cmdf('/rc %s /cz stop', sub)
+            printf('\ayCZBot:\ax Followme OFF (%s)', sub)
+            if rc.followmeMode == sub then rc.followmeMode = nil end
+            return
+        end
+        if third then
+            printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off|stop]')
+            return
+        end
+    else
+        printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off|stop]')
         return
     end
 
