@@ -7,6 +7,7 @@ This document explains how to configure a bot as an **offtank**: picking an add 
 - **AssistName (MA)** must be set so the offtank knows whose target to follow or tank.
 - When **MT target == MA target** (same mob), the offtank picks an **add** — the Nth other mob in the camp list, where N is **otoffset** (0 = first add).
 - When **MT target != MA target** (different mobs), the offtank **tanks the MA’s target** (sets engage target to the MA’s target and uses agro/taunt).
+- Once engaged on an add or on the MA’s off-target mob, the offtank **sticks on that target until it dies** (no `assistpct` gate; does not snap back to the main mob).
 
 ---
 
@@ -48,8 +49,8 @@ flowchart LR
     D --> F[engageTargetId = MA target, agro/taunt]
 ```
 
-- **Same mob:** Offtank picks the **Nth add** in the mob list (N = **otoffset**).
-- **Different mobs:** Offtank **tanks the MA’s target** (engage target = MA target; bot uses stick/agro/taunt).
+- **Same mob:** Offtank picks the **Nth add** in the mob list (N = **otoffset**), then **sticks on that add until it dies**.
+- **Different mobs:** Offtank **tanks the MA’s target** (engage target = MA target; bot uses stick/agro/taunt) and **sticks until it dies**.
 
 ---
 

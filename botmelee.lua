@@ -295,14 +295,36 @@ local function isEngageableMobListSpawn(spawn)
 end
 
 
+local function hasAliveEngageTarget(rc)
+    local engageId = rc.engageTargetId
+    if not engageId or engageId <= 0 then return false end
+    return spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId))
+        and not charm.isCharmSkipped(engageId, rc)
+end
+
+local function isOfftankPrimaryTarget(id, maTarId, mtTarId)
+    if not id then return false end
+    if maTarId and id == maTarId then return true end
+    if mtTarId and id == mtTarId then return true end
+    return false
+end
+
+function botmelee.isOfftankPrimaryTarget(id, maTarId, mtTarId)
+    return isOfftankPrimaryTarget(id, maTarId, mtTarId)
+end
+
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if not mainTankName or mainTankName == '' then return nil end
     local rc = state.getRunconfig()
-    local _, _, maTarId, maTarHp, maFromCache = spellutils.GetAssistInfo(true, assistpct)
+    local _, _, maTarId = spellutils.GetAssistInfo(true, assistpct)
     if maTarId == 0 then maTarId = nil end
     local _, _, mtTarId = spellutils.GetTankInfo(true)
     if mtTarId == 0 then mtTarId = nil end
-    if mtTarId == maTarId then
+    if hasAliveEngageTarget(rc) and not isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId) then
+        return rc.engageTargetId
+    end
+    local samePrimary = (not maTarId or not mtTarId or mtTarId == maTarId)
+    if samePrimary then
         local otoffset = myconfig.melee.otoffset or 0
         local nthSpawn = spawnutils.selectNthAdd(rc.MobList, maTarId, otoffset + 1)
         if nthSpawn then
@@ -312,20 +334,10 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
             end
             return actarid
         end
-        if maFromCache or (maTarHp and maTarHp <= assistpct) then
-            if maTarId and maTarId > 0 then return maTarId end
-        end
     elseif maTarId and maTarId > 0 then
         return maTarId
     end
     return nil
-end
-
-local function hasAliveEngageTarget(rc)
-    local engageId = rc.engageTargetId
-    if not engageId or engageId <= 0 then return false end
-    return spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId))
-        and not charm.isCharmSkipped(engageId, rc)
 end
 
 -- MA target for MT immediate follow (no assistpct gate).

@@ -222,6 +222,17 @@ function spawnutils.shouldPreserveStickyEngage(rc)
         and botconfig.config.melee.mtSticky then
         return true
     end
+    if botconfig.config.melee.offtank and not tankrole.AmIMainAssist() then
+        local spellutils = require('lib.spellutils')
+        local botmelee = require('botmelee')
+        local _, _, maTarId = spellutils.GetAssistInfo(true)
+        local _, _, mtTarId = spellutils.GetTankInfo(true)
+        if maTarId == 0 then maTarId = nil end
+        if mtTarId == 0 then mtTarId = nil end
+        if not botmelee.isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId) then
+            return true
+        end
+    end
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == rc.engageTargetId then return true end
     end

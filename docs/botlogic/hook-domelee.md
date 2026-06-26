@@ -40,7 +40,7 @@ flowchart TB
 
 - **MA (selectMATarget):** Only effective MA bot. Named-first initial pick; puller priority; sticky engage with named mid-fight override. **`mtSticky` ignored** when same bot is MT.
 - **Separate MT (resolveMtFollowTarget):** Follow MA immediately (no assistpct). **`mtSticky`:** keep `engageTargetId` once set; otherwise switch with MA.
-- **Offtank (resolveOfftankTarget):** If MT and MA same target, pick Nth add; else MA target.
+- **Offtank (resolveOfftankTarget):** If MT and MA same target, pick Nth add; else MA target. Sticks on engaged add or MA off-target until it dies (no assistpct fallback to main mob).
 - **DPS (resolveMeleeAssistTarget):** Sync to MA at **assistpct**.
 - **engageTarget / disengageCombat:** unchanged — see prior doc.
 
