@@ -10,6 +10,7 @@ local castutils = require('lib.castutils')
 local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
 local botmove = require('botmove')
+local combat = require('lib.combat')
 
 local botdebuff = {}
 local DebuffBands = {}
@@ -626,6 +627,11 @@ local function finishBardTwistOnceWait(rc, w, opts)
     end
     if w.targethit == 'notmatar' then
         retargetMaTargetAfterBardMez()
+    end
+    local fightEnded = state.getMobCount() <= 0
+        or (w.EvalID and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)))
+    if fightEnded then
+        combat.ResetCombatState()
     end
     botmelee.syncEngageStatusMessage(rc)
     bardtwist.RestoreCombatTwistAfterTwistOnce()

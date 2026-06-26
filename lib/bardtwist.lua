@@ -222,13 +222,29 @@ end
 ---@return boolean true when twistOnceActive was cleared
 function bardtwist.ReconcileTwistOnceActive(mode)
     if not twistOnceActive then return false end
+    local rc = state.getRunconfig()
+    if rc.bardTwistOnceWait then return false end
     mode = mode or bardtwist.GetCurrentTwistMode()
     if not mode then return false end
     local desiredGems = bardtwist.GetTwistListForMode(mode)
-    if not desiredGems or #desiredGems == 0 then return false end
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
     local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+    if not desiredGems or #desiredGems == 0 then
+        twistOnceActive = false
+        clearTwistOnceGemHint()
+        return true
+    end
     if twistListsEqual(currentGems, desiredGems) then
+        twistOnceActive = false
+        clearTwistOnceGemHint()
+        return true
+    end
+    if lastTwistOnceAt > 0 and mq.gettime() - lastTwistOnceAt > TWIST_ONCE_GEM_TTL_MS then
+        twistOnceActive = false
+        clearTwistOnceGemHint()
+        return true
+    end
+    if not twistListsEqual(currentGems, desiredGems) then
         twistOnceActive = false
         clearTwistOnceGemHint()
         return true
@@ -241,24 +257,29 @@ function bardtwist.EnsureTwistForMode(mode)
     if not bardtwist.SongsEnabled() then return end
     local rc = state.getRunconfig()
     local desiredGems = bardtwist.GetTwistListForMode(mode)
-    if not desiredGems or #desiredGems == 0 then
-        if mode == 'travel' and mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
-            mq.cmd('/twist stop')
-        end
-        return
-    end
-    local twisting = mq.TLO.Twist() and mq.TLO.Twist.Twisting()
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
     local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+    if not desiredGems or #desiredGems == 0 then
+        if (mode == 'travel' or mode == 'idle') and mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
+            mq.cmd('/twist stop')
+        end
+        twistOnceActive = false
+        clearTwistOnceGemHint()
+        return
+    end
     if twistOnceActive then
         if twistListsEqual(currentGems, desiredGems) then
             twistOnceActive = false
             clearTwistOnceGemHint()
+        elseif rc.bardTwistOnceWait then
+            return
+        else
+            twistOnceActive = false
+            clearTwistOnceGemHint()
         end
-        if rc.bardTwistOnceWait then return end
-        return
     end
     if rc.bardTwistOnceWait then return end
+    local twisting = mq.TLO.Twist() and mq.TLO.Twist.Twisting()
     if twisting and twistListsEqual(currentGems, desiredGems) then return end
     mq.cmd('/twist ' .. table.concat(desiredGems, ' '))
 end
@@ -272,7 +293,16 @@ function bardtwist.EnsureDefaultTwistRunning()
         bardtwist.StopTwist()
         return
     end
-    if mode then bardtwist.EnsureTwistForMode(mode) end
+    if mode then
+        local desiredGems = bardtwist.GetTwistListForMode(mode)
+        local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+        local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+        if desiredGems and #desiredGems > 0 and not twistListsEqual(currentGems, desiredGems) then
+            twistOnceActive = false
+            clearTwistOnceGemHint()
+        end
+        bardtwist.EnsureTwistForMode(mode)
+    end
 end
 
 function bardtwist.StopTwist()
