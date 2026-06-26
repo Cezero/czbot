@@ -143,7 +143,65 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
         end
         return spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon)
     end
-    return castutils.evalGroupAECount(entry, 'groupbuff', index, BuffClass, 'groupbuff', needBuff, { aeRangeSq = aeRangeSq })
+    return castutils.evalGroupAECount(entry, 'groupbuff', index, BuffClass, 'groupbuff', needBuff,
+        { aeRangeSq = aeRangeSq, includeMemberZero = true })
+end
+
+local function buffMemberClassAllowed(spellIndex, grpname, grpmember)
+    if BuffClass[spellIndex].classes == 'all' then return true end
+    local classes = BuffClass[spellIndex].classes
+    if not classes then return false end
+    local className
+    if grpmember and grpmember.Class then
+        className = grpmember.Class.ShortName()
+    else
+        local peer = charinfo.GetInfo(grpname)
+        if peer and peer.Class then className = peer.Class.ShortName() end
+        if not className then
+            local sp = mq.TLO.Spawn('pc =' .. grpname)
+            className = sp and sp.Class.ShortName()
+        end
+    end
+    return className and classes[className:lower()] or false
+end
+
+local function buffGroupNeedFn(spellIndex, spell, spellid, entry)
+    return function(grpmember, grpid, grpname, peer)
+        if not buffMemberClassAllowed(spellIndex, grpname, grpmember) then return false end
+        if peer then
+            local hasBuff = spellutils.PeerHasBuff(peer, spellid)
+            local stacks = peer:Stacks(spellid)
+            local free = peer.FreeBuffSlots
+            return not hasBuff and stacks and free and free > 0
+        end
+        return spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon)
+    end
+end
+
+local function isGroupV2PcAnchor(anchorName, bots)
+    local key = castutils.getPeerGroupKey(anchorName)
+    for i = 1, #bots do
+        local name = bots[i]
+        if castutils.getPeerGroupKey(name) == key then
+            return name == anchorName
+        end
+    end
+    return false
+end
+
+local function BuffEvalGroupV2Pc(spellIndex, entry, spell, spellid, targetId, anchorName, aeRangeSq, myRangeSq, context)
+    if not BuffClass[spellIndex].pc or not spellutils.IsGroupV2BuffEntry(entry) then return nil, nil end
+    if mq.TLO.Group.Member(anchorName).Index() then return nil, nil end
+    local bots = context and context.bots
+    if not bots or not isGroupV2PcAnchor(anchorName, bots) then return nil, nil end
+    local needBuff = buffGroupNeedFn(spellIndex, spell, spellid, entry)
+    local id = castutils.evalGroupV2OnPeer(entry, targetId, anchorName, needBuff,
+        { aeRangeSq = aeRangeSq, myRangeSq = myRangeSq })
+    if id then
+        local cls = mq.TLO.Spawn(targetId).Class.ShortName()
+        return id, cls and cls:lower() or nil
+    end
+    return nil, nil
 end
 
 local function BuffEvalMyPet(index, entry, spell, spellid, rangeSq)
@@ -314,10 +372,35 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         end
         return nil, nil
     end
-    if BuffClass[spellIndex].groupmember or BuffClass[spellIndex].pc then
+    if BuffClass[spellIndex].groupmember then
         local grpname = mq.TLO.Spawn(targetId).CleanName()
         local lc = targethit
         if (BuffClass[spellIndex].classes == 'all' or (BuffClass[spellIndex].classes and BuffClass[spellIndex].classes[lc])) and IconCheck(spellIndex, targetId) then
+            local peer = charinfo.GetInfo(grpname)
+            if peer then
+                local id, hit = BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
+                if id then return id, hit end
+            else
+                if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, lc, nil, nil, nil) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
+                    return targetId, lc
+                end
+            end
+        end
+    end
+    if BuffClass[spellIndex].pc then
+        local grpname = mq.TLO.Spawn(targetId).CleanName()
+        if not grpname then return nil, nil end
+        local lc = targethit
+        if not (BuffClass[spellIndex].classes == 'all' or (BuffClass[spellIndex].classes and BuffClass[spellIndex].classes[lc])) then
+            return nil, nil
+        end
+        if spellutils.IsGroupV2BuffEntry(entry) then
+            local myRangeOnly = myRange and myRange > 0 and myRange or nil
+            local myRangeSq = myRangeOnly and (myRangeOnly * myRangeOnly) or rangeSq
+            local aeRangeSq = aeRange and aeRange > 0 and (aeRange * aeRange) or nil
+            return BuffEvalGroupV2Pc(spellIndex, entry, spell, sid, targetId, grpname, aeRangeSq, myRangeSq, context)
+        end
+        if IconCheck(spellIndex, targetId) then
             local peer = charinfo.GetInfo(grpname)
             if peer then
                 local id, hit = BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)

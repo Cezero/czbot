@@ -3,6 +3,7 @@
 local mq = require('mq')
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
+local spellutils = require('lib.spellutils')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
 local name_list = require('gui.widgets.name_list')
@@ -39,11 +40,52 @@ local TARGETPHASE_OPTIONS_BUFF = {
     { key = 'self',        label = 'Self',     tooltip = 'Buff self.' },
     { key = 'tank',        label = 'Tank',     tooltip = 'Buff tank (main assist).' },
     { key = 'groupmember', label = 'Group',     tooltip = 'Buff your group members (class filter below).' },
-    { key = 'pc',          label = 'All chars', tooltip = 'Out-of-group buffing: buff ALL your networked characters in range, in any group, class-filtered below. Add specific non-network people (e.g. guildmates) under "Buff extra names".' },
+    { key = 'pc',          label = 'All chars', tooltip = 'Single-target: buff networked characters in range (any group), class-filtered below.' },
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Buff your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Buff other group pets.' },
-    { key = 'groupbuff',   label = 'Grp Buff', tooltip = 'Group AE buff.' },
+    { key = 'groupbuff',   label = 'Grp Buff', tooltip = 'Group v1 AE: cast on self (no target) when enough of your group need the buff. tarcnt includes self.' },
 }
+
+local TARGETPHASE_GROUPV2_PC = {
+    key = 'pc',
+    label = 'All chars',
+    tooltip = 'Group v2 remote: cast on one networked peer per group to AE their group. Uses tarcnt and class filter; one anchor per group (raid recommended for multi-group dedup).',
+}
+
+local TARGETPHASE_GROUPV2_GROUPBUFF = {
+    key = 'groupbuff',
+    label = 'Grp Buff',
+    tooltip = 'Group v2 AE: cast on self when enough of your group need the buff. tarcnt includes self.',
+}
+
+local function getTargetPhaseOptionsForEntry(entry)
+    local tt = spellutils.GetSpellTargetType(entry)
+    if tt == 'Group v2' then
+        return { TARGETPHASE_GROUPV2_GROUPBUFF, TARGETPHASE_GROUPV2_PC }
+    end
+    local out = {}
+    for _, opt in ipairs(TARGETPHASE_OPTIONS_BUFF) do
+        if tt == 'Group v1' then
+            if opt.key ~= 'pc' then out[#out + 1] = opt end
+        else
+            if opt.key ~= 'groupbuff' then out[#out + 1] = opt end
+        end
+    end
+    return out
+end
+
+local function isGroupAEBuffEntry(entry)
+    local tt = spellutils.GetSpellTargetType(entry)
+    return tt == 'Group v1' or tt == 'Group v2'
+end
+
+local function getDetectedTypeLabelForEntry(entry)
+    local tt = spellutils.GetSpellTargetType(entry)
+    if tt == 'Group v2' then return 'Group v2' end
+    if tt == 'Group v1' then return 'Group v1' end
+    if spellutils.IsPetSummonSpell(entry) then return 'Pet summon' end
+    return nil
+end
 
 -- PC/groupmember target options (class filter). Keys match spellbands CLASS_TOKENS.
 local VALIDTARGETS_OPTIONS_PC_GROUP = {
@@ -122,21 +164,23 @@ local function buffCustomSection(entry, idPrefix, onChanged)
         ImGui.SetTooltip(s.error)
     end
     ImGui.Spacing()
-    -- tarcnt row
-    ImGui.Text('Target count')
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Minimum number of targets (e.g. group members in AE range) that must be present before this spell can be used. Used for group/AE buffs; 1 = no minimum.')
+    if isGroupAEBuffEntry(entry) then
+        ImGui.Text('Target count')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(
+                'Minimum group members in AE range (including yourself for Grp Buff) that must need this buff before casting. Remote All chars uses the same count for the anchor peer\'s group.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local tc = entry.tarcnt
+        if tc == nil then tc = 1 end
+        local newTc, tcCh = inputs.boundedInt(idPrefix .. '_tarcnt', tc, 1, 10, 1, '##' .. idPrefix .. '_tarcnt')
+        if tcCh then
+            entry.tarcnt = newTc
+            if onChanged then onChanged() end
+        end
+        ImGui.Spacing()
     end
-    ImGui.SameLine()
-    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-    local tc = entry.tarcnt
-    if tc == nil then tc = 1 end
-    local newTc, tcCh = inputs.boundedInt(idPrefix .. '_tarcnt', tc, 1, 10, 1, '##' .. idPrefix .. '_tarcnt')
-    if tcCh then
-        entry.tarcnt = newTc
-        if onChanged then onChanged() end
-    end
-    ImGui.Spacing()
     -- In combat: allow this buff when mobs are in camp
     ImGui.Text('Allow in combat')
     if ImGui.IsItemHovered() then
@@ -216,11 +260,12 @@ function M.draw()
             id = 'buff_' .. i,
             label = 'Buff ' .. i,
             collapsible = true,
+            detectedTypeLabel = getDetectedTypeLabelForEntry(entry),
             primaryOptions = PRIMARY_OPTIONS,
             onChanged = runConfigLoaders,
             displayCommonFields = true,
             customSection = buffCustomSection,
-            targetphaseOptions = TARGETPHASE_OPTIONS_BUFF,
+            targetphaseOptionsFn = getTargetPhaseOptionsForEntry,
             validtargetsOptions = VALIDTARGETS_OPTIONS_PC_GROUP,
             showBandMinMax = false,
             showBandMinTarMaxtar = false,

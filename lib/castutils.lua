@@ -106,6 +106,91 @@ function castutils.evalGroupAECount(entry, targethit, index, bandTable, phaseKey
     return nil, nil
 end
 
+-- Peer group key for dedup (remote Group v2 pc anchors). Multi-group dedup requires raid when not in anchor's EQ group.
+function castutils.getPeerGroupKey(peerName)
+    if not peerName or peerName == '' then return 'solo_unknown' end
+    if mq.TLO.Group.Member(peerName).Index() then return 'mine' end
+    local raidMembers = mq.TLO.Raid.Members()
+    if raidMembers and raidMembers > 0 then
+        for i = 1, raidMembers do
+            if mq.TLO.Raid.Member(i)() == peerName then
+                local gn = mq.TLO.Raid.Member(i).Group()
+                if gn and gn > 0 then return 'raid_' .. tostring(gn) end
+                break
+            end
+        end
+    end
+    return 'solo_' .. peerName
+end
+
+local function forEachGroupMemberOfAnchor(anchorName, fn)
+    if mq.TLO.Group.Member(anchorName).Index() then
+        for i = 0, mq.TLO.Group.Members() do
+            local grpmember = mq.TLO.Group.Member(i)
+            if grpmember then
+                local grpname = grpmember.Name()
+                local grpid = grpmember.ID()
+                if grpid and grpid > 0 and grpname then
+                    fn(grpname, grpid, grpmember, charinfo.GetInfo(grpname))
+                end
+            end
+        end
+        return
+    end
+    local anchorGroupNum = nil
+    local raidMembers = mq.TLO.Raid.Members()
+    if raidMembers and raidMembers > 0 then
+        for i = 1, raidMembers do
+            if mq.TLO.Raid.Member(i)() == anchorName then
+                anchorGroupNum = mq.TLO.Raid.Member(i).Group()
+                break
+            end
+        end
+        if anchorGroupNum and anchorGroupNum > 0 then
+            for i = 1, raidMembers do
+                if mq.TLO.Raid.Member(i).Group() == anchorGroupNum then
+                    local grpname = mq.TLO.Raid.Member(i)()
+                    local grpid = mq.TLO.Spawn('pc =' .. grpname).ID()
+                    if grpname and grpid and grpid > 0 then
+                        fn(grpname, grpid, nil, charinfo.GetInfo(grpname))
+                    end
+                end
+            end
+            return
+        end
+    end
+    local grpid = mq.TLO.Spawn('pc =' .. anchorName).ID()
+    if grpid and grpid > 0 then
+        fn(anchorName, grpid, nil, charinfo.GetInfo(anchorName))
+    end
+end
+
+-- Group v2 AE on a peer anchor: count anchor's group members in AE range; return anchorId when count >= tarcnt.
+function castutils.evalGroupV2OnPeer(entry, anchorId, anchorName, needMemberFn, opts)
+    if not entry or not entry.spell then return nil end
+    local tartype = mq.TLO.Spell(entry.spell).TargetType()
+    if tartype ~= 'Group v2' then return nil end
+    opts = opts or {}
+    local aeRangeSq = opts.aeRangeSq
+    local myRangeSq = opts.myRangeSq
+    if not aeRangeSq or not myRangeSq then return nil end
+    local anchorSpawn = mq.TLO.Spawn(anchorId)
+    if not anchorSpawn or not anchorSpawn.ID() or anchorSpawn.ID() == 0 then return nil end
+    local anchorDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), anchorSpawn.X(), anchorSpawn.Y())
+    if not anchorDistSq or anchorDistSq > myRangeSq then return nil end
+    local needCount = 0
+    forEachGroupMemberOfAnchor(anchorName, function(grpname, grpid, grpmember, peer)
+        local grpspawn = mq.TLO.Spawn(grpid)
+        if not grpspawn or grpspawn.Type() ~= 'PC' then return end
+        local grpdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), grpspawn.X(), grpspawn.Y())
+        if not grpdistSq or grpdistSq > aeRangeSq then return end
+        local memberRef = grpmember or grpspawn
+        if needMemberFn(memberRef, grpid, grpname, peer) then needCount = needCount + 1 end
+    end)
+    if needCount >= (entry.tarcnt or 1) then return anchorId end
+    return nil
+end
+
 -- Shared get-targets helpers for buff/cure/heal GetTargetsForPhase.
 -- opts for getTargetsGroupMember: botsFirst (add bots in group first), excludeBotsFromGroup (in group loop skip names that have charinfo), excludeSelfAndTank (heal/buff: skip tank in group loop).
 local function addPcEntries(out, names, count, filterFn)

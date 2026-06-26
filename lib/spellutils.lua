@@ -1145,12 +1145,14 @@ end
 
 -- Return the spell TLO for the entry (Spell or FindItem.Spell for items). Nil if neither applies.
 function spellutils.GetSpellEntity(entry)
-    if not entry or not entry.spell then return nil end
+    if not entry then return nil end
     if entry.gem == 'item' then
+        if not entry.spell or entry.spell == '' then return nil end
         if not mq.TLO.FindItem(entry.spell)() then return nil end
         return mq.TLO.FindItem(entry.spell).Spell
     end
     if entry.gem == 'alt' then
+        if not entry.spell or entry.spell == '' then return nil end
         local aa = mq.TLO.Me.AltAbility(entry.spell)
         if not aa or not aa() then return nil end
         local sp = aa.Spell
@@ -1160,7 +1162,28 @@ function spellutils.GetSpellEntity(entry)
     if entry.gem == 'disc' then
         return spellutils.GetDisciplineSpellEntity(entry.spell)
     end
-    return mq.TLO.Spell(entry.spell)
+    if entry.spell and entry.spell ~= '' then
+        local resolved = spellutils.GetResolvedSpellName(entry)
+        local name = resolved or entry.spell
+        local e = mq.TLO.Spell(name)
+        if e and e() then return e end
+        local n = tonumber(name)
+        if n and n > 0 then
+            e = mq.TLO.Spell(n)
+            if e and e() then return e end
+        end
+    end
+    local gemNum = type(entry.gem) == 'number' and entry.gem or tonumber(entry.gem)
+    if gemNum and gemNum >= 1 and gemNum <= 12 then
+        local g = mq.TLO.Me.Gem(gemNum)
+        if g and g() then return g end
+    end
+    local sid = spellutils.GetSpellId(entry)
+    if sid and sid > 0 then
+        local e = mq.TLO.Spell(sid)
+        if e and e() then return e end
+    end
+    return nil
 end
 
 -- True when MQ spell data says TargetType Self (self-only; no need to retarget to cast).
@@ -1177,6 +1200,72 @@ function spellutils.IsGroupV1OrV2HealEntry(entry)
     if not e or not e.TargetType then return false end
     local tt = e.TargetType()
     return tt == 'Group v1' or tt == 'Group v2'
+end
+
+-- MQ TargetType() for a spell entry (handles item gems, spell ID, and gem slot).
+local function targetTypeFromSpellRef(ref)
+    if not ref or not ref.TargetType then return nil end
+    local ok, tt = pcall(function() return ref.TargetType() end)
+    if not ok or type(tt) ~= 'string' then return nil end
+    tt = tt:match('^%s*(.-)%s*$')
+    if tt == '' or tt == 'Unknown' then return nil end
+    return tt
+end
+
+function spellutils.GetSpellTargetType(entry)
+    if not entry then return nil end
+
+    local tt = targetTypeFromSpellRef(spellutils.GetSpellEntity(entry))
+    if tt then return tt end
+
+    local _, _, tartype = spellutils.GetSpellInfo(entry)
+    if type(tartype) == 'string' and tartype ~= '' and tartype ~= 'Unknown' then return tartype end
+
+    local resolved = spellutils.GetResolvedSpellName(entry)
+    if resolved then
+        tt = targetTypeFromSpellRef(mq.TLO.Spell(resolved))
+        if tt then return tt end
+    end
+
+    local sid = spellutils.GetSpellId(entry)
+    if sid and sid > 0 then
+        tt = targetTypeFromSpellRef(mq.TLO.Spell(sid))
+        if tt then return tt end
+    end
+
+    if entry.spell then
+        local n = tonumber(entry.spell)
+        if n and n > 0 then
+            tt = targetTypeFromSpellRef(mq.TLO.Spell(n))
+            if tt then return tt end
+        end
+    end
+
+    local gemNum = type(entry.gem) == 'number' and entry.gem or tonumber(entry.gem)
+    if gemNum and gemNum >= 1 and gemNum <= 12 then
+        tt = targetTypeFromSpellRef(mq.TLO.Me.Gem(gemNum))
+        if tt then return tt end
+    end
+
+    return nil
+end
+
+function spellutils.IsGroupV1BuffEntry(entry)
+    return spellutils.GetSpellTargetType(entry) == 'Group v1'
+end
+
+function spellutils.IsGroupV2BuffEntry(entry)
+    return spellutils.GetSpellTargetType(entry) == 'Group v2'
+end
+
+function spellutils.IsGroupAEBuffEntry(entry)
+    local tt = spellutils.GetSpellTargetType(entry)
+    return tt == 'Group v1' or tt == 'Group v2'
+end
+
+-- Group v1 buff on self: no retarget / allow no target (like group AE heals). Group v2 always needs a target.
+function spellutils.IsGroupV1NoRetargetBuffEntry(entry)
+    return spellutils.IsGroupV1BuffEntry(entry)
 end
 
 -- Return duration in seconds for the entry's spell (handles item). Returns 0 if none or invalid.
@@ -2010,7 +2099,8 @@ function spellutils.handleSpellCheckReentry(sub, options)
         local preEntry = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
         local skipPrecastTargetWait = preEntry and rc.CurSpell.target == mq.TLO.Me.ID() and
             (spellutils.IsSelfTargetSpell(preEntry) or
-                (rc.CurSpell.sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(preEntry)))
+                (rc.CurSpell.sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(preEntry)) or
+                (rc.CurSpell.sub == 'buff' and spellutils.IsGroupV1NoRetargetBuffEntry(preEntry)))
         if mq.TLO.Target.ID() ~= rc.CurSpell.target and not skipPrecastTargetWait then
             if mq.gettime() < (rc.CurSpell.deadline or 0) then return true end
             spellutils.clearCastingStateOrResume()
@@ -2615,7 +2705,8 @@ function spellutils.BuildCastRequest(entry, EvalID, sub)
         targetId = EvalID,
         sub = sub,
         maxTries = maxTries,
-        allowNoTarget = (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry)),
+        allowNoTarget = (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry))
+            or (sub == 'buff' and spellutils.IsGroupV1NoRetargetBuffEntry(entry)),
         isSelfTarget = spellutils.IsSelfTargetSpell(entry),
         spellId = spellutils.GetSpellId(entry),
     }
@@ -2722,6 +2813,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     end
     local skipSelfRetarget = (EvalID == meId and spellutils.IsSelfTargetSpell(entry)) or
         (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry)) or
+        (sub == 'buff' and EvalID == meId and spellutils.IsGroupV1NoRetargetBuffEntry(entry)) or
         (sub == 'debuff' and (gem == 'ability' or gem == 'disc') and EvalID == rc.engageTargetId and mq.TLO.Target.ID() == EvalID)
     if not useCastingLib and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat and not skipSelfRetarget then
         mq.cmdf('/tar id %s', EvalID)

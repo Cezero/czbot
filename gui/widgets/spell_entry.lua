@@ -445,7 +445,8 @@ function M.draw(spell, opts)
             opts.customSection(spell, id .. '_custom', onChanged)
         end
         -- Bands widget
-        local targetphaseOptions = opts.targetphaseOptions or {}
+        local targetphaseOptions = (opts.targetphaseOptionsFn and opts.targetphaseOptionsFn(spell))
+            or opts.targetphaseOptions or {}
         local validtargetsOptions = opts.validtargetsOptions or {}
         local targetsColumns = opts.targetsColumns or 6
         local showBandMinMax = opts.showBandMinMax == true

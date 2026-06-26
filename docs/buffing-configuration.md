@@ -46,8 +46,9 @@ Bands use **targetphase** (priority stages) and **validtargets** (classes or `al
 - **validtargets**: Class shorts (e.g. `war`, `clr`, …) or `all`. Restricts which classes get the buff for **groupmember** and **pc** phases. Absent = all classes.
 - **Pet summon:** Pet summon spells are **auto-detected** (spell Category Pet or SPA 33/103). For a summon, add a buff entry with **self** in targetphase; the bot only casts it when it has no pet. The token **petspell** in targetphase is deprecated (not a phase); if present it still sets the pet-summon flag for backward compatibility. See [Pets configuration](pets-configuration.md).
 - **name** — Buff specific characters by name (list their names in **validtargets** when using **byname** in targetphase).
-- **groupbuff** — Group AE buff: when the spell targets the group (e.g. Group v1), the bot counts group members in range who need the buff (peers from charinfo, non-peers from Spawn when BuffsPopulated); if the count is at least **tarcnt** (optional, default 1), it casts on self. **tarcnt** can be set on the spell entry.
-- **groupmember** — Single-target buffs only for characters in the bot’s (EQ) group; includes non-bot group members. For non-peers, buff state comes only from **Spawn** after targeting (Spawn.BuffsPopulated must be true). Add **pc** in targetphase to also buff peers outside the group (evaluated after groupmember).
+- **groupbuff** — Group AE buff (MQ **TargetType Group v1** or **Group v2**). Counts your EQ group members in AE range who need the buff (peers from charinfo, non-peers from Spawn when BuffsPopulated), **including yourself**. When the count is at least **tarcnt** (default 1), the bot casts on self. **Group v1** casts without retargeting (no friendly target required). **Group v2** retargets to self (v2 requires a group anchor). See [Group AE buffs (v1 vs v2)](#group-ae-buffs-v1-vs-v2) below.
+- **groupmember** — Single-target buffs only for characters in the bot’s (EQ) group; includes non-bot group members. For non-peers, buff state comes only from **Spawn** after targeting (Spawn.BuffsPopulated must be true). Add **pc** in targetphase to also buff peers outside the group (evaluated after groupmember). Not used for Group v1/v2 AE spells (GUI hides it for those).
+- **pc** — For **single-target** buffs: all networked peers by class (from validtargets), any group. For **Group v2** AE buffs only: cast on one peer per remote group to AE that group; uses **tarcnt** and class filter on counted members; one anchor per group (raid recommended for multi-group dedup). Not available for **Group v1** AE (GUI hides **pc**). See [Group AE buffs (v1 vs v2)](#group-ae-buffs-v1-vs-v2).
 - **tank** — Can be a non-bot when explicitly named in config (TankName). Buff need for non-peers is only known from the **Spawn** TLO after you have targeted that spawn long enough for **Spawn.BuffsPopulated** to be true (same as mobs). When we have buff data we only cast if they need it; when out-of-group and we don’t have data we cast in range (best-effort). When this bot is the main tank, the tank phase has a single target (this bot), so you do not need **self** in targetphase for the MT to receive a tank-only buff.
 
 **Evaluation order (priority)**
@@ -111,6 +112,33 @@ buff = {
 ```
 
 Refreshes only when mobs are in camp, not every tick while idle. Manual `/cz cast` is unchanged and can still be used out of combat.
+
+### Group AE buffs (v1 vs v2)
+
+MQ **TargetType** controls which buff phases apply. The GUI shows only appropriate phases per spell.
+
+| TargetType | Phases | Behavior |
+|------------|--------|----------|
+| **Group v1** | **groupbuff** (+ normal ST phases except **pc**) | Count your group (includes self); cast on self without retargeting when count ≥ **tarcnt**. |
+| **Group v2** | **groupbuff** + **pc** only | **groupbuff**: same count/cast-on-self for your group (retargets to self). **pc**: one cast per remote group — pick the first peer in bot order as anchor, count that group’s members in AE range; cast on the anchor so the AE lands on their group. After the cast, charinfo should show the buff on other members; the bot will not chain-cast on every peer in the same group. Multi-group dedup when you are not in the anchor’s EQ group works best when all bots are in the same **raid**. |
+| **Single / Self / etc.** | Normal ST phases; no **groupbuff** | Unchanged single-target logic. |
+
+**tarcnt** is shown in the GUI only for Group v1/v2 spells. It includes the caster for **groupbuff**.
+
+**Example: Group v2 AE (own group + remote groups)**
+
+```lua
+{
+  gem = 5,
+  spell = 'Group v2 Example Buff',
+  minmana = 0,
+  tarcnt = 3,
+  bands = {
+    { targetphase = { 'groupbuff', 'pc' }, validtargets = { 'all' } }
+  },
+  spellicon = 0
+}
+```
 
 ---
 
