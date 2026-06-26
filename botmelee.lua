@@ -23,6 +23,28 @@ botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee t
 state.getRunconfig().mobprobtimer = 0
 local _lastEngageStickCmd = nil
 
+local ENGAGE_STATUS_PREFIXES = { 'Assisting on ', 'Tanking ', 'Off-tanking ' }
+
+local function isEngageStatusMessage(msg)
+    if not msg or msg == '' then return false end
+    for _, prefix in ipairs(ENGAGE_STATUS_PREFIXES) do
+        if msg:sub(1, #prefix) == prefix then return true end
+    end
+    return false
+end
+
+--- Clear assist/tank status text when engageTargetId is missing or no longer a live target.
+function botmelee.syncEngageStatusMessage(rc)
+    rc = rc or state.getRunconfig()
+    local id = rc.engageTargetId
+    if id and id > 0 and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then
+        return
+    end
+    if isEngageStatusMessage(rc.statusMessage) then
+        rc.statusMessage = ''
+    end
+end
+
 local function getStayBehindStickToken()
     if mq.TLO.Me.Class.ShortName() == 'ROG' then return 'behind' end
     return '!front'
@@ -351,7 +373,10 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
 
     local hp = maTarHp or mq.TLO.Spawn(maTarId).PctHPs()
     if not spawnutils.isCampAcleashEnforced(rc) and hp and (hp <= assistpct) then
-        return maTarId
+        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then
+            return maTarId
+        end
+        return nil
     end
     for _, v in ipairs(rc.MobList) do
         if v.ID() == maTarId and hp and (hp <= assistpct) then

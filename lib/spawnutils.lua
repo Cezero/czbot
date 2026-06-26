@@ -11,6 +11,17 @@ local charinfoutils = require('lib.charinfoutils')
 
 local spawnutils = {}
 
+local function syncEngageStatusMessage(rc)
+    local mod = package.loaded['botmelee']
+    if not mod then
+        local ok, m = pcall(require, 'botmelee')
+        if ok then mod = m end
+    end
+    if mod and mod.syncEngageStatusMessage then
+        mod.syncEngageStatusMessage(rc)
+    end
+end
+
 -- FTE (First To Engage) tracking: combat block + in-camp recheck vs pull unpullable window.
 local COMBAT_FTE_RECHECK_MS = 2000
 local COMBAT_FTE_INITIAL_BLOCK_MS = 2000
@@ -586,11 +597,11 @@ function spawnutils.validateAcmTarget(rc)
         if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(rc.engageTargetId), rc) then
             rc.engageTargetId = nil
             rc.attackCommandEngage = nil
-            if state.getRunState() ~= state.STATES.casting or rc.bardTwistOnceWait then
-                rc.statusMessage = ''
-            end
+            syncEngageStatusMessage(rc)
             if state.getRunState() == state.STATES.melee then state.clearRunState() end
         end
+    else
+        syncEngageStatusMessage(rc)
     end
     if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return false end
     return true

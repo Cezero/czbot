@@ -13,6 +13,7 @@ local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
 local charinfo = require('plugin.charinfo')
 local botpull = require('botpull')
+local botmelee = require('botmelee')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
 local charm = require('lib.charm')
@@ -267,6 +268,7 @@ local function charState_PostDead()
     if not rc.attackCommandEngage and not spawnutils.shouldPreserveStickyEngage(rc) then
         rc.engageTargetId = nil
     end
+    botmelee.syncEngageStatusMessage(rc)
     if mq.TLO.Plugin('MQ2GMCheck').IsLoaded() and (---@diagnostic disable-next-line: undefined-field
         mq.TLO.GMCheck() == 'TRUE') then
         botevents.Event_GMDetected()

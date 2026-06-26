@@ -610,7 +610,6 @@ local function finishBardTwistOnceWait(rc, w, opts)
     end
     rc.bardTwistOnceWait = nil
     state.clearRunState()
-    rc.statusMessage = ''
     if recordDebuff and w.singingStarted and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
         updateBardTwistOnceDebuffState(w.entry, w.EvalID)
     end
@@ -628,8 +627,11 @@ local function finishBardTwistOnceWait(rc, w, opts)
     if w.targethit == 'notmatar' then
         retargetMaTargetAfterBardMez()
     end
+    botmelee.syncEngageStatusMessage(rc)
     bardtwist.RestoreCombatTwistAfterTwistOnce()
 end
+
+local BARD_TWIST_ONCE_HARD_CAP_MS = 2000
 
 --- BRD twist-once wait: wait for song, update debuff state, re-target if needed, resume twist for current mode.
 local function DebuffCheckHandleBardTwistOnceWait(rc)
@@ -638,11 +640,16 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
     end
     local w = rc.bardTwistOnceWait
     if not w or not w.entry or not w.EvalID then
+        bardtwist.StopTwist()
         rc.bardTwistOnceWait = nil
         state.clearRunState()
-        rc.statusMessage = ''
+        botmelee.syncEngageStatusMessage(rc)
         return false
     end
+
+    local mode = bardtwist.GetCurrentTwistMode()
+    if mode then bardtwist.ReconcileTwistOnceActive(mode) end
+
     if bardTwistOnceShouldAbort(w, rc) then
         local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
         finishBardTwistOnceWait(rc, w, {
@@ -650,15 +657,28 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
         })
         return true
     end
+
     local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
-    if bardtwist.IsTwistOnceActive() or stillSinging then
+    if stillSinging then
         w.singingStarted = true
         return true
     end
+
     local now = mq.gettime()
-    if not w.singingStarted and w.deadline and now < w.deadline then
+    if bardtwist.IsTwistOnceActive() then
+        w.singingStarted = true
+        local pastDeadline = w.deadline and now >= w.deadline
+        local pastHardCap = w.deadline and now > w.deadline + BARD_TWIST_ONCE_HARD_CAP_MS
+        local twistOnceAt = bardtwist.GetLastTwistOnceAt()
+        local castMs = w.castTimeMs or 3000
+        local pastTwistOnceWindow = twistOnceAt > 0 and now > twistOnceAt + castMs + 200
+        if not pastDeadline and not pastHardCap and not pastTwistOnceWindow then
+            return true
+        end
+    elseif not w.singingStarted and w.deadline and now < w.deadline then
         return true
     end
+
     local record = w.singingStarted and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID))
     finishBardTwistOnceWait(rc, w, { recordDebuff = record })
     return true
@@ -715,6 +735,7 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
         entry = entry,
         targethit = targethit,
         singingStarted = false,
+        castTimeMs = castTimeMs,
         deadline = mq.gettime() + castTimeMs + 100,
     }
     if not state.canStartBusyState(state.STATES.casting) then

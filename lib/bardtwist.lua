@@ -217,10 +217,29 @@ function bardtwist.GetTwistListStringForMode(mode)
     return table.concat(list, ' ')
 end
 
+--- Clear twistOnceActive when MQ2Twist list matches desired mode (no /twist issued).
+---@param mode string|nil defaults to GetCurrentTwistMode()
+---@return boolean true when twistOnceActive was cleared
+function bardtwist.ReconcileTwistOnceActive(mode)
+    if not twistOnceActive then return false end
+    mode = mode or bardtwist.GetCurrentTwistMode()
+    if not mode then return false end
+    local desiredGems = bardtwist.GetTwistListForMode(mode)
+    if not desiredGems or #desiredGems == 0 then return false end
+    local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+    local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+    if twistListsEqual(currentGems, desiredGems) then
+        twistOnceActive = false
+        clearTwistOnceGemHint()
+        return true
+    end
+    return false
+end
+
 --- Set twist list for mode. Only issue /twist when not twisting or list differs (avoid restart every tick). For travel with no song, stop twist.
 function bardtwist.EnsureTwistForMode(mode)
-    if state.getRunconfig().bardTwistOnceWait then return end
     if not bardtwist.SongsEnabled() then return end
+    local rc = state.getRunconfig()
     local desiredGems = bardtwist.GetTwistListForMode(mode)
     if not desiredGems or #desiredGems == 0 then
         if mode == 'travel' and mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
@@ -236,19 +255,23 @@ function bardtwist.EnsureTwistForMode(mode)
             twistOnceActive = false
             clearTwistOnceGemHint()
         end
+        if rc.bardTwistOnceWait then return end
         return
     end
+    if rc.bardTwistOnceWait then return end
     if twisting and twistListsEqual(currentGems, desiredGems) then return end
     mq.cmd('/twist ' .. table.concat(desiredGems, ' '))
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
-    if state.getRunconfig().bardTwistOnceWait then return end
+    local rc = state.getRunconfig()
+    local mode = bardtwist.GetCurrentTwistMode()
+    if mode then bardtwist.ReconcileTwistOnceActive(mode) end
+    if rc.bardTwistOnceWait then return end
     if utils.isNearPrimaryBindPoint() then
         bardtwist.StopTwist()
         return
     end
-    local mode = bardtwist.GetCurrentTwistMode()
     if mode then bardtwist.EnsureTwistForMode(mode) end
 end
 
@@ -302,6 +325,13 @@ end
 
 function bardtwist.IsTwistOnceActive()
     return twistOnceActive
+end
+
+--- mq.gettime() when the last /twist once was issued; 0 if none in TTL window.
+function bardtwist.GetLastTwistOnceAt()
+    if not lastTwistOnceGem then return 0 end
+    if mq.gettime() - lastTwistOnceAt > TWIST_ONCE_GEM_TTL_MS then return 0 end
+    return lastTwistOnceAt
 end
 
 --- Restore twist for current mode after BRD twist-once wait ends. Call only when bardTwistOnceWait was just cleared.
