@@ -57,9 +57,9 @@ Bands define **which mobs** and **at what HP %** the debuff is allowed. Debuff u
 - **targetphase:** One or more of: **charm**, **burn**, **matar**, **notmatar**, **named**.
   - **charm** — Mobs on the zone **Charm list** (when a charm spell is configured).
   - **burn** — Only evaluated while a burn window is active (**`/cz burn [seconds]`** or Status **Burn**). Combine with **matar**, **notmatar**, or **named** to pick which mobs; burn-only (no other phase) defaults to the MA target.
-  - **matar** — The Main Assist’s current target. If a debuff band has `onlyMT=true`, then `matar` casts on the Main Tank’s target instead (only when this bot is the Main Tank).
+  - **matar** — The Main Assist’s current target. If a debuff band has `onlyMT=true`, then `matar` casts on the Main Tank’s target instead when this bot is the Main Tank, or on this bot’s current off-tank engage target when it is actively off-tanking (`melee.offtank=true` with a live engage target).
   - **notmatar** — Any other mob in the list (adds).
-  - **named** — Named mobs. With `matar`, the chosen `matar` target is required to be named (MA by default, MT when `onlyMT=true`).
+  - **named** — Named mobs. With `matar`, the chosen `matar` target is required to be named (MA by default; MT or active off-tank engage target when `onlyMT=true`).
 - **Migration note:** Legacy `tanktar`/`notanktar` tokens are accepted as aliases for `matar`/`notmatar` so existing configs keep working. New configurations should use the canonical `matar`/`notmatar` names.
 - **min** / **max:** Mob HP % range (0–100). The mob’s HP must be in this range to be considered.
 - **aggroMin** / **aggroMax:** Optional. Your **Me.PctAggro** range (0–100). Default 0 / 100 (no gate). Only applies at level 20+; below level 20 the gate is ignored. Bands are merged across the spell like HP %.

@@ -62,6 +62,35 @@ local function campCountOk(mobCount, mintar, maxtar)
     return true
 end
 
+local myconfig = botconfig.config
+
+local function onlyMTDebuffAllowed(entry)
+    if not entry.onlyMT then return true end
+    if tankrole.AmIMainTank() and not myconfig.melee.offtank then return true end
+    return botmelee.isActivelyOfftanking()
+end
+
+local function getMatarChosenTargetId(entry, ctx)
+    if not entry.onlyMT then return ctx.maTargetId end
+    if botmelee.isActivelyOfftanking() then
+        return state.getRunconfig().engageTargetId
+    end
+    return ctx.mtTargetId
+end
+
+--- MobList spawn for matar eval; OT engage target allowed when briefly outside MobList.
+local function debuffMatarSpawnForTarget(chosenTargetId, ctx)
+    for _, v in ipairs(ctx.mobList) do
+        if v.ID() == chosenTargetId then return v end
+    end
+    local rc = state.getRunconfig()
+    if botmelee.isActivelyOfftanking() and chosenTargetId == rc.engageTargetId then
+        local sp = mq.TLO.Spawn(chosenTargetId)
+        if spawnutils.isAliveEngageSpawn(sp) then return sp end
+    end
+    return nil
+end
+
 local function DebuffEvalBuildContext(index)
     local myconfig = botconfig.config
     local entry = botconfig.getSpellEntry('debuff', index)
@@ -178,20 +207,17 @@ function botdebuff.MatarDebuffNeededForTwist(index)
         if not (db and db.burn and not db.notmatar and not db.named) then return false end
     end
     if db.burn then return false end
-    if entry.onlyMT and not tankrole.AmIMainTank() then return false end
+    if not onlyMTDebuffAllowed(entry) then return false end
     local ctx = DebuffEvalBuildContext(index)
     if not ctx then return false end
-    local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
+    local chosenTargetId = getMatarChosenTargetId(entry, ctx)
     if not chosenTargetId then return false end
     if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(chosenTargetId)) then return false end
     if not castutils.hpEvalSpawn(chosenTargetId, { min = db.mobMin, max = db.mobMax }) then return false end
-    for _, v in ipairs(ctx.mobList) do
-        if v.ID() == chosenTargetId then
-            if not DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then return false end
-            return spellutils.PreCondCheck('debuff', index, chosenTargetId)
-        end
-    end
-    return false
+    local spawn = debuffMatarSpawnForTarget(chosenTargetId, ctx)
+    if not spawn then return false end
+    if not DebuffSpawnNeedsSpell(entry, ctx, spawn, 'matar') then return false end
+    return spellutils.PreCondCheck('debuff', index, chosenTargetId)
 end
 
 local function DebuffEvalMatar(index, ctx)
@@ -203,20 +229,16 @@ local function DebuffEvalMatar(index, ctx)
     if spellutils.IsMezSpell(entry) then return nil, nil end
 
     -- `matar` phase provides both MA and MT candidate targets.
-    -- For `onlyMT` debuffs we cast on MT's target; otherwise on MA's target.
-    if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
-    local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
+    -- For `onlyMT` debuffs we cast on MT's target (or OT engage target when actively off-tanking).
+    if not onlyMTDebuffAllowed(entry) then return nil, nil end
+    local chosenTargetId = getMatarChosenTargetId(entry, ctx)
     if not chosenTargetId then return nil, nil end
     if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(chosenTargetId)) then return nil, nil end
 
     if not castutils.hpEvalSpawn(chosenTargetId, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
-    for _, v in ipairs(ctx.mobList) do
-        if v.ID() == chosenTargetId then
-            if DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then
-                return chosenTargetId, 'matar'
-            end
-            return nil, nil
-        end
+    local spawn = debuffMatarSpawnForTarget(chosenTargetId, ctx)
+    if spawn and DebuffSpawnNeedsSpell(entry, ctx, spawn, 'matar') then
+        return chosenTargetId, 'matar'
     end
     return nil, nil
 end
@@ -250,18 +272,14 @@ local function DebuffEvalNamedMatar(index, ctx)
     if not db or not db.named then return nil, nil end
     if spellutils.IsMezSpell(entry) then return nil, nil end
 
-    if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
-    local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
+    if not onlyMTDebuffAllowed(entry) then return nil, nil end
+    local chosenTargetId = getMatarChosenTargetId(entry, ctx)
     if not chosenTargetId then return nil, nil end
 
     if not castutils.hpEvalSpawn(chosenTargetId, { min = db.mobMin, max = db.mobMax }) then return nil, nil end
-    for _, v in ipairs(ctx.mobList) do
-        if v.ID() == chosenTargetId and v.Named() then
-            if DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then
-                return chosenTargetId, 'matar'
-            end
-            return nil, nil
-        end
+    local spawn = debuffMatarSpawnForTarget(chosenTargetId, ctx)
+    if spawn and spawn.Named() and DebuffSpawnNeedsSpell(entry, ctx, spawn, 'matar') then
+        return chosenTargetId, 'matar'
     end
     return nil, nil
 end
@@ -460,13 +478,13 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     if targethit == 'matar' then
         local id, hit = DebuffEvalMatar(spellIndex, ctx)
         if id == targetId then
-            if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
+            if not onlyMTDebuffAllowed(entry) then return nil, nil end
             return id, hit
         end
         -- Burn-only on MA target (no matar flag on band).
         local db = DebuffBands[spellIndex]
         if db and db.burn and not db.matar and not db.notmatar and not db.named and state.IsBurnActive() then
-            local chosenTargetId = entry.onlyMT and ctx.mtTargetId or ctx.maTargetId
+            local chosenTargetId = getMatarChosenTargetId(entry, ctx)
             if chosenTargetId == targetId and castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax }) then
                 for _, v in ipairs(ctx.mobList) do
                     if v.ID() == targetId and DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then
@@ -480,7 +498,7 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     if targethit == 'named' then
         local id, hit = DebuffEvalNamedMatar(spellIndex, ctx)
         if id == targetId then
-            if entry.onlyMT and not tankrole.AmIMainTank() then return nil, nil end
+            if not onlyMTDebuffAllowed(entry) then return nil, nil end
             return id, hit
         end
         return nil, nil

@@ -1,5 +1,5 @@
 -- Resolves Main Tank (MT) vs Main Assist (MA) for the bot.
--- MT = who gets heals, mtSticky follow rules, and onlyMT abilities (taunt). MT never picks camp mobs.
+-- MT = who gets heals, mtSticky follow rules, and onlyMT abilities (taunt; also OT engage when off-tanking). MT never picks camp mobs.
 -- MA = who selects targets from MobList (named-first, puller priority); DPS/offtank/non-sticky MT follow MA.
 -- "automatic" uses Group/Raid window roles: Group.MainTank, Group.MainAssist, Group.Puller.
 -- Raid has MainAssist only; MainTank and Puller always come from Group.

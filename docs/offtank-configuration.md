@@ -8,6 +8,7 @@ This document explains how to configure a bot as an **offtank**: picking an add 
 - When **MT target == MA target** (same mob), the offtank picks an **add** — the Nth other mob in the camp list, where N is **otoffset** (0 = first add).
 - When **MT target != MA target** (different mobs), the offtank **tanks the MA’s target** (sets engage target to the MA’s target and uses agro/taunt).
 - Once engaged on an add or on the MA’s off-target mob, the offtank **sticks on that target until it dies** (no `assistpct` gate; does not snap back to the main mob).
+- **`onlyMT` debuffs** (e.g. Taunt with **When MT Only** checked) cast on the off-tank’s current engage target while actively off-tanking — not on the main tank’s mob.
 
 ---
 

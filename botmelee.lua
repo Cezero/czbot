@@ -313,6 +313,13 @@ function botmelee.isOfftankPrimaryTarget(id, maTarId, mtTarId)
     return isOfftankPrimaryTarget(id, maTarId, mtTarId)
 end
 
+--- True when this bot is an offtank with a live melee engage (add or MA split-target).
+function botmelee.isActivelyOfftanking()
+    if not myconfig.melee.offtank then return false end
+    if tankrole.AmIMainAssist() then return false end
+    return hasAliveEngageTarget(state.getRunconfig())
+end
+
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if not mainTankName or mainTankName == '' then return nil end
     local rc = state.getRunconfig()

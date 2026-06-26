@@ -52,7 +52,7 @@ local PRIMARY_OPTIONS_DEBUFF = {
 }
 
 local TARGETPHASE_OPTIONS_DEBUFF = {
-    { key = 'matar',   label = "Assist's Target",     tooltip = "Use on the Main Assist's current target. If `onlyMT=true`, cast on the Main Tank's target instead (only when this bot is the MT)." },
+    { key = 'matar',   label = "Assist's Target",     tooltip = "Use on the Main Assist's current target. If `onlyMT=true`, cast on the Main Tank's target when this bot is the MT, or on this bot's off-tank engage target when actively off-tanking." },
     { key = 'notmatar', label = "Not Assist's Target", tooltip = 'Use on camp mobs that are NOT the Main Assist target (adds). `mez` debuffs exclude both MA target and MT target.' },
     { key = 'named',     label = 'Named',               tooltip = 'Use on named mobs only (applies to the selected target for this phase).' },
     { key = 'burn',      label = 'Burn window',         tooltip = 'Only cast while a burn window is active (/cz burn or Status Burn button). Combine with Assist\'s Target, Not Assist\'s Target, or Named to pick which mobs. Burn-only defaults to Assist\'s Target.' },
@@ -169,7 +169,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
     if entryHasMatarOrNamed(entry) then
         ImGui.Text('When MT Only')
         if ImGui.IsItemHovered() then
-            ImGui.SetTooltip('Only cast this debuff when this character is the main tank.')
+            ImGui.SetTooltip('Only cast when this bot is the main tank, or when actively off-tanking with a live engage target (e.g. Taunt on your add).')
         end
         ImGui.SameLine()
         local onlyMT = entry.onlyMT == true
