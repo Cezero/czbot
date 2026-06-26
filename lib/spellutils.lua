@@ -1263,6 +1263,14 @@ function spellutils.IsGroupAEBuffEntry(entry)
     return tt == 'Group v1' or tt == 'Group v2'
 end
 
+-- Group AE buff: pre-cast already validated group need; anchor/self may still show the buff mid-cast.
+function spellutils.ShouldSkipBuffInterruptForGroupAE(entry, criteria, target)
+    if not entry or not spellutils.IsGroupAEBuffEntry(entry) then return false end
+    if criteria == 'groupbuff' then return true end
+    if spellutils.IsGroupV2BuffEntry(entry) and target ~= mq.TLO.Me.ID() then return true end
+    return false
+end
+
 -- Group v1 buff on self: no retarget / allow no target (like group AE heals). Group v2 always needs a target.
 function spellutils.IsGroupV1NoRetargetBuffEntry(entry)
     return spellutils.IsGroupV1BuffEntry(entry)
@@ -2441,8 +2449,7 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
         if mq.TLO.Target.ID() ~= target or not mq.TLO.Target.BuffsPopulated() then return end
     end
     local criteria = rc.CurSpell and rc.CurSpell.targethit or nil
-    local isSelfTarget = target == mq.TLO.Me.ID()
-    local isSelfGroupBuff = (criteria == 'groupbuff' and isSelfTarget)
+    local skipGroupAEInterrupt = spellutils.ShouldSkipBuffInterruptForGroupAE(entry, criteria, target)
     local function meBuffDuration(slot)
         if not slot or not slot.Duration then return 0 end
         local ok, v = pcall(function() return slot.Duration() end)
@@ -2477,13 +2484,13 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     local spellTargetType = mq.TLO.Spell(spellid).TargetType() or ''
 
     if sub == 'buff' then
-        if not stacks and spellTargetType ~= 'Self' then
+        if not stacks and spellTargetType ~= 'Self' and not skipGroupAEInterrupt then
             printf('\ayCZBot:\axInterrupt %s, buff does not stack on target: %s', spellname, targetname)
             spellutils.interruptActiveCast(rc)
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
             spellutils.clearCastingStateOrResume()
-        elseif buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS and not isSelfGroupBuff then
+        elseif buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS and not skipGroupAEInterrupt then
             -- Buff present with enough time left: interrupt. Below threshold we allow refresh cast to complete.
             printf('\ayCZBot:\axInterrupt %s, buff already present', spellname)
             spellutils.interruptActiveCast(rc)

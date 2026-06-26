@@ -178,22 +178,42 @@ local function buffGroupNeedFn(spellIndex, spell, spellid, entry)
     end
 end
 
-local function isGroupV2PcAnchor(anchorName, bots)
-    local key = castutils.getPeerGroupKey(anchorName)
+local function peerPersonallyNeedsBuff(spellIndex, grpname, spellid, peer)
+    if not peer then return false end
+    if not buffMemberClassAllowed(spellIndex, grpname, nil) then return false end
+    local hasBuff = spellutils.PeerHasBuff(peer, spellid)
+    local stacks = peer:Stacks(spellid)
+    local free = peer.FreeBuffSlots
+    return not hasBuff and stacks and free and free > 0
+end
+
+--- First peer in bot order for groupKey who personally needs the buff; else first peer in that group (remote only).
+local function getGroupV2PcAnchorForGroup(groupKey, bots, spellIndex, spellid)
+    local firstInGroup = nil
+    local firstNeeding = nil
     for i = 1, #bots do
         local name = bots[i]
-        if castutils.getPeerGroupKey(name) == key then
-            return name == anchorName
+        if castutils.getPeerGroupKey(name) == groupKey and groupKey ~= 'mine' and not mq.TLO.Group.Member(name).Index() then
+            if not firstInGroup then firstInGroup = name end
+            if not firstNeeding then
+                local peer = charinfo.GetInfo(name)
+                if peer and peerPersonallyNeedsBuff(spellIndex, name, spellid, peer) then
+                    firstNeeding = name
+                end
+            end
         end
     end
-    return false
+    return firstNeeding or firstInGroup
 end
 
 local function BuffEvalGroupV2Pc(spellIndex, entry, spell, spellid, targetId, anchorName, aeRangeSq, myRangeSq, context)
     if not BuffClass[spellIndex].pc or not spellutils.IsGroupV2BuffEntry(entry) then return nil, nil end
     if mq.TLO.Group.Member(anchorName).Index() then return nil, nil end
     local bots = context and context.bots
-    if not bots or not isGroupV2PcAnchor(anchorName, bots) then return nil, nil end
+    if not bots then return nil, nil end
+    local groupKey = castutils.getPeerGroupKey(anchorName)
+    local preferred = getGroupV2PcAnchorForGroup(groupKey, bots, spellIndex, spellid)
+    if not preferred or anchorName ~= preferred then return nil, nil end
     local needBuff = buffGroupNeedFn(spellIndex, spell, spellid, entry)
     local id = castutils.evalGroupV2OnPeer(entry, targetId, anchorName, needBuff,
         { aeRangeSq = aeRangeSq, myRangeSq = myRangeSq })
