@@ -493,6 +493,53 @@ local function canStartPull(rc)
     return true
 end
 
+--- First blocking reason for canStartPull (debug only).
+local function pullBlockReason(rc)
+    if not isRoamMode() and rc.pulledmob then
+        local pmob = mq.TLO.Spawn(rc.pulledmob)
+        if pmob and pmob.ID() and pmob.Type() ~= 'Corpse' then
+            local pulledDistSq = utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), pmob.X(),
+                pmob.Y(), pmob.Z())
+            if pulledDistSq and myconfig.settings.acleashSq and pulledDistSq >= myconfig.settings.acleashSq then
+                return 'pulledmob'
+            end
+        end
+    end
+    if MasterPause then return 'pause' end
+    if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then return 'low-hp' end
+    if not mq.TLO.Navigation.MeshLoaded() then return 'no-mesh' end
+    if rc.pullHealerManaWait then return 'healer-mana' end
+    if rc.pullDebuffWait then return 'debuff' end
+    local members = mq.TLO.Group.Members()
+    if members and members > 0 then
+        for i = 1, members do
+            local member = mq.TLO.Group.Member(i)
+            if member then
+                local memberId = member.ID()
+                if not memberId or memberId == 0 then return 'group-corpse' end
+                local spawn = member.Spawn
+                if spawn and spawn.Type() and string.lower(spawn.Type()) == 'corpse' then
+                    return 'group-corpse'
+                end
+            end
+        end
+    end
+    local hasDebuff = spellutils.MeHasNonCurableDebuff()
+    if hasDebuff then return 'debuff' end
+    return 'ok'
+end
+
+local function logPullGate(rc, wantToPull, mobCount, engageId, canStart)
+    if not rc.dopull or not bardtwist.IsBardDebug() then return end
+    if mobCount > 0 and wantToPull then return end
+    local block = (canStart == false) and pullBlockReason(rc) or (canStart and 'ok' or 'n/a')
+    bardtwist.BardDbg(
+        'pull gate want=%s mobs=%d engage=%s runState=%s twistWait=%s canStart=%s block=%s',
+        tostring(wantToPull), mobCount, tostring(engageId or 'nil'),
+        state.getRunStateName(), tostring(rc.bardTwistOnceWait ~= nil),
+        canStart == nil and 'n/a' or tostring(canStart), block)
+end
+
 -- True when we are not in a pull state and chain-pull conditions say we should start a pull (and canStartPull passes).
 -- Only run canStartPull (and thus set pullHealerManaWait) when we might actually pull; when mob in camp and no chain pull, skip so status stays correct.
 local function shouldStartPull(rc)
@@ -517,9 +564,13 @@ local function shouldStartPull(rc)
     if not wantToPull then
         rc.pullHealerManaWait = nil
         rc.pullDebuffWait = nil
+        logPullGate(rc, wantToPull, mobCount, engageId, nil)
         return false
     end
-    if not canStartPull(rc) then return false end
+    if not canStartPull(rc) then
+        logPullGate(rc, wantToPull, mobCount, engageId, false)
+        return false
+    end
     return true
 end
 
@@ -750,15 +801,29 @@ end
 
 function botpull.StartPull()
     local rc = state.getRunconfig()
-    if not canStartPull(rc) then return end
-    if not state.canStartBusyState(state.STATES.pulling) then return end
+    if not canStartPull(rc) then
+        bardtwist.BardDbgNow('pull blocked: reason=canStartPull-failed block=%s', pullBlockReason(rc))
+        return
+    end
+    if not state.canStartBusyState(state.STATES.pulling) then
+        bardtwist.BardDbgNow('pull blocked: reason=busy runState=%s', state.getRunStateName())
+        return
+    end
 
     ensureCampAndAnchor(rc)
     local apmoblist = spawnutils.buildPullMobList(rc)
-    if gatePullSpawnWait(rc, apmoblist) then return end
+    if gatePullSpawnWait(rc, apmoblist) then
+        local pullCount = apmoblist and #apmoblist or 0
+        bardtwist.BardDbgNow('pull blocked: reason=spawn-wait pullList=%d', pullCount)
+        return
+    end
     local maxCandidates = tonumber(myconfig.pull.backupCandidates) or 3
     local targets = selectPullTargets(apmoblist, rc, maxCandidates)
-    if not targets[1] then return end
+    if not targets[1] then
+        local pullCount = apmoblist and #apmoblist or 0
+        bardtwist.BardDbgNow('pull blocked: reason=no-target pullList=%d', pullCount)
+        return
+    end
     local spawn = targets[1]
     local candidateIds = {}
     for i, s in ipairs(targets) do

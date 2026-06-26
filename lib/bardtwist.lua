@@ -13,6 +13,36 @@ local lastTwistOnceGem = nil
 local lastTwistOnceAt = 0
 local TWIST_ONCE_GEM_TTL_MS = 10000
 
+local _bardDebug = false
+local _bardDbgNext = 0
+local BARD_DBG_MS = 2000
+
+function bardtwist.SetBardDebug(on)
+    _bardDebug = on and true or false
+end
+
+function bardtwist.IsBardDebug()
+    return _bardDebug
+end
+
+function bardtwist.BardDbg(fmt, ...)
+    if not _bardDebug then return end
+    local now = mq.gettime()
+    if now < _bardDbgNext then return end
+    _bardDbgNext = now + BARD_DBG_MS
+    printf('\ayCZBot:\ax [BRD] ' .. fmt, ...)
+end
+
+function bardtwist.BardDbgNow(fmt, ...)
+    if not _bardDebug then return end
+    printf('\ayCZBot:\ax [BRD] ' .. fmt, ...)
+end
+
+local function gemsToStr(gems)
+    if not gems or #gems == 0 then return '(none)' end
+    return table.concat(gems, ' ')
+end
+
 local function clearTwistOnceGemHint()
     lastTwistOnceGem = nil
     lastTwistOnceAt = 0
@@ -253,8 +283,9 @@ function bardtwist.ReconcileTwistOnceActive(mode)
 end
 
 --- Set twist list for mode. Only issue /twist when not twisting or list differs (avoid restart every tick). For travel with no song, stop twist.
+---@return string|nil action tag for debug logging
 function bardtwist.EnsureTwistForMode(mode)
-    if not bardtwist.SongsEnabled() then return end
+    if not bardtwist.SongsEnabled() then return 'skip:songs-off' end
     local rc = state.getRunconfig()
     local desiredGems = bardtwist.GetTwistListForMode(mode)
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
@@ -262,46 +293,62 @@ function bardtwist.EnsureTwistForMode(mode)
     if not desiredGems or #desiredGems == 0 then
         if (mode == 'travel' or mode == 'idle') and mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
             mq.cmd('/twist stop')
+            return 'stop:idle-empty'
         end
         twistOnceActive = false
         clearTwistOnceGemHint()
-        return
+        return 'skip:empty-desired'
     end
     if twistOnceActive then
         if twistListsEqual(currentGems, desiredGems) then
             twistOnceActive = false
             clearTwistOnceGemHint()
         elseif rc.bardTwistOnceWait then
-            return
+            return 'skip:twistOnce-wait'
         else
             twistOnceActive = false
             clearTwistOnceGemHint()
         end
     end
-    if rc.bardTwistOnceWait then return end
+    if rc.bardTwistOnceWait then return 'skip:wait' end
     local twisting = mq.TLO.Twist() and mq.TLO.Twist.Twisting()
-    if twisting and twistListsEqual(currentGems, desiredGems) then return end
+    if twisting and twistListsEqual(currentGems, desiredGems) then return 'skip:match' end
     mq.cmd('/twist ' .. table.concat(desiredGems, ' '))
+    return 'cmd:twist'
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
     local rc = state.getRunconfig()
     local mode = bardtwist.GetCurrentTwistMode()
+    local action = 'none'
     if mode then bardtwist.ReconcileTwistOnceActive(mode) end
-    if rc.bardTwistOnceWait then return end
-    if utils.isNearPrimaryBindPoint() then
+    if rc.bardTwistOnceWait then
+        action = 'skip:wait'
+    elseif utils.isNearPrimaryBindPoint() then
         bardtwist.StopTwist()
-        return
-    end
-    if mode then
+        action = 'skip:bind'
+    elseif mode then
         local desiredGems = bardtwist.GetTwistListForMode(mode)
         local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
         local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
         if desiredGems and #desiredGems > 0 and not twistListsEqual(currentGems, desiredGems) then
             twistOnceActive = false
             clearTwistOnceGemHint()
+            action = 'cleared:twistOnce'
         end
-        bardtwist.EnsureTwistForMode(mode)
+        local twistAction = bardtwist.EnsureTwistForMode(mode)
+        if twistAction then action = twistAction end
+    end
+    if _bardDebug then
+        local desiredAfter = mode and bardtwist.GetTwistListForMode(mode) or {}
+        local currentAfterRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+        local currentAfter = parseTwistListString(currentAfterRaw and tostring(currentAfterRaw) or '')
+        bardtwist.BardDbg(
+            'twist mode=%s mobs=%d twistOnce=%s wait=%s twisting=%s current=[%s] desired=[%s] action=%s',
+            tostring(mode), state.getMobCount(), tostring(twistOnceActive),
+            tostring(rc.bardTwistOnceWait ~= nil),
+            tostring(mq.TLO.Twist() and mq.TLO.Twist.Twisting() or false),
+            gemsToStr(currentAfter), gemsToStr(desiredAfter), action)
     end
 end
 

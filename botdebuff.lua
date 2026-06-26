@@ -634,6 +634,15 @@ local function finishBardTwistOnceWait(rc, w, opts)
         combat.ResetCombatState()
     end
     botmelee.syncEngageStatusMessage(rc)
+    local mode = bardtwist.GetCurrentTwistMode()
+    local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+    local currentGems = currentListRaw and tostring(currentListRaw) or '(none)'
+    local desiredGems = mode and bardtwist.GetTwistListForMode(mode) or {}
+    local desiredStr = (#desiredGems > 0) and table.concat(desiredGems, ' ') or '(none)'
+    bardtwist.BardDbgNow(
+        'twist-once done: evalId=%s fightEnded=%s mobs=%d runState=%s mode=%s current=[%s] desired=[%s]',
+        tostring(w.EvalID), tostring(fightEnded), state.getMobCount(),
+        state.getRunStateName(), tostring(mode), currentGems, desiredStr)
     bardtwist.RestoreCombatTwistAfterTwistOnce()
 end
 

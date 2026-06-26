@@ -65,6 +65,8 @@ local function charState_Always()
         local rc = state.getRunconfig()
         if mq.TLO.Me.Class.ShortName() == 'BRD' and not rc.bardTwistOnceWait
             and not rc.CurSpell and state.getMobCount() == 0 then
+            local bardtwist = require('lib.bardtwist')
+            bardtwist.BardDbgNow('cleared orphan casting (mobCount=0, no twist wait)')
             state.clearRunState()
         elseif not rc.bardTwistOnceWait and not spellutils.IsMemorizing() then
             local castTimeLeft = mq.TLO.Me.CastTimeLeft() or 0

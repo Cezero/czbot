@@ -656,6 +656,19 @@ local function cmd_buffdebug(args)
     printf('\ayCZBot:\ax Buff debug logging %s', spellutils.IsBuffDebug() and 'on' or 'off')
 end
 
+local function cmd_barddebug(args)
+    local bardtwist = require('lib.bardtwist')
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        bardtwist.SetBardDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        bardtwist.SetBardDebug(false)
+    else
+        bardtwist.SetBardDebug(not bardtwist.IsBardDebug())
+    end
+    printf('\ayCZBot:\ax Bard debug logging %s', bardtwist.IsBardDebug() and 'on' or 'off')
+end
+
 local function cmd_burn(args)
     local arg = args[2] and string.lower(args[2]) or ''
     if arg == 'off' or arg == 'stop' or arg == '0' then
@@ -1332,6 +1345,7 @@ local handlers = {
     role = cmd_role,
     mezdebug = cmd_mezdebug,
     buffdebug = cmd_buffdebug,
+    barddebug = cmd_barddebug,
     charmpetsetup = cmd_charmpetsetup,
     aetank = cmd_aetank,
     aetankmezzer = cmd_aetankmezzer,
