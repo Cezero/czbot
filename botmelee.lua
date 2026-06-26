@@ -842,10 +842,20 @@ function botmelee.getHookFn(name)
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local chaseEngage = spawnutils.shouldChaseOutsideCamp(rc)
             if not rc.MobList[1] and not chaseEngage then
-                rc.engageTargetId = nil
-                rc.attackCommandEngage = nil
-                disengageCombat()
-                return
+                -- The camp MobList can be empty even with a mob aggro'd on us: TargetFilter "Aggressive NPCs"
+                -- requires LineOfSight, so an auto-hater behind a pillar / up stairs (e.g. Sebilis, Velketor's)
+                -- is filtered out of MobList. The engageXTargetOnly path (AdvCombat -> selectXTargetEngageTarget
+                -- -> getXTargetAutoHaterEngageables) is deliberately LoS-not-required and CAN take it, so don't
+                -- disengage here when a reachable XTarget auto-hater exists -- fall through and let AdvCombat
+                -- engage and nav to it. Auto-haters are already aggro'd on us, so this adds no over-pull.
+                local xtEngage = myconfig.settings.engageXTargetOnly == true
+                    and #spawnutils.getXTargetAutoHaterEngageables(rc) > 0
+                if not xtEngage then
+                    rc.engageTargetId = nil
+                    rc.attackCommandEngage = nil
+                    disengageCombat()
+                    return
+                end
             end
             tryRogueEvade()
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
