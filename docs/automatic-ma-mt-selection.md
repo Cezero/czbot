@@ -225,6 +225,7 @@ No automatic resolution or fallback lists involved. Both roles resolve to `MyTan
 | `/cz assist automatic` | Set MA to automatic for this session. |
 | Status tab | Shows resolved Assist Name and Tank Name; `(auto)` suffix when setting is automatic. |
 | `/cz reloadcommon` | Reload `cz_common.lua` and refresh `ma_list` / `mt_list` mirrors. |
+| `/cz tankrole` | Print automatic MA/MT resolution details (settings, list candidates, pass/fail per entry). |
 | `/cz mobfilter` | Prints MA distance, `inAttack`, target ID, and inject eligibility for the selected spawn. |
 
 `/cz tank` and `/cz assist` with a fixed name override automatic for the session only; char config file is unchanged unless you use `setvar` or edit the file.

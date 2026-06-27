@@ -574,6 +574,10 @@ local function cmd_assist(args)
     printf('\ayCZBot:\axSetting assist to %s (saved)', name)
 end
 
+local function cmd_tankrole(_args)
+    require('lib.tankrole').debugPrint()
+end
+
 local function cmd_stickcmd(args, str)
     botconfig.config.melee.stickcmd = str:match('stickcmd' .. "%s+(.+)")
     printf('\ayCZBot:\axSetting stickcmd to %s', botconfig.config.melee.stickcmd)
@@ -1353,6 +1357,7 @@ local handlers = {
     attack = cmd_attack,
     tank = cmd_tank,
     assist = cmd_assist,
+    tankrole = cmd_tankrole,
     stickcmd = cmd_stickcmd,
     acleash = cmd_acleash,
     evadepct = cmd_evadepct,

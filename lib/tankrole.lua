@@ -43,6 +43,115 @@ local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
 end
 
+local function tloName(tlo)
+    if not tlo or not tlo.Name then return nil end
+    local name = tlo.Name()
+    if not name or name == '' then return nil end
+    return name
+end
+
+local function auditCandidate(name, requireLeash)
+    if not name or name == '' then
+        return { name = name, ok = false, reason = 'empty name' }
+    end
+    local ctx = charinfoutils.getLeaderContext(name)
+    if not ctx then
+        return {
+            name = name,
+            ok = false,
+            reason = 'no leader context (charinfo/spawn)',
+            source = nil,
+            alive = false,
+            sameZone = false,
+            distance = nil,
+            requireLeash = requireLeash,
+            leash = getAnchorLeash(),
+            leashOk = false,
+        }
+    end
+    local leash = getAnchorLeash()
+    local leashOk = not requireLeash or (ctx.distance ~= nil and ctx.distance <= leash)
+    local ok = ctx.alive and ctx.sameZone and leashOk
+    return {
+        name = name,
+        ok = ok,
+        source = ctx.source,
+        alive = ctx.alive,
+        sameZone = ctx.sameZone,
+        distance = ctx.distance,
+        requireLeash = requireLeash,
+        leash = leash,
+        leashOk = leashOk,
+    }
+end
+
+local function summarizeMaPath()
+    local raid = inRaid()
+    local primary
+    if raid then
+        primary = tloName(mq.TLO.Raid.MainAssist)
+    else
+        primary = tloName(mq.TLO.Group.MainAssist)
+    end
+    if primary then
+        if isCandidateAvailable(primary, false) then
+            return string.format('primary available (%s MA): %s', raid and 'raid' or 'group', primary)
+        end
+        local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
+        if fallback then return 'ma_list fallback: ' .. fallback end
+        return 'primary retention (unavailable): ' .. primary
+    end
+    local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
+    if fallback then return 'ma_list only: ' .. fallback end
+    return 'no MA resolved'
+end
+
+local function summarizeMtPath()
+    if not inRaid() then
+        local primary = tloName(mq.TLO.Group.MainTank)
+        if primary and isCandidateAvailable(primary, false) then
+            return 'group MainTank: ' .. primary
+        end
+        if primary then
+            local fallback = firstAvailableFromList(state.getRunconfig().MtList, true)
+            if fallback then return 'group MT unavailable, mt_list fallback: ' .. fallback end
+            return 'group MT unavailable, no mt_list match'
+        end
+    else
+        local fallback = firstAvailableFromList(state.getRunconfig().MtList, true)
+        if fallback then return 'raid mt_list: ' .. fallback end
+        return 'raid mt_list walk: no match'
+    end
+    local fallback = firstAvailableFromList(state.getRunconfig().MtList, true)
+    if fallback then return 'mt_list only: ' .. fallback end
+    return 'no MT resolved'
+end
+
+local function printListAudit(label, list)
+    local count = type(list) == 'table' and #list or 0
+    printf('  %s (%d entries):', label, count)
+    if count == 0 then
+        printf('    (empty)')
+        return
+    end
+    for i, name in ipairs(list) do
+        local primary = auditCandidate(name, false)
+        local listRule = auditCandidate(name, true)
+        local distStr = primary.distance and string.format('%.1f', primary.distance) or 'nil'
+        printf('    [%d] %s  source=%s  alive=%s  sameZone=%s  dist=%s',
+            i, tostring(name),
+            tostring(primary.source or 'nil'),
+            primary.alive and 'yes' or 'no',
+            primary.sameZone and 'yes' or 'no',
+            distStr)
+        printf('        primary (no leash): %s',
+            primary.ok and 'PASS' or 'FAIL')
+        printf('        list (leash<=%s): %s',
+            tostring(listRule.leash),
+            listRule.ok and 'PASS' or 'FAIL')
+    end
+end
+
 local function resolveAutomaticAssistName()
     local primary
     if inRaid() then
@@ -123,6 +232,43 @@ end
 ---@return boolean
 function tankrole.AmIMainAssist()
     return tankrole.GetAssistTargetName() == mq.TLO.Me.Name()
+end
+
+--- Print automatic MA/MT resolution diagnostics (/cz tankrole).
+function tankrole.debugPrint()
+    local rc = state.getRunconfig()
+    local settings = botconfig.config.settings or {}
+    local raid = inRaid()
+    local raidMembers = mq.TLO.Raid.Members() or 0
+    local effectiveLeash = getAnchorLeash()
+
+    printf('\ayCZBot:\ax tankrole diagnostic')
+    printf('  inRaid: %s (Raid.Members=%s)', raid and 'yes' or 'no', tostring(raidMembers))
+    printf('  rc.TankName=%s  rc.AssistName=%s',
+        tostring(rc.TankName), tostring(rc.AssistName))
+    printf('  settings.TankName=%s  settings.AssistName=%s',
+        tostring(settings.TankName), tostring(settings.AssistName))
+    printf('  maAnchorLeash=%s  acleash=%s  effective leash=%s',
+        tostring(settings.maAnchorLeash), tostring(settings.acleash), tostring(effectiveLeash))
+    printf('  TLO Raid.MainAssist=%s  Group.MainAssist=%s  Group.MainTank=%s',
+        tostring(tloName(mq.TLO.Raid.MainAssist)),
+        tostring(tloName(mq.TLO.Group.MainAssist)),
+        tostring(tloName(mq.TLO.Group.MainTank)))
+
+    local assistName = tankrole.GetAssistTargetName()
+    local tankName = tankrole.GetMainTankName()
+    printf('  resolved Assist=%s  resolved Tank=%s',
+        assistName and assistName or '(nil)',
+        tankName and tankName or '(nil)')
+    printf('  AmIMainAssist=%s  AmIMainTank=%s',
+        tankrole.AmIMainAssist() and 'yes' or 'no',
+        tankrole.AmIMainTank() and 'yes' or 'no')
+
+    printListAudit('MaList', rc.MaList)
+    printListAudit('MtList', rc.MtList)
+
+    printf('  MA path: %s', summarizeMaPath())
+    printf('  MT path: %s', summarizeMtPath())
 end
 
 return tankrole

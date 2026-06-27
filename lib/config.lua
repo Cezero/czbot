@@ -226,6 +226,12 @@ function M.getPath()
     return mq.configDir .. '\\cz_' .. mq.TLO.Me.CleanName() .. '.lua'
 end
 
+local function configFileExists(path)
+    local f = io.open(path, 'r')
+    if f then f:close(); return true end
+    return false
+end
+
 local EMPTY_COMMON = {}
 
 function M.getCommon()
@@ -840,27 +846,6 @@ function M.swapSpellEntries(section, fromIndex, toIndex)
     M.ApplyAndPersist()
 end
 
-local function sanitizeConfigFile(filepath)
-    local file, err = io.open(filepath, "r")
-    if not file then
-        print("Error opening file:", err)
-        return nil
-    end
-    local content = file:read("*all")
-    file:close()
-    content = content:gsub("%['%w+'%]%s*=%s*table: 0x[%w]+%s*,?", function(entry)
-        print("Sanitizing invalid entry:", entry)
-        return entry:gsub("table: 0x[%w]+", "nil")
-    end)
-    local configData, loadErr = load(content)
-    if not configData then
-        print("Error loading sanitized config:", loadErr)
-        return nil
-    end
-    print("Config repaired and reloaded successfully")
-    return configData()
-end
-
 local function writeConfigToFile(config, filename)
     local file = io.open(filename, "w")
     if not file then
@@ -1160,15 +1145,36 @@ end
 
 function M.Load(path)
     local newconfig
+    local fileExists = configFileExists(path)
     local configData, err = loadfile(path)
     if err then
-        print('load failed')
-        newconfig = sanitizeConfigFile(path)
+        if fileExists then
+            return false, err
+        end
+        printf('\ayCZBot:\ax No config at \ag%s\ax — creating default', path)
+        newconfig = {}
     elseif configData then
-        newconfig = configData()
-    end
-    if not newconfig then
-        print('making new config')
+        local ok, result = pcall(configData)
+        if not ok then
+            if fileExists then
+                return false, result
+            end
+            printf('\ayCZBot:\ax No config at \ag%s\ax — creating default', path)
+            newconfig = {}
+        elseif type(result) ~= 'table' then
+            if fileExists then
+                return false, 'config must return a table'
+            end
+            printf('\ayCZBot:\ax No config at \ag%s\ax — creating default', path)
+            newconfig = {}
+        else
+            newconfig = result
+        end
+    else
+        if fileExists then
+            return false, err or 'failed to load config'
+        end
+        printf('\ayCZBot:\ax No config at \ag%s\ax — creating default', path)
         newconfig = {}
     end
     for k in pairs(M.config) do
@@ -1313,6 +1319,7 @@ function M.Load(path)
         otoffset = 0, minmana = 0, assistpct = 99,
     })
     applySectionDefaults('heal', { rezoffset = 0, interruptlevel = 0.80, xttargets = 0 })
+    return true
 end
 
 function M.Save(path)
@@ -1326,7 +1333,10 @@ end
 -- Full config load: main config, subsystem configs, script order, cz_common. Immune data is stored per zone in cz_common (zones[zone].immune).
 function M.LoadConfig()
     local path = M.getPath()
-    M.Load(path)
+    local ok, err = M.Load(path)
+    if not ok then
+        return false, err
+    end
     M.RunConfigLoaders()
     ---@type RunConfig
     local runconfig = state.getRunconfig()
@@ -1339,6 +1349,7 @@ function M.LoadConfig()
     M.Save(path)
     M.initCommonAtStartup()
     M.loadNukeFlavorsFromZone()
+    return true
 end
 
 return M

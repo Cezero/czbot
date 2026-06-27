@@ -391,7 +391,13 @@ function botlogic.StartUp(...)
     ---@type RunConfig
     local runconfig = state.getRunconfig()
     local args = { ... }
-    botconfig.LoadConfig()
+    local ok, err = botconfig.LoadConfig()
+    if not ok then
+        printf('\ayCZBot:\ax Failed to load config \ar%s\ax: %s', botconfig.getPath(), err or 'unknown error')
+        printf('\ayCZBot:\ax Fix the file manually, or delete/rename it to start with a fresh default.')
+        state.getRunconfig().terminate = true
+        return
+    end
     runconfig.zonename = mq.TLO.Zone.ShortName() or ''
     if args[1] then
         runconfig.TankName = (args[1] == 'automatic') and 'automatic' or (args[1]:sub(1, 1):upper() .. args[1]:sub(2))
