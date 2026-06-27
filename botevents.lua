@@ -15,6 +15,7 @@ local castinterrupt = require('lib.castinterrupt')
 local botevents = {}
 
 local SIT_AFTER_HIT_MS = 3000
+local _zoneChangePending = false
 
 --- Clear combat session state (engage, mob list, stick/attack). Used on death, rez, and zone change.
 ---@param reason string|nil e.g. death, rez, zone
@@ -53,11 +54,14 @@ end
 
 -- Single entry point for zone change: used by zoneCheck hook and MQ zone events.
 function botevents.OnZoneChange()
+    if _zoneChangePending then return end
+    _zoneChangePending = true
     print('Zone detected') -- not debug, keep
     state.getRunconfig().statusMessage = 'Zone change, waiting...'
     mq.delay(1000)
     DelayOnZone()
     state.getRunconfig().statusMessage = ''
+    _zoneChangePending = false
 end
 
 function botevents.Event_Slain()

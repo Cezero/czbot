@@ -227,15 +227,173 @@ function M.getCommon()
 end
 
 local COMMON_FILENAME = 'cz_common.lua'
+local COMMON_LOCK_FILENAME = 'cz_common.lock'
+local LOCK_MAX_ATTEMPTS = 5
+
+local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
+local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
+local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'noCombatZones', 'botListClassOrder' }
 
 local function commonFilePath()
     return mq.configDir .. '/' .. COMMON_FILENAME
 end
 
-local function commonFileExists()
-    local f = io.open(commonFilePath(), 'r')
+local function commonBakPath()
+    return commonFilePath() .. '.bak'
+end
+
+local function commonLockPath()
+    return mq.configDir .. '/' .. COMMON_LOCK_FILENAME
+end
+
+local function commonFileExists(path)
+    path = path or commonFilePath()
+    local f = io.open(path, 'r')
     if f then f:close(); return true end
     return false
+end
+
+local function resolveLoadOpts(opts)
+    opts = opts or {}
+    local defaults = { autoSave = true, seedDefaults = true, allowCreate = true }
+    return {
+        autoSave = opts.autoSave ~= nil and opts.autoSave or defaults.autoSave,
+        seedDefaults = opts.seedDefaults ~= nil and opts.seedDefaults or defaults.seedDefaults,
+        allowCreate = opts.allowCreate ~= nil and opts.allowCreate or defaults.allowCreate,
+    }
+end
+
+--- Load a cz_common lua file from disk without touching M._common cache.
+local function tryLoadCommonTable(path)
+    local commonData, errr = loadfile(path)
+    if errr or not commonData then return nil, errr end
+    local common = commonData()
+    if not common or type(common) ~= 'table' then return {}, nil end
+    return common, nil
+end
+
+local function readCommonFromDisk()
+    local common, err = tryLoadCommonTable(commonFilePath())
+    if common then return common end
+    if commonFileExists(commonBakPath()) then
+        return tryLoadCommonTable(commonBakPath())
+    end
+    return nil
+end
+
+local function acquireCommonLock()
+    local path = commonLockPath()
+    for _ = 1, LOCK_MAX_ATTEMPTS do
+        local f = io.open(path, 'wx')
+        if f then
+            f:write(tostring(mq.TLO.Me.CleanName() or 'unknown'), '\n', tostring(os.time()))
+            f:close()
+            return true
+        end
+        mq.delay(50 + math.random(0, 150))
+    end
+    return false
+end
+
+local function releaseCommonLock()
+    os.remove(commonLockPath())
+end
+
+local function mergeImmune(diskImmune, memImmune)
+    local out = {}
+    if type(diskImmune) == 'table' then
+        for spell, mobs in pairs(diskImmune) do
+            if type(mobs) == 'table' then
+                out[spell] = {}
+                for mobName, v in pairs(mobs) do out[spell][mobName] = v end
+            end
+        end
+    end
+    if type(memImmune) == 'table' then
+        for spell, mobs in pairs(memImmune) do
+            if type(mobs) == 'table' then
+                if not out[spell] then out[spell] = {} end
+                for mobName, v in pairs(mobs) do out[spell][mobName] = v end
+            end
+        end
+    end
+    return next(out) and out or nil
+end
+
+local function mergeZoneBlock(diskZb, memZb)
+    if not diskZb then return memZb end
+    if not memZb then return diskZb end
+    local out = {}
+    for k, v in pairs(diskZb) do out[k] = v end
+    for _, key in ipairs(ZONE_LIST_KEYS) do
+        if diskZb[key] or memZb[key] then
+            out[key] = M.unionStringList(diskZb[key], memZb[key])
+        end
+    end
+    for _, key in ipairs(ZONE_BOOL_MAP_KEYS) do
+        if diskZb[key] or memZb[key] then
+            out[key] = M.unionBoolMap(diskZb[key], memZb[key])
+        end
+    end
+    if diskZb.immune or memZb.immune then
+        out.immune = mergeImmune(diskZb.immune, memZb.immune)
+    end
+    if memZb.forageDisabled ~= nil then
+        out.forageDisabled = memZb.forageDisabled
+    end
+    for k, v in pairs(memZb) do
+        if out[k] == nil and v ~= nil then out[k] = v end
+    end
+    return out
+end
+
+--- Deep-merge disk snapshot into in-memory common before save. Returns merged table and recovery count.
+function M.mergeCommonTables(disk, mem)
+    if not disk then return mem, 0 end
+    if not mem then return disk, 0 end
+    local recovered = 0
+    for k in pairs(disk) do
+        if mem[k] == nil then recovered = recovered + 1 end
+    end
+    local out = {}
+    for k, v in pairs(mem) do out[k] = v end
+    for k, v in pairs(disk) do
+        if out[k] == nil then out[k] = v end
+    end
+    for _, key in ipairs(TOP_LIST_KEYS) do
+        if disk[key] or mem[key] then
+            out[key] = M.unionStringList(disk[key], mem[key])
+        end
+    end
+    if disk.zones or mem.zones then
+        out.zones = {}
+        local allZones = {}
+        if type(disk.zones) == 'table' then
+            for zone in pairs(disk.zones) do allZones[zone] = true end
+        end
+        if type(mem.zones) == 'table' then
+            for zone in pairs(mem.zones) do allZones[zone] = true end
+        end
+        for zone in pairs(allZones) do
+            local diskZb = disk.zones and disk.zones[zone] or nil
+            local memZb = mem.zones and mem.zones[zone] or nil
+            out.zones[zone] = mergeZoneBlock(diskZb, memZb)
+        end
+    end
+    if disk.raidlist or mem.raidlist then
+        out.raidlist = {}
+        if type(disk.raidlist) == 'table' then
+            for name, snapshot in pairs(disk.raidlist) do
+                out.raidlist[name] = snapshot
+            end
+        end
+        if type(mem.raidlist) == 'table' then
+            for name, snapshot in pairs(mem.raidlist) do
+                out.raidlist[name] = snapshot
+            end
+        end
+    end
+    return out, recovered
 end
 
 --- Union of string arrays: disk order first, then memory entries not already present.
@@ -361,38 +519,86 @@ function M.ensureZoneBlock(zone)
     return common.zones[zone]
 end
 
-function M.loadCommon()
+---@param opts table|nil optional: autoSave, seedDefaults, allowCreate (default true each)
+function M.loadCommon(opts)
+    local loadOpts = resolveLoadOpts(opts)
     local path = commonFilePath()
-    local commonData, errr = loadfile(path)
+    local restoredFromBak = false
     local newFile = false
-    if not errr and commonData then
-        M._common = commonData()
-        if not M._common then M._common = {} end
+    local common, errr = tryLoadCommonTable(path)
+    if common then
+        M._common = common
         M._commonReadOnly = false
-    elseif commonFileExists() then
-        printf('\ayCZBot:\ax Failed to load \ar%s\ax: %s', path, errr or 'unknown error')
-        M._common = {}
-        M._commonReadOnly = true
-    else
+    elseif commonFileExists(path) then
+        local bakCommon = tryLoadCommonTable(commonBakPath())
+        if bakCommon then
+            M._common = bakCommon
+            M._commonReadOnly = false
+            restoredFromBak = true
+            printf('\ayCZBot:\ax Restored \agcz_common.lua\ax from \ag.bak\ax after load error: %s', errr or 'unknown error')
+        else
+            printf('\ayCZBot:\ax Failed to load \ar%s\ax: %s', path, errr or 'unknown error')
+            M._common = {}
+            M._commonReadOnly = true
+        end
+    elseif commonFileExists(commonBakPath()) then
+        local bakCommon = tryLoadCommonTable(commonBakPath())
+        if bakCommon then
+            M._common = bakCommon
+            M._commonReadOnly = false
+            restoredFromBak = true
+            printf('\ayCZBot:\ax Restored \agcz_common.lua\ax from \ag.bak\ax (main file missing)')
+        elseif loadOpts.allowCreate then
+            M._common = {}
+            M._commonReadOnly = false
+            newFile = true
+        elseif M._common and next(M._common) then
+            M._commonReadOnly = true
+            printf('\ayCZBot:\ax \ar%s\ax missing; using cached common (read-only)', path)
+        else
+            M._common = {}
+            M._commonReadOnly = true
+            printf('\ayCZBot:\ax \ar%s\ax missing and no backup; common is read-only', path)
+        end
+    elseif loadOpts.allowCreate then
         M._common = {}
         M._commonReadOnly = false
         newFile = true
+    elseif M._common and next(M._common) then
+        M._commonReadOnly = true
+        printf('\ayCZBot:\ax \ar%s\ax missing; using cached common (read-only)', path)
+    else
+        M._common = {}
+        M._commonReadOnly = true
+        printf('\ayCZBot:\ax \ar%s\ax missing and no backup; common is read-only', path)
     end
     local migrated = migrateOldCommonToZones(M._common) or migrateCzimmuneIntoZones(M._common)
-    local nocombatzones = require('lib.nocombatzones')
-    if nocombatzones.seedDefaultsIfEmpty() then migrated = true end
-    if not M._commonReadOnly and (migrated or newFile) then M.saveCommon() end
+    if loadOpts.seedDefaults then
+        local nocombatzones = require('lib.nocombatzones')
+        if nocombatzones.seedDefaultsIfEmpty() then migrated = true end
+    end
+    if not M._commonReadOnly and loadOpts.autoSave and (migrated or newFile or restoredFromBak) then
+        M.saveCommon()
+    end
     return M._common
 end
 
 function M.saveCommon()
     if M._commonReadOnly or not M._common then return end
+    local diskCommon = readCommonFromDisk()
+    if diskCommon then
+        local merged, recovered = M.mergeCommonTables(diskCommon, M._common)
+        if recovered > 0 then
+            printf('\ayCZBot:\ax cz_common merge recovered %d top-level key(s) from disk', recovered)
+        end
+        M._common = merged
+    end
     local path = commonFilePath()
     local src = io.open(path, 'rb')
     if src then
         local content = src:read('*all')
         src:close()
-        local dst = io.open(path .. '.bak', 'wb')
+        local dst = io.open(commonBakPath(), 'wb')
         if dst then
             dst:write(content)
             dst:close()
@@ -404,19 +610,29 @@ end
 --- Reload cz_common from disk, apply mutator, then save. No-op when file failed to load (read-only).
 function M.mutateCommon(mutator)
     if mutator == nil then return false end
-    M.loadCommon()
-    if M._commonReadOnly then
-        printf('\ayCZBot:\ax Cannot save \ar%s\ax — fix load error and reload script', commonFilePath())
-        return false
+    for _ = 1, LOCK_MAX_ATTEMPTS do
+        if not acquireCommonLock() then
+            mq.delay(50 + math.random(0, 150))
+        else
+            M.loadCommon({ autoSave = false, seedDefaults = false, allowCreate = false })
+            if M._commonReadOnly then
+                releaseCommonLock()
+                printf('\ayCZBot:\ax Cannot save \ar%s\ax — fix load error and reload script', commonFilePath())
+                return false
+            end
+            mutator(M._common)
+            M.saveCommon()
+            releaseCommonLock()
+            return true
+        end
     end
-    mutator(M._common)
-    M.saveCommon()
-    return true
+    printf('\ayCZBot:\ax Cannot save \ar%s\ax — failed to acquire lock after %d attempts', commonFilePath(), LOCK_MAX_ATTEMPTS)
+    return false
 end
 
 --- Reload cz_common from disk and refresh current-zone exclude/priority/charm lists and nuke flavors.
 function M.refreshZoneStateFromCommon()
-    M.loadCommon()
+    M.loadCommon({ autoSave = false, seedDefaults = false, allowCreate = false })
     local mobfilter = require('lib.mobfilter')
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
