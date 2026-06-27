@@ -30,8 +30,7 @@ end
 
 local function ensureList()
     local common = botconfig.getCommon()
-    if not common.noCombatZones then common.noCombatZones = {} end
-    return common.noCombatZones
+    return common.noCombatZones or {}
 end
 
 function nocombatzones.getConfiguredZones()

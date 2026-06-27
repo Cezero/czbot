@@ -111,7 +111,12 @@ M.DEBUFF_DONTSTACK_ALLOWED = { Charmed = true, Crippled = true, Feared = true, M
 M.DEBUFF_STOPWHEN_ALLOWED = { Slowed = true, Snared = true, Rooted = true, Mezzed = true, Charmed = true, Crippled = true, Feared = true, Maloed = true, Tashed = true }
 M._configLoaders = {}
 M._common = nil
-M._commonReadOnly = false
+M._commonLastGood = nil
+M._commonLoadFailures = 0
+M._commonReloadPending = false
+M._commonLoadLastError = nil
+M._commonLoadPaused = false
+M._commonLoadLastAttemptMs = 0
 M._guiDirty = false
 
 -- Consider (con) color names and name-to-index map for pull filtering and UI. Indices 1-7.
@@ -221,14 +226,17 @@ function M.getPath()
     return mq.configDir .. '\\cz_' .. mq.TLO.Me.CleanName() .. '.lua'
 end
 
+local EMPTY_COMMON = {}
+
 function M.getCommon()
-    if M._common == nil then M.loadCommon() end
-    return M._common
+    return M._common or M._commonLastGood or EMPTY_COMMON
 end
 
 local COMMON_FILENAME = 'cz_common.lua'
 local COMMON_LOCK_FILENAME = 'cz_common.lock'
 local LOCK_MAX_ATTEMPTS = 5
+local COMMON_LOAD_MAX_FAILURES = 5
+local COMMON_LOAD_RETRY_MS = 100
 
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
@@ -253,14 +261,22 @@ local function commonFileExists(path)
     return false
 end
 
-local function resolveLoadOpts(opts)
-    opts = opts or {}
-    local defaults = { autoSave = true, seedDefaults = true, allowCreate = true }
-    return {
-        autoSave = opts.autoSave ~= nil and opts.autoSave or defaults.autoSave,
-        seedDefaults = opts.seedDefaults ~= nil and opts.seedDefaults or defaults.seedDefaults,
-        allowCreate = opts.allowCreate ~= nil and opts.allowCreate or defaults.allowCreate,
-    }
+local function setCommonCache(common)
+    M._common = common
+    M._commonLastGood = common
+end
+
+local function markCommonLoadSuccess()
+    M._commonLoadFailures = 0
+    M._commonReloadPending = false
+    M._commonLoadLastError = nil
+    M._commonLoadPaused = false
+end
+
+local function markCommonLoadFailure(errMsg)
+    M._commonLoadFailures = M._commonLoadFailures + 1
+    M._commonReloadPending = true
+    M._commonLoadLastError = errMsg or 'unknown error'
 end
 
 --- Load a cz_common lua file from disk without touching M._common cache.
@@ -519,72 +535,69 @@ function M.ensureZoneBlock(zone)
     return common.zones[zone]
 end
 
----@param opts table|nil optional: autoSave, seedDefaults, allowCreate (default true each)
-function M.loadCommon(opts)
-    local loadOpts = resolveLoadOpts(opts)
+--- Read-only reload from disk. Never writes. Returns true when main or .bak loaded.
+function M.reloadCommonReadOnly()
     local path = commonFilePath()
-    local restoredFromBak = false
-    local newFile = false
-    local common, errr = tryLoadCommonTable(path)
+    local common, err = tryLoadCommonTable(path)
     if common then
-        M._common = common
-        M._commonReadOnly = false
-    elseif commonFileExists(path) then
-        local bakCommon = tryLoadCommonTable(commonBakPath())
-        if bakCommon then
-            M._common = bakCommon
-            M._commonReadOnly = false
-            restoredFromBak = true
-            printf('\ayCZBot:\ax Restored \agcz_common.lua\ax from \ag.bak\ax after load error: %s', errr or 'unknown error')
-        else
-            printf('\ayCZBot:\ax Failed to load \ar%s\ax: %s', path, errr or 'unknown error')
-            M._common = {}
-            M._commonReadOnly = true
-        end
-    elseif commonFileExists(commonBakPath()) then
-        local bakCommon = tryLoadCommonTable(commonBakPath())
-        if bakCommon then
-            M._common = bakCommon
-            M._commonReadOnly = false
-            restoredFromBak = true
-            printf('\ayCZBot:\ax Restored \agcz_common.lua\ax from \ag.bak\ax (main file missing)')
-        elseif loadOpts.allowCreate then
-            M._common = {}
-            M._commonReadOnly = false
-            newFile = true
-        elseif M._common and next(M._common) then
-            M._commonReadOnly = true
-            printf('\ayCZBot:\ax \ar%s\ax missing; using cached common (read-only)', path)
-        else
-            M._common = {}
-            M._commonReadOnly = true
-            printf('\ayCZBot:\ax \ar%s\ax missing and no backup; common is read-only', path)
-        end
-    elseif loadOpts.allowCreate then
-        M._common = {}
-        M._commonReadOnly = false
-        newFile = true
-    elseif M._common and next(M._common) then
-        M._commonReadOnly = true
-        printf('\ayCZBot:\ax \ar%s\ax missing; using cached common (read-only)', path)
-    else
-        M._common = {}
-        M._commonReadOnly = true
-        printf('\ayCZBot:\ax \ar%s\ax missing and no backup; common is read-only', path)
+        setCommonCache(common)
+        markCommonLoadSuccess()
+        return true
     end
-    local migrated = migrateOldCommonToZones(M._common) or migrateCzimmuneIntoZones(M._common)
-    if loadOpts.seedDefaults then
+    if commonFileExists(commonBakPath()) then
+        local bakCommon = tryLoadCommonTable(commonBakPath())
+        if bakCommon then
+            setCommonCache(bakCommon)
+            M._commonReloadPending = true
+            printf('\ayCZBot:\ax Using \agcz_common.lua.bak\ax in memory (main unreadable: %s)', err or 'unknown')
+            return true
+        end
+    end
+    markCommonLoadFailure(err)
+    return false
+end
+
+--- One-time startup init: create file if missing, migrate/seed once when data changed. Never rewrites on .bak fallback.
+function M.initCommonAtStartup()
+    local path = commonFilePath()
+    if not commonFileExists(path) and not commonFileExists(commonBakPath()) then
+        M._common = {}
         local nocombatzones = require('lib.nocombatzones')
-        if nocombatzones.seedDefaultsIfEmpty() then migrated = true end
-    end
-    if not M._commonReadOnly and loadOpts.autoSave and (migrated or newFile or restoredFromBak) then
+        nocombatzones.seedDefaultsIfEmpty()
+        setCommonCache(M._common)
         M.saveCommon()
+        markCommonLoadSuccess()
+        return
     end
-    return M._common
+    local common, err = tryLoadCommonTable(path)
+    if common then
+        setCommonCache(common)
+        local migrated = migrateOldCommonToZones(M._common) or migrateCzimmuneIntoZones(M._common)
+        local nocombatzones = require('lib.nocombatzones')
+        local seeded = nocombatzones.seedDefaultsIfEmpty()
+        if migrated or seeded then
+            M.saveCommon()
+        end
+        markCommonLoadSuccess()
+        return
+    end
+    if commonFileExists(commonBakPath()) then
+        local bakCommon = tryLoadCommonTable(commonBakPath())
+        if bakCommon then
+            setCommonCache(bakCommon)
+            M._commonReloadPending = true
+            printf('\ayCZBot:\ax Using \agcz_common.lua.bak\ax at startup (main unreadable: %s)', err or 'unknown')
+            return
+        end
+    end
+    M._common = nil
+    M._commonLastGood = nil
+    markCommonLoadFailure(err)
+    printf('\ayCZBot:\ax Failed to load \ar%s\ax at startup: %s', path, err or 'unknown')
 end
 
 function M.saveCommon()
-    if M._commonReadOnly or not M._common then return end
+    if not M._common then return end
     local diskCommon = readCommonFromDisk()
     if diskCommon then
         local merged, recovered = M.mergeCommonTables(diskCommon, M._common)
@@ -605,19 +618,19 @@ function M.saveCommon()
         end
     end
     mq.pickle(COMMON_FILENAME, M._common)
+    M._commonLastGood = M._common
 end
 
---- Reload cz_common from disk, apply mutator, then save. No-op when file failed to load (read-only).
+--- Sole runtime write path: reload, mutate, save under lock.
 function M.mutateCommon(mutator)
     if mutator == nil then return false end
     for _ = 1, LOCK_MAX_ATTEMPTS do
         if not acquireCommonLock() then
             mq.delay(50 + math.random(0, 150))
         else
-            M.loadCommon({ autoSave = false, seedDefaults = false, allowCreate = false })
-            if M._commonReadOnly then
+            if not M.reloadCommonReadOnly() then
                 releaseCommonLock()
-                printf('\ayCZBot:\ax Cannot save \ar%s\ax — fix load error and reload script', commonFilePath())
+                printf('\ayCZBot:\ax Cannot save \ar%s\ax — reload failed, will retry', commonFilePath())
                 return false
             end
             mutator(M._common)
@@ -630,9 +643,34 @@ function M.mutateCommon(mutator)
     return false
 end
 
---- Reload cz_common from disk and refresh current-zone exclude/priority/charm lists and nuke flavors.
+--- Retry pending read-only reload; pause bot after consecutive failures.
+function M.commonLoadTick()
+    if M._commonLoadPaused then
+        if _G.MasterPause == true then return end
+        M._commonLoadPaused = false
+        M._commonLoadFailures = 0
+        M._commonReloadPending = true
+        state.getRunconfig().statusMessage = ''
+    end
+    if not M._commonReloadPending then return end
+    local now = mq.gettime()
+    if now - M._commonLoadLastAttemptMs < COMMON_LOAD_RETRY_MS then return end
+    M._commonLoadLastAttemptMs = now
+    if M.reloadCommonReadOnly() then return end
+    if M._commonLoadFailures >= COMMON_LOAD_MAX_FAILURES then
+        M._commonLoadPaused = true
+        M._commonReloadPending = false
+        state.czpause('on')
+        local msg = string.format('cz_common.lua load failed (%s) — fix file and /czp off to resume',
+            M._commonLoadLastError or 'unknown')
+        state.getRunconfig().statusMessage = msg
+        printf('\ayCZBot:\ax \ar%s\ax', msg)
+    end
+end
+
+--- Reload cz_common from disk (read-only) and refresh current-zone exclude/priority/charm lists and nuke flavors.
 function M.refreshZoneStateFromCommon()
-    M.loadCommon({ autoSave = false, seedDefaults = false, allowCreate = false })
+    M.reloadCommonReadOnly()
     local mobfilter = require('lib.mobfilter')
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
@@ -1299,7 +1337,7 @@ function M.LoadConfig()
         table.insert(M.getSubOrder().script, v)
     end
     M.Save(path)
-    M.loadCommon()
+    M.initCommonAtStartup()
     M.loadNukeFlavorsFromZone()
 end
 

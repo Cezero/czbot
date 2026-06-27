@@ -7,6 +7,7 @@
 -- Hook names and priorities. Optional 'provider': module name; registry will require it and call mod.getHookFn(name).
 local hooks = {
     { name = 'zoneCheck',       priority = 100 },
+    { name = 'commonLoadTick',  priority = 150,  runWhenDead = true },
     { name = 'doEvents',        priority = 200,  runWhenDead = true },
     { name = 'charState',       priority = 300,  runWhenDead = true },
     { name = 'doRaid',          priority = 350,  provider = 'botraid' },

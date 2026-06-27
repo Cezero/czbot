@@ -348,6 +348,10 @@ local function _registerBuiltinHooks()
         end
     end)
 
+    hookregistry.registerHookFn('commonLoadTick', function(hookName)
+        botconfig.commonLoadTick()
+    end)
+
     -- Drains MQ event queue so chat/events are processed every tick.
     hookregistry.registerHookFn('doEvents', function(hookName)
         mq.doevents()
