@@ -7,6 +7,7 @@
 -- Normal hooks: Skipped when MasterPause. When state is busy and payload has priority,
 --   only hooks with hook.priority <= payload.priority run (higher-priority hooks and the busy-holding hook).
 local mq = require('mq')
+local tickprof = require('lib.tickprof')
 -- Throttled: when busy with payload.priority, hooks with higher priority numbers are skipped (see runNormalHooks).
 local _hookSkipLogNextTime = 0
 local HOOK_SKIP_LOG_INTERVAL_MS = 1000
@@ -40,6 +41,14 @@ local function _rebuildSorted()
     _sortedRunWhenPaused = runWhenPaused
     _sortedNormal = normal
     _sortedRunWhenBusy = runWhenBusy
+end
+
+local function _runHook(h)
+    if tickprof.IsDebug() then
+        tickprof.wrapHook(h.name, h.fn, h.name)
+    else
+        h.fn(h.name)
+    end
 end
 
 local hookregistry = {}
@@ -84,7 +93,7 @@ function hookregistry.runRunWhenPausedHooks()
     if _sortedRunWhenPaused == nil then _rebuildSorted() end
     local list = _sortedRunWhenPaused or {}
     for _, h in ipairs(list) do
-        h.fn(h.name)
+        _runHook(h)
     end
 end
 
@@ -96,7 +105,7 @@ function hookregistry.runNormalHooks()
     if state.isDeadOrHover() or state.getRunState() == state.STATES.dead then
         for _, h in ipairs(list) do
             if h.runWhenDead then
-                h.fn(h.name)
+                _runHook(h)
             end
         end
         return
@@ -111,7 +120,7 @@ function hookregistry.runNormalHooks()
             end
         end
         if maxPriority == nil or h.priority <= maxPriority then
-            h.fn(h.name)
+            _runHook(h)
         else
             skippedByBusyCap[#skippedByBusyCap + 1] = string.format('%s(%d>%s)', h.name, h.priority, tostring(maxPriority))
         end
@@ -142,7 +151,7 @@ function hookregistry.runNormalHooks()
         if _sortedRunWhenBusy == nil then _rebuildSorted() end
         local busyList = _sortedRunWhenBusy or {}
         for _, h in ipairs(busyList) do
-            h.fn(h.name)
+            _runHook(h)
         end
     end
 end

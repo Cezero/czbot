@@ -88,6 +88,7 @@ local GROUPS = {
         { "/cz prememdebug on|off", "Log which gems the pre-mem pass loads (and what it skips)." },
         { "/cz upgradedebug on|off", "Log spell-upgrade scan results (SpellGroup matches per configured spell)." },
         { "/cz aetankdebug on|off", "Log why AE-tank is idle (not MT, mezzer suppress, taunt cooldown, nothing loose)." },
+        { "/cz tickdebug on|off", "Log tick gap/processing time; per-hook breakdown when proc exceeds 100ms." },
         { "/cz echo <text>", "Echo a message (testing)." },
     } },
     { title = "Utility", cmds = {

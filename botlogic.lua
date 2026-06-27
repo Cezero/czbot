@@ -20,6 +20,7 @@ local charm = require('lib.charm')
 local premem = require('lib.premem')
 local spellupgrade = require('lib.spellupgrade')
 local scribe = require('lib.scribe')
+local tickprof = require('lib.tickprof')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -429,10 +430,13 @@ end
 
 function botlogic.mainloop()
     while not state.getRunconfig().terminate do
+        local tick = tickprof.beginTick()
         hookregistry.runRunWhenPausedHooks()
-        if not MasterPause then
+        local paused = MasterPause == true
+        if not paused then
             hookregistry.runNormalHooks()
         end
+        tickprof.endTick(tick, paused)
         mq.delay(100)
     end
 end

@@ -693,6 +693,19 @@ local function cmd_barddebug(args)
     printf('\ayCZBot:\ax Bard debug logging %s', bardtwist.IsBardDebug() and 'on' or 'off')
 end
 
+local function cmd_tickdebug(args)
+    local tickprof = require('lib.tickprof')
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        tickprof.SetDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        tickprof.SetDebug(false)
+    else
+        tickprof.SetDebug(not tickprof.IsDebug())
+    end
+    printf('\ayCZBot:\ax Tick debug logging %s', tickprof.IsDebug() and 'on' or 'off')
+end
+
 local function cmd_burn(args)
     local arg = args[2] and string.lower(args[2]) or ''
     if arg == 'off' or arg == 'stop' or arg == '0' then
@@ -1371,6 +1384,7 @@ local handlers = {
     mezdebug = cmd_mezdebug,
     buffdebug = cmd_buffdebug,
     barddebug = cmd_barddebug,
+    tickdebug = cmd_tickdebug,
     charmpetsetup = cmd_charmpetsetup,
     aetank = cmd_aetank,
     aetankmezzer = cmd_aetankmezzer,
