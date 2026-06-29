@@ -103,6 +103,24 @@ local function twistListsEqual(a, b)
     return true
 end
 
+local function getCurrentTwistGems()
+    local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
+    return parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
+end
+
+--- Apply desired twist list: skip if already twisting with same list; /twist start if list matches but stopped; else full /twist.
+---@return string action tag for debug logging
+local function applyTwistList(desiredGems)
+    local currentGems = getCurrentTwistGems()
+    if twistListsEqual(currentGems, desiredGems) then
+        if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then return 'skip:match' end
+        mq.cmd('/twist start')
+        return 'cmd:twist-start'
+    end
+    mq.cmd('/twist ' .. table.concat(desiredGems, ' '))
+    return 'cmd:twist'
+end
+
 function bardtwist.IsBard()
     return mq.TLO.Me.Class.ShortName() == 'BRD'
 end
@@ -247,6 +265,19 @@ function bardtwist.GetTwistListStringForMode(mode)
     return table.concat(list, ' ')
 end
 
+--- True when gem (1–12) is in the twist list for the current mode (idle/combat/travel/pull).
+function bardtwist.IsGemInTwistListForCurrentMode(gem)
+    if type(gem) ~= 'number' or gem < 1 or gem > 12 then return false end
+    local mode = bardtwist.GetCurrentTwistMode()
+    if not mode then return false end
+    local list = bardtwist.GetTwistListForMode(mode)
+    if not list then return false end
+    for i = 1, #list do
+        if list[i] == gem then return true end
+    end
+    return false
+end
+
 --- Clear twistOnceActive when MQ2Twist list matches desired mode (no /twist issued).
 ---@param mode string|nil defaults to GetCurrentTwistMode()
 ---@return boolean true when twistOnceActive was cleared
@@ -311,10 +342,7 @@ function bardtwist.EnsureTwistForMode(mode)
         end
     end
     if rc.bardTwistOnceWait then return 'skip:wait' end
-    local twisting = mq.TLO.Twist() and mq.TLO.Twist.Twisting()
-    if twisting and twistListsEqual(currentGems, desiredGems) then return 'skip:match' end
-    mq.cmd('/twist ' .. table.concat(desiredGems, ' '))
-    return 'cmd:twist'
+    return applyTwistList(desiredGems)
 end
 
 function bardtwist.EnsureDefaultTwistRunning()
@@ -377,13 +405,7 @@ function bardtwist.ResumeTwist()
     local desiredGems = bardtwist.GetTwistListForMode(mode)
     if not desiredGems or #desiredGems == 0 then return end
     if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then return end
-    local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
-    local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
-    if twistListsEqual(currentGems, desiredGems) then
-        mq.cmd('/twist start')
-    else
-        mq.cmd('/twist ' .. table.concat(desiredGems, ' '))
-    end
+    applyTwistList(desiredGems)
 end
 
 function bardtwist.SetTwistOnce(gemList)

@@ -357,6 +357,10 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local myid = mq.TLO.Me.ID()
     local myclass = mq.TLO.Me.Class.ShortName()
 
+    if myclass == 'BRD' and type(entry.gem) == 'number' and bardtwist.IsGemInTwistListForCurrentMode(entry.gem) then
+        return nil, nil
+    end
+
     if targethit == 'self' then
         return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar)
     end
