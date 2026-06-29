@@ -38,7 +38,7 @@ flowchart TB
     MeleePhase --> End
 ```
 
-- **MA (selectMATarget):** Only effective MA bot. Named-first initial pick; puller priority; sticky engage with named mid-fight override. **`mtSticky` ignored** when same bot is MT. When **Leash to radius** is on (`doCampAcleash`), sticky/combat picks and `isEngageableMobListSpawn` require the spawn within **acleash** of the camp pin (`isSpawnWithinCampPin`). `doMelee` disengages when the player leaves that radius.
+- **MA (selectMATarget):** Only effective MA bot. Named-first initial pick; puller priority; sticky engage with named mid-fight override. On **unpause** (`/czp off`) or **startup**, MA adopts the currently selected valid NPC target once (before sticky/named logic) when `maAdoptSelectedTarget` is set—honors manual takeover while paused. **`mtSticky` ignored** when same bot is MT. When **Leash to radius** is on (`doCampAcleash`), sticky/combat picks and `isEngageableMobListSpawn` require the spawn within **acleash** of the camp pin (`isSpawnWithinCampPin`). `doMelee` disengages when the player leaves that radius.
 - **Separate MT (resolveMtFollowTarget):** Follow MA immediately (no assistpct). **`mtSticky`:** keep `engageTargetId` once set (within camp pin when leash on); otherwise switch with MA.
 - **Offtank (resolveOfftankTarget):** If MT and MA same target, pick Nth add; else MA target. Sticks on engaged add or MA off-target until it dies (no assistpct fallback to main mob).
 - **DPS (resolveMeleeAssistTarget):** Sync to MA at **assistpct**.

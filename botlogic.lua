@@ -419,6 +419,7 @@ function botlogic.StartUp(...)
     if not comkeytable.raidlist then comkeytable.raidlist = {} end
     --make sure char isnt doing anything already (stop nav, clear cursor, ect)
     CharState('startup')
+    state.getRunconfig().maAdoptSelectedTarget = true
     mq.imgui.init('debuggui', botgui.getUpdateFn())
     _registerBuiltinHooks()
     hookregistry.registerAllFromConfig()

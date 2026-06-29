@@ -9,6 +9,7 @@
 ---@field MtList table cz_common mt_list mirror
 ---@field allMezzedEngageId number|nil spawn id locked while entire camp is mezzed (shortest remaining mez)
 ---@field attackCommandEngage boolean|nil when true, engageTargetId was set by /cz attack; do not overwrite in AdvCombat for DPS/OT.
+---@field maAdoptSelectedTarget boolean|nil one-shot: MA adopts mq.TLO.Target on next selectMATarget (unpause/startup)
 ---@field AlertList number
 ---@field followid number
 ---@field followname string
@@ -243,6 +244,7 @@ function M.resetRunconfig()
         lastResolvedAssistName = nil,
         allMezzedEngageId = nil,
         attackCommandEngage = nil,
+        maAdoptSelectedTarget = nil,
         AlertList = 20,
         followid = 0,
         followname = '',
@@ -500,6 +502,7 @@ function M.czpause(...)
     local args = { ... }
     if args[1] and args[1] == 'off' then
         _G.MasterPause = false
+        M.getRunconfig().maAdoptSelectedTarget = true
         print('Unpausing CZBot')
     elseif args[1] and args[1] == 'on' then
         _G.MasterPause = true
@@ -511,6 +514,7 @@ function M.czpause(...)
             print('Pausing CZBot')
         else
             _G.MasterPause = false
+            M.getRunconfig().maAdoptSelectedTarget = true
             print('Unpausing CZBot')
         end
     end

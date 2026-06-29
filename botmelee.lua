@@ -428,11 +428,31 @@ local function findClosestEngageableNamed(mobList)
     return namedSpawn and namedSpawn.ID() or nil
 end
 
+local function isValidMaSelectedTarget(spawnId, rc)
+    if not spawnId or spawnId <= 0 then return false end
+    if spawnId == mq.TLO.Me.ID() then return false end
+    local spawn = mq.TLO.Spawn(spawnId)
+    if not spawnutils.isNpcEngageTarget(spawn) then return false end
+    if charm.isCharmSkipped(spawnId, rc) then return false end
+    if utils.isProtectedSpawn(spawn) then return false end
+    if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isSpawnWithinCampPinById(spawnId, rc) then return false end
+    return true
+end
+
 -- MA bot only: choose target from MobList independent of MT.
 -- Sticky: keep current alive target unless a named appears while on a non-named.
 -- Returns chosen id or nil.
 local function selectMATarget()
     local rc = state.getRunconfig()
+    if rc.maAdoptSelectedTarget then
+        rc.maAdoptSelectedTarget = nil
+        local curId = mq.TLO.Target.ID()
+        if isValidMaSelectedTarget(curId, rc) then
+            rc.allMezzedEngageId = nil
+            if rc.attackCommandEngage then rc.attackCommandEngage = nil end
+            return curId
+        end
+    end
     local engageId = rc.engageTargetId
     if engageId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) and not charm.isCharmSkipped(engageId, rc) then
         local keepSticky = true
@@ -501,10 +521,10 @@ local function selectMATarget()
 end
 
 local function resolveMaBotTarget(rc)
-    if rc.attackCommandEngage and rc.engageTargetId then
-        return rc.engageTargetId
+    if rc.maAdoptSelectedTarget or not (rc.attackCommandEngage and rc.engageTargetId) then
+        return selectMATarget()
     end
-    return selectMATarget()
+    return rc.engageTargetId
 end
 
 -- When no engageTargetId: stick off, attack off, pet back. Clear NPC target only when auto-attack is on (releasing a fight).
