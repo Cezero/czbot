@@ -288,7 +288,8 @@ local function isEngageableMobListSpawn(spawn)
     local rc = state.getRunconfig()
     local sid = spawn.ID()
     if sid and charm.isCharmSkipped(sid, rc) then return false end
-    if sid and spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(sid, rc) then return false end
+    if sid and spawnutils.isPullUnpullable(sid, rc) then return false end
+    if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isSpawnWithinCampPin(spawn, rc) then return false end
     local tfNum = tonumber(myconfig.settings.TargetFilter) or 0
     if tfNum == 2 then return true end
     return spawn.LineOfSight()
@@ -368,11 +369,15 @@ end
 local function resolveMtFollowTarget()
     local rc = state.getRunconfig()
     if hasAliveEngageTarget(rc) and myconfig.melee.mtSticky then
-        return rc.engageTargetId
+        if spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
+            return rc.engageTargetId
+        end
     end
     local maTarId = getMaFollowTargetId()
     if maTarId then return maTarId end
-    if hasAliveEngageTarget(rc) then return rc.engageTargetId end
+    if hasAliveEngageTarget(rc) and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
+        return rc.engageTargetId
+    end
     return nil
 end
 
@@ -430,26 +435,32 @@ local function selectMATarget()
     local rc = state.getRunconfig()
     local engageId = rc.engageTargetId
     if engageId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) and not charm.isCharmSkipped(engageId, rc) then
-        if not spawnutils.isCampAcleashEnforced(rc) then
+        local keepSticky = true
+        if spawnutils.isCampAcleashEnforced(rc) then
+            keepSticky = spawnutils.isSpawnWithinCampPinById(engageId, rc)
+        else
             local inMobList = false
             for _, v in ipairs(rc.MobList or {}) do
                 if v.ID() == engageId then inMobList = true break end
             end
             if not inMobList then return engageId end
         end
-        local currentSpawn = mq.TLO.Spawn(engageId)
-        if not currentSpawn.Named() then
-            local namedId = findClosestEngageableNamed(rc.MobList)
-            if namedId then return namedId end
+        if keepSticky then
+            local currentSpawn = mq.TLO.Spawn(engageId)
+            if not currentSpawn.Named() then
+                local namedId = findClosestEngageableNamed(rc.MobList)
+                if namedId then return namedId end
+            end
+            return engageId
         end
-        return engageId
     end
 
     if mq.TLO.Me.Combat() then
         local curId = mq.TLO.Target.ID()
         local meId = mq.TLO.Me.ID()
         if curId and curId > 0 and curId ~= meId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(curId))
-            and not charm.isCharmSkipped(curId, rc) then
+            and not charm.isCharmSkipped(curId, rc)
+            and spawnutils.isSpawnWithinCampPinById(curId, rc) then
             local curSpawn = mq.TLO.Spawn(curId)
             if curSpawn.Named() then
                 return curId
@@ -831,6 +842,13 @@ function botmelee.getHookFn(name)
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil
                 disengageCombat()
+                return
+            end
+            if not spawnutils.isPlayerWithinCampPin(rc) then
+                rc.engageTargetId = nil
+                rc.attackCommandEngage = nil
+                disengageCombat()
+                if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
                 return
             end
             if state.getRunState() == state.STATES.engage_return_follow then

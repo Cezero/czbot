@@ -6,6 +6,7 @@ local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
+local spawnutils = require('lib.spawnutils')
 local myconfig = botconfig.config
 
 local botmove = {}
@@ -667,10 +668,16 @@ end
 function botmove.MakeCampLeashCheck()
     local rc = state.getRunconfig()
     if not hasCampSet(rc) then return end
-    if rc.engageTargetId then return end
     if isCampDragWorkflowActive() then return end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     if state.getRunState() == state.STATES.pulling then return end
+    if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isPlayerWithinCampPin(rc) then
+        print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
+        doLeashResetCombat()
+        botmove.MakeCamp('return')
+        return
+    end
+    if rc.engageTargetId then return end
     if campDistanceOk(rc) and campLOSOk(rc) then return end
     print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
     doLeashResetCombat()

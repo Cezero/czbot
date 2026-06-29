@@ -158,7 +158,7 @@ function botevents.Event_FTELocked()
         rc.fteRecheckProbeId = nil
     end
     if rc.FTECount == 0 then rc.FTECount = rc.FTECount + 1 end
-    spawnutils.recordFTE(rc, spawnId, { combat = true, pull = rc.dopull == true and not isProbe })
+    spawnutils.recordFTE(rc, spawnId, { combat = true, pull = not isProbe })
     if isProbe then
         if rc.engageTargetId == spawnId then
             rc.engageTargetId = nil

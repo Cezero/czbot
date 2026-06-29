@@ -200,6 +200,47 @@ function spawnutils.isCampAcleashEnforced(rc)
     return rc.doCampAcleash ~= false
 end
 
+--- True when spawn is within settings.acleash + zradius of the camp pin (not MA anchor).
+function spawnutils.isSpawnWithinCampPin(spawn, rc)
+    if not spawn then return false end
+    rc = rc or state.getRunconfig()
+    if not spawnutils.isCampAcleashEnforced(rc) then return true end
+    if rc.campstatus ~= true then return true end
+    local cx, cy, cz = getCampAnchor(rc)
+    if not cx or not cy then return true end
+    local myconfig = botconfig.config
+    local zradius = myconfig.settings.zradius or 75
+    local acleashSq = myconfig.settings.acleashSq
+    return spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
+end
+
+function spawnutils.isSpawnWithinCampPinById(spawnId, rc)
+    if not spawnId or spawnId == 0 then return false end
+    local spawn = mq.TLO.Spawn(spawnId)
+    if not spawn or not spawn.ID() or spawn.ID() == 0 then return false end
+    return spawnutils.isSpawnWithinCampPin(spawn, rc)
+end
+
+--- True when the player is within settings.acleash + zradius of the camp pin.
+function spawnutils.isPlayerWithinCampPin(rc)
+    rc = rc or state.getRunconfig()
+    if not spawnutils.isCampAcleashEnforced(rc) then return true end
+    if rc.campstatus ~= true then return true end
+    local cx, cy, cz = getCampAnchor(rc)
+    if not cx or not cy then return true end
+    local myconfig = botconfig.config
+    local zradius = myconfig.settings.zradius or 75
+    local acleashSq = myconfig.settings.acleashSq
+    local meX, meY, meZ = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+    if not meX or not meY then return true end
+    local pdistSq = utils.getDistanceSquared2D(meX, meY, cx, cy)
+    if not pdistSq or not acleashSq or pdistSq > acleashSq then return false end
+    if zradius and cz and meZ then
+        if math.abs(meZ - cz) > zradius then return false end
+    end
+    return true
+end
+
 --- True when an alive engageTargetId should be kept outside MobList (doCampAcleash off + camp set).
 function spawnutils.shouldChaseOutsideCamp(rc)
     if spawnutils.isCampAcleashEnforced(rc) then return false end
@@ -217,10 +258,12 @@ function spawnutils.shouldPreserveStickyEngage(rc)
     if spawnutils.shouldChaseOutsideCamp(rc) then return true end
     local tankrole = require('lib.tankrole')
     local botconfig = require('lib.config')
-    if tankrole.AmIMainAssist() then return true end
+    if tankrole.AmIMainAssist() then
+        return spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc)
+    end
     if tankrole.AmIMainTank() and not tankrole.AmIMainAssist()
         and botconfig.config.melee.mtSticky then
-        return true
+        return spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc)
     end
     if botconfig.config.melee.offtank and not tankrole.AmIMainAssist() then
         local spellutils = require('lib.spellutils')
@@ -452,7 +495,8 @@ function spawnutils.isEngageAllowedSpawn(spawn, rc)
     if rc.attackCommandEngage and rc.engageTargetId == sid and spawnutils.isAliveEngageSpawn(spawn) then
         return true
     end
-    return spawnutils.isNpcEngageTarget(spawn)
+    if not spawnutils.isNpcEngageTarget(spawn) then return false end
+    return spawnutils.isSpawnWithinCampPin(spawn, rc)
 end
 
 local function filterSpawnForCamp(spawn, rc)
@@ -467,7 +511,7 @@ local function filterSpawnForCamp(spawn, rc)
     if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
     local sid = spawn.ID()
-    if rc.dopull == true and sid and spawnutils.isPullUnpullable(sid, rc) then return false end
+    if sid and spawnutils.isPullUnpullable(sid, rc) then return false end
     local tfNum = myconfig.settings.TargetFilter or 0
     return filterSpawnTargetFilter(spawn, tfNum)
 end
@@ -647,6 +691,7 @@ function spawnutils.mergeEngageTargetIntoMobList(rc)
     local id = rc.engageTargetId
     if not id or id <= 0 then return end
     if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(id), rc) then return end
+    if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isSpawnWithinCampPinById(id, rc) then return end
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == id then return end
     end
