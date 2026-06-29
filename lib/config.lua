@@ -834,6 +834,9 @@ function M.ApplyRole(roleKey)
         rc.AssistName = myName
     end
     rc.lastAssistTargetId = nil
+    if r.setTank or r.setAssist then
+        require('lib.tankrole').invalidateAll()
+    end
     M.ApplyAndPersist()
     return true, key
 end

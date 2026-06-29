@@ -82,6 +82,7 @@ local function drawMaAnchorSection()
         '##roles_ma_anchor_leash')
     if maLeashCh then
         botconfig.config.settings.maAnchorLeash = maLeashNew
+        require('lib.tankrole').bumpLeashGen()
         runConfigLoaders()
     end
     if ImGui.IsItemHovered() then

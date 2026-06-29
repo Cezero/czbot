@@ -27,6 +27,7 @@ function botevents.ResetCombatSession(reason)
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
     rc.lastAssistTargetId = nil
+    require('lib.tankrole').invalidateAll()
     rc.charmSkipIds = {}
     rc.MobList = {}
     spellstates.CleanMobList()

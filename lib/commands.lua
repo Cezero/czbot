@@ -557,6 +557,7 @@ local function cmd_tank(args)
     local name = M.normalizeRoleNameArg(args[2])
     state.getRunconfig().TankName = name
     botconfig.config.settings.TankName = name
+    require('lib.tankrole').invalidateAll()
     botconfig.ApplyAndPersist()
     printf('\ayCZBot:\axSetting tank to %s (saved)', name)
     mq.TLO.Target.TargetOfTarget()
@@ -570,6 +571,7 @@ local function cmd_assist(args)
     rc.AssistName = name
     rc.lastAssistTargetId = nil
     botconfig.config.settings.AssistName = name
+    require('lib.tankrole').invalidateAll()
     botconfig.ApplyAndPersist()
     printf('\ayCZBot:\axSetting assist to %s (saved)', name)
 end
@@ -856,6 +858,7 @@ local function cmd_maanchorleash(args)
         return
     end
     botconfig.config.settings.maAnchorLeash = val
+    require('lib.tankrole').bumpLeashGen()
     printf('\ayCZBot:\axSetting maAnchorLeash to %s', val)
 end
 

@@ -21,9 +21,28 @@ For what the MA and MT *do* once resolved (target picking, heals, offtank, pulle
 
 **Key points:**
 
-- Resolution is **live** — every heal, assist sync, and role check re-evaluates. The Status tab shows the current resolved name with `(auto)` when the setting is `"automatic"`.
+- Resolution is **cached** when `"automatic"`: once MA/MT are resolved, the result is reused until the cached candidate becomes invalid (dies, leaves zone, moves out of `maAnchorLeash` for list fallbacks) or an invalidation event occurs. Within each main-loop tick, all callers share one resolved name (no repeated lookups per tick). The Status tab shows the current resolved name with `(auto)` when the setting is `"automatic"`.
+- **Cache invalidation** forces a full re-resolve: EQ group/raid Main Assist or Main Tank assignment changes, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank` / `/cz assist`, role preset Apply with setTank/setAssist, or `maAnchorLeash` change.
 - **MA and MT resolve independently.** If `AssistName` is unset, it defaults to `TankName` at load, but when both are `"automatic"`, MA still comes from group/raid Main Assist (+ `ma_list`) and MT from group Main Tank (+ `mt_list`). They are not forced to be the same person.
 - **`TankName` defaults to `"automatic"`** in new configs. Populate **`ma_list`** and **`mt_list`** in `cz_common.lua` (or the Roles GUI) for reliable multibox fallback.
+
+---
+
+## Resolution cache
+
+When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name and reuses it until invalidated or the candidate fails availability checks.
+
+**Per-tick:** The main loop clears a tick-local memo at the start of each iteration. The first `GetAssistTargetName()` / `GetMainTankName()` call in that tick runs the cache path; subsequent calls (including `AmIMainAssist()` / `AmIMainTank()`) return the same memoized name.
+
+**Persistent cache validity** (cheap checks before a full re-resolve):
+
+1. Raid vs group path unchanged.
+2. EQ-assigned primary (Main Assist / Main Tank) unchanged.
+3. `ma_list` / `mt_list` generation unchanged (list edits or `/cz reloadcommon`).
+4. `maAnchorLeash` generation unchanged.
+5. Cached candidate still passes availability for its source (`primary`, `list`, or `primary_retained` for dead MA with no list fallback).
+
+**Invalidation events:** zone change, `/cz tank`, `/cz assist`, role preset Apply (setTank/setAssist), `ma_list`/`mt_list` GUI edits, `/cz reloadcommon`, `/cz maanchorleash`, MA leash edit in Roles GUI. Use `/cz tankrole` for a forced live diagnostic (cache cleared before printing).
 
 ---
 

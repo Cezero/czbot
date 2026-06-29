@@ -430,6 +430,7 @@ end
 
 function botlogic.mainloop()
     while not state.getRunconfig().terminate do
+        tankrole.beginTick()
         local tick = tickprof.beginTick()
         hookregistry.runRunWhenPausedHooks()
         local paused = MasterPause == true
