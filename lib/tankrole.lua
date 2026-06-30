@@ -101,6 +101,7 @@ local function getMaPrimaryTlo()
 end
 
 local function getMtPrimaryTlo()
+    if inRaid() then return nil end
     return tloName(mq.TLO.Group.MainTank)
 end
 
@@ -157,14 +158,20 @@ local function summarizeMaPath()
 end
 
 local function summarizeMtPath()
-    local primary = getMtPrimaryTlo()
-    if primary and isCandidateAvailable(primary, false) then
-        return string.format('%s MainTank: %s', inRaid() and 'raid group' or 'group', primary)
-    end
-    if primary then
+    if not inRaid() then
+        local primary = getMtPrimaryTlo()
+        if primary and isCandidateAvailable(primary, false) then
+            return 'group MainTank: ' .. primary
+        end
+        if primary then
+            local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
+            if fallback then return 'group MT unavailable, mt_list fallback: ' .. fallback end
+            return 'group MT unavailable, no mt_list match'
+        end
+    else
         local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
-        if fallback then return 'group MT unavailable, mt_list fallback: ' .. fallback end
-        return 'group MT unavailable, no mt_list match'
+        if fallback then return 'raid mt_list: ' .. fallback end
+        return 'raid mt_list walk: no match'
     end
     local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
     if fallback then return 'mt_list only: ' .. fallback end
@@ -239,7 +246,7 @@ local function resolveAutomaticTankFull()
     local primaryTlo = getMtPrimaryTlo()
     local meta = { primaryTlo = primaryTlo, inRaid = raid }
 
-    if primaryTlo and isCandidateAvailable(primaryTlo, false) then
+    if not raid and primaryTlo and isCandidateAvailable(primaryTlo, false) then
         meta.name = primaryTlo
         meta.source = 'primary'
         return meta

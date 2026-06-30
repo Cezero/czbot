@@ -63,10 +63,12 @@ flowchart TD
         MA6 -->|No| MANone[No MA resolved]
     end
     subgraph mt [TankName automatic]
-        MT2[Group.MainTank]
+        MT1{In raid?}
+        MT1 -->|Yes| MT5[Walk mt_list in order]
+        MT1 -->|No| MT2[Group.MainTank]
         MT2 --> MT4{Alive and in zone?}
         MT4 -->|Yes| MTResolved[Resolved MT]
-        MT4 -->|No| MT5[Walk mt_list in order]
+        MT4 -->|No| MT5
         MT5 --> MT6{First alive in zone?}
         MT6 -->|Yes| MTResolved
         MT6 -->|No| MTNone[No MT resolved]
@@ -80,9 +82,9 @@ flowchart TD
 | Role | Not in raid | In raid |
 |------|-------------|---------|
 | **MA** | `Group.MainAssist` | `Raid.MainAssist` |
-| **MT** | `Group.MainTank` | `Group.MainTank` (group window) |
+| **MT** | `Group.MainTank` | *(not used — `mt_list` only)* |
 
-In a **raid**, the EQ UI has no raid-wide Main Tank or Puller; those always come from the **group** window. CZBot uses **`Group.MainTank`** as the automatic MT primary in both group and raid, then **`mt_list`** when the primary is unavailable.
+In a **raid**, the EQ UI has no raid-wide Main Tank or Puller; those always come from the **group** window for puller/MT assignment in other contexts. For **automatic MT resolution**, CZBot **ignores** `Group.MainTank` entirely when `Raid.Members > 0` and uses **`mt_list` only**. See [Raid mode](raid-mode.md).
 
 For **automatic MA resolution** in a raid, CZBot uses **`Raid.MainAssist`** first, then **`ma_list`**.
 
@@ -102,7 +104,7 @@ If the primary is dead, feigned, hovering, or in another zone, resolution skips 
 
 ### Fallback (`ma_list` / `mt_list`)
 
-When no primary is available:
+When no primary is available (or in raid for MT):
 
 1. Walk the list **in order** — first eligible name wins.
 2. Candidate must be **alive** and in the **same zone**.
@@ -222,7 +224,7 @@ mt_list = { "WarriorMa", "SkOfftank" },
 ### Raid
 
 - Set **Raid Main Assist** in the EQ raid window.
-- Set **Group Main Tank** in each bot's group window (or rely on **`mt_list`** fallback).
+- Maintain **`mt_list`** with your heal priority — automatic MT does **not** use group Main Tank in raid.
 - **`ma_list`** still applies when raid MA is unavailable (with leash). **`mt_list`** applies alive/in-zone only (no leash).
 
 ### Legacy: everyone assists the tank

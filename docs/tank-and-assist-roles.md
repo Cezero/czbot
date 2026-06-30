@@ -27,7 +27,7 @@ If **AssistName** is unset, it falls back to **TankName** — the MT bot becomes
 - **Values:**
   - **Character name** — Healers focus on this character. If this bot is also the effective MA (AssistName unset or same name), it selects camp targets.
   - **`"manual"`** — No default MT; set at runtime with `/cz tank SomeName`.
-  - **`"automatic"`** — Resolve from the EQ group Main Tank role, then **`mt_list`** fallback. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
+  - **`"automatic"`** — Resolve from the EQ group Main Tank role (not in raid), then **`mt_list`** fallback. In raid, **`mt_list` only**. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
 
 Healers always use the resolved MT. MT bots do **not** pick mobs unless they are also the effective MA.
 
