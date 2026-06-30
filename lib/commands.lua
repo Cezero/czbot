@@ -587,8 +587,7 @@ end
 
 local function cmd_acleash(args)
     botconfig.config.settings.acleash = tonumber(args[2])
-    botconfig.config.settings.acleashSq = (botconfig.config.settings.acleash or 0) *
-        (botconfig.config.settings.acleash or 0)
+    botconfig.recomputeDerivedSettings()
     printf('\ayCZBot:\axSetting acleash to %s', botconfig.config.settings.acleash)
 end
 
@@ -606,8 +605,7 @@ end
 
 local function cmd_camprestdistance(args)
     botconfig.config.settings.campRestDistance = tonumber(args[2])
-    botconfig.config.settings.campRestDistanceSq = (botconfig.config.settings.campRestDistance or 0) *
-        (botconfig.config.settings.campRestDistance or 0)
+    botconfig.recomputeDerivedSettings()
     printf('\ayCZBot:\axSetting campRestDistance to %s', botconfig.config.settings.campRestDistance)
 end
 
@@ -971,6 +969,7 @@ local function cmd_setvar(args)
                             tempconfig[k][k2] = value
                             botconfig.config[k][k2] = value
                         end
+                        botconfig.recomputeDerivedSettings()
                         botconfig.WriteToFile(tempconfig, botconfig.getPath())
                         botconfig.RunConfigLoaders()
                     end
@@ -995,6 +994,7 @@ local function cmd_setvar(args)
                             tempconfig[k][k2] = value
                             botconfig.config[k][k2] = value
                         end
+                        botconfig.recomputeDerivedSettings()
                         botconfig.WriteToFile(tempconfig, botconfig.getPath())
                         botconfig.RunConfigLoaders()
                     end

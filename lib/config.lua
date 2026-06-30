@@ -789,8 +789,26 @@ function M.ClearDirty()
     M._guiDirty = false
 end
 
+--- Recompute precomputed squared distance fields after settings/pull mutations.
+function M.recomputeDerivedSettings()
+    local s = M.config.settings
+    if s then
+        s.acleashSq = (s.acleash or 0) * (s.acleash or 0)
+        s.followdistanceSq = (s.followdistance or 0) * (s.followdistance or 0)
+        s.campRestDistanceSq = (s.campRestDistance or 0) * (s.campRestDistance or 0)
+    end
+    local pull = M.config.pull
+    if pull then
+        pull.radiusSq = (pull.radius or 0) * (pull.radius or 0)
+        local r40 = (pull.radius or 0) + 40
+        pull.radiusPlus40Sq = r40 * r40
+        pull.leashSq = (pull.leash or 0) * (pull.leash or 0)
+    end
+end
+
 --- Call after GUI mutates config: refresh derived state and schedule persist at end of frame.
 function M.ApplyAndPersist()
+    M.recomputeDerivedSettings()
     M.RunConfigLoaders()
     M.MarkDirty()
 end
@@ -1225,12 +1243,8 @@ function M.Load(path)
     if (M.config.settings.sitaggro == nil) then M.config.settings.sitaggro = 60 end
     if (M.config.settings.acleash == nil) then M.config.settings.acleash = 75 end
     if (M.config.settings.followdistance == nil) then M.config.settings.followdistance = 35 end
-    M.config.settings.acleashSq = (M.config.settings.acleash or 0) * (M.config.settings.acleash or 0)
-    M.config.settings.followdistanceSq = (M.config.settings.followdistance or 0) *
-        (M.config.settings.followdistance or 0)
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.campRestDistance == nil) then M.config.settings.campRestDistance = 15 end
-    M.config.settings.campRestDistanceSq = (M.config.settings.campRestDistance or 0) * (M.config.settings.campRestDistance or 0)
     if M.config.settings.maCampAnchor == nil then M.config.settings.maCampAnchor = true end
     if M.config.settings.engageXTargetOnly == nil then M.config.settings.engageXTargetOnly = false end
     -- Character-wide minimum mez level (0 = disabled; spell MaxLevel still applies above).
@@ -1312,10 +1326,7 @@ function M.Load(path)
         if n < 1 then n = 1 elseif n > 5 then n = 5 end
         M.config.pull.backupCandidates = n
     end
-    M.config.pull.radiusSq = (M.config.pull.radius or 0) * (M.config.pull.radius or 0)
-    local r40 = (M.config.pull.radius or 0) + 40
-    M.config.pull.radiusPlus40Sq = r40 * r40
-    M.config.pull.leashSq = (M.config.pull.leash or 0) * (M.config.pull.leash or 0)
+    M.recomputeDerivedSettings()
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
         stickcmd = 'hold uw 7', stayBehind = false, behindAggroPct = 90, evadePct = 90, offtank = false, mtSticky = false,
