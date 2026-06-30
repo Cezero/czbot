@@ -3,7 +3,7 @@
 -- MA = who selects targets from MobList (named-first, puller priority); DPS/offtank/non-sticky MT follow MA.
 -- "automatic" uses Group/Raid window roles: Group.MainTank, Group.MainAssist, Group.Puller.
 -- Raid has MainAssist only; MainTank and Puller always come from Group.
--- When primary is unavailable, falls back to cz_common ma_list / mt_list (proximity-gated).
+-- When primary is unavailable, falls back to cz_common ma_list (proximity-gated) / mt_list (in-zone only).
 -- Automatic resolution is cached until invalidation or the cached candidate becomes unavailable.
 
 local mq = require('mq')
@@ -80,6 +80,10 @@ local function firstAvailableFromList(list, requireLeash)
     return nil
 end
 
+local function firstAvailableFromMtList(list)
+    return firstAvailableFromList(list, false)
+end
+
 local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
 end
@@ -97,7 +101,6 @@ local function getMaPrimaryTlo()
 end
 
 local function getMtPrimaryTlo()
-    if inRaid() then return nil end
     return tloName(mq.TLO.Group.MainTank)
 end
 
@@ -130,6 +133,7 @@ local function auditCandidate(name, requireLeash)
         alive = ctx.alive,
         sameZone = ctx.sameZone,
         distance = ctx.distance,
+        peerZone = ctx.peerZone,
         requireLeash = requireLeash,
         leash = leash,
         leashOk = leashOk,
@@ -153,48 +157,50 @@ local function summarizeMaPath()
 end
 
 local function summarizeMtPath()
-    if not inRaid() then
-        local primary = getMtPrimaryTlo()
-        if primary and isCandidateAvailable(primary, false) then
-            return 'group MainTank: ' .. primary
-        end
-        if primary then
-            local fallback = firstAvailableFromList(state.getRunconfig().MtList, true)
-            if fallback then return 'group MT unavailable, mt_list fallback: ' .. fallback end
-            return 'group MT unavailable, no mt_list match'
-        end
-    else
-        local fallback = firstAvailableFromList(state.getRunconfig().MtList, true)
-        if fallback then return 'raid mt_list: ' .. fallback end
-        return 'raid mt_list walk: no match'
+    local primary = getMtPrimaryTlo()
+    if primary and isCandidateAvailable(primary, false) then
+        return string.format('%s MainTank: %s', inRaid() and 'raid group' or 'group', primary)
     end
-    local fallback = firstAvailableFromList(state.getRunconfig().MtList, true)
+    if primary then
+        local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
+        if fallback then return 'group MT unavailable, mt_list fallback: ' .. fallback end
+        return 'group MT unavailable, no mt_list match'
+    end
+    local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
     if fallback then return 'mt_list only: ' .. fallback end
     return 'no MT resolved'
 end
 
-local function printListAudit(label, list)
+local function printListAudit(label, list, listRequireLeash)
     local count = type(list) == 'table' and #list or 0
     printf('  %s (%d entries):', label, count)
     if count == 0 then
         printf('    (empty)')
         return
     end
+    local useLeash = listRequireLeash ~= false
     for i, name in ipairs(list) do
         local primary = auditCandidate(name, false)
-        local listRule = auditCandidate(name, true)
+        local listRule = auditCandidate(name, useLeash)
         local distStr = primary.distance and string.format('%.1f', primary.distance) or 'nil'
-        printf('    [%d] %s  source=%s  alive=%s  sameZone=%s  dist=%s',
+        local peerZoneStr = primary.peerZone and tostring(primary.peerZone) or 'nil'
+        printf('    [%d] %s  source=%s  alive=%s  sameZone=%s  dist=%s  peerZone=%s',
             i, tostring(name),
             tostring(primary.source or 'nil'),
             primary.alive and 'yes' or 'no',
             primary.sameZone and 'yes' or 'no',
-            distStr)
+            distStr,
+            peerZoneStr)
         printf('        primary (no leash): %s',
             primary.ok and 'PASS' or 'FAIL')
-        printf('        list (leash<=%s): %s',
-            tostring(listRule.leash),
-            listRule.ok and 'PASS' or 'FAIL')
+        if useLeash then
+            printf('        list (leash<=%s): %s',
+                tostring(listRule.leash),
+                listRule.ok and 'PASS' or 'FAIL')
+        else
+            printf('        list (in-zone only): %s',
+                listRule.ok and 'PASS' or 'FAIL')
+        end
     end
 end
 
@@ -233,13 +239,13 @@ local function resolveAutomaticTankFull()
     local primaryTlo = getMtPrimaryTlo()
     local meta = { primaryTlo = primaryTlo, inRaid = raid }
 
-    if not raid and primaryTlo and isCandidateAvailable(primaryTlo, false) then
+    if primaryTlo and isCandidateAvailable(primaryTlo, false) then
         meta.name = primaryTlo
         meta.source = 'primary'
         return meta
     end
 
-    local fallback = firstAvailableFromList(state.getRunconfig().MtList, true)
+    local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
     meta.name = fallback
     meta.source = fallback and 'list' or nil
     return meta
@@ -278,7 +284,7 @@ local function isCachedMtValid(cache)
         return isCandidateAvailable(cache.name, false)
     end
     if cache.source == 'list' then
-        return isCandidateAvailable(cache.name, true)
+        return isCandidateAvailable(cache.name, false)
     end
     return false
 end
@@ -435,7 +441,7 @@ function tankrole.debugPrint()
         tankrole.AmIMainTank() and 'yes' or 'no')
 
     printListAudit('MaList', rc.MaList)
-    printListAudit('MtList', rc.MtList)
+    printListAudit('MtList', rc.MtList, false)
 
     printf('  MA path: %s', summarizeMaPath())
     printf('  MT path: %s', summarizeMtPath())

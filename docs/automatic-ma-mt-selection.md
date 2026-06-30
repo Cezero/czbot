@@ -21,7 +21,7 @@ For what the MA and MT *do* once resolved (target picking, heals, offtank, pulle
 
 **Key points:**
 
-- Resolution is **cached** when `"automatic"`: once MA/MT are resolved, the result is reused until the cached candidate becomes invalid (dies, leaves zone, moves out of `maAnchorLeash` for list fallbacks) or an invalidation event occurs. Within each main-loop tick, all callers share one resolved name (no repeated lookups per tick). The Status tab shows the current resolved name with `(auto)` when the setting is `"automatic"`.
+- Resolution is **cached** when `"automatic"`: once MA/MT are resolved, the result is reused until the cached candidate becomes invalid (dies, leaves zone, moves out of `maAnchorLeash` for **ma_list** fallbacks) or an invalidation event occurs. Within each main-loop tick, all callers share one resolved name (no repeated lookups per tick). The Status tab shows the current resolved name with `(auto)` when the setting is `"automatic"`.
 - **Cache invalidation** forces a full re-resolve: EQ group/raid Main Assist or Main Tank assignment changes, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank` / `/cz assist`, role preset Apply with setTank/setAssist, or `maAnchorLeash` change.
 - **MA and MT resolve independently.** If `AssistName` is unset, it defaults to `TankName` at load, but when both are `"automatic"`, MA still comes from group/raid Main Assist (+ `ma_list`) and MT from group Main Tank (+ `mt_list`). They are not forced to be the same person.
 - **`TankName` defaults to `"automatic"`** in new configs. Populate **`ma_list`** and **`mt_list`** in `cz_common.lua` (or the Roles GUI) for reliable multibox fallback.
@@ -63,13 +63,11 @@ flowchart TD
         MA6 -->|No| MANone[No MA resolved]
     end
     subgraph mt [TankName automatic]
-        MT1{In raid?}
-        MT1 -->|Yes| MT5[Walk mt_list in order]
-        MT1 -->|No| MT2[Group.MainTank]
+        MT2[Group.MainTank]
         MT2 --> MT4{Alive and in zone?}
         MT4 -->|Yes| MTResolved[Resolved MT]
-        MT4 -->|No| MT5
-        MT5 --> MT6{First alive in zone within maAnchorLeash?}
+        MT4 -->|No| MT5[Walk mt_list in order]
+        MT5 --> MT6{First alive in zone?}
         MT6 -->|Yes| MTResolved
         MT6 -->|No| MTNone[No MT resolved]
     end
@@ -82,9 +80,9 @@ flowchart TD
 | Role | Not in raid | In raid |
 |------|-------------|---------|
 | **MA** | `Group.MainAssist` | `Raid.MainAssist` |
-| **MT** | `Group.MainTank` | *(not used — see below)* |
+| **MT** | `Group.MainTank` | `Group.MainTank` (group window) |
 
-In a **raid**, the EQ UI has no raid-wide Main Tank or Puller; those always come from the **group** window for puller/MT assignment in other contexts. For **automatic MT resolution**, CZBot **ignores** `Group.MainTank` entirely when `Raid.Members > 0` and uses **`mt_list` only**. See [Raid mode](raid-mode.md).
+In a **raid**, the EQ UI has no raid-wide Main Tank or Puller; those always come from the **group** window. CZBot uses **`Group.MainTank`** as the automatic MT primary in both group and raid, then **`mt_list`** when the primary is unavailable.
 
 For **automatic MA resolution** in a raid, CZBot uses **`Raid.MainAssist`** first, then **`ma_list`**.
 
@@ -104,13 +102,14 @@ If the primary is dead, feigned, hovering, or in another zone, resolution skips 
 
 ### Fallback (`ma_list` / `mt_list`)
 
-When no primary is available (or in raid for MT):
+When no primary is available:
 
 1. Walk the list **in order** — first eligible name wins.
 2. Candidate must be **alive** and in the **same zone**.
-3. Candidate must be within **`maAnchorLeash`** of this bot.
+3. **`ma_list` only:** candidate must be within **`maAnchorLeash`** of this bot.
+4. **`mt_list`:** no leash — healers gate on spell range separately.
 
-**Common gotcha:** If the EQ-assigned MA is alive in your zone but 200 units away, bots still follow that MA. List entries only matter when the primary fails the alive/in-zone check (or for MT in raid).
+**Common gotcha:** If the EQ-assigned MA is alive in your zone but 200 units away, bots still follow that MA. **`ma_list`** entries only matter when the primary fails the alive/in-zone check (or for distance beyond leash). **`mt_list`** applies the same alive/in-zone rules without a leash cap.
 
 ---
 
@@ -118,11 +117,11 @@ When no primary is available (or in raid for MT):
 
 CZBot looks up each candidate via **MQCharInfo** (bot peers) or **Spawn TLO** (non-bot PCs).
 
-| Check | Primary (game role) | Fallback (list) |
-|-------|---------------------|-----------------|
-| Alive | Yes | Yes |
-| Same zone | Yes | Yes |
-| Within `maAnchorLeash` | No | Yes |
+| Check | Primary (game role) | `ma_list` fallback | `mt_list` fallback |
+|-------|---------------------|--------------------|--------------------|
+| Alive | Yes | Yes | Yes |
+| Same zone | Yes | Yes | Yes |
+| Within `maAnchorLeash` | No | Yes | No |
 
 **Alive (MQCharInfo peer):**
 
@@ -133,13 +132,16 @@ CZBot looks up each candidate via **MQCharInfo** (bot peers) or **Spawn TLO** (n
 
 - Spawn is not dead and not hovering.
 
-**Same zone (MQCharInfo):**
+**Same zone (tiered lookup for bot peers):**
 
-- `Zone.Distance` is non-nil (plugin reports distance only for peers in your zone).
+1. **Early out:** If charinfo reports `peer.Zone.ShortName` and it differs from this bot's zone (case-insensitive), the peer is in another zone — no spawn lookup.
+2. **Charinfo distance:** When `Zone.Distance` is non-nil, the peer is in this zone; use charinfo distance/position.
+3. **Spawn fallback:** When charinfo distance is nil but zone shortnames match (or charinfo zone name is unknown), check `Spawn('pc =name')` in **this client's instance**. Spawn found → in zone (merged with charinfo alive/target). Spawn absent → other instance or not present locally.
+4. **Self:** When the candidate is this bot (`Me.Name`), always in zone with distance 0.
 
-**Same zone (Spawn fallback):**
+**Same zone (Spawn-only for non-bot PCs):**
 
-- Assumed true when spawn exists.
+- Assumed true when spawn exists in this instance.
 
 ---
 
@@ -186,7 +188,7 @@ Editable on the Roles tab (**MA leash**). Can also be set at runtime (persists t
 
 **Used for three features:**
 
-1. **List fallback** — max distance for `ma_list` / `mt_list` candidates.
+1. **`ma_list` fallback** — max distance for MA list candidates (not applied to `mt_list`).
 2. **MA camp anchor** — when `maCampAnchor` is on, mob bubble centers on the resolved MA within this distance.
 3. **Combat target inject** — when `maCampAnchor` is on, injects the MA's (then MT's) ATTACK target into MobList if the leader is within leash.
 
@@ -220,8 +222,8 @@ mt_list = { "WarriorMa", "SkOfftank" },
 ### Raid
 
 - Set **Raid Main Assist** in the EQ raid window.
-- Maintain **`mt_list`** with your heal priority — automatic MT does **not** use group Main Tank in raid.
-- **`ma_list`** still applies when raid MA is unavailable.
+- Set **Group Main Tank** in each bot's group window (or rely on **`mt_list`** fallback).
+- **`ma_list`** still applies when raid MA is unavailable (with leash). **`mt_list`** applies alive/in-zone only (no leash).
 
 ### Legacy: everyone assists the tank
 
@@ -244,7 +246,7 @@ No automatic resolution or fallback lists involved. Both roles resolve to `MyTan
 | `/cz assist automatic` | Set MA to automatic for this session. |
 | Status tab | Shows resolved Assist Name and Tank Name; `(auto)` suffix when setting is automatic. |
 | `/cz reloadcommon` | Reload `cz_common.lua` and refresh `ma_list` / `mt_list` mirrors. |
-| `/cz tankrole` | Print automatic MA/MT resolution details (settings, list candidates, pass/fail per entry). |
+| `/cz tankrole` | Print automatic MA/MT resolution details (settings, list candidates, pass/fail per entry, `peerZone` for charinfo debugging). |
 | `/cz mobfilter` | Prints MA distance, `inAttack`, target ID, and inject eligibility for the selected spawn. |
 
 `/cz tank` and `/cz assist` with a fixed name override automatic for the session only; char config file is unchanged unless you use `setvar` or edit the file.

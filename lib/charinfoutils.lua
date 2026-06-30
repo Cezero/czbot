@@ -25,28 +25,42 @@ function charinfoutils.peerHasAnyState(peer, flags)
     return false
 end
 
-local function leaderContextFromCharinfo(name, peer)
+local function peerZoneShortName(zone)
+    if not zone then return nil end
+    local sn = zone.ShortName
+    if sn and sn ~= '' then return sn end
+    local name = zone.Name
+    if name and name ~= '' then return name end
+    return nil
+end
+
+---@return boolean|nil true/false when both names known; nil when either is missing
+local function zoneShortNamesMatch(a, b)
+    if not a or a == '' or not b or b == '' then return nil end
+    return string.lower(a) == string.lower(b)
+end
+
+local function aliveFromCharinfoPeer(peer)
+    return not charinfoutils.peerHasAnyState(peer, UNAVAILABLE_STATE_FLAGS)
+        and (peer.PctHPs == nil or peer.PctHPs > 0)
+end
+
+local function baseContextFromCharinfo(name, peer)
     local zone = peer.Zone
-    local x = zone and zone.X or nil
-    local y = zone and zone.Y or nil
-    local z = zone and zone.Z or nil
-    local distance = zone and zone.Distance or nil
-    local sameZone = distance ~= nil
     local targetId = peer.Target and peer.Target.ID or nil
     if targetId and targetId <= 0 then targetId = nil end
-    local alive = not charinfoutils.peerHasAnyState(peer, UNAVAILABLE_STATE_FLAGS)
-        and (peer.PctHPs == nil or peer.PctHPs > 0)
     return {
         source = 'charinfo',
         name = name,
-        x = x,
-        y = y,
-        z = z,
-        distance = distance,
+        x = zone and zone.X or nil,
+        y = zone and zone.Y or nil,
+        z = zone and zone.Z or nil,
+        distance = zone and zone.Distance or nil,
         targetId = targetId,
         inAttack = charinfoutils.peerHasState(peer, 'ATTACK'),
-        alive = alive,
-        sameZone = sameZone,
+        alive = aliveFromCharinfoPeer(peer),
+        sameZone = false,
+        peerZone = peerZoneShortName(zone),
         peer = peer,
     }
 end
@@ -88,8 +102,65 @@ local function leaderContextFromSpawn(name)
         inAttack = spawnInAttack(spawn),
         alive = alive,
         sameZone = true,
+        peerZone = nil,
         peer = nil,
     }
+end
+
+local function mergeCharinfoWithSpawn(charinfoCtx, spawnCtx)
+    charinfoCtx.distance = spawnCtx.distance
+    charinfoCtx.x = spawnCtx.x
+    charinfoCtx.y = spawnCtx.y
+    charinfoCtx.z = spawnCtx.z
+    charinfoCtx.sameZone = true
+    return charinfoCtx
+end
+
+local function leaderContextFromCharinfoPeer(name, peer)
+    local myZone = mq.TLO.Zone.ShortName()
+    local peerZone = peerZoneShortName(peer.Zone)
+    local zoneMatch = zoneShortNamesMatch(peerZone, myZone)
+
+    if zoneMatch == false then
+        local ctx = baseContextFromCharinfo(name, peer)
+        ctx.sameZone = false
+        return ctx
+    end
+
+    local ctx = baseContextFromCharinfo(name, peer)
+    if ctx.distance ~= nil then
+        ctx.sameZone = true
+        return ctx
+    end
+
+    local spawnCtx = leaderContextFromSpawn(name)
+    if spawnCtx then
+        return mergeCharinfoWithSpawn(ctx, spawnCtx)
+    end
+
+    ctx.sameZone = false
+    return ctx
+end
+
+local function leaderContextForSelf(name)
+    local ok, charinfo = pcall(require, 'plugin.charinfo')
+    if ok and charinfo then
+        local peer = charinfo.GetInfo(name)
+        if peer then
+            local ctx = baseContextFromCharinfo(name, peer)
+            ctx.sameZone = true
+            ctx.distance = 0
+            ctx.peerZone = mq.TLO.Zone.ShortName()
+            return ctx
+        end
+    end
+    local spawnCtx = leaderContextFromSpawn(name)
+    if spawnCtx then
+        spawnCtx.distance = 0
+        spawnCtx.peerZone = mq.TLO.Zone.ShortName()
+        return spawnCtx
+    end
+    return nil
 end
 
 --- Normalized leader context from charinfo (bot peer) or Spawn TLO (non-bot PC).
@@ -97,10 +168,16 @@ end
 ---@return table|nil
 function charinfoutils.getLeaderContext(name)
     if not name or name == '' then return nil end
+
+    local meName = mq.TLO.Me.Name()
+    if meName and name == meName then
+        return leaderContextForSelf(name)
+    end
+
     local ok, charinfo = pcall(require, 'plugin.charinfo')
     if ok and charinfo then
         local peer = charinfo.GetInfo(name)
-        if peer then return leaderContextFromCharinfo(name, peer) end
+        if peer then return leaderContextFromCharinfoPeer(name, peer) end
     end
     return leaderContextFromSpawn(name)
 end
