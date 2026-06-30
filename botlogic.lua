@@ -56,13 +56,6 @@ local function charState_Always()
         local botdebuff = require('botdebuff')
         botdebuff.TickBardTwistOnceWait(state.getRunconfig())
     end
-    -- Camp return: clear when not moving or deadline passed
-    if state.getRunState() == state.STATES.camp_return then
-        local p = state.getRunStatePayload()
-        if not mq.TLO.Me.Moving() or (p and p.deadline and mq.gettime() >= p.deadline) then
-            state.clearRunState()
-        end
-    end
     -- Clear stuck casting: effectively idle or deadline passed with no active cast. Do not clear while memorizing.
     -- When viaMQ2Cast and no cast bar yet (castTimeLeft==0), do not clear as effectivelyIdle so MQ2Cast has time to sit/memorize.
     -- Skip when BRD is in notanktar (mez) wait so we don't clear state before the song finishes.
@@ -325,6 +318,7 @@ end
 -- Movement only: camp return and follow. Runs in runWhenBusy pass so pure casters get camp/follow even when stuck in casting. Throttled 1s.
 local function _runDoMovementCheck()
     if _movementLastRun > mq.gettime() then return end
+    botmove.TickCampReturn()
     botmove.FollowAndStuckCheck()
     botmove.MakeCampLeashCheck()
     _movementLastRun = mq.gettime() + 1000

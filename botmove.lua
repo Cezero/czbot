@@ -300,6 +300,15 @@ local function isCampDragWorkflowActive()
     return p and p.mode == 'camp_fetch'
 end
 
+local CAMP_RETURN_DEADLINE_MS = 5000
+
+local function campLeashGoalReached(rc)
+    if spawnutils.isCampAcleashEnforced(rc) then
+        return spawnutils.isPlayerWithinCampPin(rc)
+    end
+    return campDistanceOk(rc) and campLOSOk(rc)
+end
+
 local function isCorpseAtCamp(corpseID, rc)
     if not corpseID or not hasCampSet(rc) then return false end
     local corpseX = mq.TLO.Spawn(corpseID).X()
@@ -375,11 +384,13 @@ local function makeCampOff()
 end
 
 local function makeCampReturn()
+    if state.getRunState() == state.STATES.camp_return then return end
     doLeashResetCombat()
     doNavToCamp()
     if state.canStartBusyState(state.STATES.camp_return) then
+        printf('\ayCZBot:\ax Returning to camp')
         state.setRunState(state.STATES.camp_return,
-            { deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMiscTimer') })
+            { deadline = mq.gettime() + CAMP_RETURN_DEADLINE_MS, priority = bothooks.getPriority('doMiscTimer') })
     end
 end
 
@@ -664,6 +675,28 @@ function botmove.FollowAndStuckCheck()
     updateStuckTimerWithinLeash(rc)
 end
 
+function botmove.TickCampReturn()
+    if state.getRunState() ~= state.STATES.camp_return then return end
+    local rc = state.getRunconfig()
+    local p = state.getRunStatePayload()
+    if not p then
+        state.clearRunState()
+        return
+    end
+    if campLeashGoalReached(rc) then
+        state.clearRunState()
+        return
+    end
+    local now = mq.gettime()
+    if p.deadline and now >= p.deadline then
+        if not mq.TLO.Navigation.Active() then
+            doNavToCamp()
+        end
+        p.deadline = now + CAMP_RETURN_DEADLINE_MS
+        state.setRunState(state.STATES.camp_return, p)
+    end
+end
+
 -- Camp return and leash. Called from doMovementCheck (runWhenBusy).
 function botmove.MakeCampLeashCheck()
     local rc = state.getRunconfig()
@@ -671,16 +704,13 @@ function botmove.MakeCampLeashCheck()
     if isCampDragWorkflowActive() then return end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     if state.getRunState() == state.STATES.pulling then return end
+    if state.getRunState() == state.STATES.camp_return then return end
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isPlayerWithinCampPin(rc) then
-        print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
-        doLeashResetCombat()
         botmove.MakeCamp('return')
         return
     end
     if rc.engageTargetId then return end
     if campDistanceOk(rc) and campLOSOk(rc) then return end
-    print("\ar Exceeded ACLeash\ax, resetting combat") -- not debug, real status message
-    doLeashResetCombat()
     botmove.MakeCamp('return')
 end
 
@@ -730,7 +760,6 @@ function botmove.MakeCamp(...)
     elseif mode == 'off' then
         makeCampOff()
     elseif mode == 'return' then
-        print('return called') -- not debug, but needs reformatting / context to be meaningful
         makeCampReturn()
     end
 end

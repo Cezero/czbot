@@ -208,8 +208,13 @@ end
 
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
-    if rc.mobprobtimer > mq.gettime() then return true end
+    local eqMsg = (line and line:match('^%s*(.-)%s*$')) or '?'
+    if rc.mobprobtimer > mq.gettime() then
+        printf('\ayCZBot:\ax [MobProb] throttled: %s', eqMsg)
+        return true
+    end
     if rc.dopull and state.getRunState() == state.STATES.pulling and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
+        printf('\ayCZBot:\ax [MobProb] ignored (pull returning): %s', eqMsg)
         rc.mobprobtimer = mq.gettime() + 3000
         return true
     end
@@ -217,8 +222,13 @@ function botevents.Event_MobProb(line, arg1, arg2)
         local pathLen = mq.TLO.Navigation.PathLength('id ' .. rc.engageTargetId)()
         local withinAcleash = pathLen and pathLen <= botconfig.config.settings.acleash
         if withinAcleash or not spawnutils.isCampAcleashEnforced(rc) then
+            printf('\ayCZBot:\ax [MobProb] /nav id %s dist=0 — %s', tostring(rc.engageTargetId), eqMsg)
             mq.cmdf('/nav id %s dist=0 log=off', rc.engageTargetId)
+        else
+            printf('\ayCZBot:\ax [MobProb] skipped nav (outside acleash): %s', eqMsg)
         end
+    else
+        printf('\ayCZBot:\ax [MobProb] no engage target: %s', eqMsg)
     end
     rc.mobprobtimer = mq.gettime() + 3000
 end
