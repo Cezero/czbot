@@ -148,9 +148,19 @@ end
 
 local RED, BLACK = theme.RED, theme.BLACK
 
-local function calcMoveButtonWidth(icon)
+local CONTROL_GAP = 4
+
+local function calcSmallButtonWidth(icon)
     local iconW = select(1, ImGui.CalcTextSize(icon))
     return (iconW or 0) + 24
+end
+
+local function calcToggleButtonWidth()
+    local style = ImGui.GetStyle()
+    local iconW = math.max(
+        select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_ON)) or 0,
+        select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_OFF)) or 0)
+    return math.max(iconW + style.FramePadding.x * 2, style.FrameHeight)
 end
 
 local function hasReorderControls(opts)
@@ -158,61 +168,61 @@ local function hasReorderControls(opts)
     return entryCount > 1 and (opts.onMoveUp or opts.onMoveDown)
 end
 
+--- Fixed slot offsets from the right content edge (toggle is rightmost).
+local function getRightControlLayout()
+    local moveW = math.max(
+        calcSmallButtonWidth(Icons.FA_CARET_UP),
+        calcSmallButtonWidth(Icons.FA_CARET_DOWN))
+    local deleteW = calcSmallButtonWidth(Icons.FA_TRASH)
+    local toggleW = calcToggleButtonWidth()
+    return {
+        move = moveW,
+        delete = deleteW,
+        toggle = toggleW,
+        toggleOff = toggleW,
+        deleteOff = toggleW + CONTROL_GAP + deleteW,
+        moveDownOff = toggleW + CONTROL_GAP + deleteW + CONTROL_GAP + moveW,
+        moveUpOff = toggleW + CONTROL_GAP + deleteW + CONTROL_GAP + moveW + CONTROL_GAP + moveW,
+    }
+end
+
+local function getContentRightX()
+    if ImGui.GetWindowContentRegionMax then
+        return select(1, ImGui.GetWindowContentRegionMax())
+    end
+    local availX = select(1, ImGui.GetContentRegionAvail()) or 0
+    return ImGui.GetCursorPosX() + availX
+end
+
 local function calcRightControlsWidth(opts)
-    local enabledIconW = select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_ON))
-    local enabledButtonWidth = (enabledIconW or 0) + 24
-    local deleteButtonWidth = 0
-    if opts.onDelete then
-        local trashW = select(1, ImGui.CalcTextSize(Icons.FA_TRASH))
-        deleteButtonWidth = (trashW or 0) + 24
-    end
-    local reorderButtonWidth = 0
-    if hasReorderControls(opts) then
-        reorderButtonWidth = calcMoveButtonWidth(Icons.FA_CARET_UP)
-            + calcMoveButtonWidth(Icons.FA_CARET_DOWN) + 4
-    end
-    return enabledButtonWidth
-        + (opts.onDelete and (deleteButtonWidth + 4) or 0)
-        + (reorderButtonWidth > 0 and (reorderButtonWidth + 4) or 0)
+    local layout = getRightControlLayout()
+    local w = layout.toggleOff
+    if opts.onDelete then w = layout.deleteOff end
+    if hasReorderControls(opts) then w = layout.moveUpOff end
+    return w
 end
 
 local function drawEntryRightControls(id, spell, opts, state, onChanged)
+    ImGui.SameLine()
+    local rightX = getContentRightX()
+    local layout = getRightControlLayout()
     local enabled = spell.enabled ~= false
     local entryCount = opts.entryCount or 0
     local showMoveUp = entryCount > 1 and opts.onMoveUp
     local showMoveDown = entryCount > 1 and opts.onMoveDown
-    local reserveReorderSlots = hasReorderControls(opts)
-    local moveUpWidth = calcMoveButtonWidth(Icons.FA_CARET_UP)
-    local moveDownWidth = calcMoveButtonWidth(Icons.FA_CARET_DOWN)
-    if showMoveUp then
-        if ImGui.SmallButton(Icons.FA_CARET_UP .. '##' .. id .. '_move_up') then
-            opts.onMoveUp()
-        end
-        if ImGui.IsItemHovered() then
-            ImGui.SetTooltip('Move up')
-        end
-    elseif reserveReorderSlots then
-        ---@diagnostic disable-next-line: undefined-global
-        ImGui.Dummy(ImVec2(moveUpWidth, 0))
+    local noun = string.lower(opts.deleteEntryLabel or 'entry')
+
+    ImGui.SetCursorPosX(rightX - layout.toggleOff)
+    if toggle.pill(id .. '_enabled', enabled, {
+            onTip = 'This ' .. noun .. ' is ENABLED (click to disable)',
+            offTip = 'This ' .. noun .. ' is DISABLED (click to enable)',
+        }) then
+        spell.enabled = not (spell.enabled ~= false)
+        if onChanged then onChanged() end
     end
-    if showMoveUp or reserveReorderSlots then
-        ImGui.SameLine()
-    end
-    if showMoveDown then
-        if ImGui.SmallButton(Icons.FA_CARET_DOWN .. '##' .. id .. '_move_down') then
-            opts.onMoveDown()
-        end
-        if ImGui.IsItemHovered() then
-            ImGui.SetTooltip('Move down')
-        end
-    elseif reserveReorderSlots then
-        ---@diagnostic disable-next-line: undefined-global
-        ImGui.Dummy(ImVec2(moveDownWidth, 0))
-    end
-    if showMoveDown or reserveReorderSlots then
-        ImGui.SameLine()
-    end
+
     if opts.onDelete then
+        ImGui.SetCursorPosX(rightX - layout.deleteOff)
         ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
         ImGui.PushStyleColor(ImGuiCol.Text, RED)
         if ImGui.SmallButton(Icons.FA_TRASH .. '##' .. id .. '_delete') then
@@ -224,27 +234,27 @@ local function drawEntryRightControls(id, spell, opts, state, onChanged)
             ImGui.SetTooltip('Delete this %s', opts.deleteEntryLabel or 'entry')
         end
         ImGui.PopStyleColor(2)
-        ImGui.SameLine()
     end
-    local noun = string.lower(opts.deleteEntryLabel or 'entry')
-    if toggle.pill(id .. '_enabled', enabled, {
-            onTip = 'This ' .. noun .. ' is ENABLED (click to disable)',
-            offTip = 'This ' .. noun .. ' is DISABLED (click to enable)',
-        }) then
-        spell.enabled = not (spell.enabled ~= false)
-        if onChanged then onChanged() end
-    end
-end
 
-local function drawEntryRightControlsRightAligned(id, spell, opts, state, onChanged)
-    local totalRightWidth = calcRightControlsWidth(opts)
-    local avail = ImGui.GetContentRegionAvail()
-    if avail and avail > totalRightWidth then
-        ImGui.SameLine(ImGui.GetCursorPosX() + avail - totalRightWidth)
-    else
-        ImGui.SameLine()
+    if showMoveDown then
+        ImGui.SetCursorPosX(rightX - layout.moveDownOff)
+        if ImGui.SmallButton(Icons.FA_CARET_DOWN .. '##' .. id .. '_move_down') then
+            opts.onMoveDown()
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Move down')
+        end
     end
-    drawEntryRightControls(id, spell, opts, state, onChanged)
+
+    if showMoveUp then
+        ImGui.SetCursorPosX(rightX - layout.moveUpOff)
+        if ImGui.SmallButton(Icons.FA_CARET_UP .. '##' .. id .. '_move_up') then
+            opts.onMoveUp()
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Move up')
+        end
+    end
 end
 
 --- Draw spell entry: label, type combo, spell/item/ability selectable; optionally range, common fields, customSection.
@@ -307,7 +317,7 @@ function M.draw(spell, opts)
             ImGuiTreeNodeFlags.AllowItemOverlap)
         state.expanded = expanded
         if displayCommonFields then
-            drawEntryRightControlsRightAligned(id, spell, opts, state, onChanged)
+            drawEntryRightControls(id, spell, opts, state, onChanged)
         end
         if not expanded then
             return
@@ -430,7 +440,7 @@ function M.draw(spell, opts)
     end
 
     if displayCommonFields and not opts.collapsible then
-        drawEntryRightControlsRightAligned(id, spell, opts, state, onChanged)
+        drawEntryRightControls(id, spell, opts, state, onChanged)
     end
 
     if displayCommonFields then
