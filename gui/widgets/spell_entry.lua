@@ -146,7 +146,7 @@ local function hasAnyPhase(phases, wanted)
     return false
 end
 
-local GREEN, RED, BLACK = theme.GREEN, theme.RED, theme.BLACK
+local RED, BLACK = theme.RED, theme.BLACK
 
 local function calcRightControlsWidth(opts)
     local enabledIconW = select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_ON))
@@ -170,6 +170,64 @@ local function calcRightControlsWidth(opts)
     return enabledButtonWidth
         + (opts.onDelete and (deleteButtonWidth + 4) or 0)
         + (reorderButtonWidth > 0 and (reorderButtonWidth + 4) or 0)
+end
+
+local function drawEntryRightControls(id, spell, opts, state, onChanged)
+    local enabled = spell.enabled ~= false
+    local entryCount = opts.entryCount or 0
+    local showMoveUp = entryCount > 1 and opts.onMoveUp
+    local showMoveDown = entryCount > 1 and opts.onMoveDown
+    if showMoveUp then
+        if ImGui.SmallButton(Icons.FA_CARET_UP .. '##' .. id .. '_move_up') then
+            opts.onMoveUp()
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Move up')
+        end
+        ImGui.SameLine()
+    end
+    if showMoveDown then
+        if ImGui.SmallButton(Icons.FA_CARET_DOWN .. '##' .. id .. '_move_down') then
+            opts.onMoveDown()
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Move down')
+        end
+        ImGui.SameLine()
+    end
+    if opts.onDelete then
+        ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
+        ImGui.PushStyleColor(ImGuiCol.Text, RED)
+        if ImGui.SmallButton(Icons.FA_TRASH .. '##' .. id .. '_delete') then
+            state.deleteConfirm.open = true
+            state.deleteConfirm.pendingClose = nil
+            modals.openDeleteConfirmModal(id)
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Delete this %s', opts.deleteEntryLabel or 'entry')
+        end
+        ImGui.PopStyleColor(2)
+        ImGui.SameLine()
+    end
+    local noun = string.lower(opts.deleteEntryLabel or 'entry')
+    if toggle.pill(id .. '_enabled', enabled, {
+            onTip = 'This ' .. noun .. ' is ENABLED (click to disable)',
+            offTip = 'This ' .. noun .. ' is DISABLED (click to enable)',
+        }) then
+        spell.enabled = not (spell.enabled ~= false)
+        if onChanged then onChanged() end
+    end
+end
+
+local function drawEntryRightControlsRightAligned(id, spell, opts, state, onChanged)
+    local totalRightWidth = calcRightControlsWidth(opts)
+    local avail = ImGui.GetContentRegionAvail()
+    if avail and avail > totalRightWidth then
+        ImGui.SameLine(ImGui.GetCursorPosX() + avail - totalRightWidth)
+    else
+        ImGui.SameLine()
+    end
+    drawEntryRightControls(id, spell, opts, state, onChanged)
 end
 
 --- Draw spell entry: label, type combo, spell/item/ability selectable; optionally range, common fields, customSection.
@@ -227,8 +285,13 @@ function M.draw(spell, opts)
         -- expanded is stored on the spell entry table (via _entryState) so reorder keeps the same entries open/closed.
         if state.expanded == nil then state.expanded = false end
         ImGui.SetNextItemOpen(state.expanded, ImGuiCond.Always)
-        local expanded = ImGui.CollapsingHeader(string.format('%s — %s###%s', labelText, spellNameForHeader, id .. '_collapse'))
+        local expanded = ImGui.CollapsingHeader(
+            string.format('%s — %s###%s', labelText, spellNameForHeader, id .. '_collapse'),
+            ImGuiTreeNodeFlags.AllowItemOverlap)
         state.expanded = expanded
+        if displayCommonFields then
+            drawEntryRightControlsRightAligned(id, spell, opts, state, onChanged)
+        end
         if not expanded then
             return
         end
@@ -298,7 +361,7 @@ function M.draw(spell, opts)
         else
             displayName = spell.spell
         end
-        local reservedRight = displayCommonFields and calcRightControlsWidth(opts) or 0
+        local reservedRight = (not opts.collapsible) and displayCommonFields and calcRightControlsWidth(opts) or 0
         local availSpell = ImGui.GetContentRegionAvail()
         local spellWidth = SPELL_SELECTABLE_WIDTH
         if reservedRight > 0 and availSpell then
@@ -349,60 +412,8 @@ function M.draw(spell, opts)
         end
     end
 
-    if displayCommonFields then
-        local enabled = spell.enabled ~= false
-        local enabledIcon = enabled and Icons.FA_TOGGLE_ON or Icons.FA_TOGGLE_OFF
-        local enabledColor = enabled and GREEN or RED
-        local entryCount = opts.entryCount or 0
-        local showMoveUp = entryCount > 1 and opts.onMoveUp
-        local showMoveDown = entryCount > 1 and opts.onMoveDown
-        local totalRightWidth = calcRightControlsWidth(opts)
-        local availEnabled = ImGui.GetContentRegionAvail()
-        if availEnabled and availEnabled > totalRightWidth then
-            ImGui.SameLine(ImGui.GetCursorPosX() + availEnabled - totalRightWidth)
-        else
-            ImGui.SameLine()
-        end
-        if showMoveUp then
-            if ImGui.SmallButton(Icons.FA_CARET_UP .. '##' .. id .. '_move_up') then
-                opts.onMoveUp()
-            end
-            if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Move up')
-            end
-            ImGui.SameLine()
-        end
-        if showMoveDown then
-            if ImGui.SmallButton(Icons.FA_CARET_DOWN .. '##' .. id .. '_move_down') then
-                opts.onMoveDown()
-            end
-            if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Move down')
-            end
-            ImGui.SameLine()
-        end
-        if opts.onDelete then
-            ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
-            ImGui.PushStyleColor(ImGuiCol.Text, RED)
-            if ImGui.SmallButton(Icons.FA_TRASH .. '##' .. id .. '_delete') then
-                state.deleteConfirm.open = true
-                state.deleteConfirm.pendingClose = nil
-                modals.openDeleteConfirmModal(id)
-            end
-            if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Delete this %s', opts.deleteEntryLabel or 'entry')
-            end
-            ImGui.PopStyleColor(2)
-            ImGui.SameLine()
-        end
-        local noun = string.lower(opts.deleteEntryLabel or 'entry')
-        if toggle.pill(id .. '_enabled', enabled, {
-                onTip = 'This ' .. noun .. ' is ENABLED (click to disable)',
-                offTip = 'This ' .. noun .. ' is DISABLED (click to enable)',
-            }) then
-            spell.enabled = not (spell.enabled ~= false)
-            if onChanged then onChanged() end
-        end
+    if displayCommonFields and not opts.collapsible then
+        drawEntryRightControlsRightAligned(id, spell, opts, state, onChanged)
     end
 
     if displayCommonFields then
