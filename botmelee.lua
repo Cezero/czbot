@@ -22,6 +22,10 @@ botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee t
 
 state.getRunconfig().mobprobtimer = 0
 local _lastEngageStickCmd = nil
+local _engageLosBlocked = false
+local _engageLosLastLogTime = 0
+local _engageLosEngageId = nil
+local ENGAGE_LOS_LOG_INTERVAL_MS = 3000
 
 local ENGAGE_STATUS_PREFIXES = { 'Assisting on ', 'Tanking ', 'Off-tanking ' }
 
@@ -527,10 +531,57 @@ local function resolveMaBotTarget(rc)
     return rc.engageTargetId
 end
 
+local function getMeleePhaseLabel()
+    if state.getRunState() ~= state.STATES.melee then return 'none' end
+    local p = state.getRunStatePayload()
+    return (p and p.phase) or 'unknown'
+end
+
+local function logEngageLoSClear(engageTargetId)
+    if not _engageLosBlocked then return end
+    _engageLosBlocked = false
+    _engageLosLastLogTime = 0
+    _engageLosEngageId = nil
+    local mobName = engageTargetId and (mq.TLO.Spawn(engageTargetId).CleanName() or '?') or 'none'
+    printf('\ayCZBot:\ax [EngageLoS] clear engageId=%s mob=%s', tostring(engageTargetId), mobName)
+end
+
+local function logEngageLoSBlocked(engageTargetId, context)
+    local now = mq.gettime()
+    local newEpisode = not _engageLosBlocked or _engageLosEngageId ~= engageTargetId
+    if not newEpisode and now < _engageLosLastLogTime + ENGAGE_LOS_LOG_INTERVAL_MS then
+        return
+    end
+    _engageLosBlocked = true
+    _engageLosEngageId = engageTargetId
+    _engageLosLastLogTime = now
+
+    local targetId = mq.TLO.Target.ID() or 0
+    local mobName = mq.TLO.Spawn(engageTargetId).CleanName() or '?'
+    local dist = mq.TLO.Target.Distance() or mq.TLO.Spawn(engageTargetId).Distance() or 0
+    local spawn = mq.TLO.Spawn(engageTargetId)
+    local spawnLoS = spawn and spawn.LineOfSight() and 1 or 0
+    local pathExists = mq.TLO.Navigation.PathExists('id ' .. engageTargetId)() and 1 or 0
+    local navActive = mq.TLO.Navigation.Active() and 1 or 0
+    local stickActive = mq.TLO.Stick.Active() and 1 or 0
+    printf(
+        '\ayCZBot:\ax [EngageLoS] blocked context=%s engageId=%s targetId=%s mob=%s dist=%.1f targetLoS=0 spawnLoS=%d pathExists=%d navActive=%d stickActive=%d meleePhase=%s',
+        tostring(context or 'unknown'), tostring(engageTargetId), tostring(targetId), mobName, dist,
+        spawnLoS, pathExists, navActive, stickActive, getMeleePhaseLabel())
+end
+
 -- When no engageTargetId: stick off, attack off, pet back. Clear NPC target only when auto-attack is on (releasing a fight).
-local function disengageCombat()
-    _lastEngageStickCmd = nil
+local function disengageCombat(reason)
     local rc = state.getRunconfig()
+    local engageId = rc.engageTargetId
+    local targetId = mq.TLO.Target.ID() or 0
+    local mobName = engageId and (mq.TLO.Spawn(engageId).CleanName() or '?') or 'none'
+    printf('\ayCZBot:\ax [Disengage] reason=%s engageId=%s targetId=%s mob=%s',
+        tostring(reason or 'unknown'), tostring(engageId), tostring(targetId), mobName)
+    _lastEngageStickCmd = nil
+    _engageLosBlocked = false
+    _engageLosLastLogTime = 0
+    _engageLosEngageId = nil
     rc.allMezzedEngageId = nil
     if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
     combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
@@ -567,8 +618,12 @@ end
 -- Note: we intentionally do NOT gate on aggro here. Proactive no-LoS targeting is prevented upstream
 -- (the MT only auto-selects mobs it can see; no-LoS picks come from the XTarget Auto-Hater path), and
 -- an assist target is the group's committed mob — both are legitimate things to path to.
-local function navToEngageTargetIfBlocked(engageTargetId)
-    if mq.TLO.Target.LineOfSight() then return false end
+local function navToEngageTargetIfBlocked(engageTargetId, context)
+    if mq.TLO.Target.LineOfSight() then
+        logEngageLoSClear(engageTargetId)
+        return false
+    end
+    logEngageLoSBlocked(engageTargetId, context)
     if mq.TLO.Navigation.PathExists('id ' .. engageTargetId)() then
         if mq.TLO.Stick.Active() then mq.cmd('/squelch /stick off') end
         _lastEngageStickCmd = nil
@@ -594,7 +649,7 @@ local function engageTarget()
         local rc = state.getRunconfig()
         rc.engageTargetId = nil
         rc.attackCommandEngage = nil
-        disengageCombat()
+        disengageCombat('engage_not_allowed')
         return
     end
 
@@ -602,7 +657,7 @@ local function engageTarget()
         local rc = state.getRunconfig()
         rc.engageTargetId = nil
         rc.attackCommandEngage = nil
-        disengageCombat()
+        disengageCombat('protected_spawn')
         return
     end
 
@@ -626,7 +681,7 @@ local function engageTarget()
             end
             -- Still out of range: if blocked by LoS, keep pathing around the obstruction.
             if myconfig.settings.domelee and mq.TLO.Target.ID() == engageTargetId then
-                navToEngageTargetIfBlocked(engageTargetId)
+                navToEngageTargetIfBlocked(engageTargetId, 'moving_closer')
             end
             return
         end
@@ -645,7 +700,7 @@ local function engageTarget()
     if mq.TLO.Target.ID() ~= engageTargetId then return end
 
     -- Blocked by LoS but reachable: pathfind around the obstruction; stick takes over on arrival.
-    if navToEngageTargetIfBlocked(engageTargetId) then
+    if navToEngageTargetIfBlocked(engageTargetId, 'engage') then
         if mq.TLO.Me.Class.ShortName() ~= 'BRD' then
             if state.canStartBusyState(state.STATES.melee) then
                 state.setRunState(state.STATES.melee, { phase = 'moving_closer', deadline = mq.gettime() + 8000, priority = bothooks.getPriority('doMelee') })
@@ -813,7 +868,7 @@ function botmelee.AdvCombat()
         end
         engageTarget()
     else
-        disengageCombat()
+        disengageCombat('no_engage_target')
     end
     if rc.engageTargetId then
         spawnutils.mergeEngageTargetIntoMobList(rc)
@@ -861,13 +916,13 @@ function botmelee.getHookFn(name)
             if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil
-                disengageCombat()
+                disengageCombat('beyond_follow_distance')
                 return
             end
             if not spawnutils.isPlayerWithinCampPin(rc) then
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil
-                disengageCombat()
+                disengageCombat('outside_camp_pin')
                 if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
                 return
             end
@@ -898,7 +953,7 @@ function botmelee.getHookFn(name)
                 if not xtEngage then
                     rc.engageTargetId = nil
                     rc.attackCommandEngage = nil
-                    disengageCombat()
+                    disengageCombat('moblist_empty')
                     return
                 end
             end

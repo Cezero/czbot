@@ -5,7 +5,7 @@ This document explains the nuances and considerations when configuring a **bard 
 ## Overview
 
 - **Default twist (MQ2Twist):** Self buffs with numeric gems are sustained via a continuous twist derived from your buff config. The bot runs **noncombat** (idle) or **combat** twist depending on state; when it needs to cast something else (mez, cure, single spell), it stops twist, casts, then resumes.
-- **Buff targeting:** Group AE songs use **groupbuff** or **pc** bands (GUI default for Group spells). Twist membership is controlled by spell-level **inCombat** and **inIdle**, not by band phase. When a song's gem is in the active twist list, the buff hook does **not** cast it — MQ2Twist maintains it. Songs **not** in the twist (e.g. **inIdle** off) can still be cast via groupbuff/pc when targets need them. Spell-level **combatOnly** applies only to non-bard auto buffs; bards should use **inCombat** / **inIdle** instead.
+- **Buff targeting:** Group AE songs use **groupbuff** or **pc** bands in config (GUI default for Group spells). Numeric gem buffs are sustained **only** via MQ2Twist — the buff hook does **not** single-cast them. Twist membership is controlled by spell-level **inCombat** and **inIdle**. Spell-level **combatOnly** applies only to non-bard auto buffs; bards should use **inCombat** / **inIdle** instead.
 - **Interrupts:** The bot does not interrupt bard casts (buff, debuff, cure). No configuration required.
 - **Movement and casting:** Bards can move, use nav, and stick while "casting"; the bot does not force a stop before casting.
 - **Melee:** Before casting, if **domelee** is on and the bard is not in combat, the bot re-engages melee. Set **settings.domelee** if the bard should melee when not casting.
@@ -37,12 +37,12 @@ For full targeting and band details, see [Spell targeting and bands](spell-targe
 
 ## Buff targeting and bands
 
-For **BRD**, configure Group AE songs with **groupbuff** (Group v1) or **pc** (Group v2 remote groups) bands — the GUI sets these automatically for Group-target spells. The legacy **self** band still works but is not required for twist.
+For **BRD**, configure Group AE songs with **groupbuff** (Group v1) or **pc** (Group v2 remote groups) bands — the GUI sets these automatically for Group-target spells. The legacy **self** band still works for twist membership when **inIdle** is unset.
 
 - **inIdle** (spell-level) — When `true` (default), this buff is in the **idle** twist list. When `false`, it is not twisted when no mobs are in camp. GUI shows "In idle" only for Bards.
 - **inCombat** (spell-level) — When `true`, this buff is in the **combat** twist list. When `false` (default), it is not twisted when mobs are in camp.
 
-When a song's gem is in the **active twist list** for the current mode, the buff hook skips casting it (all phases). MQ2Twist rotation maintains the song on you and your group. When a song is **not** in the twist (e.g. **inIdle** false, combat-only song while idle), the buff hook evaluates **groupbuff** / **pc** normally and casts when enough targets need the buff.
+The buff hook does **not** schedule single casts for numeric gem buffs — MQ2Twist sustains them when they are in the active twist list for the current mode. Tank, groupbuff, groupmember, pc, mypet, and pet phases are **not** used to cast gem songs on bards (item/alt buffs still cast normally).
 
 ### Example buff block (minimal)
 
@@ -61,9 +61,9 @@ buff = {
 }
 ```
 
-- Gem 1: in **idle** twist only (inIdle true, inCombat false). Maintained by twist; no buff-hook cast while idle.
+- Gem 1: in **idle** twist only (inIdle true, inCombat false). Maintained by twist; buff hook does not cast it.
 - Gem 2: in **combat** and **idle** twist (inCombat and inIdle both true).
-- Gem 3: **idle** only; longer-duration group song — twist sustains it; buff hook does not re-cast while in the idle twist list.
+- Gem 3: **idle** only; longer-duration group song — twist sustains it; buff hook does not cast it.
 
 ### Example debuff block (minimal)
 
@@ -181,7 +181,7 @@ The "already on target" and resist handling for debuffs treat bards specially (e
 
 | Area              | What to do                                                                                                                                                                                                                                         |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Buffs**         | Use **groupbuff** / **pc** bands for Group AE songs. Twist membership = **inIdle** / **inCombat** (not band phase). In-twist songs are sustained by MQ2Twist only; out-of-twist songs cast via groupbuff/pc when needed. |
+| **Buffs**         | Use **groupbuff** / **pc** bands for Group AE songs. Twist membership = **inIdle** / **inCombat**. Numeric gem buffs are sustained by MQ2Twist only; the buff hook does not cast them. Item/alt buffs cast normally. |
 | **Default twist** | Idle = inIdle buffs (not near bind; includes pull travel); combat = inCombat buffs + unconditional matar debuffs. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI. Bind stealth stops idle twist near primary bind. |
 | **Pull**          | Idle twist continues during pull travel. Use **pull.spell** with a numeric **gem** (and **spell** name) for the agro song.                                                                                                         |
 | **Debuffs**       | **matar** unconditional → combat twist. **matar** conditional (dontStack/stopWhen/precondition/restrictive max) → twist-once. **notmatar** → twist-once; **bard.mez_remez_sec** (default 6) re-applies before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |

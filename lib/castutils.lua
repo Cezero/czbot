@@ -198,10 +198,13 @@ local function addPcEntries(out, names, count, filterFn)
     count = count or #names
     for i = 1, count do
         local name = names[i]
-        if name and (not filterFn or filterFn(name)) then
-            local id = mq.TLO.Spawn('pc =' .. name).ID()
-            local class = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
-            if id and id > 0 and class then out[#out + 1] = { id = id, targethit = class:lower() } end
+        if name and charinfo.GetInfo(name) and (not filterFn or filterFn(name)) then
+            local sp = mq.TLO.Spawn('pc =' .. name)
+            local id = sp and sp.ID()
+            if id and id > 0 and sp.Type() == 'PC' then
+                local class = sp.Class.ShortName()
+                if class then out[#out + 1] = { id = id, targethit = class:lower() } end
+            end
         end
     end
 end

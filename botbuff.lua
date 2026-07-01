@@ -7,6 +7,7 @@ local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
+local buffphase = require('lib.buffphase')
 local botmove = require('botmove')
 
 local botbuff = {}
@@ -24,6 +25,7 @@ function botbuff.LoadBuffConfig()
         storeIn = BuffClass,
         perEntryAfterBands = function(entry, i)
             BuffClass[i].petspell = spellutils.IsPetSummonSpell(entry) or BuffClass[i].petspell
+            buffphase.sanitizeRuntimePhases(entry, BuffClass[i])
         end,
     })
 end
@@ -214,6 +216,7 @@ end
 
 local function BuffEvalGroupV2Pc(spellIndex, entry, spell, spellid, targetId, anchorName, aeRangeSq, myRangeSq, context)
     if not BuffClass[spellIndex].pc or not spellutils.IsGroupV2BuffEntry(entry) then return nil, nil end
+    if not charinfo.GetInfo(anchorName) then return nil, nil end
     if mq.TLO.Group.Member(anchorName).Index() then return nil, nil end
     local bots = context and context.bots
     if not bots then return nil, nil end
@@ -339,6 +342,10 @@ local function buffBandHasPhase(spellIndex, phase)
         if buffHasNameList(spellIndex) then return true end
         return BuffClass[spellIndex] and BuffClass[spellIndex].name and true or false
     end
+    if phase == 'pet' or phase == 'mypet' then
+        local entry = botconfig.getSpellEntry('buff', spellIndex)
+        if entry and spellutils.IsGroupAEBuffEntry(entry) then return false end
+    end
     return castutils.bandHasPhaseSimple(BuffClass, spellIndex, phase)
 end
 
@@ -357,7 +364,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local myid = mq.TLO.Me.ID()
     local myclass = mq.TLO.Me.Class.ShortName()
 
-    if myclass == 'BRD' and type(entry.gem) == 'number' and bardtwist.IsGemInTwistListForCurrentMode(entry.gem) then
+    if myclass == 'BRD' and type(entry.gem) == 'number' then
         return nil, nil
     end
 
@@ -373,11 +380,13 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         return BuffEvalGroupBuff(spellIndex, entry, spell, sid, range)
     end
     if targethit == 'mypet' then
+        if spellutils.IsGroupAEBuffEntry(entry) then return nil, nil end
         local id, hit = BuffEvalMyPet(spellIndex, entry, spell, sid, rangeSq)
         if id == targetId then return id, hit end
         return nil, nil
     end
     if targethit == 'pet' then
+        if spellutils.IsGroupAEBuffEntry(entry) then return nil, nil end
         local id, hit = BuffEvalPets(spellIndex, entry, sid, rangeSq, context.bots,
             context.botcount or #(context.bots or {}))
         if id == targetId then return id, hit end
@@ -430,6 +439,14 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
             local aeRangeSq = aeRange and aeRange > 0 and (aeRange * aeRange) or nil
             return BuffEvalGroupV2Pc(spellIndex, entry, spell, sid, targetId, grpname, aeRangeSq, myRangeSq, context)
         end
+        if spellutils.IsGroupAEBuffEntry(entry) then
+            local peer = charinfo.GetInfo(grpname)
+            if not peer then return nil, nil end
+            if IconCheck(spellIndex, targetId) then
+                return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
+            end
+            return nil, nil
+        end
         if IconCheck(spellIndex, targetId) then
             local peer = charinfo.GetInfo(grpname)
             if peer then
@@ -464,7 +481,14 @@ function botbuff.BuffCheck(runPriority)
             if entry.enabled == false then return false end
             if not ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') then return false end
             local bc = BuffClass[i]
-            if mq.TLO.Me.Class.ShortName() ~= 'BRD' and bc and bc.combatOnly == true then
+            if mq.TLO.Me.Class.ShortName() == 'BRD' then
+                if type(gem) ~= 'number' or gem == 0 then
+                    return (not inCombatContext) or (inCombatContext and bc and bc.inCombat == true)
+                end
+                local mode = inCombatContext and 'combat' or 'idle'
+                return bardtwist.BuffEntryInModeTwist(entry, mode)
+            end
+            if bc and bc.combatOnly == true then
                 return inCombatContext
             end
             return (not inCombatContext) or (inCombatContext and bc and bc.inCombat == true)

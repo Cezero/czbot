@@ -4,6 +4,7 @@ local mq = require('mq')
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spellutils = require('lib.spellutils')
+local buffphase = require('lib.buffphase')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
 local name_list = require('gui.widgets.name_list')
@@ -75,8 +76,12 @@ local function getTargetPhaseOptionsForEntry(entry)
 end
 
 local function isGroupAEBuffEntry(entry)
-    local tt = spellutils.GetSpellTargetType(entry)
-    return tt == 'Group v1' or tt == 'Group v2'
+    return buffphase.getAllowedPhases(entry) ~= nil
+end
+
+--- Strip hidden targetphase tokens that the GUI no longer shows for Group AE buffs.
+local function sanitizeBuffTargetPhases(entry)
+    buffphase.sanitizeEntryTargetPhases(entry)
 end
 
 local function getDetectedTypeLabelForEntry(entry)
@@ -256,6 +261,7 @@ function M.draw()
     spell_entry.drawTabIntro({ flagKey = 'dobuff', flagNoun = 'Buffing', isEmpty = #spells == 0,
         emptyHint = 'No buffs configured. Click "Add buff" below to create one.' })
     for i, entry in ipairs(spells) do
+        sanitizeBuffTargetPhases(entry)
         spell_entry.draw(entry, {
             id = 'buff_' .. i,
             label = 'Buff ' .. i,

@@ -131,6 +131,20 @@ function bardtwist.SongsEnabled()
     return rc.dosongs ~= false
 end
 
+--- True when a numeric-gem buff entry belongs in the twist list for mode ('idle' | 'combat').
+function bardtwist.BuffEntryInModeTwist(entry, mode)
+    if not entry or entry.enabled == false then return false end
+    if type(entry.gem) ~= 'number' or entry.gem < 1 or entry.gem > 12 then return false end
+    if mode == 'idle' then
+        return (entry.inIdle == true)
+            or (entry.inIdle == nil and (buffHasPhase(entry, 'idle') or buffHasPhase(entry, 'self')))
+    end
+    if mode == 'combat' then
+        return (entry.inCombat == true) or buffHasPhase(entry, 'cbt')
+    end
+    return false
+end
+
 --- Idle twist list: buffs where inIdle is true (or legacy idle/self in bands). Config order.
 function bardtwist.BuildNoncombatTwistList()
     if not bardtwist.IsBard() then return {} end
@@ -139,11 +153,8 @@ function bardtwist.BuildNoncombatTwistList()
     local out = {}
     for i = 1, #spells do
         local entry = spells[i]
-        if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
-            local inIdle = (entry.inIdle == true) or (entry.inIdle == nil and (buffHasPhase(entry, 'idle') or buffHasPhase(entry, 'self')))
-            if inIdle then
-                out[#out + 1] = entry.gem
-            end
+        if bardtwist.BuffEntryInModeTwist(entry, 'idle') then
+            out[#out + 1] = entry.gem
         end
     end
     return out
@@ -157,11 +168,8 @@ function bardtwist.BuildCombatTwistList()
     if buffs then
         for i = 1, #buffs do
             local entry = buffs[i]
-            if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
-                local inCombat = (entry.inCombat == true) or buffHasPhase(entry, 'cbt')
-                if inCombat then
-                    out[#out + 1] = entry.gem
-                end
+            if bardtwist.BuffEntryInModeTwist(entry, 'combat') then
+                out[#out + 1] = entry.gem
             end
         end
     end
