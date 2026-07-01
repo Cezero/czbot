@@ -148,6 +148,16 @@ end
 
 local RED, BLACK = theme.RED, theme.BLACK
 
+local function calcMoveButtonWidth(icon)
+    local iconW = select(1, ImGui.CalcTextSize(icon))
+    return (iconW or 0) + 24
+end
+
+local function hasReorderControls(opts)
+    local entryCount = opts.entryCount or 0
+    return entryCount > 1 and (opts.onMoveUp or opts.onMoveDown)
+end
+
 local function calcRightControlsWidth(opts)
     local enabledIconW = select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_ON))
     local enabledButtonWidth = (enabledIconW or 0) + 24
@@ -156,16 +166,10 @@ local function calcRightControlsWidth(opts)
         local trashW = select(1, ImGui.CalcTextSize(Icons.FA_TRASH))
         deleteButtonWidth = (trashW or 0) + 24
     end
-    local entryCount = opts.entryCount or 0
-    local showMoveUp = entryCount > 1 and opts.onMoveUp
-    local showMoveDown = entryCount > 1 and opts.onMoveDown
-    local moveUpIconW = showMoveUp and select(1, ImGui.CalcTextSize(Icons.FA_CARET_UP)) or 0
-    local moveDownIconW = showMoveDown and select(1, ImGui.CalcTextSize(Icons.FA_CARET_DOWN)) or 0
-    local moveUpButtonWidth = showMoveUp and ((moveUpIconW or 0) + 24) or 0
-    local moveDownButtonWidth = showMoveDown and ((moveDownIconW or 0) + 24) or 0
-    local reorderButtonWidth = moveUpButtonWidth + moveDownButtonWidth
-    if reorderButtonWidth > 0 and (showMoveUp and showMoveDown) then
-        reorderButtonWidth = reorderButtonWidth + 4
+    local reorderButtonWidth = 0
+    if hasReorderControls(opts) then
+        reorderButtonWidth = calcMoveButtonWidth(Icons.FA_CARET_UP)
+            + calcMoveButtonWidth(Icons.FA_CARET_DOWN) + 4
     end
     return enabledButtonWidth
         + (opts.onDelete and (deleteButtonWidth + 4) or 0)
@@ -177,6 +181,9 @@ local function drawEntryRightControls(id, spell, opts, state, onChanged)
     local entryCount = opts.entryCount or 0
     local showMoveUp = entryCount > 1 and opts.onMoveUp
     local showMoveDown = entryCount > 1 and opts.onMoveDown
+    local reserveReorderSlots = hasReorderControls(opts)
+    local moveUpWidth = calcMoveButtonWidth(Icons.FA_CARET_UP)
+    local moveDownWidth = calcMoveButtonWidth(Icons.FA_CARET_DOWN)
     if showMoveUp then
         if ImGui.SmallButton(Icons.FA_CARET_UP .. '##' .. id .. '_move_up') then
             opts.onMoveUp()
@@ -184,6 +191,11 @@ local function drawEntryRightControls(id, spell, opts, state, onChanged)
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip('Move up')
         end
+    elseif reserveReorderSlots then
+        ---@diagnostic disable-next-line: undefined-global
+        ImGui.Dummy(ImVec2(moveUpWidth, 0))
+    end
+    if showMoveUp or reserveReorderSlots then
         ImGui.SameLine()
     end
     if showMoveDown then
@@ -193,6 +205,11 @@ local function drawEntryRightControls(id, spell, opts, state, onChanged)
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip('Move down')
         end
+    elseif reserveReorderSlots then
+        ---@diagnostic disable-next-line: undefined-global
+        ImGui.Dummy(ImVec2(moveDownWidth, 0))
+    end
+    if showMoveDown or reserveReorderSlots then
         ImGui.SameLine()
     end
     if opts.onDelete then
