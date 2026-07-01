@@ -156,11 +156,9 @@ local function calcSmallButtonWidth(icon)
 end
 
 local function calcToggleButtonWidth()
-    local style = ImGui.GetStyle()
-    local iconW = math.max(
-        select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_ON)) or 0,
-        select(1, ImGui.CalcTextSize(Icons.FA_TOGGLE_OFF)) or 0)
-    return math.max(iconW + style.FramePadding.x * 2, style.FrameHeight)
+    return math.max(
+        calcSmallButtonWidth(Icons.FA_TOGGLE_ON),
+        calcSmallButtonWidth(Icons.FA_TOGGLE_OFF))
 end
 
 local function hasReorderControls(opts)
