@@ -7,16 +7,20 @@ local log = require('lib.log')
 
 local M = {}
 
-local DEBUG = false
 local POSITION_EPS = 0.5
 local IDLE_MIN_MS = 60000
 local IDLE_MAX_MS = 90000
-local NUDGE_HOLD_MS = 200
 
-local DIRECTIONS = { 'forward', 'back', 'left', 'right' }
+-- Each leg of a nudge lasts one main-loop tick (~100ms): hold out, then hold return.
+local NUDGE_PAIRS = {
+    { 'forward', 'back' },
+    { 'back', 'forward' },
+    { 'strafe_left', 'strafe_right' },
+    { 'strafe_right', 'strafe_left' },
+}
 
 local _idleUntil = 0
-local _wiggle = nil -- { dir, phase='hold', deadline }
+local _wiggle = nil -- { outDir, returnDir, step=1|2 }
 local _prev = {
     x = nil,
     y = nil,
@@ -30,10 +34,6 @@ local _prev = {
 
 local function randomIdleMs()
     return math.random(IDLE_MIN_MS, IDLE_MAX_MS)
-end
-
-local function dbg(fmt, ...)
-    if DEBUG then log.say('[antiafk] ' .. fmt, ...) end
 end
 
 local function posDelta(x1, y1, z1, x2, y2, z2)
@@ -103,30 +103,42 @@ local function updatePrev(snap)
     _prev.engageTargetId = snap.engageTargetId
 end
 
-local function tickWiggle(now)
-    if not _wiggle or _wiggle.phase ~= 'hold' then return end
-    if now < (_wiggle.deadline or 0) then return end
-    mq.cmdf('/squelch /keypress %s', _wiggle.dir)
-    dbg('nudge release %s', _wiggle.dir)
-    _wiggle = nil
+local function tickWiggle()
+    if not _wiggle then return end
+
+    if _wiggle.step == 1 then
+        mq.cmdf('/squelch /keypress %s', _wiggle.outDir)
+        mq.cmdf('/squelch /keypress %s hold', _wiggle.returnDir)
+        log.say('anti-AFK: nudge return hold %s', _wiggle.returnDir)
+        _wiggle.step = 2
+        return
+    end
+
+    if _wiggle.step == 2 then
+        mq.cmdf('/squelch /keypress %s', _wiggle.returnDir)
+        log.say('anti-AFK: nudge complete (%s then %s)', _wiggle.outDir, _wiggle.returnDir)
+        _wiggle = nil
+    end
 end
 
 local function startNudge()
-    local dir = DIRECTIONS[math.random(1, #DIRECTIONS)]
+    local pair = NUDGE_PAIRS[math.random(1, #NUDGE_PAIRS)]
+    local outDir, returnDir = pair[1], pair[2]
     if mq.TLO.Navigation.Active() then mq.cmd('/squelch /nav stop log=off') end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
-    mq.cmdf('/squelch /keypress %s hold', dir)
-    _wiggle = { dir = dir, phase = 'hold', deadline = mq.gettime() + NUDGE_HOLD_MS }
-    dbg('nudge hold %s', dir)
+    mq.cmdf('/squelch /keypress %s hold', outDir)
+    _wiggle = { outDir = outDir, returnDir = returnDir, step = 1 }
+    log.say('anti-AFK: nudge out hold %s (return %s)', outDir, returnDir)
 end
 
 local function sitStandToggle()
     if mq.TLO.Me.Sitting() then
         mq.cmd('/stand')
+        log.say('anti-AFK: stand')
     else
         mq.cmd('/squelch /sit on')
+        log.say('anti-AFK: sit')
     end
-    dbg('sit/stand toggle')
 end
 
 local function fireAction()
@@ -140,7 +152,7 @@ end
 function M.tick()
     local now = mq.gettime()
 
-    tickWiggle(now)
+    tickWiggle()
 
     local snap = takeSnapshot()
     local active = isActive(snap)
