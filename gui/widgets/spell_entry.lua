@@ -148,17 +148,25 @@ end
 
 local RED, BLACK = theme.RED, theme.BLACK
 
-local CONTROL_GAP = 4
-
-local function calcSmallButtonWidth(icon)
-    local iconW = select(1, ImGui.CalcTextSize(icon))
-    return (iconW or 0) + 24
+local function getFramePadX()
+    local style = ImGui.GetStyle()
+    if style and style.FramePadding and style.FramePadding.x then
+        return style.FramePadding.x
+    end
+    return 4
 end
 
-local function calcToggleButtonWidth()
-    return math.max(
-        calcSmallButtonWidth(Icons.FA_TOGGLE_ON),
-        calcSmallButtonWidth(Icons.FA_TOGGLE_OFF))
+local function getControlGap()
+    local style = ImGui.GetStyle()
+    if style and style.ItemSpacing and style.ItemSpacing.x then
+        return style.ItemSpacing.x
+    end
+    return 4
+end
+
+local function calcSmallButtonWidth(icon)
+    local iconW = select(1, ImGui.CalcTextSize(icon)) or 0
+    return iconW + getFramePadX() * 2
 end
 
 local function hasReorderControls(opts)
@@ -168,19 +176,22 @@ end
 
 --- Fixed slot offsets from the right content edge (toggle is rightmost).
 local function getRightControlLayout()
+    local gap = getControlGap()
     local moveW = math.max(
         calcSmallButtonWidth(Icons.FA_CARET_UP),
         calcSmallButtonWidth(Icons.FA_CARET_DOWN))
     local deleteW = calcSmallButtonWidth(Icons.FA_TRASH)
-    local toggleW = calcToggleButtonWidth()
+    local toggleW = math.max(
+        calcSmallButtonWidth(Icons.FA_TOGGLE_ON),
+        calcSmallButtonWidth(Icons.FA_TOGGLE_OFF))
     return {
         move = moveW,
         delete = deleteW,
         toggle = toggleW,
         toggleOff = toggleW,
-        deleteOff = toggleW + CONTROL_GAP + deleteW,
-        moveDownOff = toggleW + CONTROL_GAP + deleteW + CONTROL_GAP + moveW,
-        moveUpOff = toggleW + CONTROL_GAP + deleteW + CONTROL_GAP + moveW + CONTROL_GAP + moveW,
+        deleteOff = toggleW + gap + deleteW,
+        moveDownOff = toggleW + gap + deleteW + gap + moveW,
+        moveUpOff = toggleW + gap + deleteW + gap + moveW + gap + moveW,
     }
 end
 
@@ -210,8 +221,9 @@ local function drawEntryRightControls(id, spell, opts, state, onChanged)
     local showMoveDown = entryCount > 1 and opts.onMoveDown
     local noun = string.lower(opts.deleteEntryLabel or 'entry')
 
-    ImGui.SetCursorPosX(rightX - layout.toggleOff)
+    ImGui.SameLine(rightX - layout.toggleOff)
     if toggle.pill(id .. '_enabled', enabled, {
+            small = true,
             onTip = 'This ' .. noun .. ' is ENABLED (click to disable)',
             offTip = 'This ' .. noun .. ' is DISABLED (click to enable)',
         }) then
@@ -220,7 +232,7 @@ local function drawEntryRightControls(id, spell, opts, state, onChanged)
     end
 
     if opts.onDelete then
-        ImGui.SetCursorPosX(rightX - layout.deleteOff)
+        ImGui.SameLine(rightX - layout.deleteOff)
         ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
         ImGui.PushStyleColor(ImGuiCol.Text, RED)
         if ImGui.SmallButton(Icons.FA_TRASH .. '##' .. id .. '_delete') then
@@ -235,7 +247,7 @@ local function drawEntryRightControls(id, spell, opts, state, onChanged)
     end
 
     if showMoveDown then
-        ImGui.SetCursorPosX(rightX - layout.moveDownOff)
+        ImGui.SameLine(rightX - layout.moveDownOff)
         if ImGui.SmallButton(Icons.FA_CARET_DOWN .. '##' .. id .. '_move_down') then
             opts.onMoveDown()
         end
@@ -245,7 +257,7 @@ local function drawEntryRightControls(id, spell, opts, state, onChanged)
     end
 
     if showMoveUp then
-        ImGui.SetCursorPosX(rightX - layout.moveUpOff)
+        ImGui.SameLine(rightX - layout.moveUpOff)
         if ImGui.SmallButton(Icons.FA_CARET_UP .. '##' .. id .. '_move_up') then
             opts.onMoveUp()
         end
