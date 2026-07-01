@@ -1,4 +1,4 @@
--- Anti-AFK: random sit/stand or micro-nudge after 60–90s of continuous true idle.
+-- Anti-AFK: random sit/stand or micro-nudge after 3–4 min of continuous true idle.
 -- Runs every main-loop tick (including when MasterPause); activity pushes the idle deadline forward.
 local mq = require('mq')
 local state = require('lib.state')
@@ -8,8 +8,8 @@ local log = require('lib.log')
 local M = {}
 
 local POSITION_EPS = 0.5
-local IDLE_MIN_MS = 60000
-local IDLE_MAX_MS = 90000
+local IDLE_MIN_MS = 180000
+local IDLE_MAX_MS = 240000
 local NUDGE_HOLD_MS = 25
 
 -- Brief out-and-back pairs using strafe keys (not turn).
