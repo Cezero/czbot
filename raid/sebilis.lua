@@ -3,6 +3,7 @@ local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local utils = require('lib.utils')
+local log = require('lib.log')
 local myconfig = botconfig.config
 
 local M = {}
@@ -19,7 +20,7 @@ function TrakBreathOut()
             state.getRunconfig().engageTargetId = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
             mq.cmd('/nav loc -1180 -75 -178')
-            print('\ayCZBot:\ax TrotsRaid: Moving away from Trak')
+            log.say('TrotsRaid: Moving away from Trak')
             mq.delay(200)
         end
     end
@@ -39,7 +40,7 @@ function TrakBreathIn()
             state.getRunconfig().engageTargetId = nil
             mq.cmd('/multiline ; /stick off ; /attack off ; /pet back off')
             mq.cmd('/nav id ${Spawn[Trakanon].ID} distance=35')
-            print('\ayCZBot:\ax TrotsRaid: Resuming Combat with Trak...')
+            log.say('TrotsRaid: Resuming Combat with Trak...')
             mq.delay(200)
         end
     end

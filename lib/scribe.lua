@@ -10,6 +10,7 @@
 local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local log = require('lib.log')
 
 local scribe = {}
 
@@ -57,7 +58,7 @@ end
 
 -- Scribe one scroll given its /itemnotify target string; drive the cursor/dialog to completion.
 local function scribeOne(notifyTarget, spellName)
-    printf('\ayCZBot:\axScribing %s', spellName or notifyTarget)
+    log.say('Scribing %s', spellName or notifyTarget)
     mq.cmdf('/nomodkey /ctrlkey /itemnotify %s rightmouseup', notifyTarget)
     mq.delay(1000, function() return mq.TLO.Cursor.ID() ~= nil end)
     local deadline = mq.gettime() + 25000
@@ -129,14 +130,14 @@ local function finishScribeSession(scribedCount)
     _scan = nil
 
     if scribedCount > 0 then
-        printf('\ayCZBot:\axScribed %d spell(s).', scribedCount)
+        log.say('Scribed %d spell(s).', scribedCount)
     end
 
     local okU, spellupgrade = pcall(require, 'lib.spellupgrade')
     if okU and spellupgrade then
         spellupgrade.scan()
         if spellupgrade.count() > 0 then
-            printf('\ayCZBot:\ax%d spell upgrade(s) available -- Status tab or /cz upgrades', spellupgrade.count())
+            log.say('%d spell upgrade(s) available -- Status tab or /cz upgrades', spellupgrade.count())
         end
     end
 end
@@ -146,7 +147,7 @@ function scribe.Run()
     if _running then return 0 end
     local okSafe, why = safeToScribe()
     if not okSafe then
-        printf('\ayCZBot:\axCan\'t scribe right now (%s).', why)
+        log.say('Can\'t scribe right now (%s).', why)
         return 0
     end
     _running = true
@@ -165,11 +166,11 @@ function scribe.Run()
 
     _running = false
     if not okRun then
-        printf('\ayCZBot:\axScribe error: %s', tostring(err))
+        log.say('Scribe error: %s', tostring(err))
     end
 
     if scribedCount == 0 and okRun then
-        printf('\ayCZBot:\axNo new scrolls to scribe.')
+        log.say('No new scrolls to scribe.')
     end
     finishScribeSession(scribedCount)
     return scribedCount
@@ -185,7 +186,7 @@ function scribe.tick()
     if lvl > _lastLevel then
         _lastLevel = lvl
         _wantScribe = true
-        printf('\ayCZBot:\axDinged %d -- will scribe new spells when out of combat.', lvl)
+        log.say('Dinged %d -- will scribe new spells when out of combat.', lvl)
     elseif lvl < _lastLevel then
         _lastLevel = lvl
     end
@@ -197,7 +198,7 @@ function scribe.tick()
     if not target then
         _wantScribe = false
         if _autoScribedCount == 0 then
-            printf('\ayCZBot:\axNo new scrolls to scribe.')
+            log.say('No new scrolls to scribe.')
         end
         finishScribeSession(_autoScribedCount)
         _autoScribedCount = 0
@@ -206,7 +207,7 @@ function scribe.tick()
 
     local okOne, err = pcall(scribeOne, target, spellName)
     if not okOne then
-        printf('\ayCZBot:\axScribe error: %s', tostring(err))
+        log.say('Scribe error: %s', tostring(err))
         _wantScribe = false
         _scan = nil
         if _autoScribedCount > 0 then finishScribeSession(_autoScribedCount) end

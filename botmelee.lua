@@ -12,6 +12,7 @@ local spawnutils = require('lib.spawnutils')
 local charm = require('lib.charm')
 local spellstates = require('lib.spellstates')
 local spellutils = require('lib.spellutils')
+local log = require('lib.log')
 local myconfig = botconfig.config
 local botmelee = {}
 
@@ -342,7 +343,7 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
         if nthSpawn then
             local actarid = nthSpawn.ID()
             if actarid ~= mq.TLO.Target.ID() then
-                printf('\ayCZBot:\ax\arOff-tanking\ax a \ag%s id %s', nthSpawn.CleanName(), actarid)
+                log.say('\arOff-tanking\ax a \ag%s id %s', nthSpawn.CleanName(), actarid)
             end
             return actarid
         end
@@ -543,7 +544,7 @@ local function logEngageLoSClear(engageTargetId)
     _engageLosLastLogTime = 0
     _engageLosEngageId = nil
     local mobName = engageTargetId and (mq.TLO.Spawn(engageTargetId).CleanName() or '?') or 'none'
-    printf('\ayCZBot:\ax [EngageLoS] clear engageId=%s mob=%s', tostring(engageTargetId), mobName)
+    log.say('[EngageLoS] clear engageId=%s mob=%s', tostring(engageTargetId), mobName)
 end
 
 local function logEngageLoSBlocked(engageTargetId, context)
@@ -564,8 +565,7 @@ local function logEngageLoSBlocked(engageTargetId, context)
     local pathExists = mq.TLO.Navigation.PathExists('id ' .. engageTargetId)() and 1 or 0
     local navActive = mq.TLO.Navigation.Active() and 1 or 0
     local stickActive = mq.TLO.Stick.Active() and 1 or 0
-    printf(
-        '\ayCZBot:\ax [EngageLoS] blocked context=%s engageId=%s targetId=%s mob=%s dist=%.1f targetLoS=0 spawnLoS=%d pathExists=%d navActive=%d stickActive=%d meleePhase=%s',
+    log.say('[EngageLoS] blocked context=%s engageId=%s targetId=%s mob=%s dist=%.1f targetLoS=0 spawnLoS=%d pathExists=%d navActive=%d stickActive=%d meleePhase=%s',
         tostring(context or 'unknown'), tostring(engageTargetId), tostring(targetId), mobName, dist,
         spawnLoS, pathExists, navActive, stickActive, getMeleePhaseLabel())
 end
@@ -573,15 +573,18 @@ end
 -- When no engageTargetId: stick off, attack off, pet back. Clear NPC target only when auto-attack is on (releasing a fight).
 local function disengageCombat(reason)
     local rc = state.getRunconfig()
+    if not state.isMeleeEngaged(rc) then return end
     local engageId = rc.engageTargetId
     local targetId = mq.TLO.Target.ID() or 0
     local mobName = engageId and (mq.TLO.Spawn(engageId).CleanName() or '?') or 'none'
-    printf('\ayCZBot:\ax [Disengage] reason=%s engageId=%s targetId=%s mob=%s',
+    log.say('[Disengage] reason=%s engageId=%s targetId=%s mob=%s',
         tostring(reason or 'unknown'), tostring(engageId), tostring(targetId), mobName)
     _lastEngageStickCmd = nil
     _engageLosBlocked = false
     _engageLosLastLogTime = 0
     _engageLosEngageId = nil
+    rc.engageTargetId = nil
+    rc.attackCommandEngage = nil
     rc.allMezzedEngageId = nil
     if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
     combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
@@ -646,17 +649,11 @@ local function engageTarget()
     if not engageTargetId then return end
 
     if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(engageTargetId), state.getRunconfig()) then
-        local rc = state.getRunconfig()
-        rc.engageTargetId = nil
-        rc.attackCommandEngage = nil
         disengageCombat('engage_not_allowed')
         return
     end
 
     if utils.isProtectedSpawn(mq.TLO.Spawn(engageTargetId)) then
-        local rc = state.getRunconfig()
-        rc.engageTargetId = nil
-        rc.attackCommandEngage = nil
         disengageCombat('protected_spawn')
         return
     end
@@ -753,7 +750,7 @@ local function aeDbg(fmt, ...)
     if not _aeDebug then return end
     if mq.gettime() < _aeDebugNextTime then return end
     _aeDebugNextTime = mq.gettime() + 2000
-    printf('\ay[aetank]\ax ' .. fmt, ...)
+    log.say('[aetank] ' .. fmt, ...)
 end
 
 local function mezzerInGroup()
@@ -848,9 +845,9 @@ function botmelee.AdvCombat()
     if aeLooseId then id = aeLooseId end
     if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
-    rc.engageTargetId = id
 
-    if rc.engageTargetId then
+    if id then
+        rc.engageTargetId = id
         local name = mq.TLO.Spawn(rc.engageTargetId).CleanName() or tostring(rc.engageTargetId)
         local cs = rc.CurSpell
         local curSpellBusy = cs and cs.sub and cs.phase and
@@ -914,14 +911,10 @@ function botmelee.getHookFn(name)
             local rc = state.getRunconfig()
             if rc.bardTwistOnceWait and mq.TLO.Me.Class.ShortName() == 'BRD' then return end
             if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
-                rc.engageTargetId = nil
-                rc.attackCommandEngage = nil
                 disengageCombat('beyond_follow_distance')
                 return
             end
             if not spawnutils.isPlayerWithinCampPin(rc) then
-                rc.engageTargetId = nil
-                rc.attackCommandEngage = nil
                 disengageCombat('outside_camp_pin')
                 if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
                 return
@@ -951,8 +944,6 @@ function botmelee.getHookFn(name)
                 local xtEngage = myconfig.settings.engageXTargetOnly == true
                     and #spawnutils.getXTargetAutoHaterEngageables(rc) > 0
                 if not xtEngage then
-                    rc.engageTargetId = nil
-                    rc.attackCommandEngage = nil
                     disengageCombat('moblist_empty')
                     return
                 end

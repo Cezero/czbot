@@ -7,6 +7,7 @@ local targeting = require('lib.targeting')
 local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
 local spawnutils = require('lib.spawnutils')
+local log = require('lib.log')
 local myconfig = botconfig.config
 
 local botmove = {}
@@ -67,7 +68,7 @@ local function refreshFollowId()
             local now = mq.gettime()
             if now >= lastFollowResolveFailTime + 15000 then
                 lastFollowResolveFailTime = now
-                printf('\ayCZBot:\axFollow: waiting for leader "%s" in zone.', rc.followname)
+                log.say('Follow: waiting for leader "%s" in zone.', rc.followname)
             end
         end
         return
@@ -339,7 +340,7 @@ local function doNavToCamp(opts)
     opts = opts or {}
     local rc = state.getRunconfig()
     if not rc.makecamp.x or not rc.makecamp.y or not rc.makecamp.z then return end
-    if opts.echoMsg then printf('\ayCZBot:\ax %s', opts.echoMsg) end
+    if opts.echoMsg then log.say('%s', opts.echoMsg) end
     if opts.dist ~= nil then
         mq.cmdf('/nav locxyz %s %s %s log=off dist=%s', rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, opts.dist)
     else
@@ -362,7 +363,7 @@ local function makeCampOn()
     if mq.TLO.Stick.Active() then mq.cmd('/stick off') end
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
     if not mq.TLO.Navigation.MeshLoaded() then
-        printf('\ayCZBot:\axCannot use makecamp (no mesh loaded)')
+        log.say('Cannot use makecamp (no mesh loaded)')
         return false
     end
     setCampHere()
@@ -370,7 +371,7 @@ local function makeCampOn()
     local rc = state.getRunconfig()
     rc.followid = 0
     rc.followname = ''
-    printf('\ayCZBot:\axhanging out using mq2nav')
+    log.say('hanging out using mq2nav')
     return true
 end
 
@@ -380,7 +381,7 @@ local function makeCampOff()
     if not myconfig.pull.hunter and not myconfig.pull.roam then
         rc.makecamp = { x = nil, y = nil, z = nil }
     end
-    printf('\ayCZBot:\axmakecamp \aroff\ax')
+    log.say('makecamp \aroff\ax')
 end
 
 local function makeCampReturn()
@@ -388,7 +389,7 @@ local function makeCampReturn()
     doLeashResetCombat()
     doNavToCamp()
     if state.canStartBusyState(state.STATES.camp_return) then
-        printf('\ayCZBot:\ax Returning to camp')
+        log.say('Returning to camp')
         state.setRunState(state.STATES.camp_return,
             { deadline = mq.gettime() + CAMP_RETURN_DEADLINE_MS, priority = bothooks.getPriority('doMiscTimer') })
     end
@@ -743,7 +744,7 @@ function botmove.ClearCamp(reason)
     rc.campstatus = false
     rc.makecamp = { x = nil, y = nil, z = nil }
     if reason == 'death' then
-        printf('\ayCZBot:\ax\arCamp cleared (death)\ax')
+        log.say('\arCamp cleared (death)\ax')
     end
     return true
 end

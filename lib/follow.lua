@@ -7,6 +7,7 @@ local state = require('lib.state')
 local botmove = require('botmove')
 local botpull = require('botpull')
 local charinfo = require("plugin.charinfo")
+local log = require('lib.log')
 
 local follow = {}
 
@@ -30,7 +31,7 @@ function follow.StopFollow(reason)
         end
     end
     if reason == 'death' then
-        printf('\ayCZBot:\ax\arFollow OFF (death)\ax')
+        log.say('\arFollow OFF (death)\ax')
     end
     return true
 end
@@ -51,7 +52,7 @@ function follow.StartFollow(name)
     rc.followid = followId
     rc.followname = name
     rc.stucktimer = mq.gettime() + 60000
-    printf('\ayCZBot:\ax\auFollowing\ax ON %s', spawn.CleanName())
+    log.say('\auFollowing\ax ON %s', spawn.CleanName())
 end
 
 --- Re-arm follow/travel after zone: invalidate stale spawn id, keep followname/travelMode, kick nav when ready.

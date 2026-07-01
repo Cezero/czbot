@@ -4,6 +4,7 @@
 local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local log = require('lib.log')
 
 local M = {}
 
@@ -17,7 +18,7 @@ local function doOneInvite(groupldr, raidmember, grptype)
     elseif spawnid > 0 and groupldrspawnid == myid then
         mq.cmdf('/inv %s', raidmember)
     elseif grptype == 'raid' then
-        printf("\ayCZBot:\ax\ar%s's\ax group member \ar%s\ax is not in the zone, skipping", groupldr, raidmember)
+        log.say("\ar%s's\ax group member \ar%s\ax is not in the zone, skipping", groupldr, raidmember)
     end
 end
 
@@ -32,14 +33,14 @@ end
 function M.SaveRaid(raidname)
     local raidmembers = mq.TLO.Raid.Members() or 0
     if raidmembers == 0 then
-        printf('\ayCZBot:\ax Not in a raid, no raid to save')
+        log.say('Not in a raid, no raid to save')
         return
     end
     if not raidname or raidname == '' then
-        printf('\ayCZBot:\ax Noname given, cant save raid (/cz raid save raidname)')
+        log.say('Noname given, cant save raid (/cz raid save raidname)')
         return
     end
-    printf('\ayCZBot:\ax saving raidconfig \ag%s\ax', raidname)
+    log.say('saving raidconfig \ag%s\ax', raidname)
     local raidSnapshot = { leaders = {}, groups = {} }
     for i = 1, raidmembers do
         local raidmember = mq.TLO.Raid.Member(i)() or false
@@ -69,7 +70,7 @@ function M.LoadRaid(raidname)
         printf('no raid named %s found on this pc', raidname)
         return
     end
-    printf('\ayCZBot:\ax Loading raid setup \ag%s\ax', raidname)
+    log.say('Loading raid setup \ag%s\ax', raidname)
     state.getRunconfig().statusMessage = string.format('Loading raid: %s', raidname)
     local raidmembers = mq.TLO.Raid.Members() or 0
     local myid = mq.TLO.Me.ID() or 0
@@ -108,7 +109,7 @@ function M.LoadRaid(raidname)
             if groupldrspawnid > 0 and groupldrspawnid ~= myid then
                 mq.cmdf('/raidinv %s', a.groupldr)
             elseif groupldrspawnid ~= myid then
-                printf('\ayCZBot:\axGroup Leader \ar%s is not in zone, skipping group', a.groupldr)
+                log.say('Group Leader \ar%s is not in zone, skipping group', a.groupldr)
             end
         end
         mq.delay(50)

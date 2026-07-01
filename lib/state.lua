@@ -454,6 +454,22 @@ function M.isCombatContextForBuff(rc)
     return false
 end
 
+---True when the bot is actively in melee/combat state (stick, attack, pet, or engage tracking).
+---@param rc RunConfig|nil Optional; defaults to getRunconfig().
+---@return boolean
+function M.isMeleeEngaged(rc)
+    rc = rc or M.getRunconfig()
+    if rc.engageTargetId and rc.engageTargetId > 0 then return true end
+    if rc.attackCommandEngage then return true end
+    if rc.allMezzedEngageId then return true end
+    if M.getRunState() == M.STATES.melee then return true end
+    local mq = require('mq')
+    if mq.TLO.Me.Combat() then return true end
+    if mq.TLO.Stick.Active() then return true end
+    if mq.TLO.Me.Pet.Aggressive() then return true end
+    return false
+end
+
 local DEFAULT_BURN_SEC = 30
 
 ---Start a burn window of `seconds` (default 30). <= 0 stops it. Returns the seconds applied.

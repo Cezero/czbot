@@ -12,6 +12,7 @@ local state = require('lib.state')
 local charinfo = require("plugin.charinfo")
 local charinfoutils = require('lib.charinfoutils')
 local rolelists = require('lib.rolelists')
+local log = require('lib.log')
 
 local tankrole = {}
 
@@ -425,7 +426,7 @@ function tankrole.debugPrint()
     local raidMembers = mq.TLO.Raid.Members() or 0
     local effectiveLeash = getAnchorLeash()
 
-    printf('\ayCZBot:\ax tankrole diagnostic')
+    log.say('tankrole diagnostic')
     printf('  inRaid: %s (Raid.Members=%s)', raid and 'yes' or 'no', tostring(raidMembers))
     printf('  rc.TankName=%s  rc.AssistName=%s',
         tostring(rc.TankName), tostring(rc.AssistName))

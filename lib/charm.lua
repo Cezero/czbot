@@ -7,6 +7,7 @@ local state = require('lib.state')
 local spellstates = require('lib.spellstates')
 local spellutils = require('lib.spellutils')
 local utils = require('lib.utils')
+local log = require('lib.log')
 
 local charm = {}
 
@@ -126,7 +127,7 @@ function charm.AutoSetupNewCharmPet(rc)
     if targetId and targetId > 0 then
         mq.cmdf('/squelch /pet attack %s', targetId)
     end
-    printf('\ayCZBot:\axCharm pet acquired: taunt off, assisting.')
+    log.say('Charm pet acquired: taunt off, assisting.')
 end
 
 function charm.BeforeCast(EvalID, targethit)
@@ -143,7 +144,7 @@ function charm.OnCharmBroke(line, spellNameFromEvent)
     if spellNameFromEvent ~= charmspellname then return end
     spellstates.ClearDebuffOnSpawn(rc.charmid, _charmspellid)
     charm.trackCharmSkip(rc.charmid, rc)
-    printf('\ayCZBot:\ax\arCHARM %s wore off!', spellNameFromEvent)
+    log.say('\arCHARM %s wore off!', spellNameFromEvent)
     _recastRequest = { index = _charmindex, spawnId = rc.charmid }
 end
 

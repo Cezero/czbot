@@ -1,6 +1,7 @@
 ﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local log = require('lib.log')
 local M = {}
 
 --- Return immune table for current zone only: [spell][mobName] = true.
@@ -48,7 +49,7 @@ function M.processList(immuneID, opts)
         local t = M.get()
         if not t[spell] or not t[spell][mobName] then
             M.add(spell, zone, mobName)
-            printf('\ayCZBot:\ax%s is \\arIMMUNE\\ax to spell \\ag%s\\ax, adding to the ImmuneList', mobName, spell)
+            log.say('%s is \\arIMMUNE\\ax to spell \\ag%s\\ax, adding to the ImmuneList', mobName, spell)
         end
     end
 end

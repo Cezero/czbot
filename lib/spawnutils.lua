@@ -8,6 +8,7 @@ local state = require('lib.state')
 local utils = require('lib.utils')
 local bardtwist = require('lib.bardtwist')
 local charinfoutils = require('lib.charinfoutils')
+local log = require('lib.log')
 
 local spawnutils = {}
 
@@ -804,14 +805,14 @@ end
 function spawnutils.explainMobFilter(spawnId)
     spawnId = tonumber(spawnId) or mq.TLO.Target.ID()
     if not spawnId or spawnId == 0 then
-        printf('\ayCZBot:\ax mobfilter: no target (pass spawn id or select a spawn)')
+        log.say('mobfilter: no target (pass spawn id or select a spawn)')
         return
     end
     local rc = state.getRunconfig()
     local myconfig = botconfig.config
     local spawn = mq.TLO.Spawn(spawnId)
     if not spawn or not spawn.ID() or spawn.ID() == 0 then
-        printf('\ayCZBot:\ax mobfilter: spawn id %s not found', tostring(spawnId))
+        log.say('mobfilter: spawn id %s not found', tostring(spawnId))
         return
     end
     local ax, ay, az, anchorSource = spawnutils.getMobListAnchor(rc)
@@ -821,7 +822,7 @@ function spawnutils.explainMobFilter(spawnId)
     local tfNum = myconfig.settings.TargetFilter or 0
     local inList = mobListContainsId(rc.MobList, spawnId)
 
-    printf('\ayCZBot:\ax mobfilter for %s (id %s)', spawn.CleanName() or '?', tostring(spawnId))
+    log.say('mobfilter for %s (id %s)', spawn.CleanName() or '?', tostring(spawnId))
     printf('  MobList anchor: %s at %.1f, %.1f, %.1f', anchorSource, ax or 0, ay or 0, az or 0)
     printf('  In MobList: %s', inList and 'yes' or 'no')
     printf('  alive: %s', spawnutils.isAliveEngageSpawn(spawn) and 'yes' or 'no')

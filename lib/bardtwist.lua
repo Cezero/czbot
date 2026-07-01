@@ -2,6 +2,7 @@
 -- Requires mq, botconfig, state. No dependency on spellutils/botbuff to avoid circular refs.
 
 local mq = require('mq')
+local log = require('lib.log')
 
 local botconfig = require('lib.config')
 local state = require('lib.state')
@@ -30,12 +31,12 @@ function bardtwist.BardDbg(fmt, ...)
     local now = mq.gettime()
     if now < _bardDbgNext then return end
     _bardDbgNext = now + BARD_DBG_MS
-    printf('\ayCZBot:\ax [BRD] ' .. fmt, ...)
+    log.say('[BRD] ' .. fmt, ...)
 end
 
 function bardtwist.BardDbgNow(fmt, ...)
     if not _bardDebug then return end
-    printf('\ayCZBot:\ax [BRD] ' .. fmt, ...)
+    log.say('[BRD] ' .. fmt, ...)
 end
 
 local function gemsToStr(gems)

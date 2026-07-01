@@ -6,6 +6,7 @@ local spellutils = require('lib.spellutils')
 local spawnutils = require('lib.spawnutils')
 local bothooks = require('lib.bothooks')
 local tankrole = require('lib.tankrole')
+local log = require('lib.log')
 
 local castinterrupt = {}
 
@@ -69,7 +70,7 @@ local function diagFail(reason, mobName, extra)
     _diagNextTime = now + DIAG_THROTTLE_MS
     local assistName = tankrole.GetAssistTargetName()
     local _, _, maTargetId = spellutils.GetAssistInfo(true)
-    printf('\ayCZBot:\ax [CH interrupt] blocked: %s (mob=%s ma=%s maTarget=%s mobs=%s%s)',
+    log.say('[CH interrupt] blocked: %s (mob=%s ma=%s maTarget=%s mobs=%s%s)',
         reason, tostring(mobName), tostring(assistName), tostring(maTargetId), tostring(state.getMobCount()),
         extra and (' ' .. extra) or '')
 end
@@ -165,7 +166,7 @@ local function executeInterrupt(targetId, spellIndex)
         local botdebuff = require('botdebuff')
         local ok = botdebuff.CastBardMezOnce(spellIndex, targetId, runPriority, INTERRUPT_REASON)
         if not ok then
-            printf('\ayCZBot:\ax [CH interrupt] failed: bard mez could not start \ag%s\ax on \at%s\ax', spellName,
+            log.say('[CH interrupt] failed: bard mez could not start \ag%s\ax on \at%s\ax', spellName,
                 targetName)
         end
         return ok
@@ -173,9 +174,9 @@ local function executeInterrupt(targetId, spellIndex)
 
     local ok = spellutils.CastSpell(spellIndex, targetId, 'matar', 'debuff', runPriority, nil, { fromInterrupt = true })
     if ok then
-        printf('\ayCZBot:\ax interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, INTERRUPT_REASON)
+        log.say('interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, INTERRUPT_REASON)
     else
-        printf('\ayCZBot:\ax [CH interrupt] failed: CastSpell returned false for \ag%s\ax on \at%s\ax', spellName,
+        log.say('[CH interrupt] failed: CastSpell returned false for \ag%s\ax on \at%s\ax', spellName,
             targetName)
     end
     return ok
@@ -190,7 +191,7 @@ local function queuePending(rc, targetId, mobName)
     local spellIndex = findInterruptSpellIndex(targetId)
     local entry = spellIndex and botconfig.getSpellEntry('debuff', spellIndex)
     if entry then
-        printf('\ayCZBot:\ax queued \ag%s\ax interrupt on \at%s\ax (waiting for current cast)', entry.spell or '?',
+        log.say('queued \ag%s\ax interrupt on \at%s\ax (waiting for current cast)', entry.spell or '?',
             targetDisplayName(targetId))
     end
 end
@@ -258,7 +259,7 @@ function castinterrupt.tryInterruptMaCast(mobName)
     end
     if executeInterrupt(maTargetId, spellIndex) then return true end
     if entry then
-        printf('\ayCZBot:\ax [CH interrupt] failed after executeInterrupt for \ag%s\ax on \at%s\ax', entry.spell or '?',
+        log.say('[CH interrupt] failed after executeInterrupt for \ag%s\ax on \at%s\ax', entry.spell or '?',
             targetDisplayName(maTargetId))
     end
     return false

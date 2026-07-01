@@ -11,6 +11,7 @@ local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
 local botmove = require('botmove')
 local combat = require('lib.combat')
+local log = require('lib.log')
 
 local botdebuff = {}
 local DebuffBands = {}
@@ -744,22 +745,22 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
         if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed()
             and spellutils.SpawnMezActive(EvalID)
             and not spellutils.SpawnHasDebuffSpell(entry.spell, EvalID) then
-            printf('\ayCZBot:\ax [Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
+            log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
             spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
             retargetMaTargetAfterBardMez()
             bardtwist.RestoreCombatTwistAfterTwistOnce()
             return true
         end
         if reason and reason ~= '' then
-            printf('\ayCZBot:\ax interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, reason)
+            log.say('interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, reason)
         else
-            printf('\ayCZBot:\ax [Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
+            log.say('[Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
         end
     elseif targethit == 'matar' then
         if mq.TLO.Target.ID() ~= EvalID then
             targeting.TargetAndWait(EvalID, 500)
         end
-        printf('\ayCZBot:\ax [Debuff] twist-once \am%s\ax on \at%s\ax (id %s)', spellName, targetName, EvalID)
+        log.say('[Debuff] twist-once \am%s\ax on \at%s\ax (id %s)', spellName, targetName, EvalID)
     else
         return false
     end
@@ -825,8 +826,7 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
         state.getRunconfig().CurSpell = {}
         if newCount >= adEntry.recast then
             local rc = state.getRunconfig()
-            printf(
-                '\ayCZBot:\ax\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
+            log.say('\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
                 mq.TLO.Spawn(EvalID).CleanName(), adEntry.spell, spellIndex, adEntry.recast)
             local recastduration = 600000 + mq.gettime()
             local duration_sec = spellutils.GetSpellDurationSec(adEntry)
@@ -846,7 +846,7 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
                             if not rc.nukeFlavorsAutoDisabled then rc.nukeFlavorsAutoDisabled = {} end
                             if not rc.nukeFlavorsAutoDisabled[f] then
                                 rc.nukeFlavorsAutoDisabled[f] = true
-                                printf('\ayCZBot:\ax \ar%s\ax nukes auto-disabled after resists on 3 mobs in a row.', f:gsub('^%l', string.upper))
+                                log.say('\ar%s\ax nukes auto-disabled after resists on 3 mobs in a row.', f:gsub('^%l', string.upper))
                                 botconfig.saveNukeFlavorsToCommon()
                             end
                         end

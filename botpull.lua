@@ -10,6 +10,7 @@ local utils = require('lib.utils')
 local spellutils = require('lib.spellutils')
 local casting = require('lib.casting')
 local charinfo = require('plugin.charinfo')
+local log = require('lib.log')
 local myconfig = botconfig.config
 
 local botpull = {}
@@ -289,7 +290,7 @@ function botpull.DisablePull(reason)
     end
     mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
     if wasOn then
-        printf('\ayCZBot:\axDisabling pull (%s)', reason or 'off')
+        log.say('Disabling pull (%s)', reason or 'off')
     end
 end
 
@@ -330,7 +331,7 @@ end
 function botpull.SetPullArc(arc)
     local rc = state.getRunconfig()
     if not arc and rc.pullarc then
-        print('\ayCZBot:\ax \arTurning off Directional Pulling.')
+        log.say('\arTurning off Directional Pulling.')
         rc.pullarc = 0
     else
         rc.pullarc = tonumber(arc)
@@ -364,7 +365,7 @@ function botpull.EngageCheck()
         if targetDistSq and rangeSq and targetDistSq > rangeSq and not myconfig.pull.hunter and not myconfig.pull.roam then return false end
     end
     if totID and totID > 0 and totID ~= mq.TLO.Me.ID() and (totType ~= 'NPC') and totType ~= 'Corpse' then
-        printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arengaged\ax by someone else! Returning to camp!', target)
+        log.say('\arUh Oh, \ag%s\ax is \arengaged\ax by someone else! Returning to camp!', target)
         rc.engagetracker[targetid] = (mq.gettime() + 60000)
         mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
         return true
@@ -479,8 +480,7 @@ local function canStartPull(rc)
     if MasterPause then return false end
     if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then return false end
     if not mq.TLO.Navigation.MeshLoaded() then
-        printf(
-            '\ayCZBot:\axI have DoPull set TRUE but have \arno MQ2Nav Mesh loaded\ax, please generate a NavMesh before using DoPull, \arsetting DoPull to FALSE\ax')
+        log.say('I have DoPull set TRUE but have \arno MQ2Nav Mesh loaded\ax, please generate a NavMesh before using DoPull, \arsetting DoPull to FALSE\ax')
         state.getRunconfig().dopull = false
         return false
     end
@@ -579,13 +579,13 @@ local function ensureCampAndAnchor(rc)
     botpull.syncPullMapFilter(false)
     if isRoamMode() then
         if myconfig.pull.hunter then
-            print('\ayCZBot:\ax Roam hunt enabled; hunter mode ignored')
+            log.say('Roam hunt enabled; hunter mode ignored')
         end
         if rc.campstatus then botmove.MakeCamp('off') end
     elseif not myconfig.pull.hunter and not myconfig.pull.roam and not rc.campstatus then
         botmove.MakeCamp('on')
     elseif myconfig.pull.hunter and (not rc.makecamp.x or not rc.makecamp.y) then
-        print('\ayCZBot:\ax setting HunterMode anchor')
+        log.say('setting HunterMode anchor')
         botmove.SetCampHere()
         if rc.campstatus then botmove.MakeCamp('off') end
     end
@@ -644,7 +644,7 @@ local function selectPullTargets(apmoblist, rc, maxCount)
         end
     end
     if skippedAttemptedCount > 0 then
-        printf('\ayCZBot:\ax [Pull] skipping %d recently-attempted pull target(s)', skippedAttemptedCount)
+        log.say('[Pull] skipping %d recently-attempted pull target(s)', skippedAttemptedCount)
     end
     if #unattempted > 0 then
         candidates = unattempted
@@ -836,7 +836,7 @@ function botpull.StartPull()
     local isWarp = entry and entry.gem == 'script' and entry.spell and string.lower(tostring(entry.spell)) == 'warp'
 
     local distance = spawn.Distance() and math.floor(spawn.Distance()) or 0
-    printf('\ayCZBot:\axAttempting to pull \ar%s \arid %s \auat %s', spawn.Name(), spawn.ID(), distance)
+    log.say('Attempting to pull \ar%s \arid %s \auat %s', spawn.Name(), spawn.ID(), distance)
     mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /mqtarget clear')
     mq.cmdf('/nav id %s dist=7 log=off los=on', spawn.ID())
     if isWarp then mq.cmdf('/warp id %s', spawn.ID()) end
@@ -882,7 +882,7 @@ local function abortRoamHunt(reason)
     markPullTargetAttempted(rc, reason)
     rc.engageTargetId = nil
     clearPullState(reason or 'roam hunt aborted')
-    if reason then printf('\ayCZBot:\ax [Roam hunt] abort: %s', reason) end
+    if reason then log.say('[Roam hunt] abort: %s', reason) end
 end
 
 local function abortPullAndReturnToCamp(reason)
@@ -898,7 +898,7 @@ local function abortPullAndReturnToCamp(reason)
     rawset(rc, 'pullAbortReturnDeadline', mq.gettime() + RETURNING_AFTER_ABORT_TIMEOUT_MS)
     rc.statusMessage = 'Returning to camp after abort'
     botmove.NavToCamp({ dist = 0, echoMsg = 'Add aggro, returning to camp' })
-    if reason then printf('\ayCZBot:\ax [Pull] abort: %s', reason) end
+    if reason then log.say('[Pull] abort: %s', reason) end
 end
 
 local function ensurePullingRunState()
@@ -946,7 +946,7 @@ local function beginPullCandidate(rc, spawn, reason)
     mq.cmdf('/nav id %s dist=7 log=off los=on', spawnId)
     rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawnId)
     if reason then
-        printf('\ayCZBot:\ax [Pull] %s; trying backup target %s (%s)', reason, spawn.Name(), spawnId)
+        log.say('[Pull] %s; trying backup target %s (%s)', reason, spawn.Name(), spawnId)
     end
 end
 
@@ -1116,7 +1116,7 @@ local function tickNavigating(rc, spawn)
     end
 
     if rc.pullTagTimer and mq.gettime() >= rc.pullTagTimer then
-        printf('\ayCZBot:\ax\arI have timed out trying to pull \ay%s', spawn.Name())
+        log.say('\arI have timed out trying to pull \ay%s', spawn.Name())
         if isPullWarp() then
             mq.cmdf('/warp loc %s %s %s', rc.makecamp.y, rc.makecamp.x, rc.makecamp.z)
         end

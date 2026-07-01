@@ -21,6 +21,7 @@ local premem = require('lib.premem')
 local spellupgrade = require('lib.spellupgrade')
 local scribe = require('lib.scribe')
 local tickprof = require('lib.tickprof')
+local log = require('lib.log')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -39,7 +40,7 @@ local _petAttackRetargetLastTime = 0
 local function charState_StartupIfRequested(args)
     if args[1] ~= 'startup' then return end
     if mq.TLO.Me.Hovering() then
-        printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
+        log.say('Can\'t start CZBot cause I\'m hovering over my corpse!')
         state.getRunconfig().terminate = true
         return
     end
@@ -154,7 +155,7 @@ local function charState_Always()
             mq.cmd('/destroy')
         elseif mq.TLO.Me.FreeInventory() == 0 then
             if not rc.OutOfSpace then
-                printf('\ayCZBot:\axI\'m out of inventory space!')
+                log.say('I\'m out of inventory space!')
             end
             rc.OutOfSpace = true
         elseif not rc.OutOfSpace and rc.forageExpectCursor and mq.TLO.Me.FreeInventory() > 0 then
@@ -369,7 +370,7 @@ function botlogic.StartUp(...)
     print('CZBot is starting! (' .. VERSION .. ')')
     math.randomseed(os.time() * 1000 + os.clock() * 1000)
     if mq.TLO.Me.Hovering() or string.find(mq.TLO.Me.Name() or '', 'corpse') then
-        printf('\ayCZBot:\axCan\'t start CZBot cause I\'m hovering over my corpse!')
+        log.say('Can\'t start CZBot cause I\'m hovering over my corpse!')
         state.getRunconfig().terminate = true
         return
     end
@@ -388,8 +389,8 @@ function botlogic.StartUp(...)
     local args = { ... }
     local ok, err = botconfig.LoadConfig()
     if not ok then
-        printf('\ayCZBot:\ax Failed to load config \ar%s\ax: %s', botconfig.getPath(), err or 'unknown error')
-        printf('\ayCZBot:\ax Fix the file manually, or delete/rename it to start with a fresh default.')
+        log.say('Failed to load config \ar%s\ax: %s', botconfig.getPath(), err or 'unknown error')
+        log.say('Fix the file manually, or delete/rename it to start with a fresh default.')
         state.getRunconfig().terminate = true
         return
     end

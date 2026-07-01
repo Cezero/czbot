@@ -42,7 +42,7 @@ flowchart TB
 - **Separate MT (resolveMtFollowTarget):** Follow MA immediately (no assistpct). **`mtSticky`:** keep `engageTargetId` once set (within camp pin when leash on); otherwise switch with MA.
 - **Offtank (resolveOfftankTarget):** If MT and MA same target, pick Nth add; else MA target. Sticks on engaged add or MA off-target until it dies (no assistpct fallback to main mob).
 - **DPS (resolveMeleeAssistTarget):** Sync to MA at **assistpct**.
-- **engageTarget / disengageCombat:** unchanged — see prior doc.
+- **engageTarget / disengageCombat:** `disengageCombat` is a no-op when not melee-engaged (`state.isMeleeEngaged`); stick off, attack off, pet back, clear engage state when engaged and camp/target resolution says disengage.
 
 Non-MT/MA: minmana gate — only run AdvCombat if minmana is 0 or current mana above minmana.
 

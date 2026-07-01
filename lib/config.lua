@@ -101,6 +101,7 @@
 
 local mq = require('mq')
 local state = require('lib.state')
+local log = require('lib.log')
 local M = {}
 ---@type Config
 M.config = {}
@@ -555,7 +556,7 @@ function M.reloadCommonReadOnly()
         if bakCommon then
             setCommonCache(bakCommon)
             M._commonReloadPending = true
-            printf('\ayCZBot:\ax Using \agcz_common.lua.bak\ax in memory (main unreadable: %s)', err or 'unknown')
+            log.say('Using \agcz_common.lua.bak\ax in memory (main unreadable: %s)', err or 'unknown')
             return true
         end
     end
@@ -592,14 +593,14 @@ function M.initCommonAtStartup()
         if bakCommon then
             setCommonCache(bakCommon)
             M._commonReloadPending = true
-            printf('\ayCZBot:\ax Using \agcz_common.lua.bak\ax at startup (main unreadable: %s)', err or 'unknown')
+            log.say('Using \agcz_common.lua.bak\ax at startup (main unreadable: %s)', err or 'unknown')
             return
         end
     end
     M._common = nil
     M._commonLastGood = nil
     markCommonLoadFailure(err)
-    printf('\ayCZBot:\ax Failed to load \ar%s\ax at startup: %s', path, err or 'unknown')
+    log.say('Failed to load \ar%s\ax at startup: %s', path, err or 'unknown')
 end
 
 function M.saveCommon()
@@ -608,7 +609,7 @@ function M.saveCommon()
     if diskCommon then
         local merged, recovered = M.mergeCommonTables(diskCommon, M._common)
         if recovered > 0 then
-            printf('\ayCZBot:\ax cz_common merge recovered %d top-level key(s) from disk', recovered)
+            log.say('cz_common merge recovered %d top-level key(s) from disk', recovered)
         end
         M._common = merged
     end
@@ -636,7 +637,7 @@ function M.mutateCommon(mutator)
         else
             if not M.reloadCommonReadOnly() then
                 releaseCommonLock()
-                printf('\ayCZBot:\ax Cannot save \ar%s\ax — reload failed, will retry', commonFilePath())
+                log.say('Cannot save \ar%s\ax — reload failed, will retry', commonFilePath())
                 return false
             end
             mutator(M._common)
@@ -645,7 +646,7 @@ function M.mutateCommon(mutator)
             return true
         end
     end
-    printf('\ayCZBot:\ax Cannot save \ar%s\ax — failed to acquire lock after %d attempts', commonFilePath(), LOCK_MAX_ATTEMPTS)
+    log.say('Cannot save \ar%s\ax — failed to acquire lock after %d attempts', commonFilePath(), LOCK_MAX_ATTEMPTS)
     return false
 end
 
@@ -670,7 +671,7 @@ function M.commonLoadTick()
         local msg = string.format('cz_common.lua load failed (%s) — fix file and /czp off to resume',
             M._commonLoadLastError or 'unknown')
         state.getRunconfig().statusMessage = msg
-        printf('\ayCZBot:\ax \ar%s\ax', msg)
+        log.say('\ar%s\ax', msg)
     end
 end
 
@@ -1172,7 +1173,7 @@ function M.Load(path)
         if fileExists then
             return false, err
         end
-        printf('\ayCZBot:\ax No config at \ag%s\ax — creating default', path)
+        log.say('No config at \ag%s\ax — creating default', path)
         newconfig = {}
     elseif configData then
         local ok, result = pcall(configData)
@@ -1180,13 +1181,13 @@ function M.Load(path)
             if fileExists then
                 return false, result
             end
-            printf('\ayCZBot:\ax No config at \ag%s\ax — creating default', path)
+            log.say('No config at \ag%s\ax — creating default', path)
             newconfig = {}
         elseif type(result) ~= 'table' then
             if fileExists then
                 return false, 'config must return a table'
             end
-            printf('\ayCZBot:\ax No config at \ag%s\ax — creating default', path)
+            log.say('No config at \ag%s\ax — creating default', path)
             newconfig = {}
         else
             newconfig = result
@@ -1195,7 +1196,7 @@ function M.Load(path)
         if fileExists then
             return false, err or 'failed to load config'
         end
-        printf('\ayCZBot:\ax No config at \ag%s\ax — creating default', path)
+        log.say('No config at \ag%s\ax — creating default', path)
         newconfig = {}
     end
     for k in pairs(M.config) do

@@ -1,5 +1,6 @@
 -- Opt-in mainloop tick profiler: inter-tick gaps, processing time, per-hook breakdown.
 local mq = require('mq')
+local log = require('lib.log')
 
 local TICK_MS = 100
 local GAP_SLACK_MS = 50
@@ -87,14 +88,12 @@ local function _emitSummary(now)
         return
     end
     local avgProc = math.floor(_stats.sumProc / ticks + 0.5)
-    printf(
-        '\ayCZBot:\ax [tick] stats 10s: ticks=%d over=%d delayed=%d maxProc=%dms avgProc=%dms',
+    log.say('[tick] stats 10s: ticks=%d over=%d delayed=%d maxProc=%dms avgProc=%dms',
         ticks,
         _stats.overCount,
         _stats.delayedCount,
         _stats.maxProc,
-        avgProc
-    )
+        avgProc)
     _stats.tickCount = 0
     _stats.overCount = 0
     _stats.delayedCount = 0
@@ -147,23 +146,19 @@ function tickprof.endTick(handle, paused)
 
     if overBudget then
         local runState, busyCap = _runStateContext()
-        printf(
-            '\ayCZBot:\ax [tick] proc=%dms gap=%dms paused=%s runState=%s busyCap=%s%s',
+        log.say('[tick] proc=%dms gap=%dms paused=%s runState=%s busyCap=%s%s',
             procMs,
             gapMs,
             tostring(paused == true),
             runState,
             busyCap,
-            _formatHookBreakdown(handle.hooks)
-        )
+            _formatHookBreakdown(handle.hooks))
     elseif delayed and now >= _delayedLogNextTime then
         _delayedLogNextTime = now + LOG_THROTTLE_MS
-        printf(
-            '\ayCZBot:\ax [tick] delayed gap=%dms lastProc=%dms (expected ~%dms)',
+        log.say('[tick] delayed gap=%dms lastProc=%dms (expected ~%dms)',
             gapMs,
             _lastProcMs,
-            expectedGap
-        )
+            expectedGap)
     end
 
     if now >= _summaryNextTime then

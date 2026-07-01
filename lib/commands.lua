@@ -33,6 +33,7 @@ local command_dispatcher = require('lib.command_dispatcher')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
 local targeting = require('lib.targeting')
+local log = require('lib.log')
 local unpack = unpack
 
 local TOGGLELIST = {
@@ -96,13 +97,13 @@ local function cmd_toggle(args)
         botpull.syncPullMapFilter(true)
         botpull.ensurePullCampState(rc)
     end
-    printf('\ayCZBot:\axTurning %s to %s', args[1],
+    log.say('Turning %s to %s', args[1],
         isDopull and tostring(rc.dopull) or tostring(botconfig.config.settings[args[1]]))
 end
 
 local function cmd_togglesongs(args)
     if not bardtwist.IsBard() then
-        printf('\ayCZBot:\ax togglesongs is bard-only.')
+        log.say('togglesongs is bard-only.')
         return
     end
     local rc = state.getRunconfig()
@@ -121,13 +122,13 @@ local function cmd_togglesongs(args)
     elseif botconfig.config.settings.dobuff then
         bardtwist.EnsureDefaultTwistRunning()
     end
-    printf('\ayCZBot:\ax Songs %s', rc.dosongs ~= false and 'on' or 'off')
+    log.say('Songs %s', rc.dosongs ~= false and 'on' or 'off')
 end
 
 local function cmd_togglecampacleash(args)
     local rc = state.getRunconfig()
     if rc.campstatus ~= true or not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y then
-        printf('\ayCZBot:\ax togglecampacleash requires makecamp on.')
+        log.say('togglecampacleash requires makecamp on.')
         return
     end
     local function acleashOn()
@@ -143,13 +144,13 @@ local function cmd_togglecampacleash(args)
     -- Persist so the choice survives reloads (seeded back into rc at startup from settings.campAcleash).
     botconfig.config.settings.campAcleash = rc.doCampAcleash
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\ax Camp acleash %s', rc.doCampAcleash ~= false and 'on' or 'off')
+    log.say('Camp acleash %s', rc.doCampAcleash ~= false and 'on' or 'off')
 end
 
 local function cmd_addjunk(args, str)
     local zone = mq.TLO.Zone.ShortName()
     if not zone or zone == '' then
-        printf('\ayCZBot:\ax No zone; cannot add junk.')
+        log.say('No zone; cannot add junk.')
         return
     end
     local itemName
@@ -159,29 +160,28 @@ local function cmd_addjunk(args, str)
         itemName = mq.TLO.Cursor.Name()
     end
     if not itemName or itemName == '' then
-        printf(
-            '\ayCZBot:\ax No item name given and nothing on cursor. Use: /cz addjunk <itemname> or put item on cursor.')
+        log.say('No item name given and nothing on cursor. Use: /cz addjunk <itemname> or put item on cursor.')
         return
     end
     botconfig.addZoneJunk(zone, itemName)
-    printf('\ayCZBot:\ax Added "%s" to zone %s junk list.', itemName, zone)
+    log.say('Added "%s" to zone %s junk list.', itemName, zone)
 end
 
 local function cmd_foragezone(args, str)
     local zone = mq.TLO.Zone.ShortName()
     if not zone or zone == '' then
-        printf('\ayCZBot:\ax No zone; cannot set foragezone.')
+        log.say('No zone; cannot set foragezone.')
         return
     end
     local sub = args[2] and args[2]:lower()
     if sub == 'on' then
         botconfig.setForageDisabledInZone(zone, false)
-        printf('\ayCZBot:\ax Auto-forage enabled in this zone.')
+        log.say('Auto-forage enabled in this zone.')
     elseif sub == 'off' then
         botconfig.setForageDisabledInZone(zone, true)
-        printf('\ayCZBot:\ax Auto-forage disabled in this zone.')
+        log.say('Auto-forage disabled in this zone.')
     else
-        printf('\ayCZBot:\ax Usage: /cz foragezone on|off')
+        log.say('Usage: /cz foragezone on|off')
     end
 end
 
@@ -198,7 +198,7 @@ local function cmd_import(args)
                 for k, v in pairs(newconfig) do botconfig.config[k] = v end
             end
             botconfig.RunConfigLoaders()
-            printf('\ayCZBot:\axLoaded lua file %s', args[3])
+            log.say('Loaded lua file %s', args[3])
             if args[4] == 'save' then botconfig.Save(botconfig.getPath()) end
         end
     else
@@ -254,7 +254,7 @@ end
 local function cmd_groupcamp(args, str)
     botmove.MakeCamp('on')
     mq.cmd('/rc group /cz makecamp on')
-    printf('\ayCZBot:\ax Group camp set (me + MQRemote group).')
+    log.say('Group camp set (me + MQRemote group).')
 end
 
 local function cmd_follow(args, str)
@@ -271,7 +271,7 @@ end
 local function cmd_stop(args)
     follow.StopFollow('command')
     if state.getRunconfig().campstatus then botmove.MakeCamp('off') end
-    printf('\ayCZBot:\ax\arDisabling makecamp and follow')
+    log.say('\arDisabling makecamp and follow')
 end
 
 local function cmd_travel(args, str)
@@ -285,7 +285,7 @@ local function cmd_travel(args, str)
     if targetName then
         follow.StartFollow(targetName)
         rc.travelMode = true
-        printf('\ayCZBot:\ax\auTravel mode ON, following %s', targetName)
+        log.say('\auTravel mode ON, following %s', targetName)
     end
 end
 
@@ -296,15 +296,15 @@ local function cmd_followme(args)
 
     if sub == 'off' or sub == 'stop' then
         if third then
-            printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off|stop]')
+            log.say('Usage: /cz followme [group|raid|off|stop]')
             return
         end
         if not rc.followmeMode then
-            printf('\ayCZBot:\ax Followme not active')
+            log.say('Followme not active')
             return
         end
         mq.cmdf('/rc %s /cz stop', rc.followmeMode)
-        printf('\ayCZBot:\ax Followme OFF (%s)', rc.followmeMode)
+        log.say('Followme OFF (%s)', rc.followmeMode)
         rc.followmeMode = nil
         return
     end
@@ -312,20 +312,20 @@ local function cmd_followme(args)
     if sub == 'group' or sub == 'raid' then
         if third == 'stop' or third == 'off' then
             if args[4] then
-                printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off|stop]')
+                log.say('Usage: /cz followme [group|raid|off|stop]')
                 return
             end
             mq.cmdf('/rc %s /cz stop', sub)
-            printf('\ayCZBot:\ax Followme OFF (%s)', sub)
+            log.say('Followme OFF (%s)', sub)
             if rc.followmeMode == sub then rc.followmeMode = nil end
             return
         end
         if third then
-            printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off|stop]')
+            log.say('Usage: /cz followme [group|raid|off|stop]')
             return
         end
     else
-        printf('\ayCZBot:\ax Usage: /cz followme [group|raid|off|stop]')
+        log.say('Usage: /cz followme [group|raid|off|stop]')
         return
     end
 
@@ -342,7 +342,7 @@ local function cmd_followme(args)
 
     mq.cmdf('/rc %s /cz follow %s', sub, myname)
     rc.followmeMode = sub
-    printf('\ayCZBot:\ax Followme ON (%s -> %s)', sub, myname)
+    log.say('Followme ON (%s -> %s)', sub, myname)
 end
 
 local function tableContains(list, name)
@@ -369,7 +369,7 @@ local function cmd_exclude(args)
     if args[2] == 'remove' then
         local name = args[3] or mq.TLO.Target.CleanName()
         if name and removeFromList(rc.ExcludeList, name) then
-            printf('\ayCZBot:\axRemoved %s from exclude list', name)
+            log.say('Removed %s from exclude list', name)
             if APTarget and APTarget.ID() then APTarget = nil end
             mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
             mobfilter.process('exclude', 'save_replace')
@@ -378,7 +378,7 @@ local function cmd_exclude(args)
     end
     local excludemob = args[2] or mq.TLO.Target.CleanName()
     if excludemob and not tableContains(rc.ExcludeList, excludemob) then
-        printf('\ayCZBot:\axExcluding %s from CZBot', excludemob)
+        log.say('Excluding %s from CZBot', excludemob)
         table.insert(rc.ExcludeList, excludemob)
         if APTarget and APTarget.ID() then APTarget = nil end
         mq.cmd('/squelch /mqtarget clear ; /nav stop ; /stick off ; /attack off')
@@ -392,19 +392,19 @@ local function cmd_fte(args)
     if sub == 'clear' then
         if args[3] and string.lower(args[3]) == 'all' then
             spawnutils.clearFTE(rc, nil)
-            printf('\ayCZBot:\ax Cleared all FTE entries')
+            log.say('Cleared all FTE entries')
             return
         end
         local tid = mq.TLO.Target.ID()
         if tid and tid > 0 and mq.TLO.Target.Type() == 'NPC' then
             spawnutils.clearFTE(rc, tid)
-            printf('\ayCZBot:\ax Cleared FTE entry for %s (%s)', mq.TLO.Target.CleanName() or mq.TLO.Target.Name(), tid)
+            log.say('Cleared FTE entry for %s (%s)', mq.TLO.Target.CleanName() or mq.TLO.Target.Name(), tid)
         else
-            printf('\ayCZBot:\ax Usage: /cz fte clear [all] — or target an NPC')
+            log.say('Usage: /cz fte clear [all] — or target an NPC')
         end
         return
     end
-    printf('\ayCZBot:\ax Usage: /cz fte clear [all]')
+    log.say('Usage: /cz fte clear [all]')
 end
 
 local function cmd_xarc(args)
@@ -417,14 +417,14 @@ local function cmd_priority(args)
     if args[2] == 'remove' then
         local name = args[3] or mq.TLO.Target.CleanName()
         if name and removeFromList(rc.PriorityList, name) then
-            printf('\ayCZBot:\axRemoved %s from priority list', name)
+            log.say('Removed %s from priority list', name)
             mobfilter.process('priority', 'save_replace')
         end
         return
     end
     local prioritymob = args[2] or mq.TLO.Target.CleanName()
     if prioritymob and not tableContains(rc.PriorityList, prioritymob) then
-        printf('\ayCZBot:\axPrioritizing %s in CZBot', prioritymob)
+        log.say('Prioritizing %s in CZBot', prioritymob)
         table.insert(rc.PriorityList, prioritymob)
         mobfilter.process('priority', 'save')
     end
@@ -436,14 +436,14 @@ local function cmd_charm(args)
     if args[2] == 'remove' then
         local name = args[3] or mq.TLO.Target.CleanName()
         if name and removeFromList(rc.CharmList, name) then
-            printf('\ayCZBot:\axRemoved %s from charm list', name)
+            log.say('Removed %s from charm list', name)
             mobfilter.process('charm', 'save_replace')
         end
         return
     end
     local charmmob = args[2] or mq.TLO.Target.CleanName()
     if charmmob and not tableContains(rc.CharmList, charmmob) then
-        printf('\ayCZBot:\axAdding %s to charm list', charmmob)
+        log.say('Adding %s to charm list', charmmob)
         table.insert(rc.CharmList, charmmob)
         mobfilter.process('charm', 'save')
     end
@@ -455,7 +455,7 @@ local function cmd_reloadcommon(args)
     botconfig.refreshZoneStateFromCommon()
     local zone = mq.TLO.Zone.ShortName()
     zone = zone and zone ~= '' and zone or '<unknown>'
-    printf('\ayCZBot:\ax Reloaded \agcz_common.lua\ax and refreshed zone state (zone=%s).', zone)
+    log.say('Reloaded \agcz_common.lua\ax and refreshed zone state (zone=%s).', zone)
 end
 
 local function cmd_abort(args)
@@ -476,7 +476,7 @@ local function cmd_abort(args)
             botconfig.config.settings.dodebuff = false
             rc.debuffAbort = true
         end
-        printf('\ayCZBot:\ax\arAbort+ called!\ax - DoDebuffs & DoMelee FALSE and leashing to camp')
+        log.say('\arAbort+ called!\ax - DoDebuffs & DoMelee FALSE and leashing to camp')
     elseif args[2] == 'off' then
         if not botconfig.config.settings.domelee and rc.meleeAbort then
             botconfig.config.settings.domelee = true
@@ -492,10 +492,10 @@ end
 
 local function cmd_leash(args)
     if state.getRunconfig().campstatus then
-        printf('\ayCZBot:\ax\arLeash\ax called, returning to camp location')
+        log.say('\arLeash\ax called, returning to camp location')
         botmove.MakeCamp('return')
     else
-        printf('\ayCZBot:\axNo camp set, cannot leash')
+        log.say('No camp set, cannot leash')
     end
 end
 
@@ -516,17 +516,17 @@ local function cmd_attack(args)
         assistName = tankrole.GetAssistTargetName()
     end
     if not assistName then
-        printf('\ayCZBot:\ax\ar No Main Assist set, cannot engage')
+        log.say('\ar No Main Assist set, cannot engage')
         return
     end
     local _, assistid, KillTarget = spellutils.GetAssistInfo(true)
     if not assistid or assistid == 0 then
-        printf('\ayCZBot:\ax\ar Could not find %s\ax', assistName)
+        log.say('\ar Could not find %s\ax', assistName)
         return
     end
     if KillTarget == 0 then KillTarget = nil end
     if KillTarget and utils.isProtectedSpawn(mq.TLO.Spawn(KillTarget)) then
-        printf('\ayCZBot:\ax\ar Cannot engage protected NPC\ax')
+        log.say('\ar Cannot engage protected NPC\ax')
         return
     end
     local rc = state.getRunconfig()
@@ -537,16 +537,16 @@ local function cmd_attack(args)
     rc.engageTargetId = KillTarget
     rc.attackCommandEngage = (KillTarget ~= nil)
     if KillTarget then
-        local msg = string.format('\ayCZBot:\ax\arEngaging\ax \ay%s\ax now', mq.TLO.Spawn(KillTarget).CleanName())
+        local msg = log.fmt('\arEngaging\ax \ay%s\ax now', mq.TLO.Spawn(KillTarget).CleanName())
         if overrideName then
             msg = msg .. string.format(' \at(assist: %s)\ax', overrideName)
         end
         printf('%s', msg)
     else
         if overrideName then
-            printf('\ayCZBot:\ax\ar %s has no target, cannot engage\ax', overrideName)
+            log.say('\ar %s has no target, cannot engage\ax', overrideName)
         else
-            printf('\ayCZBot:\ax\ar Main Assist has no target, cannot engage')
+            log.say('\ar Main Assist has no target, cannot engage')
         end
     end
 end
@@ -559,7 +559,7 @@ local function cmd_tank(args)
     botconfig.config.settings.TankName = name
     require('lib.tankrole').invalidateAll()
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axSetting tank to %s (saved)', name)
+    log.say('Setting tank to %s (saved)', name)
     mq.TLO.Target.TargetOfTarget()
 end
 
@@ -573,7 +573,7 @@ local function cmd_assist(args)
     botconfig.config.settings.AssistName = name
     require('lib.tankrole').invalidateAll()
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axSetting assist to %s (saved)', name)
+    log.say('Setting assist to %s (saved)', name)
 end
 
 local function cmd_tankrole(_args)
@@ -582,36 +582,36 @@ end
 
 local function cmd_stickcmd(args, str)
     botconfig.config.melee.stickcmd = str:match('stickcmd' .. "%s+(.+)")
-    printf('\ayCZBot:\axSetting stickcmd to %s', botconfig.config.melee.stickcmd)
+    log.say('Setting stickcmd to %s', botconfig.config.melee.stickcmd)
 end
 
 local function cmd_acleash(args)
     botconfig.config.settings.acleash = tonumber(args[2])
     botconfig.recomputeDerivedSettings()
-    printf('\ayCZBot:\axSetting acleash to %s', botconfig.config.settings.acleash)
+    log.say('Setting acleash to %s', botconfig.config.settings.acleash)
 end
 
 local function cmd_evadepct(args)
     local val = tonumber(args[2])
     if val == nil or val < 0 or val > 100 then
-        printf('\ayCZBot:\ax Usage: /cz evadepct <0-100>')
+        log.say('Usage: /cz evadepct <0-100>')
         return
     end
     if not botconfig.config.melee then botconfig.config.melee = {} end
     botconfig.config.melee.evadePct = val
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axSetting evadePct to %d', val)
+    log.say('Setting evadePct to %d', val)
 end
 
 local function cmd_camprestdistance(args)
     botconfig.config.settings.campRestDistance = tonumber(args[2])
     botconfig.recomputeDerivedSettings()
-    printf('\ayCZBot:\axSetting campRestDistance to %s', botconfig.config.settings.campRestDistance)
+    log.say('Setting campRestDistance to %s', botconfig.config.settings.campRestDistance)
 end
 
 local function cmd_targetfilter(args)
     botconfig.config.settings.TargetFilter = tonumber(args[2])
-    printf('\ayCZBot:\axSetting TargetFilter to %d', botconfig.config.settings.TargetFilter)
+    log.say('Setting TargetFilter to %d', botconfig.config.settings.TargetFilter)
 end
 
 local function cmd_mobfilter(args)
@@ -629,7 +629,7 @@ local function cmd_macampanchor(args)
     else
         botconfig.config.settings.maCampAnchor = not (botconfig.config.settings.maCampAnchor ~= false)
     end
-    printf('\ayCZBot:\ax MA camp anchor %s', botconfig.config.settings.maCampAnchor ~= false and 'on' or 'off')
+    log.say('MA camp anchor %s', botconfig.config.settings.maCampAnchor ~= false and 'on' or 'off')
 end
 
 local function cmd_engagextargetonly(args)
@@ -642,15 +642,15 @@ local function cmd_engagextargetonly(args)
         botconfig.config.settings.engageXTargetOnly = not (botconfig.config.settings.engageXTargetOnly == true)
     end
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\ax Engage XTarget-only %s', botconfig.config.settings.engageXTargetOnly == true and 'on' or 'off')
+    log.say('Engage XTarget-only %s', botconfig.config.settings.engageXTargetOnly == true and 'on' or 'off')
 end
 
 local function cmd_role(args)
     local ok, key = botconfig.ApplyRole(args[2])
     if ok then
-        printf('\ayCZBot:\ax Applied role preset: \ag%s\ax', key)
+        log.say('Applied role preset: \ag%s\ax', key)
     else
-        printf('\ayCZBot:\ax Unknown role "%s" (use: tank, ma, dps, healer)', tostring(args[2]))
+        log.say('Unknown role "%s" (use: tank, ma, dps, healer)', tostring(args[2]))
     end
 end
 
@@ -664,7 +664,7 @@ local function cmd_mezdebug(args)
     else
         spellutils.SetMezDebug(not spellutils.IsMezDebug())
     end
-    printf('\ayCZBot:\ax Mez debug logging %s', spellutils.IsMezDebug() and 'on' or 'off')
+    log.say('Mez debug logging %s', spellutils.IsMezDebug() and 'on' or 'off')
 end
 
 local function cmd_buffdebug(args)
@@ -677,7 +677,7 @@ local function cmd_buffdebug(args)
     else
         spellutils.SetBuffDebug(not spellutils.IsBuffDebug())
     end
-    printf('\ayCZBot:\ax Buff debug logging %s', spellutils.IsBuffDebug() and 'on' or 'off')
+    log.say('Buff debug logging %s', spellutils.IsBuffDebug() and 'on' or 'off')
 end
 
 local function cmd_barddebug(args)
@@ -690,7 +690,7 @@ local function cmd_barddebug(args)
     else
         bardtwist.SetBardDebug(not bardtwist.IsBardDebug())
     end
-    printf('\ayCZBot:\ax Bard debug logging %s', bardtwist.IsBardDebug() and 'on' or 'off')
+    log.say('Bard debug logging %s', bardtwist.IsBardDebug() and 'on' or 'off')
 end
 
 local function cmd_tickdebug(args)
@@ -703,18 +703,18 @@ local function cmd_tickdebug(args)
     else
         tickprof.SetDebug(not tickprof.IsDebug())
     end
-    printf('\ayCZBot:\ax Tick debug logging %s', tickprof.IsDebug() and 'on' or 'off')
+    log.say('Tick debug logging %s', tickprof.IsDebug() and 'on' or 'off')
 end
 
 local function cmd_burn(args)
     local arg = args[2] and string.lower(args[2]) or ''
     if arg == 'off' or arg == 'stop' or arg == '0' then
         state.ClearBurn()
-        printf('\ayCZBot:\axBurn window stopped.')
+        log.say('Burn window stopped.')
         return
     end
     local sec = state.SetBurn(tonumber(args[2])) -- nil arg -> default window
-    printf('\ayCZBot:\axBurn window started (%ds). Debuffs with a Burn band phase will cast.', sec)
+    log.say('Burn window started (%ds). Debuffs with a Burn band phase will cast.', sec)
 end
 
 local function cmd_aetank(args)
@@ -727,7 +727,7 @@ local function cmd_aetank(args)
         botconfig.config.settings.tankAllMobs = not (botconfig.config.settings.tankAllMobs == true)
     end
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axAE-tank %s', (botconfig.config.settings.tankAllMobs == true) and 'on' or 'off')
+    log.say('AE-tank %s', (botconfig.config.settings.tankAllMobs == true) and 'on' or 'off')
 end
 
 local function cmd_premem(args)
@@ -740,7 +740,7 @@ local function cmd_premem(args)
         botconfig.config.settings.premem = not (botconfig.config.settings.premem ~= false)
     end
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axPre-memorize gembar %s', (botconfig.config.settings.premem ~= false) and 'on' or 'off')
+    log.say('Pre-memorize gembar %s', (botconfig.config.settings.premem ~= false) and 'on' or 'off')
 end
 
 local function cmd_prememdebug(args)
@@ -753,7 +753,7 @@ local function cmd_prememdebug(args)
     else
         premem.SetDebug(not premem.IsDebug())
     end
-    printf('\ayCZBot:\axPre-mem debug logging %s', premem.IsDebug() and 'on' or 'off')
+    log.say('Pre-mem debug logging %s', premem.IsDebug() and 'on' or 'off')
 end
 
 local function cmd_scribe(args)
@@ -770,7 +770,7 @@ local function cmd_autoscribe(args)
         botconfig.config.settings.autoScribe = not (botconfig.config.settings.autoScribe ~= false)
     end
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axAuto-scribe on level-up %s', (botconfig.config.settings.autoScribe ~= false) and 'on' or 'off')
+    log.say('Auto-scribe on level-up %s', (botconfig.config.settings.autoScribe ~= false) and 'on' or 'off')
 end
 
 local function cmd_upgrades(args)
@@ -778,10 +778,10 @@ local function cmd_upgrades(args)
     su.scan()
     local pending = su.getPending()
     if #pending == 0 then
-        printf('\ayCZBot:\axNo spell upgrades available.')
+        log.say('No spell upgrades available.')
         return
     end
-    printf('\ayCZBot:\ax%d spell upgrade(s) available:', #pending)
+    log.say('%d spell upgrade(s) available:', #pending)
     for i, u in ipairs(pending) do
         printf('  [%d] %s: %s (L%d) -> %s (L%d)', i, u.section, u.old, u.oldLevel, u.new, u.newLevel)
     end
@@ -792,15 +792,15 @@ local function cmd_applyupgrade(args)
     local su = require('lib.spellupgrade')
     local which = args[2] and string.lower(args[2]) or ''
     if which == '' then
-        printf('\ayCZBot:\axUsage: /cz applyupgrade <n|all>  (see /cz upgrades)')
+        log.say('Usage: /cz applyupgrade <n|all>  (see /cz upgrades)')
         return
     end
     if which == 'all' then
-        printf('\ayCZBot:\axApplied %d upgrade(s).', su.applyAll())
+        log.say('Applied %d upgrade(s).', su.applyAll())
     else
         local n = tonumber(which)
         if not n or not su.apply(n) then
-            printf('\ayCZBot:\axNo upgrade #%s (see /cz upgrades).', tostring(args[2]))
+            log.say('No upgrade #%s (see /cz upgrades).', tostring(args[2]))
         end
     end
 end
@@ -811,7 +811,7 @@ local function cmd_upgradedebug(args)
     if mode == 'on' or mode == 'true' or mode == '1' then su.SetDebug(true)
     elseif mode == 'off' or mode == 'false' or mode == '0' then su.SetDebug(false)
     else su.SetDebug(not su.IsDebug()) end
-    printf('\ayCZBot:\axUpgrade debug logging %s', su.IsDebug() and 'on' or 'off')
+    log.say('Upgrade debug logging %s', su.IsDebug() and 'on' or 'off')
 end
 
 local function cmd_aetankmezzer(args)
@@ -824,7 +824,7 @@ local function cmd_aetankmezzer(args)
         botconfig.config.settings.aeTankIgnoreMezzer = not (botconfig.config.settings.aeTankIgnoreMezzer == true)
     end
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axAE-tank ignore-mezzer %s', (botconfig.config.settings.aeTankIgnoreMezzer == true) and 'on (AE-tank runs with ENC/BRD in group)' or 'off (auto-suppress on ENC/BRD)')
+    log.say('AE-tank ignore-mezzer %s', (botconfig.config.settings.aeTankIgnoreMezzer == true) and 'on (AE-tank runs with ENC/BRD in group)' or 'off (auto-suppress on ENC/BRD)')
 end
 
 local function cmd_aetankdebug(args)
@@ -833,7 +833,7 @@ local function cmd_aetankdebug(args)
     if mode == 'on' or mode == 'true' or mode == '1' then botmelee.SetAeTankDebug(true)
     elseif mode == 'off' or mode == 'false' or mode == '0' then botmelee.SetAeTankDebug(false)
     else botmelee.SetAeTankDebug(not botmelee.IsAeTankDebug()) end
-    printf('\ayCZBot:\axAE-tank debug logging %s', botmelee.IsAeTankDebug() and 'on' or 'off')
+    log.say('AE-tank debug logging %s', botmelee.IsAeTankDebug() and 'on' or 'off')
 end
 
 local function cmd_charmpetsetup(args)
@@ -846,18 +846,18 @@ local function cmd_charmpetsetup(args)
         botconfig.config.settings.charmPetAutoSetup = not (botconfig.config.settings.charmPetAutoSetup ~= false)
     end
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axCharm pet auto-setup %s', (botconfig.config.settings.charmPetAutoSetup ~= false) and 'on' or 'off')
+    log.say('Charm pet auto-setup %s', (botconfig.config.settings.charmPetAutoSetup ~= false) and 'on' or 'off')
 end
 
 local function cmd_maanchorleash(args)
     local val = tonumber(args[2])
     if not val or val < 1 then
-        printf('\ayCZBot:\ax Usage: /cz maanchorleash <number>')
+        log.say('Usage: /cz maanchorleash <number>')
         return
     end
     botconfig.config.settings.maAnchorLeash = val
     require('lib.tankrole').bumpLeashGen()
-    printf('\ayCZBot:\axSetting maAnchorLeash to %s', val)
+    log.say('Setting maAnchorLeash to %s', val)
 end
 
 local function cmd_offtank(args)
@@ -872,12 +872,11 @@ local function cmd_offtank(args)
     elseif string.lower(args[2]) == 'false' or string.lower(args[2]) == 'off' then
         botconfig.config.melee.offtank = false
     else
-        printf(
-            '\ayCZBot:\ax%s is an invalid value for offtank, please use true, on, false, off, or leave it blank to toggle',
+        log.say('%s is an invalid value for offtank, please use true, on, false, off, or leave it blank to toggle',
             args[2])
         return false
     end
-    printf('\ayCZBot:\axSetting offtank to %s', botconfig.config.melee.offtank)
+    log.say('Setting offtank to %s', botconfig.config.melee.offtank)
 end
 
 -- Cast by alias (section: heal, buff, debuff, cure)
@@ -906,18 +905,18 @@ local function cmd_cast(args)
             for value in tostring(entry.alias or ''):gmatch("[^|]+") do
                 if value == args[2] and (args[3] ~= 'on' and args[3] ~= 'off') then
                     local tgtID, tgtName = resolveCastTarget()
-                    printf('\ayCZBot:\ax\agCasting\ax %s on %s', entry.spell, tgtName)
+                    log.say('\agCasting\ax %s on %s', entry.spell, tgtName)
                     if cfgkey == 'debuff' and mq.TLO.Me.CastTimeLeft() > 0 then
                         spellutils.InterruptCheck()
                         return
                     end
                     if not spellutils.CastSpell(i, tgtID, 'castcommand', cfgkey) then
-                        printf('\ayCZBot:\ax\arCast command spell %s not ready!', entry.spell)
+                        log.say('\arCast command spell %s not ready!', entry.spell)
                     end
                 elseif args[3] and value == args[2] then
                     if args[3] == 'on' then
                         entry.enabled = true
-                        printf('\ayCZBot:\axEnabling \ag%s\ax', entry.spell)
+                        log.say('Enabling \ag%s\ax', entry.spell)
                         if not botconfig.config.settings[settingkey] then
                             loadfn()
                             botconfig.config.settings[settingkey] = true
@@ -925,7 +924,7 @@ local function cmd_cast(args)
                     end
                     if args[3] == 'off' then
                         entry.enabled = false
-                        printf('\ayCZBot:\axDisabling \ag%s\ax', entry.spell)
+                        log.say('Disabling \ag%s\ax', entry.spell)
                     end
                 end
             end
@@ -954,7 +953,7 @@ local function cmd_setvar(args)
             if type(v) == "table" and k == sub then
                 for k2, v2 in pairs(tempconfig[k]) do
                     if key == k2 then
-                        printf('\ayCZBot:\axSetting \ag%s to \ay%s\ax', args[2], value)
+                        log.say('Setting \ag%s to \ay%s\ax', args[2], value)
                         valfound = true
                         if tonumber(value) then
                             tempconfig[k][k2] = tonumber(value)
@@ -979,7 +978,7 @@ local function cmd_setvar(args)
             if type(v) == "table" then
                 for k2, v2 in pairs(tempconfig[k]) do
                     if args[2] == k2 then
-                        printf('\ayCZBot:\axSetting \ag%s to \ay%s\ax', args[2], value)
+                        log.say('Setting \ag%s to \ay%s\ax', args[2], value)
                         valfound = true
                         if tonumber(value) then
                             tempconfig[k][k2] = tonumber(value)
@@ -1010,7 +1009,7 @@ local function cmd_setvar(args)
         botconfig.config.settings.docure = false
         state.getRunconfig().dopull = false
     end
-    if not valfound then printf('\ayCZBot:\ax\ar%s not found', args[2]) end
+    if not valfound then log.say('\ar%s not found', args[2]) end
 end
 
 local function copyEntry(src)
@@ -1031,12 +1030,12 @@ local function cmd_addspell(args)
         end
     end
     if not subfound then
-        printf('\ayCZBot:\ax%s is not a valid CZBot sub please use heal, buff, debuff, or cure', sub)
+        log.say('%s is not a valid CZBot sub please use heal, buff, debuff, or cure', sub)
         return false
     end
     local currentCount = botconfig.getSpellCount(sub)
     if not key or key < 1 or key > currentCount + 1 then
-        printf('\ayCZBot:\ax%s is not a valid position for %s (use 1 to %s)', args[3], sub, currentCount + 1)
+        log.say('%s is not a valid position for %s (use 1 to %s)', args[3], sub, currentCount + 1)
         return false
     end
     local temploadconfig = loadfile(botconfig.getPath())
@@ -1052,7 +1051,7 @@ local function cmd_addspell(args)
     if sub == 'buff' then botbuff.LoadBuffConfig() end
     if sub == 'debuff' then botdebuff.LoadDebuffConfig() end
     if sub == 'cure' then botcure.LoadCureConfig() end
-    printf('\ayCZBot:\axadded new %s entry at position %s', sub, key)
+    log.say('added new %s entry at position %s', sub, key)
 end
 
 
@@ -1069,9 +1068,9 @@ local function cmd_echo(args)
         key = afterDot
     end
     if sub and key and botconfig.config[sub] and botconfig.config[sub][key] ~= nil then
-        printf('\ayCZBot:\ax\ag%s\ax is set as \ay%s\ay', args[2], botconfig.config[sub][key])
+        log.say('\ag%s\ax is set as \ay%s\ay', args[2], botconfig.config[sub][key])
     else
-        printf('\ayCZBot:\ax\ar%s\ar is not a valid CZBot value', args[2])
+        log.say('\ar%s\ar is not a valid CZBot value', args[2])
     end
 end
 
@@ -1099,11 +1098,11 @@ local function cmd_syt(args, str)
         message = str:match('syt%s+%S+%s+(.+)') or str:match('saytarget%s+%S+%s+(.+)')
     end
     if not id or id == 0 or not message or message == '' then
-        printf('\ayCZBot:\ax usage: /cz syt <spawnId> <message>')
+        log.say('usage: /cz syt <spawnId> <message>')
         return
     end
     if not targeting.TargetAndWait(id, 500) then
-        printf('\ayCZBot:\ax failed to target spawn id %s', id)
+        log.say('failed to target spawn id %s', id)
         return
     end
     mq.delay(math.random(10, 50) * 500)
@@ -1131,16 +1130,16 @@ local function cmd_saytarget(args, str)
         if inner then message = inner end
     end
     if not message or message == '' then
-        printf('\ayCZBot:\ax usage: /cz saytarget [group|raid] <message>')
+        log.say('usage: /cz saytarget [group|raid] <message>')
         return
     end
     local targetId = mq.TLO.Target.ID()
     if not targetId or targetId == 0 then
-        printf('\ayCZBot:\ax saytarget requires a target')
+        log.say('saytarget requires a target')
         return
     end
     mq.cmdf('/rc %s /cz syt %s %s', scope, targetId, message)
-    printf('\ayCZBot:\ax saytarget broadcast (%s)', scope)
+    log.say('saytarget broadcast (%s)', scope)
     cmd_syt({ 'syt', tostring(targetId), message }, '')
 end
 
@@ -1149,7 +1148,7 @@ local function cmd_chchain(args)
     local rc = state.getRunconfig()
     if args[2] == 'stop' and rc.doChchain then
         rc.doChchain = false
-        printf('\ayCZBot:\ax\arDisabling\ax CHChain')
+        log.say('\arDisabling\ax CHChain')
         mq.cmd('/rs CHCHain OFF')
         if state.getRunconfig().PreCH['dodebuff'] then
             botconfig.config.settings.dodebuff = state.getRunconfig().PreCH
@@ -1190,7 +1189,7 @@ local function cmd_chchain(args)
         end
         if not aminlist then return false end
         if not mq.TLO.Me.Book(spell)() then
-            printf('\ayCZBot:\axCZBot CHChain: Spell %s not found in your book, failed to start CHChain', spell)
+            log.say('CZBot CHChain: Spell %s not found in your book, failed to start CHChain', spell)
             return false
         end
         M.chchainSetupContinuation({ args[3], args[4], args[5] })
@@ -1219,7 +1218,7 @@ local function cmd_draghack(args)
     elseif not args[2] then
         if state.getRunconfig().DragHack then state.getRunconfig().DragHack = false else state.getRunconfig().DragHack = true end
     end
-    printf('\ayCZBot:\axSet DragHack to %s', state.getRunconfig().DragHack)
+    log.say('Set DragHack to %s', state.getRunconfig().DragHack)
 end
 
 local function cmd_linkitem(args)
@@ -1242,9 +1241,9 @@ local function cmd_linkaugs(args)
             end
         end
         if augstring then
-            printf('\ayCZBot:\ax\ag%s\ax in slot \ay%s\ax augs: %s', itemlink, args[2], augstring)
+            log.say('\ag%s\ax in slot \ay%s\ax augs: %s', itemlink, args[2], augstring)
         else
-            printf('\ayCZBot:\ax\arI have no augment in %s', itemlink)
+            log.say('\arI have no augment in %s', itemlink)
         end
     end
 end
@@ -1287,14 +1286,13 @@ local function cmd_togglenuke(args)
     local raw = args[2] and tostring(args[2]) or ''
     local flavorArg = string.lower(raw:match('^%s*(.-)%s*$') or '')
     if flavorArg == '' then
-        printf(
-            '\ayCZBot:\ax Usage: /cz togglenuke <flavor> [on|off]. Flavors: fire, ice, magic, poison, disease (and cold=ice).')
+        log.say('Usage: /cz togglenuke <flavor> [on|off]. Flavors: fire, ice, magic, poison, disease (and cold=ice).')
         return
     end
     local flavor = (flavorArg == 'cold') and 'ice' or flavorArg
     local applicable = getApplicableNukeFlavors()
     if not applicable[flavor] then
-        printf('\ayCZBot:\ax No nuke with flavor \ar%s\ax in debuff list. Use a flavor from your configured nukes.',
+        log.say('No nuke with flavor \ar%s\ax in debuff list. Use a flavor from your configured nukes.',
             flavor)
         return
     end
@@ -1313,17 +1311,17 @@ local function cmd_togglenuke(args)
     end
     if force == 'off' then
         setOff()
-        printf('\ayCZBot:\ax Nuke flavor \ar%s\ax turned off.', flavor)
+        log.say('Nuke flavor \ar%s\ax turned off.', flavor)
     elseif force == 'on' then
         setOn()
-        printf('\ayCZBot:\ax Nuke flavor \ag%s\ax turned on.', flavor)
+        log.say('Nuke flavor \ag%s\ax turned on.', flavor)
     else
         local allowed = (not rc.nukeFlavorsAutoDisabled or not rc.nukeFlavorsAutoDisabled[flavor])
             and (not rc.nukeFlavorsAllowed or rc.nukeFlavorsAllowed[flavor])
         if allowed then
-            setOff(); printf('\ayCZBot:\ax Nuke flavor \ar%s\ax turned off.', flavor)
+            setOff(); log.say('Nuke flavor \ar%s\ax turned off.', flavor)
         else
-            setOn(); printf('\ayCZBot:\ax Nuke flavor \ag%s\ax turned on.', flavor)
+            setOn(); log.say('Nuke flavor \ag%s\ax turned on.', flavor)
         end
     end
     rc.nukeResistDisabledRecent = nil
@@ -1334,7 +1332,7 @@ local function cmd_raid(args)
     local sub = args[2] and string.lower(args[2])
     if sub == 'save' then
         if not args[3] or args[3] == '' then
-            printf('\ayCZBot:\ax Noname given, cant save raid (/cz raid save raidname)')
+            log.say('Noname given, cant save raid (/cz raid save raidname)')
             return
         end
         groupmanager.SaveRaid(args[3])

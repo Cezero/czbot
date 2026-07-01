@@ -11,6 +11,7 @@ local botpull = require('botpull')
 local spawnutils = require('lib.spawnutils')
 local combat = require('lib.combat')
 local castinterrupt = require('lib.castinterrupt')
+local log = require('lib.log')
 
 local botevents = {}
 
@@ -68,7 +69,7 @@ end
 function botevents.Event_Slain()
     botevents.ResetCombatSession('death')
     local respawntimeleft = (state.getRunconfig().HoverEchoTimer - mq.gettime()) / 1000
-    printf('\ayCZBot:\axI died and am hovering, %s seconds until I release', respawntimeleft)
+    log.say('I died and am hovering, %s seconds until I release', respawntimeleft)
     mq.cmd('/multiline ; /consent group ; /consent raid ; /consent guild')
     state.getRunconfig().HoverTimer = mq.gettime() + 30000
 end
@@ -126,7 +127,7 @@ function botevents.Event_LinkItem(line, Slot, HPFilter)
         if HPFilter < mq.TLO.InvSlot(Slot).Item.HP() then return false end
     end
     if not mq.TLO.Me.Inventory(Slot).ID() then
-        printf('\ayCZBot:\ax\arMy \at%s slot \aris empty!', Slot)
+        log.say('\arMy \at%s slot \aris empty!', Slot)
         mq.cmdf('/rs My %s slot is empty!', Slot)
         return
     end
@@ -134,8 +135,8 @@ function botevents.Event_LinkItem(line, Slot, HPFilter)
     local itemac = mq.TLO.InvSlot(Slot).Item.AC()
     local itemhp = mq.TLO.InvSlot(Slot).Item.HP()
     local itemmana = mq.TLO.InvSlot(Slot).Item.Mana()
-    printf('\ayCZBot:\ax%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
-    mq.cmdf('/rs \ayCZBot:\ax%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
+    log.say('%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana)
+    mq.cmd('/rs ' .. log.fmt('%s AC:%s HP:%s Mana:%s', itemlink, itemac, itemhp, itemmana))
 end
 
 function botevents.Event_TooSteep()
@@ -150,7 +151,7 @@ function botevents.Event_FTELocked()
         displayName = sp.CleanName() or sp.Name() or tostring(spawnId)
     end
     if displayName and displayName ~= '' then
-        printf('\ayCZBot:\ax\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', displayName)
+        log.say('\arUh Oh, \ag%s\ax is \arFTE locked\ax to someone else!', displayName)
     end
     if not spawnId then return end
     local isProbe = rc.fteRecheckProbeId and rc.fteRecheckProbeId == spawnId
@@ -185,7 +186,7 @@ end
 
 function botevents.Event_GMDetected()
     if state.getRunconfig().gmtimer < mq.gettime() then
-        printf('\ayCZBot:\axGM Detected! Disabling DoMelee, MakeCamp, and Stick!')
+        log.say('GM Detected! Disabling DoMelee, MakeCamp, and Stick!')
         botconfig.config.settings.domelee = false
         mq.cmd('/stick off')
         state.getRunconfig().makecamp = { x = nil, y = nil, z = nil }
@@ -210,11 +211,11 @@ function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
     local eqMsg = (line and line:match('^%s*(.-)%s*$')) or '?'
     if rc.mobprobtimer > mq.gettime() then
-        printf('\ayCZBot:\ax [MobProb] throttled: %s', eqMsg)
+        log.say('[MobProb] throttled: %s', eqMsg)
         return true
     end
     if rc.dopull and state.getRunState() == state.STATES.pulling and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
-        printf('\ayCZBot:\ax [MobProb] ignored (pull returning): %s', eqMsg)
+        log.say('[MobProb] ignored (pull returning): %s', eqMsg)
         rc.mobprobtimer = mq.gettime() + 3000
         return true
     end
@@ -222,13 +223,13 @@ function botevents.Event_MobProb(line, arg1, arg2)
         local pathLen = mq.TLO.Navigation.PathLength('id ' .. rc.engageTargetId)()
         local withinAcleash = pathLen and pathLen <= botconfig.config.settings.acleash
         if withinAcleash or not spawnutils.isCampAcleashEnforced(rc) then
-            printf('\ayCZBot:\ax [MobProb] /nav id %s dist=0 — %s', tostring(rc.engageTargetId), eqMsg)
+            log.say('[MobProb] /nav id %s dist=0 — %s', tostring(rc.engageTargetId), eqMsg)
             mq.cmdf('/nav id %s dist=0 log=off', rc.engageTargetId)
         else
-            printf('\ayCZBot:\ax [MobProb] skipped nav (outside acleash): %s', eqMsg)
+            log.say('[MobProb] skipped nav (outside acleash): %s', eqMsg)
         end
     else
-        printf('\ayCZBot:\ax [MobProb] no engage target: %s', eqMsg)
+        log.say('[MobProb] no engage target: %s', eqMsg)
     end
     rc.mobprobtimer = mq.gettime() + 3000
 end

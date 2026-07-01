@@ -3,6 +3,7 @@
 
 local mq = require('mq')
 local state = require('lib.state')
+local log = require('lib.log')
 
 local combat = {}
 
@@ -26,8 +27,7 @@ function combat.ResetCombatState(opts)
             local engageId = rc and rc.engageTargetId or nil
             local targetId = mq.TLO.Target.ID() or 0
             local petTargetId = mq.TLO.Me.Pet.Target.ID() or 0
-            printf(
-                '\ayCZBot:\axDebug petResetCombatState backoff follower\ax runState=%s engageTargetId=%s targetId=%s petTargetId=%s petAgg=%s meCombat=%s opts={clearPet=%s,clearTarget=%s}',
+            log.say('Debug petResetCombatState backoff follower runState=%s engageTargetId=%s targetId=%s petTargetId=%s petAgg=%s meCombat=%s opts={clearPet=%s,clearTarget=%s}',
                 state.getRunStateName(),
                 tostring(engageId),
                 tostring(targetId),
@@ -35,8 +35,7 @@ function combat.ResetCombatState(opts)
                 tostring(mq.TLO.Me.Pet.Aggressive()),
                 tostring(mq.TLO.Me.Combat()),
                 tostring(clearPet),
-                tostring(clearTarget)
-            )
+                tostring(clearTarget))
         end
         mq.cmd('/squelch /pet back off')
         mq.cmd('/squelch /pet follow')

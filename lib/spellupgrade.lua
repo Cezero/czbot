@@ -10,6 +10,7 @@
 
 local mq = require('mq')
 local botconfig = require('lib.config')
+local log = require('lib.log')
 
 local spellupgrade = {}
 
@@ -110,7 +111,7 @@ function spellupgrade.apply(n)
     entry._resolved_level = nil
     entry._resolved_alias = nil
     botconfig.ApplyAndPersist()
-    printf('\ayCZBot:\axUpgraded %s spell %d: %s -> %s', u.section, u.index, u.old, u.new)
+    log.say('Upgraded %s spell %d: %s -> %s', u.section, u.index, u.old, u.new)
     local okP, premem = pcall(require, 'lib.premem')
     if okP and premem and premem.requestCheck then premem.requestCheck() end
     -- Re-scan so the list reflects the change (and catches any chained upgrades).
@@ -144,7 +145,7 @@ function spellupgrade.tick()
     local before = #_pending
     spellupgrade.scan()
     if #_pending > before and #_pending > 0 then
-        printf('\ayCZBot:\ax%d spell upgrade(s) available -- Status tab or /cz upgrades', #_pending)
+        log.say('%d spell upgrade(s) available -- Status tab or /cz upgrades', #_pending)
     end
 end
 
