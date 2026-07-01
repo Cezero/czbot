@@ -470,6 +470,26 @@ function M.isMeleeEngaged(rc)
     return false
 end
 
+---True when anti-AFK must not fire (combat, busy, recent MobProb, movement, casting).
+---@param rc RunConfig|nil Optional; defaults to getRunconfig().
+---@return boolean
+function M.isAntiAfkBlocked(rc)
+    rc = rc or M.getRunconfig()
+    local mq = require('mq')
+    if M.isDeadOrHover() then return true end
+    if M.isBusy() then return true end
+    if M.getRunState() == M.STATES.melee then return true end
+    if M.isCombatContextForBuff(rc) then return true end
+    if M.isMeleeEngaged(rc) then return true end
+    if rc.mobprobtimer and rc.mobprobtimer > mq.gettime() then return true end
+    if mq.TLO.Me.Moving() then return true end
+    if mq.TLO.Navigation.Active() then return true end
+    if mq.TLO.Stick.Active() then return true end
+    if mq.TLO.Me.Casting() then return true end
+    if (mq.TLO.Me.CastTimeLeft() or 0) > 0 then return true end
+    return false
+end
+
 local DEFAULT_BURN_SEC = 30
 
 ---Start a burn window of `seconds` (default 30). <= 0 stops it. Returns the seconds applied.

@@ -28,8 +28,7 @@ local _prev = {
     runState = nil,
     curSpellKey = nil,
     sitting = nil,
-    combat = nil,
-    engageTargetId = nil,
+    mobCount = nil,
 }
 
 local function randomIdleMs()
@@ -58,34 +57,22 @@ local function takeSnapshot()
         runState = state.getRunState(),
         curSpellKey = curSpellKey(rc),
         sitting = me.Sitting() == true,
-        combat = me.Combat() == true,
-        engageTargetId = rc.engageTargetId,
+        mobCount = state.getMobCount(rc),
     }
 end
 
 local function isActive(snap)
-    if state.isDeadOrHover() then return true end
-
-    local me = mq.TLO.Me
-    if me.Moving() then return true end
-    if mq.TLO.Navigation.Active() then return true end
-    if mq.TLO.Stick.Active() then return true end
-    if me.Casting() then return true end
-    if (me.CastTimeLeft() or 0) > 0 then return true end
-    if spellutils.IsMemorizing() then return true end
-    if me.Combat() then return true end
-    if me.AutoFire() then return true end
-
     local rc = state.getRunconfig()
-    if rc.engageTargetId then return true end
+    if state.isAntiAfkBlocked(rc) then return true end
+    if spellutils.IsMemorizing() then return true end
+    if mq.TLO.Me.AutoFire() then return true end
 
     if _prev.x ~= nil then
         if posDelta(_prev.x, _prev.y, _prev.z, snap.x, snap.y, snap.z) > POSITION_EPS then return true end
         if snap.runState ~= _prev.runState then return true end
         if snap.curSpellKey ~= _prev.curSpellKey then return true end
         if snap.sitting ~= _prev.sitting then return true end
-        if snap.combat ~= _prev.combat then return true end
-        if snap.engageTargetId ~= _prev.engageTargetId then return true end
+        if snap.mobCount ~= _prev.mobCount then return true end
     end
 
     return false
@@ -98,8 +85,7 @@ local function updatePrev(snap)
     _prev.runState = snap.runState
     _prev.curSpellKey = snap.curSpellKey
     _prev.sitting = snap.sitting
-    _prev.combat = snap.combat
-    _prev.engageTargetId = snap.engageTargetId
+    _prev.mobCount = snap.mobCount
 end
 
 local function runNudgeSequence(outDir, returnDir)
@@ -125,10 +111,14 @@ local function startNudge()
 end
 
 local function fireAction()
+    if state.isAntiAfkBlocked() then
+        log.say('anti-AFK: skipped (combat/busy)')
+        return false
+    end
     if mq.TLO.Me.Sitting() then
         mq.cmd('/stand')
         log.say('anti-AFK: stand')
-        return
+        return true
     end
     if math.random(1, 2) == 1 then
         mq.cmd('/squelch /sit on')
@@ -136,6 +126,7 @@ local function fireAction()
     else
         startNudge()
     end
+    return true
 end
 
 function M.tick()
