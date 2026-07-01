@@ -124,19 +124,15 @@ local function startNudge()
     runNudgeSequence(outDir, returnDir)
 end
 
-local function sitStandToggle()
+local function fireAction()
     if mq.TLO.Me.Sitting() then
         mq.cmd('/stand')
         log.say('anti-AFK: stand')
-    else
+        return
+    end
+    if math.random(1, 2) == 1 then
         mq.cmd('/squelch /sit on')
         log.say('anti-AFK: sit')
-    end
-end
-
-local function fireAction()
-    if math.random(1, 2) == 1 then
-        sitStandToggle()
     else
         startNudge()
     end
