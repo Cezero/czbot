@@ -10,8 +10,9 @@ local M = {}
 local POSITION_EPS = 0.5
 local IDLE_MIN_MS = 60000
 local IDLE_MAX_MS = 90000
+local NUDGE_HOLD_MS = 25
 
--- Each leg of a nudge lasts one main-loop tick (~100ms): hold out, then hold return.
+-- Brief out-and-back pairs using strafe keys (not turn).
 local NUDGE_PAIRS = {
     { 'forward', 'back' },
     { 'back', 'forward' },
@@ -20,7 +21,6 @@ local NUDGE_PAIRS = {
 }
 
 local _idleUntil = 0
-local _wiggle = nil -- { outDir, returnDir, step=1|2 }
 local _prev = {
     x = nil,
     y = nil,
@@ -64,7 +64,6 @@ local function takeSnapshot()
 end
 
 local function isActive(snap)
-    if _wiggle then return true end
     if state.isDeadOrHover() then return true end
 
     local me = mq.TLO.Me
@@ -103,22 +102,18 @@ local function updatePrev(snap)
     _prev.engageTargetId = snap.engageTargetId
 end
 
-local function tickWiggle()
-    if not _wiggle then return end
+local function runNudgeSequence(outDir, returnDir)
+    mq.cmdf('/squelch /keypress %s hold', outDir)
+    log.say('anti-AFK: nudge out hold %s (return %s)', outDir, returnDir)
 
-    if _wiggle.step == 1 then
-        mq.cmdf('/squelch /keypress %s', _wiggle.outDir)
-        mq.cmdf('/squelch /keypress %s hold', _wiggle.returnDir)
-        log.say('anti-AFK: nudge return hold %s', _wiggle.returnDir)
-        _wiggle.step = 2
-        return
-    end
+    mq.delay(NUDGE_HOLD_MS)
+    mq.cmdf('/squelch /keypress %s', outDir)
+    mq.cmdf('/squelch /keypress %s hold', returnDir)
+    log.say('anti-AFK: nudge return hold %s', returnDir)
 
-    if _wiggle.step == 2 then
-        mq.cmdf('/squelch /keypress %s', _wiggle.returnDir)
-        log.say('anti-AFK: nudge complete (%s then %s)', _wiggle.outDir, _wiggle.returnDir)
-        _wiggle = nil
-    end
+    mq.delay(NUDGE_HOLD_MS)
+    mq.cmdf('/squelch /keypress %s', returnDir)
+    log.say('anti-AFK: nudge complete (%s then %s)', outDir, returnDir)
 end
 
 local function startNudge()
@@ -126,9 +121,7 @@ local function startNudge()
     local outDir, returnDir = pair[1], pair[2]
     if mq.TLO.Navigation.Active() then mq.cmd('/squelch /nav stop log=off') end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
-    mq.cmdf('/squelch /keypress %s hold', outDir)
-    _wiggle = { outDir = outDir, returnDir = returnDir, step = 1 }
-    log.say('anti-AFK: nudge out hold %s (return %s)', outDir, returnDir)
+    runNudgeSequence(outDir, returnDir)
 end
 
 local function sitStandToggle()
@@ -151,8 +144,6 @@ end
 
 function M.tick()
     local now = mq.gettime()
-
-    tickWiggle()
 
     local snap = takeSnapshot()
     local active = isActive(snap)
