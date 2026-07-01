@@ -22,6 +22,7 @@ local spellupgrade = require('lib.spellupgrade')
 local scribe = require('lib.scribe')
 local tickprof = require('lib.tickprof')
 local log = require('lib.log')
+local antiafk = require('lib.antiafk')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -297,20 +298,12 @@ local function CharState(...)
     charState_PostDead()
 end
 
--- State for doMiscTimer (runs every 1s): throttle and inactive-click timer.
+-- State for doMiscTimer (runs every 1s): throttle.
 local _miscLastRun = 0
-local _miscInactivetimer = 0
 -- State for doMovementCheck (runs when busy, every 1s): camp return and follow.
 local _movementLastRun = 0
 
 -- doMiscTimer sub-routines (run every 1s from _runDoMiscTimer).
-local function _miscInactiveClick()
-    if state.getRunconfig().engageTargetId then return end
-    if _miscInactivetimer >= mq.gettime() then return end
-    _miscInactivetimer = mq.gettime() + math.random(60000, 90000)
-    mq.cmd('/click right center')
-end
-
 local function _miscDrag()
     if not myconfig.settings.dodrag then return end
     botmove.DragCheck()
@@ -325,10 +318,9 @@ local function _runDoMovementCheck()
     _movementLastRun = mq.gettime() + 1000
 end
 
--- Misc only: inactive click (anti-afk, random 60–90s interval) and drag. Runs only when priority allows (not when casting). Throttled 1s.
+-- Misc only: drag and background maintenance. Anti-AFK runs every tick via lib.antiafk. Throttled 1s.
 local function _runDoMiscTimer()
     if _miscLastRun > mq.gettime() then return end
-    _miscInactiveClick() -- anti-afk, randomized interval
     _miscDrag()
     premem.tick() -- pre-load configured gems during downtime so combat spells don't memorize on the fly
     spellupgrade.tick() -- detect when a better in-book version of a configured spell is available
@@ -433,6 +425,7 @@ function botlogic.mainloop()
         if not paused then
             hookregistry.runNormalHooks()
         end
+        antiafk.tick()
         tickprof.endTick(tick, paused)
         mq.delay(100)
     end

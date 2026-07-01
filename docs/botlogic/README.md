@@ -15,13 +15,15 @@ flowchart LR
     subgraph tick [One tick]
         A[runRunWhenPausedHooks] --> B{MasterPause?}
         B -->|No| C[runNormalHooks]
-        B -->|Yes| D[delay 100ms]
+        B -->|Yes| D[antiafk.tick]
         C --> D
+        D --> E[delay 100ms]
     end
 ```
 
 - **runRunWhenPausedHooks()** — Always runs. Executes every hook that was registered with `runWhenPaused = true` (e.g. network sync). Currently no hooks use this.
 - **runNormalHooks()** — Runs only when `MasterPause` is not set. Its behavior depends on `runState` and the current payload.
+- **antiafk.tick()** — Always runs after hook passes (including when paused). Fires a random sit/stand or micro-nudge only after 60–90s of continuous true idle; any movement, combat, casting, or bot activity resets the idle window. See [`lib/antiafk.lua`](../../lib/antiafk.lua).
 
 ### When runState is `dead`
 
@@ -77,7 +79,7 @@ Hooks are defined in `lib/bothooks.lua`. Execution order:
 | 1100 | doBuff | Buff phase-first spell check | [hook-dobuff](hook-dobuff.md) |
 | 1200 | doCure | Cure phase-first spell check | [hook-docure](hook-docure.md) |
 | 1350 | doMovementCheck | Camp return and follow (runs in runWhenBusy pass when busy) | [hook-domovementcheck](hook-domovementcheck.md) |
-| 1400 | doMiscTimer | Throttled 1s: inactive click, drag | [hook-domisctimer](hook-domisctimer.md) |
+| 1400 | doMiscTimer | Throttled 1s: drag, premem, spellupgrade, scribe | [hook-domisctimer](hook-domisctimer.md) |
 
 ---
 
