@@ -16,7 +16,16 @@ local log = require('lib.log')
 local botevents = {}
 
 local SIT_AFTER_HIT_MS = 3000
+local MOBPROB_THROTTLE_MS = 3000
 local _zoneChangePending = false
+
+local function mobProbReason(line)
+    if not line then return 'unknown' end
+    if line:find('too far away', 1, true) then return 'target too far' end
+    if line:find('cannot see your target', 1, true) then return 'cannot see target' end
+    if line:find("can't hit them from here", 1, true) then return "can't hit from here" end
+    return 'mob prob'
+end
 
 --- Clear combat session state (engage, mob list, stick/attack). Used on death, rez, and zone change.
 ---@param reason string|nil e.g. death, rez, zone
@@ -209,29 +218,28 @@ end
 
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
-    local eqMsg = (line and line:match('^%s*(.-)%s*$')) or '?'
     if rc.mobprobtimer > mq.gettime() then
-        log.say('[MobProb] throttled: %s', eqMsg)
         return true
     end
+    rc.mobprobtimer = mq.gettime() + MOBPROB_THROTTLE_MS
+
+    local reason = mobProbReason(line)
     if rc.dopull and state.getRunState() == state.STATES.pulling and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
-        log.say('[MobProb] ignored (pull returning): %s', eqMsg)
-        rc.mobprobtimer = mq.gettime() + 3000
+        log.say('[MobProb] ignored (pull returning): %s', reason)
         return true
     end
     if rc.engageTargetId then
         local pathLen = mq.TLO.Navigation.PathLength('id ' .. rc.engageTargetId)()
         local withinAcleash = pathLen and pathLen <= botconfig.config.settings.acleash
         if withinAcleash or not spawnutils.isCampAcleashEnforced(rc) then
-            log.say('[MobProb] /nav id %s dist=0 — %s', tostring(rc.engageTargetId), eqMsg)
+            log.say('[MobProb] /nav id %s dist=0 — %s', tostring(rc.engageTargetId), reason)
             mq.cmdf('/nav id %s dist=0 log=off', rc.engageTargetId)
         else
-            log.say('[MobProb] skipped nav (outside acleash): %s', eqMsg)
+            log.say('[MobProb] skipped nav (outside acleash): %s', reason)
         end
     else
-        log.say('[MobProb] no engage target: %s', eqMsg)
+        log.say('[MobProb] no engage target: %s', reason)
     end
-    rc.mobprobtimer = mq.gettime() + 3000
 end
 
 function botevents.BindEvents()
