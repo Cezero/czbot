@@ -56,7 +56,7 @@ local GROUPS = {
     } },
     { title = "Camp & movement", cmds = {
         { "/cz makecamp on|off", "Set / clear camp at your current spot." },
-        { "/cz groupcamp", "Make GROUP camp: camp here + tell every group member (via MQRemote) to camp at their spot." },
+        { "/cz camphere [group|raid|off|stop]", "Leader camp: camp here + tell group/raid (auto-detect) via MQRemote to camp at their spot." },
         { "/cz leash", "Return to camp now." },
         { "/cz acleash <n>", "Camp radius (which mobs count as in-camp)." },
         { "/cz camprestdistance <n>", "How close counts as 'at camp' for the return." },
@@ -65,7 +65,7 @@ local GROUPS = {
         { "/cz macampanchor", "Toggle anchoring the mob bubble on the Main Assist." },
         { "/cz maanchorleash <n>", "Max MA distance for the anchor and ma/mt fallback lists." },
         { "/cz follow <name>", "Follow a PC." },
-        { "/cz followme", "Follow the character who issued the command." },
+        { "/cz followme [group|raid|off|stop]", "Leader follow: group/raid (auto-detect) follows you via MQRemote." },
         { "/cz travel <name>", "Travel mode: follow only, combat/pull suspended." },
     } },
     { title = "Mob lists & filters", cmds = {

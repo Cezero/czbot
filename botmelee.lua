@@ -16,17 +16,43 @@ local log = require('lib.log')
 local myconfig = botconfig.config
 local botmelee = {}
 
-function botmelee.LoadMeleeConfig()
-end
-
-botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee then botmelee.LoadMeleeConfig() end end)
-
-state.getRunconfig().mobprobtimer = 0
+local _mobprobGraceEngageId = nil
+local DEFAULT_MOBPROB_ENGAGE_GRACE_MS = 1000
 local _lastEngageStickCmd = nil
 local _engageLosBlocked = false
 local _engageLosLastLogTime = 0
 local _engageLosEngageId = nil
 local ENGAGE_LOS_LOG_INTERVAL_MS = 3000
+
+function botmelee.LoadMeleeConfig()
+end
+
+local function getMobprobEngageGraceMs()
+    local ms = tonumber(myconfig.melee and myconfig.melee.mobprobEngageGraceMs)
+    if ms == nil then return DEFAULT_MOBPROB_ENGAGE_GRACE_MS end
+    if ms < 0 then return 0 end
+    return ms
+end
+
+--- Suppress MobProb /nav briefly after acquiring a new engage target (avoids early swing LoS/range spam).
+---@param engageId number|nil
+function botmelee.armMobprobEngageGrace(engageId)
+    if not engageId or engageId <= 0 then return end
+    local graceMs = getMobprobEngageGraceMs()
+    if graceMs <= 0 then return end
+    if engageId == _mobprobGraceEngageId then return end
+    _mobprobGraceEngageId = engageId
+    state.getRunconfig().mobprobEngageGraceUntil = mq.gettime() + graceMs
+end
+
+function botmelee.clearMobprobEngageGrace()
+    _mobprobGraceEngageId = nil
+    state.getRunconfig().mobprobEngageGraceUntil = 0
+end
+
+botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee then botmelee.LoadMeleeConfig() end end)
+
+state.getRunconfig().mobprobtimer = 0
 
 local ENGAGE_STATUS_PREFIXES = { 'Assisting on ', 'Tanking ', 'Off-tanking ' }
 
@@ -583,6 +609,7 @@ local function disengageCombat(reason)
     _engageLosBlocked = false
     _engageLosLastLogTime = 0
     _engageLosEngageId = nil
+    botmelee.clearMobprobEngageGrace()
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
     rc.allMezzedEngageId = nil
@@ -847,6 +874,7 @@ function botmelee.AdvCombat()
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
 
     if id then
+        botmelee.armMobprobEngageGrace(id)
         rc.engageTargetId = id
         local name = mq.TLO.Spawn(rc.engageTargetId).CleanName() or tostring(rc.engageTargetId)
         local cs = rc.CurSpell

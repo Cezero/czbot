@@ -136,7 +136,7 @@ These handlers feed cast outcomes into `lib/casting.lua` for all cast backends. 
 | LinkItem    | Event_LinkItem    | Validates slot/HP filter; echoes item link and /rs                                           |
 | TooSteep    | Event_TooSteep    | Stub                                                                                         |
 | MountFailed | Event_MountFailed | If domount: sets global `MountCastFailed = true`                                             |
-| MobProb     | Event_MobProb     | Throttled 3s (gated invocations silently dropped); if engageTargetId and path length ≤ acleash, /nav to target; arms mobprobtimer on entry |
+| MobProb     | Event_MobProb     | Ignored for `melee.mobprobEngageGraceMs` (default 1s, 0 = off) after a new engage target; throttled 3s (gated invocations silently dropped); if engageTargetId and path length ≤ acleash, /nav to target; arms mobprobtimer on entry |
 
 ---
 

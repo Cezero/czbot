@@ -5,6 +5,7 @@
 -- Raid has MainAssist only; MainTank and Puller always come from Group.
 -- When primary is unavailable, falls back to cz_common ma_list (proximity-gated) / mt_list (in-zone only).
 -- Automatic resolution is cached until invalidation or the cached candidate becomes unavailable.
+-- A throttled refresh re-resolves every 2s so higher-priority MA/MT can reclaim the role after rez.
 
 local mq = require('mq')
 local botconfig = require('lib.config')
@@ -19,12 +20,15 @@ local tankrole = {}
 local _maCache = {}
 local _mtCache = {}
 local _leashGen = 0
+local REFRESH_INTERVAL_MS = 2000
+local _nextRefreshAt = 0
 local _tickMemo = {
     assistName = nil,
     tankName = nil,
     assistResolved = false,
     tankResolved = false,
 }
+local maybeRefreshAutomaticCache
 
 function tankrole.getAnchorLeash()
     local settings = botconfig.config.settings
@@ -38,6 +42,7 @@ function tankrole.beginTick()
     _tickMemo.tankResolved = false
     _tickMemo.assistName = nil
     _tickMemo.tankName = nil
+    maybeRefreshAutomaticCache()
 end
 
 function tankrole.bumpLeashGen()
@@ -317,6 +322,39 @@ local function storeMtCache(result)
         listGen = rolelists.getMtListGen(),
         leashGen = _leashGen,
     }
+end
+
+local function getEffectiveAssistSetting(rc)
+    local name = rc.AssistName
+    if name == nil or name == '' then
+        name = rc.TankName
+    end
+    return name
+end
+
+maybeRefreshAutomaticCache = function()
+    local now = mq.gettime()
+    if now < _nextRefreshAt then return end
+    _nextRefreshAt = now + REFRESH_INTERVAL_MS
+
+    local rc = state.getRunconfig()
+    local assistSetting = getEffectiveAssistSetting(rc)
+    if assistSetting == 'automatic' then
+        local oldMa = _maCache.name
+        local fresh = resolveAutomaticAssistFull()
+        if fresh.name ~= oldMa then
+            log.say('MA switched to %s (was %s)', tostring(fresh.name or '(nil)'), tostring(oldMa or '(nil)'))
+            storeMaCache(fresh)
+        end
+    end
+    if rc.TankName == 'automatic' then
+        local oldMt = _mtCache.name
+        local fresh = resolveAutomaticTankFull()
+        if fresh.name ~= oldMt then
+            log.say('MT switched to %s (was %s)', tostring(fresh.name or '(nil)'), tostring(oldMt or '(nil)'))
+            storeMtCache(fresh)
+        end
+    end
 end
 
 local function resolveAutomaticAssistName()

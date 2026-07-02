@@ -2184,6 +2184,7 @@ function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, target
 end
 
 --- Thin phase-first orchestrator. phaseOrder = ordered list of phase names; getTargetsFn(phase, context) returns list of { id, targethit }; getSpellIndicesFn(phase) returns list of indices; targetNeedsSpellFn(spellIndex, targetId, targethit, context) returns EvalID, targethit or nil.
+--- options.spellFirst: when true, within each phase iterate spell indices before targets (buff only).
 function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTargetsFn, getSpellIndicesFn,
                                             targetNeedsSpellFn, context, options)
     options = options or {}
@@ -2230,59 +2231,101 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
         startSpellIdx = 1
     end
 
-    for phaseIdx = startPhaseIdx, #phaseOrder do
-        local phase = phaseOrder[phaseIdx]
-        local targets = getTargetsFn(phase, context)
-        if targets and #targets > 0 then
-            local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
-            for targetIdx = targetStart, #targets do
-                local target = targets[targetIdx]
-                if target and target.id then
-                    local spellIndices = getSpellIndicesFn(phase, target)
-                    if spellIndices and #spellIndices > 0 then
-                        local spellStart = (phaseIdx == startPhaseIdx and targetIdx == targetStart) and startSpellIdx or
-                            1
-                        local fromSpellIndices = {}
-                        for _, si in ipairs(spellIndices) do
-                            if si >= spellStart then fromSpellIndices[#fromSpellIndices + 1] = si end
+    local function tryCastMatch(phase, targetIdx, spellIndex, EvalID, targethit)
+        if spellIndex and EvalID and targethit then
+            local entry = botconfig.getSpellEntry(sub, spellIndex)
+            if entry and spellutils.IsGroupOnlySpell(entry) and targethit ~= 'self' and not spellutils.IsSpawnInMyGroup(EvalID) then
+                return false
+            end
+        end
+        if not (spellIndex and EvalID and targethit) then return false end
+        if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 and not spellutils.IsMemorizing() then
+            mq.cmd('/stopcast')
+            spellutils.clearCastingStateOrResume()
+        end
+        local spellcheckResume = nil
+        if not options.noResume then
+            spellcheckResume = {
+                hook = hookName,
+                phase = phase,
+                targetIndex = targetIdx,
+                spellIndex = spellIndex,
+            }
+        end
+        if options.customCastFn and options.customCastFn(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
+            return true
+        end
+        if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
+            if _instantDebuffCastPending and options.afterCast then
+                local ic = _instantDebuffCastPending
+                _instantDebuffCastPending = nil
+                options.afterCast(ic.spell, ic.target, ic.targethit)
+            end
+            return true
+        end
+        return false
+    end
+
+    if options.spellFirst then
+        for phaseIdx = startPhaseIdx, #phaseOrder do
+            local phase = phaseOrder[phaseIdx]
+            local targets = getTargetsFn(phase, context)
+            if targets and #targets > 0 then
+                local spellIndices = getSpellIndicesFn(phase, targets[1])
+                if spellIndices and #spellIndices > 0 then
+                    local spellPosStart = 1
+                    if phaseIdx == startPhaseIdx then
+                        for i, idx in ipairs(spellIndices) do
+                            if idx >= startSpellIdx then
+                                spellPosStart = i
+                                break
+                            end
                         end
-                        if #fromSpellIndices > 0 then
-                            local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
-                                fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn,
-                                phase)
-                            if not spellIndex and options.mezDebug and sub == 'debuff' and phase == 'notmatar' then
-                                spellutils.MezLog('no spell passed gates for id=%s (indices tried: %s)', target.id,
-                                    table.concat(fromSpellIndices, ','))
-                            end
-                            if spellIndex and EvalID and targethit then
-                                local entry = botconfig.getSpellEntry(sub, spellIndex)
-                                if entry and spellutils.IsGroupOnlySpell(entry) and targethit ~= 'self' and not spellutils.IsSpawnInMyGroup(EvalID) then
-                                    spellIndex, EvalID, targethit = nil, nil, nil
-                                end
-                            end
-                            if spellIndex and EvalID and targethit then
-                                if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 and not spellutils.IsMemorizing() then
-                                    mq.cmd('/stopcast')
-                                    spellutils.clearCastingStateOrResume()
-                                end
-                                local spellcheckResume = nil
-                                if not options.noResume then
-                                    spellcheckResume = {
-                                        hook = hookName,
-                                        phase = phase,
-                                        targetIndex = targetIdx,
-                                        spellIndex = spellIndex,
-                                    }
-                                end
-                                if options.customCastFn and options.customCastFn(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
+                    end
+                    for si = spellPosStart, #spellIndices do
+                        local spellIndex = spellIndices[si]
+                        local targetStart = (phaseIdx == startPhaseIdx and si == spellPosStart) and startTargetIdx or 1
+                        for targetIdx = targetStart, #targets do
+                            local target = targets[targetIdx]
+                            if target and target.id then
+                                local spellIndexOut, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
+                                    { spellIndex }, target.id, target.targethit, context, options, targetNeedsSpellFn,
+                                    phase)
+                                if tryCastMatch(phase, targetIdx, spellIndexOut, EvalID, targethit) then
                                     return false
                                 end
-                                if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
-                                    if _instantDebuffCastPending and options.afterCast then
-                                        local ic = _instantDebuffCastPending
-                                        _instantDebuffCastPending = nil
-                                        options.afterCast(ic.spell, ic.target, ic.targethit)
-                                    end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    else
+        for phaseIdx = startPhaseIdx, #phaseOrder do
+            local phase = phaseOrder[phaseIdx]
+            local targets = getTargetsFn(phase, context)
+            if targets and #targets > 0 then
+                local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
+                for targetIdx = targetStart, #targets do
+                    local target = targets[targetIdx]
+                    if target and target.id then
+                        local spellIndices = getSpellIndicesFn(phase, target)
+                        if spellIndices and #spellIndices > 0 then
+                            local spellStart = (phaseIdx == startPhaseIdx and targetIdx == targetStart) and startSpellIdx or
+                                1
+                            local fromSpellIndices = {}
+                            for _, si in ipairs(spellIndices) do
+                                if si >= spellStart then fromSpellIndices[#fromSpellIndices + 1] = si end
+                            end
+                            if #fromSpellIndices > 0 then
+                                local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
+                                    fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn,
+                                    phase)
+                                if not spellIndex and options.mezDebug and sub == 'debuff' and phase == 'notmatar' then
+                                    spellutils.MezLog('no spell passed gates for id=%s (indices tried: %s)', target.id,
+                                        table.concat(fromSpellIndices, ','))
+                                end
+                                if tryCastMatch(phase, targetIdx, spellIndex, EvalID, targethit) then
                                     return false
                                 end
                             end

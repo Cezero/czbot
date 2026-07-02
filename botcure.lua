@@ -7,6 +7,7 @@ local charinfo = require('plugin.charinfo')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
 local botmove = require('botmove')
+local pcphasethrottle = require('lib.pcphasethrottle')
 
 local botcure = {}
 local CureClass = {}
@@ -195,7 +196,7 @@ local function cureBuildContext()
     return { tank = tank, tankid = tankid, bots = bots, botcount = #bots }
 end
 
-local function cureGetTargetsForPhase(phase, context)
+local function cureGetTargetsForPhase(phase, context, pcAllowed)
     if phase == 'priority' then
         local count = botconfig.getSpellCount('cure')
         if count <= 0 then return {} end
@@ -213,8 +214,12 @@ local function cureGetTargetsForPhase(phase, context)
         local out = {}
         for _, targetType in ipairs(CURE_PHASE_ORDER) do
             if needTypes[targetType] then
-                local list = cureGetTargetsForPhase(targetType, context)
-                for _, t in ipairs(list) do out[#out + 1] = t end
+                if targetType == 'pc' and not pcAllowed then
+                    -- skip throttled pc peer scan
+                else
+                    local list = cureGetTargetsForPhase(targetType, context, pcAllowed)
+                    for _, t in ipairs(list) do out[#out + 1] = t end
+                end
             end
         end
         return out
@@ -223,7 +228,10 @@ local function cureGetTargetsForPhase(phase, context)
     if phase == 'tank' then return castutils.getTargetsTank(context) end
     if phase == 'groupcure' then return castutils.getTargetsGroupCaster('groupcure') end
     if phase == 'groupmember' then return castutils.getTargetsGroupMember(context, { botsFirst = true, excludeBotsFromGroup = true }) end
-    if phase == 'pc' then return castutils.getTargetsPc(context) end
+    if phase == 'pc' then
+        if not pcAllowed then return {} end
+        return castutils.getTargetsPc(context)
+    end
     return {}
 end
 
@@ -275,7 +283,12 @@ function botcure.CureCheck(runPriority, phaseOrder, hookName)
     local function getSpellIndices(phase, _target)
         return spellutils.getSpellIndicesForPhase(count, phase, CureClass)
     end
-    return spellutils.RunPhaseFirstSpellCheck('cure', hookName, phaseOrder, cureGetTargetsForPhase, getSpellIndices,
+    local cursor = spellutils.getResumeCursor(hookName)
+    local pcAllowed = pcphasethrottle.allow('cure', cursor)
+    local function getTargets(phase, context)
+        return cureGetTargetsForPhase(phase, context, pcAllowed)
+    end
+    return spellutils.RunPhaseFirstSpellCheck('cure', hookName, phaseOrder, getTargets, getSpellIndices,
         cureTargetNeedsSpell, ctx, options)
 end
 

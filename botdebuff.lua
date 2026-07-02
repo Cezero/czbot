@@ -548,12 +548,15 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
             local _, _, mtTargetId = spellutils.GetTankInfo(true)
             if mtTargetId and mtTargetId ~= 0 then
                 rc.engageTargetId = mtTargetId
+                botmelee.armMobprobEngageGrace(mtTargetId)
                 desiredPetTargetId = mtTargetId
             else
                 rc.engageTargetId = EvalID
+                botmelee.armMobprobEngageGrace(EvalID)
             end
         elseif not myconfig.melee.offtank then
             rc.engageTargetId = EvalID
+            botmelee.armMobprobEngageGrace(EvalID)
         end
 
         if desiredPetTargetId and mq.TLO.Pet.Target.ID() ~= desiredPetTargetId and not mq.TLO.Me.Pet.Combat() then
@@ -570,6 +573,7 @@ local function retargetMaTargetAfterBardMez()
     if maTargetId and maTargetId ~= 0 then
         targeting.TargetAndWait(maTargetId, 500)
         rc.engageTargetId = maTargetId
+        botmelee.armMobprobEngageGrace(maTargetId)
         return maTargetId
     end
     return nil

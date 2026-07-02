@@ -249,12 +249,89 @@ local function cmd_makecamp(args, str)
     end
 end
 
--- Make GROUP camp: set my camp here and tell every group member to camp at their own spot via MQRemote
--- group broadcast (/rc group). Mirrors the Status-tab group-camp button. Peers need MQRemote loaded.
-local function cmd_groupcamp(args, str)
-    botmove.MakeCamp('on')
-    mq.cmd('/rc group /cz makecamp on')
-    log.say('Group camp set (me + MQRemote group).')
+local function autoRcScope()
+    return ((mq.TLO.Raid.Members() or 0) > 0) and 'raid' or 'group'
+end
+
+---@return string|nil scope 'group'|'raid' for explicit scope; nil when action is off and scope should come from remembered mode
+---@return 'on'|'off'|nil action
+---@return string|nil err usage message when args are invalid
+local function parseLeaderBroadcastArgs(args, startIdx, usage)
+    startIdx = startIdx or 2
+    local sub = args[startIdx] and string.lower(args[startIdx])
+    local third = args[startIdx + 1] and string.lower(args[startIdx + 1])
+
+    if sub == 'off' or sub == 'stop' then
+        if third then return nil, nil, usage end
+        return nil, 'off', nil
+    end
+
+    if sub == 'group' or sub == 'raid' then
+        if third == 'stop' or third == 'off' then
+            if args[startIdx + 2] then return nil, nil, usage end
+            return sub, 'off', nil
+        end
+        if third then return nil, nil, usage end
+        return sub, 'on', nil
+    end
+
+    if not sub then
+        return autoRcScope(), 'on', nil
+    end
+
+    return nil, nil, usage
+end
+
+local function isMobilePullMode(rc)
+    local pullCfg = botconfig.config.pull
+    local pullActive = rc.dopull == true
+    local roamOnly = pullCfg and pullCfg.roam == true and pullActive
+    local hunterMode = pullCfg and pullCfg.hunter == true and not roamOnly and pullActive
+    return roamOnly or hunterMode
+end
+
+-- Leader camp broadcast (/rc group|raid). Mirrors Status-tab group-camp button. Peers need MQRemote loaded.
+local function cmd_camphere(args)
+    local rc = state.getRunconfig()
+    local usage = 'Usage: /cz camphere [group|raid|off|stop]'
+    local scope, action, err = parseLeaderBroadcastArgs(args, 2, usage)
+    if err then
+        log.say(err)
+        return
+    end
+
+    if action == 'off' then
+        if not scope then
+            scope = rc.camphereMode
+            if not scope then
+                log.say('Camphere not active')
+                return
+            end
+        end
+        mq.cmdf('/rc %s /cz stop', scope)
+        follow.StopFollow('command')
+        if rc.campstatus then botmove.MakeCamp('off') end
+        log.say('Camphere OFF (%s)', scope)
+        if rc.camphereMode == scope then rc.camphereMode = nil end
+        return
+    end
+
+    if rc.followmeMode then
+        mq.cmdf('/rc %s /cz stop', rc.followmeMode)
+        rc.followmeMode = nil
+    end
+
+    if rc.camphereMode and rc.camphereMode ~= scope then
+        mq.cmdf('/rc %s /cz stop', rc.camphereMode)
+    end
+
+    follow.StopFollow('command')
+    if not isMobilePullMode(rc) then
+        botmove.MakeCamp('on')
+    end
+    mq.cmdf('/rc %s /cz makecamp on', scope)
+    rc.camphereMode = scope
+    log.say('Camphere ON (%s)', scope)
 end
 
 local function cmd_follow(args, str)
@@ -291,58 +368,46 @@ end
 
 local function cmd_followme(args)
     local rc = state.getRunconfig()
-    local sub = args[2] and string.lower(args[2]) or 'group'
-    local third = args[3] and string.lower(args[3]) or nil
-
-    if sub == 'off' or sub == 'stop' then
-        if third then
-            log.say('Usage: /cz followme [group|raid|off|stop]')
-            return
-        end
-        if not rc.followmeMode then
-            log.say('Followme not active')
-            return
-        end
-        mq.cmdf('/rc %s /cz stop', rc.followmeMode)
-        log.say('Followme OFF (%s)', rc.followmeMode)
-        rc.followmeMode = nil
+    local usage = 'Usage: /cz followme [group|raid|off|stop]'
+    local scope, action, err = parseLeaderBroadcastArgs(args, 2, usage)
+    if err then
+        log.say(err)
         return
     end
 
-    if sub == 'group' or sub == 'raid' then
-        if third == 'stop' or third == 'off' then
-            if args[4] then
-                log.say('Usage: /cz followme [group|raid|off|stop]')
+    if action == 'off' then
+        if not scope then
+            scope = rc.followmeMode
+            if not scope then
+                log.say('Followme not active')
                 return
             end
-            mq.cmdf('/rc %s /cz stop', sub)
-            log.say('Followme OFF (%s)', sub)
-            if rc.followmeMode == sub then rc.followmeMode = nil end
-            return
         end
-        if third then
-            log.say('Usage: /cz followme [group|raid|off|stop]')
-            return
-        end
-    else
-        log.say('Usage: /cz followme [group|raid|off|stop]')
+        mq.cmdf('/rc %s /cz stop', scope)
+        log.say('Followme OFF (%s)', scope)
+        if rc.followmeMode == scope then rc.followmeMode = nil end
         return
+    end
+
+    if rc.camphereMode then
+        mq.cmdf('/rc %s /cz stop', rc.camphereMode)
+        rc.camphereMode = nil
     end
 
     follow.StopFollow('command')
     local campSet = rc.campstatus or (rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z))
     if campSet then botmove.ClearCamp() end
 
-    if rc.followmeMode and rc.followmeMode ~= sub then
+    if rc.followmeMode and rc.followmeMode ~= scope then
         mq.cmdf('/rc %s /cz stop', rc.followmeMode)
     end
 
     local myname = mq.TLO.Me.Name()
     if not myname or myname == '' then return end
 
-    mq.cmdf('/rc %s /cz follow %s', sub, myname)
-    rc.followmeMode = sub
-    log.say('Followme ON (%s -> %s)', sub, myname)
+    mq.cmdf('/rc %s /cz follow %s', scope, myname)
+    rc.followmeMode = scope
+    log.say('Followme ON (%s -> %s)', scope, myname)
 end
 
 local function tableContains(list, name)
@@ -537,6 +602,7 @@ local function cmd_attack(args)
     rc.engageTargetId = KillTarget
     rc.attackCommandEngage = (KillTarget ~= nil)
     if KillTarget then
+        require('botmelee').armMobprobEngageGrace(KillTarget)
         local msg = log.fmt('\arEngaging\ax \ay%s\ax now', mq.TLO.Spawn(KillTarget).CleanName())
         if overrideName then
             msg = msg .. string.format(' \at(assist: %s)\ax', overrideName)
@@ -1085,8 +1151,7 @@ local function resolveSaytargetScope(args)
     if sub == 'group' or sub == 'raid' then
         return sub, 3
     end
-    local scope = ((mq.TLO.Raid.Members() or 0) > 0) and 'raid' or 'group'
-    return scope, 2
+    return autoRcScope(), 2
 end
 
 local function cmd_syt(args, str)
@@ -1354,7 +1419,7 @@ local handlers = {
     ui = cmd_ui,
     show = cmd_ui,
     makecamp = cmd_makecamp,
-    groupcamp = cmd_groupcamp,
+    camphere = cmd_camphere,
     follow = cmd_follow,
     followme = cmd_followme,
     travel = cmd_travel,

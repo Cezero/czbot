@@ -43,6 +43,7 @@ function botevents.ResetCombatSession(reason)
     spellstates.CleanMobList()
     if APTarget then APTarget = nil end
     if rawget(_G, 'KillTarget') then _G.KillTarget = nil end
+    require('botmelee').clearMobprobEngageGrace()
     combat.ResetCombatState({ clearTarget = true, clearPet = true })
 end
 
@@ -218,12 +219,16 @@ end
 
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
+    local reason = mobProbReason(line)
+    if rc.mobprobEngageGraceUntil and rc.mobprobEngageGraceUntil > mq.gettime() then
+        log.say('[MobProb] ignored (engage grace): %s', reason)
+        return true
+    end
     if rc.mobprobtimer > mq.gettime() then
         return true
     end
     rc.mobprobtimer = mq.gettime() + MOBPROB_THROTTLE_MS
 
-    local reason = mobProbReason(line)
     if rc.dopull and state.getRunState() == state.STATES.pulling and (rc.pullState == 'returning' or rc.pullState == 'returning_after_abort') then
         log.say('[MobProb] ignored (pull returning): %s', reason)
         return true

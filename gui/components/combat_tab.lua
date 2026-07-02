@@ -147,6 +147,17 @@ function M.draw()
     local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, flags)
     if stickCh and stickNew ~= nil then melee.stickcmd = stickNew; runConfigLoaders() end
 
+    ImGui.Text('MobProb grace (ms)')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('After engaging a new target, ignore MobProb /nav for this many milliseconds.\nSuppresses early "too far away" / "cannot see target" swings before /stick positions you.\n0 = disabled.')
+    end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local graceVal = melee.mobprobEngageGraceMs
+    if graceVal == nil then graceVal = 1000 end
+    local graceNew, graceCh = inputs.boundedInt('combat_mobprobEngageGraceMs', graceVal, 0, 5000, 100, '##combat_mobprobEngageGraceMs')
+    if graceCh then melee.mobprobEngageGraceMs = graceNew; runConfigLoaders() end
+
     ImGui.Spacing()
     ImGui.Text('Stay behind')
     if ImGui.IsItemHovered() then

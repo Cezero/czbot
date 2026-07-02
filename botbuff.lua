@@ -9,6 +9,7 @@ local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
 local buffphase = require('lib.buffphase')
 local botmove = require('botmove')
+local pcphasethrottle = require('lib.pcphasethrottle')
 
 local botbuff = {}
 local BuffClass = {}
@@ -474,6 +475,7 @@ function botbuff.BuffCheck(runPriority)
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
+        spellFirst = true,
         entryValid = function(i)
             local entry = botconfig.getSpellEntry('buff', i)
             if not entry then return false end
@@ -497,7 +499,13 @@ function botbuff.BuffCheck(runPriority)
     local function getSpellIndices(phase, _target)
         return spellutils.getSpellIndicesForPhase(count, phase, buffBandHasPhase)
     end
-    return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, buffGetTargetsForPhase, getSpellIndices,
+    local cursor = spellutils.getResumeCursor('doBuff')
+    local pcAllowed = pcphasethrottle.allow('buff', cursor)
+    local function getTargets(phase, context)
+        if phase == 'pc' and not pcAllowed then return {} end
+        return buffGetTargetsForPhase(phase, context)
+    end
+    return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,
         buffTargetNeedsSpell, ctx, options)
 end
 

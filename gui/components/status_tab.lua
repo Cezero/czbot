@@ -551,11 +551,10 @@ function M.draw()
             ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
             ImGui.PushStyleColor(ImGuiCol.Text, WHITE)
             if ImGui.SmallButton(groupCampIcon .. '##group_camp') then
-                if not mobilePullMode then botmove.MakeCamp('on') end
-                mq.cmd('/rc group /cz makecamp on')
+                mq.cmd('/cz camphere')
             end
             if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Make GROUP camp: set my camp here and tell every group member (via MQRemote) to camp at their own position.')
+                ImGui.SetTooltip('Camphere: camp here (unless hunter/roam pull) and tell group or raid (auto-detect via MQRemote) to camp at their own position. Use /cz camphere off to stop.')
             end
             ImGui.PopStyleColor(2)
             ImGui.SameLine(0, GROUP_CAMP_GAP)

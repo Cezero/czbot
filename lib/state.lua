@@ -78,6 +78,7 @@
 ---@field stucktimer number|nil
 ---@field unstuckWiggleIndex number|nil current step (1–9) in unstuck wiggle sequence; nil when not wiggling or after sequence
 ---@field mobprobtimer number
+---@field mobprobEngageGraceUntil number|nil mq.gettime() until which MobProb /nav is suppressed after a new engage
 ---@field sitTimer number|nil mq.gettime() until which we should not auto-sit (set when hit; cleared when expired or no mobs in camp)
 ---@field spellNotInBook table|nil
 ---@field statusMessage string User-facing activity line for GUI
@@ -106,6 +107,7 @@
 ---@field nukeFlavorsAutoDisabled table|nil flavor -> true (auto-disabled due to resist streak)
 ---@field travelMode boolean|nil when true, only follow active; other bot logic disabled unless /cz attack override
 ---@field followmeMode string|nil 'group' or 'raid' when this toon is leading a followme broadcast
+---@field camphereMode string|nil 'group' or 'raid' when this toon is leading a camphere broadcast
 ---@field wasDeadOrHover boolean|nil true while character was dead/hovering on prior tick (rez transition detection)
 
 local M = {}
@@ -309,6 +311,7 @@ function M.resetRunconfig()
         stucktimer = 0,
         unstuckWiggleIndex = nil,
         mobprobtimer = 0,
+        mobprobEngageGraceUntil = 0,
         sitTimer = nil,
         spellNotInBook = {},
         statusMessage = '',
@@ -332,6 +335,7 @@ function M.resetRunconfig()
         raidCtx = nil, -- optional: { raidsactive = boolean }; zone raid modules may set global raidsactive instead
         travelMode = false,
         followmeMode = nil,
+        camphereMode = nil,
         wasDeadOrHover = false,
     }
     return M._runconfig
