@@ -73,7 +73,6 @@
 
 ---@class ConfigHeal
 ---@field spells table[]|nil
----@field rezoffset number|nil
 ---@field interruptlevel number|nil
 ---@field xttargets number|nil
 
@@ -132,7 +131,7 @@ local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe', 'confirmExit' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
-    heal = { 'rezoffset', 'interruptlevel', 'xttargets', 'spells' },
+    heal = { 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
     cure = { 'spells' },
@@ -1334,7 +1333,7 @@ function M.Load(path)
         stickcmd = 'hold uw 7', mobprobEngageGraceMs = 1000, stayBehind = false, behindAggroPct = 90, evadePct = 90, offtank = false, mtSticky = false,
         otoffset = 0, minmana = 0, assistpct = 99,
     })
-    applySectionDefaults('heal', { rezoffset = 0, interruptlevel = 0.80, xttargets = 0 })
+    applySectionDefaults('heal', { interruptlevel = 0.80, xttargets = 0 })
     return true
 end
 

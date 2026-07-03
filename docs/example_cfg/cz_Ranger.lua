@@ -61,7 +61,6 @@ melee = {
   otoffset = 0,
 },
 heal = {
-  rezoffset = 0,
   interruptlevel = 0.8,
   xttargets = 0,
   spells = {

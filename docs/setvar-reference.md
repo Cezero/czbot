@@ -96,7 +96,6 @@ Top-level heal options only. **heal.spells** is an array of spell entries; indiv
 
 | Path | Type | Default | Purpose |
 |------|------|---------|---------|
-| **heal.rezoffset** | number | 0 | Rez offset. |
 | **heal.interruptlevel** | number | 0.80 | Interrupt level for heals. See [Healing configuration](healing-configuration.md). |
 | **heal.xttargets** | number | 0 | Extra heal targets. |
 

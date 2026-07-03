@@ -150,17 +150,18 @@ local function _corpseRezCandidates()
 end
 
 local function CorpseRezIdForFilter()
-    local myconfig = botconfig.config
     local candidates = _corpseRezCandidates()
     if #candidates == 0 then return nil end
-    local corpsecount = #candidates
-    local rezoffset = myconfig.heal.rezoffset or 0
-    local skip = 0
-    if rezoffset > 0 and corpsecount > rezoffset then skip = rezoffset end
-    for i = skip + 1, #candidates do
-        return candidates[i].rezid
+    local bestPriority = candidates[1].priority
+    local band = {}
+    for _, c in ipairs(candidates) do
+        if c.priority == bestPriority then
+            band[#band + 1] = c
+        else
+            break
+        end
     end
-    return candidates[1].rezid
+    return band[math.random(1, #band)].rezid
 end
 
 local function HPEvalCorpse(index, ctx)

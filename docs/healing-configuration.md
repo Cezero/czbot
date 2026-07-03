@@ -24,7 +24,6 @@ All heal options live under **`config.heal`**. Spell entries are in **`heal.spel
 
 | Option | Default | Purpose |
 |--------|--------|---------|
-| **rezoffset** | 0 | When multiple corpses are in range, skip this many before picking a rez target (e.g. rez the 2nd corpse when rezoffset is 1). |
 | **interruptlevel** | 0.80 | Used when deciding whether to interrupt a cast (e.g. for a higher-priority heal). Target HP threshold. |
 | **xttargets** | 0 | Comma- or digit-separated extended target slot numbers (e.g. `1,2,3` or `123`) that are valid for heals. When set, spells with band **xtgt** can heal those XTarget slots. |
 
@@ -103,7 +102,6 @@ PC heal candidates come from **peers** (characters known via the actor net). Put
 
 ```lua
 heal = {
-  rezoffset = 0,
   interruptlevel = 0.80,
   xttargets = 0,
   spells = {
@@ -147,6 +145,6 @@ heal = {
 
 ## Behavior summary
 
-- **Corpse rez:** Spells with **corpse** in targetphase can target eligible corpses in range (charinfo peer, group member, raid member, or guild member). **rezoffset** skips the first N matching corpses. Rez is only considered when the spell’s band allows it and (for non-**cbt**) no mobs are in the camp list if the band is not combat.
+- **Corpse rez:** Spells with **corpse** in targetphase can target eligible corpses in range (charinfo peer, group member, raid member, or guild member). Corpses are ordered by class priority (healers first, configurable via **botListClassOrder**); when multiple corpses share the top priority tier, one is chosen at random so multiple rez casters spread across targets. Rez is only considered when the spell’s band allows it and (for non-**cbt**) no mobs are in the camp list if the band is not combat.
 - **Interrupt:** **interruptlevel** is used when deciding whether to interrupt the current cast for another heal (e.g. tank drop).
 - **XT targets:** If **xttargets** lists slot numbers, spells with **xtgt** in bands can heal those extended target slots when their HP is in the spell’s band.

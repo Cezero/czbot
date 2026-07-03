@@ -27,7 +27,7 @@ Heal spells use the phase-first pattern above, split into **two resource passes*
 
 The heal phase order is:
 
-1. **corpse** (rez) — Eligible corpses in range (charinfo, group, raid, or guild); subject to **rezoffset**. Spell-level **inCombat** allows rez in combat when set on the spell entry.
+1. **corpse** (rez) — Eligible corpses in range (charinfo, group, raid, or guild); ordered by class priority with random selection within the top tier. Spell-level **inCombat** allows rez in combat when set on the spell entry.
 2. **self** — Yourself.
 3. **groupheal** (group/AE) — Group heal; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
 4. **tank** — The resolved Main Tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
