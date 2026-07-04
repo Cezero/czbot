@@ -164,11 +164,55 @@ local function CorpseRezIdForFilter()
     return band[math.random(1, #band)].rezid
 end
 
+local function healHasCorpseSpellConfigured()
+    local count = botconfig.getSpellCount('heal')
+    for idx = 1, count do
+        local entry = botconfig.getSpellEntry('heal', idx)
+        if entry and entry.enabled ~= false and entry.gem ~= 0
+            and AHThreshold[idx] and AHThreshold[idx].corpse then
+            return true
+        end
+    end
+    return false
+end
+
+local function healCorpsePending()
+    if not healHasCorpseSpellConfigured() then return false end
+    return #_corpseRezCandidates() > 0
+end
+
+local function healCorpseSpellBlockedByCombat(index)
+    if not AHThreshold[index] then return false end
+    if AHThreshold[index].inCombat then return false end
+    local rc = state.getRunconfig()
+    return rc.MobList and rc.MobList[1] ~= nil
+end
+
+local function healCorpseAllSpellsCombatBlocked()
+    local count = botconfig.getSpellCount('heal')
+    local hasCorpseSpell = false
+    for idx = 1, count do
+        local entry = botconfig.getSpellEntry('heal', idx)
+        if entry and entry.enabled ~= false and entry.gem ~= 0
+            and AHThreshold[idx] and AHThreshold[idx].corpse then
+            hasCorpseSpell = true
+            if not healCorpseSpellBlockedByCombat(idx) then
+                return false
+            end
+        end
+    end
+    return hasCorpseSpell
+end
+
+local function healShouldHoldHealPass()
+    if not healCorpsePending() then return false end
+    if healCorpseAllSpellsCombatBlocked() then return false end
+    return true
+end
+
 local function HPEvalCorpse(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].corpse then return nil, nil end
-    if not AHThreshold[index].inCombat and state.getRunconfig().MobList and state.getRunconfig().MobList[1] then
-        return nil, nil
-    end
+    if healCorpseSpellBlockedByCombat(index) then return nil, nil end
     local rezid = CorpseRezIdForFilter()
     if rezid then return rezid, 'corpse' end
     return nil, nil
@@ -299,7 +343,8 @@ local function HPEvalXtgt(index, ctx)
     return nil, nil
 end
 
-local HEAL_PHASE_ORDER = { 'corpse', 'self', 'groupheal', 'tank', 'offtank', 'groupmember', 'pc', 'mypet', 'pet', 'xtgt' }
+local HEAL_PHASE_ORDER_CORPSE = { 'corpse' }
+local HEAL_PHASE_ORDER_HP = { 'self', 'groupheal', 'tank', 'offtank', 'groupmember', 'pc', 'mypet', 'pet', 'xtgt' }
 
 local function healSpellResource(spellIndex)
     local entry = botconfig.getSpellEntry('heal', spellIndex)
@@ -332,16 +377,6 @@ local function healEntryValid(spellIndex)
     return spellutils.SpellCheck('heal', spellIndex)
 end
 
-local function healHasCastableCorpseSpell()
-    local count = botconfig.getSpellCount('heal')
-    for idx = 1, count do
-        if AHThreshold[idx] and AHThreshold[idx].corpse and healEntryValid(idx) then
-            return true
-        end
-    end
-    return false
-end
-
 local function healGetTargetsForPhase(phase, context)
     if phase == 'self' then return castutils.getTargetsSelf() end
     if phase == 'tank' then return castutils.getTargetsTank(context) end
@@ -363,7 +398,7 @@ local function healGetTargetsForPhase(phase, context)
         return out
     end
     if phase == 'corpse' then
-        if not healHasCastableCorpseSpell() then return {} end
+        if not healCorpsePending() then return {} end
         local rezid = CorpseRezIdForFilter()
         if rezid then return { { id = rezid, targethit = 'corpse' } } end
         return {}
@@ -477,6 +512,10 @@ function botheal.HealCheck(runPriority)
         entryValid = healEntryValid,
     }
     local cursor = spellutils.getResumeCursor('doHeal')
+    if healCorpsePending() and cursor and cursor.phase and cursor.phase ~= 'corpse' then
+        state.clearRunState()
+        cursor = nil
+    end
     local resumePass
     if cursor and cursor.spellIndex then
         resumePass = healSpellResource(cursor.spellIndex) == 'mana' and 'mana' or 'hp'
@@ -488,11 +527,15 @@ function botheal.HealCheck(runPriority)
         end
     end
     if resumePass ~= 'mana' then
-        spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER, healGetTargetsForPhase,
+        spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
+            getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
+        if healPassStartedCast() then return false end
+        if healShouldHoldHealPass() then return false end
+        spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
             getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
         if healPassStartedCast() then return false end
     end
-    spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER, healGetTargetsForPhase,
+    spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
         getSpellIndicesForResource('mana'), healTargetNeedsSpell, ctx, options)
     return false
 end

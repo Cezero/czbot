@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **healing** behavior: which 
 ## Overview
 
 - **Master switch:** Healing runs only when **`settings.doheal`** is `true`. Default is `false`.
-- **Heal target:** The heal loop runs **two passes** when no cast is in progress. **Pass 1 (HP):** evaluates **phases** in order (see [Heal bands](#heal-bands)): corpse (rez) → self → groupheal → tank → offtank → groupmember → pc → mypet → pet → xtgt, using only spells where **healResource** is `'hp'` (the default, including corpse rez). For each phase it gets the list of targets for that phase, then for **each target** checks all matching heal spells (in config order). The first spell that the target needs (HP in band, in range) is cast. **Pass 2 (Mana):** runs the same phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
+- **Heal target:** The heal loop runs **two resource passes** when no cast is in progress. **Pass 1 (HP):** runs **corpse (rez) in a dedicated sub-pass first**. If eligible corpses remain and rez is not intentionally deferred for combat (`inCombat` false with mobs in camp), the heal hook **holds** and skips other HP phases until a rez cast starts or corpses clear—so the bot retries corpse each tick instead of falling through to self/tank heals or buffing. When no corpses need rez (or all corpse spells are combat-blocked), pass 1 continues with self → groupheal → tank → offtank → groupmember → pc → mypet → pet → xtgt using only **healResource** `'hp'` spells. **Pass 2 (Mana):** runs the same non-corpse phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
 - **Where to configure:** Set **`settings.doheal`** in the `settings` section and all heal options under the **`heal`** section. See [Config file reference](#config-file-reference) below.
 
 ---
@@ -60,7 +60,7 @@ Bands define **who** can receive the spell and **at what HP %**. Each band has t
 
 **Phase order**
 
-The **phase order** is the evaluation order within each pass. The bot runs **pass 1 (HP spells)** first, then **pass 2 (mana spells)** only if pass 1 found no cast. Within a pass, the bot evaluates phases in this sequence; for each phase it gets the list of targets for that phase and, for **each target**, checks all heal spells of that resource type that include that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The order is:
+The **phase order** is the evaluation order within each pass. The bot runs **pass 1 (HP spells)** first, then **pass 2 (mana spells)** only if pass 1 found no cast. Within pass 1, **corpse is evaluated alone first**; if eligible corpses remain (and rez is not combat-deferred for all corpse spells), other HP phases are skipped until the corpse is rezzed or gone. Otherwise pass 1 continues with the sequence below. Pass 2 uses the same sequence minus corpse (mana heals only). For each phase the bot gets the list of targets and, for **each target**, checks all heal spells of that resource type that include that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The order is:
 
 1. **corpse** (rez) — pass 1 only (HP pass)
 2. **self**
@@ -147,6 +147,6 @@ heal = {
 
 ## Behavior summary
 
-- **Corpse rez:** Spells with **corpse** in targetphase can target eligible corpses in range (charinfo peer, group member, raid member, or guild member). Corpses are ordered by class priority (healers first, configurable via **botListClassOrder**); when multiple corpses share the top priority tier, one is chosen at random so multiple rez casters spread across targets. Rez is only considered when the spell’s band allows it and (for non-**cbt**) no mobs are in the camp list if the band is not combat.
+- **Corpse rez:** Spells with **corpse** in targetphase can target eligible corpses in range (charinfo peer, group member, raid member, or guild member). Corpses are ordered by class priority (healers first, configurable via **botListClassOrder**); when multiple corpses share the top priority tier, one is chosen at random so multiple rez casters spread across targets. Rez is only considered when the spell’s band allows it and (for non-**inCombat**) no mobs are in the camp list if the band is not combat. When corpses are pending and rez is allowed, the heal hook holds before other HP phases until a rez cast starts or corpses disappear.
 - **Interrupt:** **interruptlevel** is used when deciding whether to interrupt the current cast for another heal (e.g. tank drop).
 - **XT targets:** If **xttargets** lists slot numbers, spells with **xtgt** in bands can heal those extended target slots when their HP is in the spell’s band.
