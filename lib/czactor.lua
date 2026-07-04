@@ -61,7 +61,7 @@ function czactor.init()
     ensureRunconfigFields(rc)
     if _actor then return end
     _actor = actors.register(MAILBOX, function(message)
-        if not message or not message.content then return end
+        if type(message) ~= 'table' or type(message.content) ~= 'table' then return end
         _inboundQueue[#_inboundQueue + 1] = message
     end)
     _nextPingAt = mq.gettime()
@@ -426,8 +426,9 @@ local function handleLeaderCampHereOff(content)
 end
 
 local function processMessage(message)
+    if type(message) ~= 'table' then return end
     local content = message.content
-    if not content or type(content) ~= 'table' then return end
+    if type(content) ~= 'table' then return end
     if content.ver and content.ver ~= PROTOCOL_VER then return end
     local sender = senderCharacter(message)
     local id = content.id
@@ -526,9 +527,9 @@ function czactor.tick()
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
 
-    while #_inboundQueue > 0 do
+    while _inboundQueue[1] ~= nil do
         local msg = table.remove(_inboundQueue, 1)
-        processMessage(msg)
+        if msg then processMessage(msg) end
     end
 
     local now = mq.gettime()
