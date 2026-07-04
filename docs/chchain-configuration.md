@@ -120,10 +120,11 @@ While in CHChain, the status UI shows run state **CH chain**.
 
 - **Sitting:** Clerics sit when not casting.
 - **Mana skip:** A cleric skips their turn if mana is too low (roughly below 400 after a regen buffer) and passes to the next cleric after the pause.
-- **Range skip:** A cleric skips if the tank is out of Complete Heal range.
+- **Tank selection:** Each turn scans the tank list from the current shared index (`chchainCurtank`) onward. The first tank that is alive, in zone, and within Complete Heal range **for that cleric** is chosen. Alive but out-of-range tanks are skipped in favor of the next backup (positioning differs per cleric).
+- **Tank index sync:** When a cleric advances to a higher-priority tank because lower-index tanks are dead, it publishes `chchain_curtank` on the [czbot actor channel](czbot-actor-channel.md). All CHChain bots update their shared index. Watch the MQ console for `czactor send chchain_curtank` / `czactor recv chchain_curtank` to debug sync.
 - **Fizzle:** On fizzle, the bot recasts Complete Heal on the current target.
 - **Tank died mid-cast:** If the target becomes a corpse while casting, the bot interrupts and immediately passes the turn.
-- **Tank dead or zoned:** The bot advances through the tank list. If no valid tank remains, it skips the turn and passes after the pause.
+- **No tank in range:** If no list entry is alive and in range for this cleric, the turn is passed after the pause.
 
 ---
 
@@ -139,9 +140,9 @@ While in CHChain, the status UI shows run state **CH chain**.
 
 **Turn passes but no heal is cast**
 
-- Watch raid say for skip messages: out of mana, tank out of range, no live tank, or failed to target.
+- Watch raid say for skip messages: out of mana, no tank in range, or failed to target.
 - Ensure **Complete Heal** is in the cleric's spell book (checked at setup).
-- Confirm the chain tank is in Complete Heal range when the turn starts.
+- Check MQ console for `czactor send/recv chchain_curtank` if tanks died and peers may be on a stale index. All CHChain clerics must be czbot actor peers (`/cz actor ping`).
 
 **Chain stalls after one cast**
 

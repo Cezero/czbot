@@ -23,8 +23,19 @@ CZBot peers coordinate through a dedicated **Actor mailbox** (`czbot`) on the sa
 | `ma_update` / `mt_update` | Session MA/MT override (seq increases; used for death handoff and manual `/cz assist` / `/cz tank`) |
 | `follow_me` / `follow_me_off` | Leader follow broadcast (replaces `/rc` for `/cz followme`) |
 | `camp_here` / `camp_here_off` | Leader camp broadcast (replaces `/rc` for `/cz camphere`) |
+| `chchain_curtank` | CHChain shared tank index/name when the chain advances past dead tanks ([CHChain configuration](chchain-configuration.md)) |
 
 Protocol version: **1** (`ver` field on every message).
+
+## Extension handlers
+
+Messages beyond the built-in ids above can register handlers via [`lib/czactor_dispatch.lua`](../lib/czactor_dispatch.lua):
+
+```lua
+require('lib.czactor_dispatch').RegisterHandler('my_message_id', function(content, sender) ... end)
+```
+
+Publish with `require('lib.czactor').publish('my_message_id', { ... })`. Send and receive are logged to the MQ console as `czactor send ...` / `czactor recv ...`.
 
 ## Off-tank add selection
 

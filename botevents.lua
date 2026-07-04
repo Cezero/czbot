@@ -249,6 +249,7 @@ end
 
 function botevents.BindEvents()
     chchain.registerEvents()
+    chchain.registerActorHandlers()
     follow.registerEvents()
     mq.event('Slain1', "#*#You have been slain by#*#", botevents.Event_Slain)
     mq.event('Slain2', "#*#Returning to Bind Location#*#", botevents.Event_Slain)

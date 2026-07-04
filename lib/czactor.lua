@@ -7,6 +7,7 @@ local charinfo = require('plugin.charinfo')
 local charinfoutils = require('lib.charinfoutils')
 local state = require('lib.state')
 local log = require('lib.log')
+local czactor_dispatch = require('lib.czactor_dispatch')
 
 local czactor = {}
 
@@ -70,6 +71,13 @@ end
 function czactor.broadcast(msg)
     if not _actor then return end
     _actor:send(msg)
+end
+
+function czactor.publish(messageId, fields)
+    if not messageId then return end
+    fields = fields or {}
+    czactor_dispatch.logSend(messageId, fields)
+    czactor.broadcast(envelope(messageId, fields))
 end
 
 function czactor.sendToCharacter(character, msg)
@@ -473,6 +481,8 @@ local function processMessage(message)
     if id == 'follow_me_off' then handleLeaderFollowMeOff(content) return end
     if id == 'camp_here' then handleLeaderCampHere(content) return end
     if id == 'camp_here_off' then handleLeaderCampHereOff(content) return end
+
+    if czactor_dispatch.Dispatch(content, sender) then return end
 end
 
 local function tickRoleHandoff()

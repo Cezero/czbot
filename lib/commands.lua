@@ -1591,6 +1591,7 @@ function M.chchainSetupContinuation(setupArgs)
             end
         end
         rc.chchainTank = rc.chchainTanklist[1]
+        rc.chchainCurtank = 1
         local chtankstr = table.concat(rc.chchainTanklist, ",")
         botconfig.config.settings.dodebuff = false
         botconfig.config.settings.dobuff = false

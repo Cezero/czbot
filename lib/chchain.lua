@@ -9,6 +9,8 @@ local spellutils = require('lib.spellutils')
 local command_dispatcher = require('lib.command_dispatcher')
 local casting = require('lib.casting')
 local utils = require('lib.utils')
+local czactor = require('lib.czactor')
+local czactor_dispatch = require('lib.czactor_dispatch')
 
 local chchain = {}
 
@@ -45,22 +47,53 @@ local function isTankInCHRange(tankid)
     return distSq and distSq <= (spellRange * spellRange)
 end
 
-local function findLiveTankId(rc)
-    local tankid = mq.TLO.Spawn('=' .. rc.chchainTank).ID()
-    if tankid and tankid > 0 and mq.TLO.Spawn(tankid).Type() ~= 'Corpse' then
-        return tankid
+--- Update curtank index/name when index >= current. Returns true if state changed forward.
+local function advanceCurtank(rc, index, tankName)
+    if not rc.doChchain then return false end
+    if not index or not tankName or tankName == '' then return false end
+    local cur = rc.chchainCurtank or 1
+    if index < cur then return false end
+    rc.chchainCurtank = index
+    rc.chchainTank = tankName
+    return true
+end
+
+local function applyCurtank(content, sender)
+    local rc = state.getRunconfig()
+    if not rc.doChchain then return end
+    local idx = tonumber(content.index)
+    local name = content.tank
+    if not idx or not name or name == '' then return end
+    local prev = rc.chchainCurtank or 1
+    if idx < prev then
+        printf('CHChain curtank ignored (stale) from %s: index=%s tank=%s', tostring(sender), tostring(idx), tostring(name))
+        return
     end
-    while rc.chchainTanklist do
-        rc.chchainCurtank = rc.chchainCurtank + 1
-        local name = rc.chchainTanklist[rc.chchainCurtank]
-        if not name then break end
-        local sp = mq.TLO.Spawn('=' .. name)
-        if sp and sp.Type() == 'PC' and sp.ID() and sp.ID() > 0 then
-            mq.cmdf('/rs Tank DIED or ZONED, moving to tank %s, %s', rc.chchainCurtank, name)
-            rc.chchainTank = name
-            return sp.ID()
+    advanceCurtank(rc, idx, name)
+end
+
+--- First alive tank from chchainCurtank onward that is in Complete Heal range for this cleric.
+local function selectHealTank(rc)
+    local list = rc.chchainTanklist
+    if not list or #list == 0 then return nil end
+    local startIdx = rc.chchainCurtank or 1
+    if startIdx < 1 then startIdx = 1 end
+
+    for idx = startIdx, #list do
+        local name = list[idx]
+        if name and name ~= '' then
+            local sp = mq.TLO.Spawn('=' .. name)
+            if sp and sp.Type() == 'PC' and sp.ID() and sp.ID() > 0 then
+                local tid = sp.ID()
+                if isTankInCHRange(tid) then
+                    local prev = rc.chchainCurtank or 1
+                    if advanceCurtank(rc, idx, name) and idx > prev then
+                        czactor.publish('chchain_curtank', { index = idx, tank = name })
+                    end
+                    return tid
+                end
+            end
         end
-        mq.cmdf('/rs Tank %s is not in zone or dead, skipping', rc.chchainCurtank)
     end
     return nil
 end
@@ -107,17 +140,20 @@ function chchain.registerEvents()
     mq.event('CHChainSetup', "#*#chchain #1# #2# #3# #4#", event_CHChainSetup)
 end
 
+function chchain.registerActorHandlers()
+    czactor_dispatch.RegisterHandler('chchain_curtank', applyCurtank)
+end
+
 function chchain.OnGo(line, arg1)
     local rc = state.getRunconfig()
     local myName = mq.TLO.Me.Name()
     arg1 = cleanEventToken(arg1)
     if not arg1 or not myName or string.lower(arg1) ~= string.lower(myName) then return false end
     if not rc.doChchain then return false end
-    rc.chchainCurtank = 1
     local chtimer = chchain.getDeadline(rc)
-    local tankid = findLiveTankId(rc)
+    local tankid = selectHealTank(rc)
     if not tankid or tankid == 0 then
-        mq.cmdf('/rs CHChain: No live tank found, passing turn to %s', rc.chnextClr or '?')
+        mq.cmdf('/rs CHChain: No live tank in range, passing turn to %s', rc.chnextClr or '?')
         deferChchainGo(rc)
         return
     end
@@ -132,11 +168,6 @@ function chchain.OnGo(line, arg1)
     if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < 400 then
         mq.cmdf('/rs SKIP ME (out of mana)')
         deferChchainGo(rc, mq.gettime() + (rc.chchainPause or 0) * 100)
-        return
-    end
-    if not isTankInCHRange(tankid) then
-        mq.cmdf('/rs Tank %s is out of range of complete heal!', rc.chchainTank)
-        deferChchainGo(rc)
         return
     end
     castCompleteHeal(rc)
