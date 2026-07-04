@@ -236,6 +236,24 @@ local function HPEvalTank(index, ctx)
     return nil, nil
 end
 
+local function HPEvalOfftank(index, ctx)
+    if not AHThreshold[index] or not AHThreshold[index].offtank then return nil, nil end
+    local czactor = require('lib.czactor')
+    for _, ot in ipairs(czactor.getActiveOfftanks()) do
+        local sp = mq.TLO.Spawn('pc =' .. ot.name)
+        if sp and sp.ID() and sp.ID() > 0 then
+            local otid = sp.ID()
+            local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
+            local peer = charinfo.GetInfo(ot.name)
+            local othp = peer and peer.PctHPs or sp.PctHPs()
+            if othp and hpInBand(othp, AHThreshold[index].offtank) and distSq and ctx.spellrangeSq and distSq <= ctx.spellrangeSq then
+                return otid, 'offtank'
+            end
+        end
+    end
+    return nil, nil
+end
+
 local function HPEvalMyPet(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].mypet then return nil, nil end
     local mypetid = mq.TLO.Me.Pet.ID()
@@ -281,7 +299,7 @@ local function HPEvalXtgt(index, ctx)
     return nil, nil
 end
 
-local HEAL_PHASE_ORDER = { 'corpse', 'self', 'groupheal', 'tank', 'groupmember', 'pc', 'mypet', 'pet', 'xtgt' }
+local HEAL_PHASE_ORDER = { 'corpse', 'self', 'groupheal', 'tank', 'offtank', 'groupmember', 'pc', 'mypet', 'pet', 'xtgt' }
 
 local function healSpellResource(spellIndex)
     local entry = botconfig.getSpellEntry('heal', spellIndex)
@@ -327,6 +345,7 @@ end
 local function healGetTargetsForPhase(phase, context)
     if phase == 'self' then return castutils.getTargetsSelf() end
     if phase == 'tank' then return castutils.getTargetsTank(context) end
+    if phase == 'offtank' then return castutils.getTargetsOfftank(context) end
     if phase == 'groupheal' then return castutils.getTargetsGroupCaster('groupheal') end
     if phase == 'groupmember' then return castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true }) end
     if phase == 'pc' then return castutils.getTargetsPc(context, { excludeTank = true }) end
@@ -355,6 +374,7 @@ end
 local function healBandHasPhase(spellIndex, phase)
     if not AHThreshold[spellIndex] then return false end
     if phase == 'corpse' then return AHThreshold[spellIndex].corpse end
+    if phase == 'offtank' then return AHThreshold[spellIndex].offtank and true or false end
     if phase == 'groupmember' or phase == 'pc' then
         return (AHThreshold[spellIndex].groupmember or AHThreshold[spellIndex].pc) and true or false
     end
@@ -377,6 +397,11 @@ local function healTargetNeedsSpell(spellIndex, targetId, targethit, context, ph
     -- Tank: HP band only; no validtargets/class filter.
     if targethit == 'tank' then
         local id, hit = HPEvalTank(spellIndex, ctx)
+        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
+        return nil, nil
+    end
+    if targethit == 'offtank' then
+        local id, hit = HPEvalOfftank(spellIndex, ctx)
         if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
         return nil, nil
     end

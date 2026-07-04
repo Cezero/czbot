@@ -216,6 +216,18 @@ function castutils.getTargetsSelf()
     return out
 end
 
+function castutils.getTargetsOfftank(_context)
+    local out = {}
+    local czactor = require('lib.czactor')
+    for _, ot in ipairs(czactor.getActiveOfftanks()) do
+        local sp = mq.TLO.Spawn('pc =' .. ot.name)
+        if sp and sp.ID() and sp.ID() > 0 then
+            out[#out + 1] = { id = sp.ID(), targethit = 'offtank' }
+        end
+    end
+    return out
+end
+
 function castutils.getTargetsTank(context)
     local out = {}
     if context.tankid and context.tankid > 0 then

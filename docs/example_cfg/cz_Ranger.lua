@@ -58,7 +58,6 @@ melee = {
   offtank = false ,
   mtSticky = true,
   minmana = 0,
-  otoffset = 0,
 },
 heal = {
   interruptlevel = 0.8,

@@ -364,13 +364,14 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     end
     local samePrimary = (not maTarId or not mtTarId or mtTarId == maTarId)
     if samePrimary then
-        local otoffset = myconfig.melee.otoffset or 0
-        local nthSpawn = spawnutils.selectNthAdd(rc.MobList, maTarId, otoffset + 1)
-        if nthSpawn then
-            local actarid = nthSpawn.ID()
+        local czactor = require('lib.czactor')
+        local actarid = czactor.pickOfftankAdd(rc.MobList, maTarId, mtTarId)
+        if actarid then
             if actarid ~= mq.TLO.Target.ID() then
-                log.say('\arOff-tanking\ax a \ag%s id %s', nthSpawn.CleanName(), actarid)
+                local mobName = mq.TLO.Spawn(actarid).CleanName() or tostring(actarid)
+                log.say('\arOff-tanking\ax a \ag%s id %s', mobName, actarid)
             end
+            czactor.syncOtClaimForEngage(actarid, mq.TLO.Spawn(actarid).CleanName(), maTarId)
             return actarid
         end
     elseif maTarId and maTarId > 0 then
@@ -610,6 +611,9 @@ local function disengageCombat(reason)
     _engageLosLastLogTime = 0
     _engageLosEngageId = nil
     botmelee.clearMobprobEngageGrace()
+    if myconfig.melee.offtank and engageId then
+        require('lib.czactor').publishOtRelease(engageId, reason or 'disengage')
+    end
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
     rc.allMezzedEngageId = nil

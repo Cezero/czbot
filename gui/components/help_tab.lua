@@ -29,6 +29,8 @@ local GROUPS = {
         { "/cz assist <name|automatic>", "Set the Main Assist (persists across reloads)." },
         { "/cz role <tank|ma|dps|healer>", "Apply a role preset: behavior flags + tank/assist designation." },
         { "/cz offtank", "Toggle off-tank mode for this character." },
+        { "/cz actor ping|status", "Czbot Actor channel: ping peers or show claims/role overrides." },
+        { "/cz tankrole", "Print MA/MT resolution diagnostics." },
         { "/cz attack", "Manually engage your current target (overrides XTarget-only)." },
         { "/cz cast <alias>", "Cast a configured spell/ability by its alias." },
     } },
@@ -56,7 +58,7 @@ local GROUPS = {
     } },
     { title = "Camp & movement", cmds = {
         { "/cz makecamp on|off", "Set / clear camp at your current spot." },
-        { "/cz camphere [group|raid|off|stop]", "Leader camp: camp here + tell group/raid (auto-detect) via MQRemote to camp at their spot." },
+        { "/cz camphere [group|raid|off|stop]", "Leader camp: camp here + tell group/raid (auto-detect) via Actor channel to camp at their spot." },
         { "/cz leash", "Return to camp now." },
         { "/cz acleash <n>", "Camp radius (which mobs count as in-camp)." },
         { "/cz camprestdistance <n>", "How close counts as 'at camp' for the return." },
@@ -65,7 +67,7 @@ local GROUPS = {
         { "/cz macampanchor", "Toggle anchoring the mob bubble on the Main Assist." },
         { "/cz maanchorleash <n>", "Max MA distance for the anchor and ma/mt fallback lists." },
         { "/cz follow <name>", "Follow a PC." },
-        { "/cz followme [group|raid|off|stop]", "Leader follow: group/raid (auto-detect) follows you via MQRemote." },
+        { "/cz followme [group|raid|off|stop]", "Leader follow: group/raid (auto-detect) follows you via Actor channel." },
         { "/cz travel <name>", "Travel mode: follow only, combat/pull suspended." },
     } },
     { title = "Mob lists & filters", cmds = {

@@ -8,3 +8,4 @@ Base documentation: [README](docs/README.md)
 
 - Completely refactored to be a state machine based action processing engine
 - Removed all dependancy on DanNet and EQBC/NetBots and replaced with MQRemote and MQCharinfo which are Actors based
+- CZBot peers coordinate via a dedicated **Actor mailbox** (`lib/czactor.lua`): OT add claims, MA/MT handoff, `/cz followme`, and `/cz camphere`

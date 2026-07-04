@@ -32,6 +32,7 @@ local utils = require('lib.utils')
 local command_dispatcher = require('lib.command_dispatcher')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
+local czactor = require('lib.czactor')
 local targeting = require('lib.targeting')
 local log = require('lib.log')
 local unpack = unpack
@@ -290,7 +291,7 @@ local function isMobilePullMode(rc)
     return roamOnly or hunterMode
 end
 
--- Leader camp broadcast (/rc group|raid). Mirrors Status-tab group-camp button. Peers need MQRemote loaded.
+-- Leader camp broadcast via czbot Actor channel. Mirrors Status-tab group-camp button.
 local function cmd_camphere(args)
     local rc = state.getRunconfig()
     local usage = 'Usage: /cz camphere [group|raid|off|stop]'
@@ -308,7 +309,7 @@ local function cmd_camphere(args)
                 return
             end
         end
-        mq.cmdf('/rc %s /cz stop', scope)
+        czactor.broadcastCampHereOff(scope)
         follow.StopFollow('command')
         if rc.campstatus then botmove.MakeCamp('off') end
         log.say('Camphere OFF (%s)', scope)
@@ -317,19 +318,21 @@ local function cmd_camphere(args)
     end
 
     if rc.followmeMode then
-        mq.cmdf('/rc %s /cz stop', rc.followmeMode)
+        czactor.broadcastFollowMeOff(rc.followmeMode)
         rc.followmeMode = nil
     end
 
     if rc.camphereMode and rc.camphereMode ~= scope then
-        mq.cmdf('/rc %s /cz stop', rc.camphereMode)
+        czactor.broadcastCampHereOff(rc.camphereMode)
     end
 
     follow.StopFollow('command')
     if not isMobilePullMode(rc) then
         botmove.MakeCamp('on')
     end
-    mq.cmdf('/rc %s /cz makecamp on', scope)
+    local myname = mq.TLO.Me.Name()
+    if not myname or myname == '' then return end
+    czactor.broadcastCampHere(scope, myname)
     rc.camphereMode = scope
     log.say('Camphere ON (%s)', scope)
 end
@@ -383,14 +386,14 @@ local function cmd_followme(args)
                 return
             end
         end
-        mq.cmdf('/rc %s /cz stop', scope)
+        czactor.broadcastFollowMeOff(scope)
         log.say('Followme OFF (%s)', scope)
         if rc.followmeMode == scope then rc.followmeMode = nil end
         return
     end
 
     if rc.camphereMode then
-        mq.cmdf('/rc %s /cz stop', rc.camphereMode)
+        czactor.broadcastCampHereOff(rc.camphereMode)
         rc.camphereMode = nil
     end
 
@@ -399,13 +402,13 @@ local function cmd_followme(args)
     if campSet then botmove.ClearCamp() end
 
     if rc.followmeMode and rc.followmeMode ~= scope then
-        mq.cmdf('/rc %s /cz stop', rc.followmeMode)
+        czactor.broadcastFollowMeOff(rc.followmeMode)
     end
 
     local myname = mq.TLO.Me.Name()
     if not myname or myname == '' then return end
 
-    mq.cmdf('/rc %s /cz follow %s', scope, myname)
+    czactor.broadcastFollowMe(scope, myname)
     rc.followmeMode = scope
     log.say('Followme ON (%s -> %s)', scope, myname)
 end
@@ -626,6 +629,9 @@ local function cmd_tank(args)
     require('lib.tankrole').invalidateAll()
     botconfig.ApplyAndPersist()
     log.say('Setting tank to %s (saved)', name)
+    if name ~= 'automatic' then
+        czactor.publishMtUpdate(name, 'manual')
+    end
     mq.TLO.Target.TargetOfTarget()
 end
 
@@ -640,10 +646,25 @@ local function cmd_assist(args)
     require('lib.tankrole').invalidateAll()
     botconfig.ApplyAndPersist()
     log.say('Setting assist to %s (saved)', name)
+    if name ~= 'automatic' then
+        czactor.publishMaUpdate(name, 'manual')
+    end
 end
 
 local function cmd_tankrole(_args)
     require('lib.tankrole').debugPrint()
+end
+
+local function cmd_actor(args)
+    local sub = args[2] and string.lower(args[2])
+    if sub == 'ping' then
+        czactor.sendPing()
+        czactor.printPeerStatus()
+    elseif sub == 'status' then
+        czactor.printStatus()
+    else
+        log.say('Usage: /cz actor ping|status')
+    end
 end
 
 local function cmd_stickcmd(args, str)
@@ -1260,7 +1281,10 @@ local function cmd_chchain(args)
         M.chchainSetupContinuation({ args[3], args[4], args[5] })
     end
     if args[2] == 'start' then
-        if args[3] == mq.TLO.Me.Name() then chchain.OnGo('start', mq.TLO.Me.Name()) end
+        local meName = mq.TLO.Me.Name()
+        if args[3] and meName and string.lower(args[3]) == string.lower(meName) then
+            chchain.OnGo('start', meName)
+        end
     end
     if args[2] == 'tank' then
         local sp = mq.TLO.Spawn('=' .. args[3])
@@ -1465,6 +1489,7 @@ local handlers = {
     burn = cmd_burn,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,
+    actor = cmd_actor,
     cast = cmd_cast,
     setvar = cmd_setvar,
     addspell = cmd_addspell,

@@ -191,6 +191,7 @@ local function charState_DeadOrHover()
             rc.HoverTimer = 0
             rc.HoverEchoTimer = 0
             rc.wasDeadOrHover = false
+            require('lib.czactor').onMaResumed()
             mq.cmd('/squelch /multiline ; /attack off ; /mqtarget clear ; /stick off')
         end
         return false
@@ -409,6 +410,7 @@ function botlogic.StartUp(...)
     state.getRunconfig().maAdoptSelectedTarget = true
     mq.imgui.init('debuggui', botgui.getUpdateFn())
     _registerBuiltinHooks()
+    require('lib.czactor').init()
     hookregistry.registerAllFromConfig()
     --check startup scripts NTA
     --check each section

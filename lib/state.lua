@@ -109,6 +109,11 @@
 ---@field followmeMode string|nil 'group' or 'raid' when this toon is leading a followme broadcast
 ---@field camphereMode string|nil 'group' or 'raid' when this toon is leading a camphere broadcast
 ---@field wasDeadOrHover boolean|nil true while character was dead/hovering on prior tick (rez transition detection)
+---@field OtClaims table|nil spawnId -> { character, ts, zone } from peer ot_claim messages
+---@field OtMyClaim table|nil { spawnId, ts } this bot's published OT claim
+---@field ActorMaOverride table|nil { name, seq, ts, until?, zone?, publisher?, reason? }
+---@field ActorMtOverride table|nil { name, seq, ts, until?, zone?, publisher?, reason? }
+---@field CzActorPeers table|nil character name -> last pong/ping time
 
 local M = {}
 
@@ -221,7 +226,11 @@ function M.canStartBusyState(stateNum)
         return true
     end
 
-    if stateNum == M.STATES.unstuck or stateNum == M.STATES.dragging or stateNum == M.STATES.chchain or stateNum == M.STATES.raid_mechanic then
+    if stateNum == M.STATES.chchain then
+        return current ~= M.STATES.dead
+    end
+
+    if stateNum == M.STATES.unstuck or stateNum == M.STATES.dragging or stateNum == M.STATES.raid_mechanic then
         return false
     end
 
@@ -337,6 +346,11 @@ function M.resetRunconfig()
         followmeMode = nil,
         camphereMode = nil,
         wasDeadOrHover = false,
+        OtClaims = {},
+        OtMyClaim = nil,
+        ActorMaOverride = nil,
+        ActorMtOverride = nil,
+        CzActorPeers = {},
     }
     return M._runconfig
 end

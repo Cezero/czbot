@@ -229,6 +229,13 @@ local function resolveAutomaticAssistFull()
             meta.source = 'primary'
             return meta
         end
+        local czactor = require('lib.czactor')
+        local actorMa = czactor.getMaOverrideNameIfAvailable()
+        if actorMa then
+            meta.name = actorMa
+            meta.source = 'actor'
+            return meta
+        end
         local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
         if fallback then
             meta.name = fallback
@@ -243,6 +250,13 @@ local function resolveAutomaticAssistFull()
     local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
     meta.name = fallback
     meta.source = fallback and 'list' or nil
+    if not fallback then
+        local actorMa = require('lib.czactor').getMaOverrideNameIfAvailable()
+        if actorMa then
+            meta.name = actorMa
+            meta.source = 'actor'
+        end
+    end
     return meta
 end
 
@@ -255,6 +269,13 @@ local function resolveAutomaticTankFull()
     if not raid and primaryTlo and isCandidateAvailable(primaryTlo, false) then
         meta.name = primaryTlo
         meta.source = 'primary'
+        return meta
+    end
+
+    local actorMt = require('lib.czactor').getMtOverrideNameIfAvailable()
+    if actorMt then
+        meta.name = actorMt
+        meta.source = 'actor'
         return meta
     end
 
@@ -277,6 +298,9 @@ local function isCachedMaValid(cache)
     if cache.source == 'list' then
         return isCandidateAvailable(cache.name, true)
     end
+    if cache.source == 'actor' then
+        return isCandidateAvailable(cache.name, false)
+    end
     if cache.source == 'primary_retained' then
         if cache.name ~= cache.primaryTlo then return false end
         if cache.primaryTlo and isCandidateAvailable(cache.primaryTlo, false) then return false end
@@ -297,6 +321,9 @@ local function isCachedMtValid(cache)
         return isCandidateAvailable(cache.name, false)
     end
     if cache.source == 'list' then
+        return isCandidateAvailable(cache.name, false)
+    end
+    if cache.source == 'actor' then
         return isCandidateAvailable(cache.name, false)
     end
     return false
@@ -491,6 +518,16 @@ function tankrole.debugPrint()
 
     printf('  MA path: %s', summarizeMaPath())
     printf('  MT path: %s', summarizeMtPath())
+    if rc.ActorMaOverride then
+        printf('  Actor MA override: %s seq=%s reason=%s publisher=%s',
+            tostring(rc.ActorMaOverride.name), tostring(rc.ActorMaOverride.seq),
+            tostring(rc.ActorMaOverride.reason), tostring(rc.ActorMaOverride.publisher))
+    end
+    if rc.ActorMtOverride then
+        printf('  Actor MT override: %s seq=%s reason=%s publisher=%s',
+            tostring(rc.ActorMtOverride.name), tostring(rc.ActorMtOverride.seq),
+            tostring(rc.ActorMtOverride.reason), tostring(rc.ActorMtOverride.publisher))
+    end
 end
 
 return tankrole

@@ -8,6 +8,12 @@ if not ok then
     return
 end
 
+local okActors, _ = pcall(require, 'actors')
+if not okActors then
+    log.say('MQ actors module is required but failed to load.')
+    return
+end
+
 -- Load required MQ plugins and end macro if any fail to load.
 if not mq.TLO.Plugin('MQ2MoveUtils').IsLoaded() then mq.cmd('/squelch /plugin MQ2MoveUtils load') end
 if not mq.TLO.Plugin('MQ2Twist').IsLoaded() then mq.cmd('/squelch /plugin MQ2Twist load') end

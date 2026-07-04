@@ -127,6 +127,28 @@ While in CHChain, the status UI shows run state **CH chain**.
 
 ---
 
+## Troubleshooting
+
+**Start does nothing after setup**
+
+- Confirm the setup ack showed the expected tank list (`Tank: ...`). Tanks must be alive PCs in zone when setup runs, or the list will be empty and no heal target is available.
+- Use the cleric's exact in-game name in the start command (case-insensitive).
+- Confirm bots are not paused (`/czp off` or Resume in the status UI). Paused bots do not process chat events or run CHChain ticks.
+- Test one cleric locally: `/cz chchain start <FirstCleric>` on that cleric's client. If that works but `/rs chchain start` does not, check that all bots hear raid say.
+
+**Turn passes but no heal is cast**
+
+- Watch raid say for skip messages: out of mana, tank out of range, no live tank, or failed to target.
+- Ensure **Complete Heal** is in the cleric's spell book (checked at setup).
+- Confirm the chain tank is in Complete Heal range when the turn starts.
+
+**Chain stalls after one cast**
+
+- Status UI should show run state **CH chain** during an active turn. If it stays idle, the bot may be paused or stuck in another run state.
+- After the pause deadline, the active cleric should broadcast `<<Go NextCleric>>` via `/rs`. If that message never appears, check that `chchainTick` is running (bot not paused).
+
+---
+
 ## Caveats
 
 - **Replaces normal healing:** CHChain takes over entirely while active. Configure normal heal spells in [Healing configuration](healing-configuration.md) for everyday use outside a CH rotation.

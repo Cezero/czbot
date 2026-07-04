@@ -554,7 +554,7 @@ function M.draw()
                 mq.cmd('/cz camphere')
             end
             if ImGui.IsItemHovered() then
-                ImGui.SetTooltip('Camphere: camp here (unless hunter/roam pull) and tell group or raid (auto-detect via MQRemote) to camp at their own position. Use /cz camphere off to stop.')
+                ImGui.SetTooltip('Camphere: camp here (unless hunter/roam pull) and tell group or raid (auto-detect) via Actor channel to camp at their own position. Use /cz camphere off to stop.')
             end
             ImGui.PopStyleColor(2)
             ImGui.SameLine(0, GROUP_CAMP_GAP)

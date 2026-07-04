@@ -31,11 +31,12 @@ The heal phase order is:
 2. **self** — Yourself.
 3. **groupheal** (group/AE) — Group heal; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
 4. **tank** — The resolved Main Tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
-5. **groupmember** — Only characters in the bot’s (EQ) group (evaluated before pc). For **heal and buff**, the target list excludes self and the configured main tank (they are considered only in the self and tank phases).
-6. **pc** — All peers (in or out of group). **validtargets** (classes or `all`) filter which classes. For **heal and buff**, the target list excludes the configured main tank (tank is considered only in the tank phase).
-7. **mypet** — Your pet.
-8. **pet** — Other peers’ pets.
-9. **xtgt** — Extended target (XTarget) slots when **heal.xttargets** is set.
+5. **offtank** — Peers with a live OT claim ([Actor channel](czbot-actor-channel.md)).
+6. **groupmember** — Only characters in the bot’s (EQ) group (evaluated before pc). For **heal and buff**, the target list excludes self and the configured main tank (they are considered only in the self and tank phases).
+7. **pc** — All peers (in or out of group). **validtargets** (classes or `all`) filter which classes. For **heal and buff**, the target list excludes the configured main tank (tank is considered only in the tank phase).
+8. **mypet** — Your pet.
+9. **pet** — Other peers’ pets.
+10. **xtgt** — Extended target (XTarget) slots when **heal.xttargets** is set.
 
 For a given target within a pass, the first heal spell (in config order) of that resource type that has that phase in its bands and for which the target is in HP band and in range is the one cast. Mana heals are deferred until the HP pass completes without casting.
 
@@ -45,7 +46,7 @@ For a given target within a pass, the first heal spell (in config order) of that
 
 ### Bands
 
-Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, pc, groupmember, mypet, pet, xtgt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; corpse has no validtargets). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
+Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, offtank, pc, groupmember, mypet, pet, xtgt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; corpse has no validtargets). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
 
 ---
 

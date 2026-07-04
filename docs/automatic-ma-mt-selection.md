@@ -25,6 +25,7 @@ For what the MA and MT *do* once resolved (target picking, heals, offtank, pulle
 - **Cache invalidation** forces a full re-resolve: EQ group/raid Main Assist or Main Tank assignment changes, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank` / `/cz assist`, role preset Apply with setTank/setAssist, or `maAnchorLeash` change.
 - **MA and MT resolve independently.** If `AssistName` is unset, it defaults to `TankName` at load, but when both are `"automatic"`, MA still comes from group/raid Main Assist (+ `ma_list`) and MT from group Main Tank (+ `mt_list`). They are not forced to be the same person.
 - **`TankName` defaults to `"automatic"`** in new configs. Populate **`ma_list`** and **`mt_list`** in `cz_common.lua` (or the Roles GUI) for reliable multibox fallback.
+- **Actor role overrides:** When the EQ primary MA/MT is unavailable, peers can publish **`ma_update`** / **`mt_update`** on the [CZBot Actor channel](czbot-actor-channel.md) (e.g. after MA death, the first available `ma_list` entry). Actor overrides sit **between** primary failure and `ma_list` fallback. Manual `/cz assist` / `/cz tank` (non-automatic) also publish updates.
 
 ---
 

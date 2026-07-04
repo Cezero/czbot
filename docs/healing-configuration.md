@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **healing** behavior: which 
 ## Overview
 
 - **Master switch:** Healing runs only when **`settings.doheal`** is `true`. Default is `false`.
-- **Heal target:** The heal loop runs **two passes** when no cast is in progress. **Pass 1 (HP):** evaluates **phases** in order (see [Heal bands](#heal-bands)): corpse (rez) → self → groupheal → tank → groupmember → pc → mypet → pet → xtgt, using only spells where **healResource** is `'hp'` (the default, including corpse rez). For each phase it gets the list of targets for that phase, then for **each target** checks all matching heal spells (in config order). The first spell that the target needs (HP in band, in range) is cast. **Pass 2 (Mana):** runs the same phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
+- **Heal target:** The heal loop runs **two passes** when no cast is in progress. **Pass 1 (HP):** evaluates **phases** in order (see [Heal bands](#heal-bands)): corpse (rez) → self → groupheal → tank → offtank → groupmember → pc → mypet → pet → xtgt, using only spells where **healResource** is `'hp'` (the default, including corpse rez). For each phase it gets the list of targets for that phase, then for **each target** checks all matching heal spells (in config order). The first spell that the target needs (HP in band, in range) is cast. **Pass 2 (Mana):** runs the same phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
 - **Where to configure:** Set **`settings.doheal`** in the `settings` section and all heal options under the **`heal`** section. See [Config file reference](#config-file-reference) below.
 
 ---
@@ -54,7 +54,7 @@ Each entry in **`heal.spells`** can have:
 
 Bands define **who** can receive the spell and **at what HP %**. Each band has two distinct concepts:
 
-- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`. Spell-level **inCombat** (see [Special tokens](#special-tokens-targetphase)) controls whether corpse rez is allowed in combat; do not put `cbt` in targetphase.
+- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `offtank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`. Spell-level **inCombat** (see [Special tokens](#special-tokens-targetphase)) controls whether corpse rez is allowed in combat; do not put `cbt` in targetphase.
 - **validtargets:** Within a phase stage, which target types to consider. For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `validtargets = { 'all' }`. **Corpse**, **tank**, and **self** need no validtargets.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For corpse-related targets the effective max is 200 (special).
 
@@ -66,11 +66,12 @@ The **phase order** is the evaluation order within each pass. The bot runs **pas
 2. **self**
 3. **groupheal** (group AE)
 4. **tank**
-5. **groupmember** (in-group only)
-6. **pc** (all peers)
-7. **mypet**
-8. **pet** (other pets)
-9. **xtgt** (extended targets)
+5. **offtank** — peers with a live OT claim on the [Actor channel](czbot-actor-channel.md)
+6. **groupmember** (in-group only)
+7. **pc** (all peers)
+8. **mypet**
+9. **pet** (other pets)
+10. **xtgt** (extended targets)
 
 If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bot still follows this global phase order within the pass: it does not prefer one phase over another within the same spell. The first phase in the list above that has a valid, in-range target for that spell wins. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
 
@@ -79,6 +80,7 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 - **targetphase vs validtargets:** targetphase = at which phase stage; validtargets = what target types within that stage (classes for pc/groupmember only).
 - **self vs pc:** Add `'self'` in targetphase for self-heals; they are evaluated before tank, groupmember, and pc (see evaluation order above).
 - **tank:** No validtargets needed; main tank by role; `'tank'` alone in targetphase is enough.
+- **offtank:** Targets active off-tank peers (Actor `ot_claim`); no validtargets needed.
 - **groupheal vs groupmember:** **groupheal** = group AE heal (count group members in band, cast on group/self). **groupmember** = single-target heals only for characters in the bot’s (EQ) group; if no group member needs a heal, out-of-group PCs are not considered. Add **pc** in targetphase to also heal peers outside the group (evaluated after groupmember in the order above).
 - **Selection:** For each phase within a pass, each target is checked against all heal spells of that resource type that have that phase; first spell (in config order) that the target needs is cast. Within pc/groupmember, targets are in iteration order (not lowest HP). Mana heals (`healResource = 'mana'`) are never considered until the HP pass completes without casting.
 

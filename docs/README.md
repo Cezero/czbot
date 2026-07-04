@@ -12,7 +12,8 @@ Short index of all documentation pages. Use this to find the right doc for confi
 | [Tank and Assist Roles](tank-and-assist-roles.md) | How to configure Main Tank (MT), Main Assist (MA), and Puller; who gets heals, who picks targets, and how DPS/offtank follow. |
 | [Automatic MA/MT Selection](automatic-ma-mt-selection.md) | How `automatic` TankName/AssistName resolves: game roles, `ma_list`/`mt_list` fallback, `maAnchorLeash`, and multi-box editing. |
 | [Tanking configuration](tanking-configuration.md) | Melee/tank settings: stick command, assist %, camp leash, and links to roles and pull.                                        |
-| [Offtank configuration](offtank-configuration.md) | How to configure an offtank: same target (pick add) vs different target (tank MA’s target).                                   |
+| [Offtank configuration](offtank-configuration.md) | How to configure an offtank: Actor-coordinated adds vs tanking MA's split target.                                   |
+| [CZBot Actor channel](czbot-actor-channel.md) | Peer coordination: OT claims, MA/MT handoff, followme/camphere. |
 | [Safety and stealth](safety-and-stealth.md) | Protected NPCs (soulbinder/translocator), bind-point stealth, and configurable no-combat zones in cz_common.                |
 
 

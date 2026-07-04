@@ -90,9 +90,9 @@ end
 function chchain.registerEvents()
     mq.event('CHChain', "#*#Go #1#>>#*#", event_CHChain)
     mq.event('CHChainStop', "#*#chchain stop#*#", event_CHChainStop)
-    mq.event('CHChainStart', "#*#chchain start #1#'", event_CHChainStart)
-    mq.event('CHChainTank', "#*#chchain tank #1#'", event_CHChainTank)
-    mq.event('CHChainPause', "#*#chchain pause #1#'", event_CHChainPause)
+    mq.event('CHChainStart', "#*#chchain start #1#", event_CHChainStart)
+    mq.event('CHChainTank', "#*#chchain tank #1#", event_CHChainTank)
+    mq.event('CHChainPause', "#*#chchain pause #1#", event_CHChainPause)
     mq.event('CHChainSetup', "#*#chchain #1# #2# #3# #4#", event_CHChainSetup)
 end
 
@@ -105,6 +105,7 @@ function chchain.OnGo(line, arg1)
     local chtimer = chchain.getDeadline(rc)
     local tankid = findLiveTankId(rc)
     if not tankid or tankid == 0 then
+        mq.cmdf('/rs CHChain: No live tank found, passing turn to %s', rc.chnextClr or '?')
         deferChchainGo(rc)
         return
     end
@@ -112,6 +113,7 @@ function chchain.OnGo(line, arg1)
         targeting.TargetAndWait(tankid, 500)
     end
     if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
+        mq.cmdf('/rs CHChain: Failed to target tank %s, passing turn to %s', rc.chchainTank, rc.chnextClr or '?')
         deferChchainGo(rc)
         return
     end

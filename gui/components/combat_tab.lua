@@ -44,21 +44,13 @@ function M.draw()
     end
     ImGui.SameLine()
     ImGui.Text('Off Tank')
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('This bot is an offtank.') end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('This bot is an offtank. Add selection is coordinated with other czbot peers via the Actor channel (last claim wins on conflicts).')
+    end
     ImGui.SameLine()
     local otChecked = melee.offtank == true
     local value, pressed = ImGui.Checkbox('##combat_offtank', otChecked)
     if pressed then melee.offtank = value; runConfigLoaders() end
-    if melee.offtank then
-        ImGui.SameLine()
-        ImGui.Text('Offset')
-        if ImGui.IsItemHovered() then ImGui.SetTooltip('Which add to pick when MT and MA on same mob.') end
-        ImGui.SameLine()
-        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-        local otoVal = melee.otoffset or 0
-        local otoNew, otoCh = inputs.boundedInt('combat_otoffset', otoVal, 0, 10, 1, '##combat_otoffset')
-        if otoCh then melee.otoffset = otoNew; runConfigLoaders() end
-    end
 
     ImGui.Spacing()
     ImGui.Text('MT Sticky')

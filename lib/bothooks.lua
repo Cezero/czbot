@@ -9,6 +9,7 @@ local hooks = {
     { name = 'zoneCheck',       priority = 100 },
     { name = 'commonLoadTick',  priority = 150,  runWhenDead = true },
     { name = 'doEvents',        priority = 200,  runWhenDead = true },
+    { name = 'czactorTick',     priority = 250,  provider = 'lib.czactor', runWhenPaused = true },
     { name = 'charState',       priority = 300,  runWhenDead = true },
     { name = 'doRaid',          priority = 350,  provider = 'botraid' },
     { name = 'AddSpawnCheck',   priority = 400,  provider = 'lib.spawnutils' },

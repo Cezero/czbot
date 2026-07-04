@@ -69,7 +69,6 @@
 ---@field offtank boolean|nil
 ---@field mtSticky boolean|nil
 ---@field minmana number|nil
----@field otoffset number|nil
 
 ---@class ConfigHeal
 ---@field spells table[]|nil
@@ -130,7 +129,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe', 'confirmExit' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
-    melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'otoffset' },
+    melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
@@ -1331,7 +1330,7 @@ function M.Load(path)
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
         stickcmd = 'hold uw 7', mobprobEngageGraceMs = 1000, stayBehind = false, behindAggroPct = 90, evadePct = 90, offtank = false, mtSticky = false,
-        otoffset = 0, minmana = 0, assistpct = 99,
+        minmana = 0, assistpct = 99,
     })
     applySectionDefaults('heal', { interruptlevel = 0.80, xttargets = 0 })
     return true
