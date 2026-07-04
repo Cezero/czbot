@@ -131,6 +131,7 @@ While in CHChain, the status UI shows run state **CH chain**.
 
 **Start does nothing after setup**
 
+- Raid say wraps messages in single quotes (`'chchain start Buhmarez'`). The bot strips trailing quote characters from captured names; reload the script after updates.
 - Confirm the setup ack showed the expected tank list (`Tank: ...`). Tanks must be alive PCs in zone when setup runs, or the list will be empty and no heal target is available.
 - Use the cleric's exact in-game name in the start command (case-insensitive).
 - Confirm bots are not paused (`/czp off` or Resume in the status UI). Paused bots do not process chat events or run CHChain ticks.

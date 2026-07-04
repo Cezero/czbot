@@ -12,6 +12,16 @@ local utils = require('lib.utils')
 
 local chchain = {}
 
+--- Strip raid-chat punctuation from an mq.event capture (e.g. Buhmarez' -> Buhmarez).
+local function cleanEventToken(s)
+    if not s or s == '' then return nil end
+    local token = s:match('%S+')
+    if not token then return nil end
+    return token:gsub("^['\"]+", ''):gsub("['\"]+$", '')
+end
+
+chchain.cleanEventToken = cleanEventToken
+
 local function deferChchainGo(rc, deadline)
     state.setRunState(state.STATES.chchain, {
         deadline = deadline or chchain.getDeadline(rc),
@@ -68,17 +78,18 @@ local function event_CHChainStop(line)
 end
 
 local function event_CHChainStart(line, arg1, argN)
-    local cleanname = arg1 and arg1:match("%S+")
-    if arg1 then command_dispatcher.Dispatch('chchain', 'start', cleanname) end
+    local cleanname = cleanEventToken(arg1)
+    if cleanname then command_dispatcher.Dispatch('chchain', 'start', cleanname) end
 end
 
 local function event_CHChainTank(line, arg1, argN)
-    local cleanname = arg1 and arg1:match("%S+")
-    if arg1 and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'tank', cleanname) end
+    local cleanname = cleanEventToken(arg1)
+    if cleanname and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'tank', cleanname) end
 end
 
 local function event_CHChainPause(line, arg1, argN)
-    if arg1 and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'pause', arg1) end
+    local cleanval = cleanEventToken(arg1) or arg1
+    if cleanval and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'pause', cleanval) end
 end
 
 --- Deadline for current chchain round: chchainPause (tenths of sec) * 100 ms + now.
@@ -90,16 +101,17 @@ end
 function chchain.registerEvents()
     mq.event('CHChain', "#*#Go #1#>>#*#", event_CHChain)
     mq.event('CHChainStop', "#*#chchain stop#*#", event_CHChainStop)
-    mq.event('CHChainStart', "#*#chchain start #1#", event_CHChainStart)
-    mq.event('CHChainTank', "#*#chchain tank #1#", event_CHChainTank)
-    mq.event('CHChainPause', "#*#chchain pause #1#", event_CHChainPause)
+    mq.event('CHChainStart', "#*#chchain start #1#'", event_CHChainStart)
+    mq.event('CHChainTank', "#*#chchain tank #1#'", event_CHChainTank)
+    mq.event('CHChainPause', "#*#chchain pause #1#'", event_CHChainPause)
     mq.event('CHChainSetup', "#*#chchain #1# #2# #3# #4#", event_CHChainSetup)
 end
 
 function chchain.OnGo(line, arg1)
     local rc = state.getRunconfig()
     local myName = mq.TLO.Me.Name()
-    if not myName or string.lower(arg1) ~= string.lower(myName) then return false end
+    arg1 = cleanEventToken(arg1)
+    if not arg1 or not myName or string.lower(arg1) ~= string.lower(myName) then return false end
     if not rc.doChchain then return false end
     rc.chchainCurtank = 1
     local chtimer = chchain.getDeadline(rc)

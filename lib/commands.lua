@@ -1282,20 +1282,25 @@ local function cmd_chchain(args)
     end
     if args[2] == 'start' then
         local meName = mq.TLO.Me.Name()
-        if args[3] and meName and string.lower(args[3]) == string.lower(meName) then
+        local startName = chchain.cleanEventToken(args[3])
+        if startName and meName and string.lower(startName) == string.lower(meName) then
             chchain.OnGo('start', meName)
         end
     end
     if args[2] == 'tank' then
-        local sp = mq.TLO.Spawn('=' .. args[3])
-        if sp and sp.Type() == 'PC' and sp.ID() and sp.ID() > 0 then
-            rc.chchainTank = args[3]
-            rc.chchainTanklist = {}
+        local tankName = chchain.cleanEventToken(args[3])
+        if tankName then
+            local sp = mq.TLO.Spawn('=' .. tankName)
+            if sp and sp.Type() == 'PC' and sp.ID() and sp.ID() > 0 then
+                rc.chchainTank = tankName
+                rc.chchainTanklist = {}
+            end
         end
         mq.cmdf('/rs CHChain tank: %s', rc.chchainTank)
     end
     if args[2] == 'pause' then
-        if args[3] then rc.chchainPause = args[3] end
+        local pauseVal = chchain.cleanEventToken(args[3]) or args[3]
+        if pauseVal then rc.chchainPause = pauseVal end
         mq.cmdf('/rs CHChain pause: %s', rc.chchainPause)
     end
 end
