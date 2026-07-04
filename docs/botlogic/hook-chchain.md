@@ -23,7 +23,7 @@ flowchart TB
     Sit --> End2[return]
 ```
 
-**OnGo (event):** When the Go message is for this character and dochchain is on: validate tank (chtanklist); if tank dead/zoned advance to next tank and set chchain state with deadline. Target tank, check mana and range; if ok /cast "Complete Heal" and setRunState('chchain', { deadline, chnextclr, priority }). Otherwise set state with deadline and skip (e.g. out of mana, out of range).
+**OnGo (event):** When the Go message is for this character and dochchain is on: select first alive in-range tank from the tank list; target with a short wait (200 ms). On success, start Complete Heal and setRunState('chchain', { deadline, chnextclr, priority }) where **deadline = now + pause** (start-to-start rotation — Go fires mid-cast). No tank in range or failed target → immediate `<<Go chnextClr>>`. Out of mana → skip after pause via deferChchainGo.
 
 ## See also
 

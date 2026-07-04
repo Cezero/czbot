@@ -1599,6 +1599,7 @@ function M.chchainSetupContinuation(setupArgs)
         botconfig.config.settings.doheal = false
         botconfig.config.settings.docure = false
         state.getRunconfig().dopull = false
+        log.say('[chchain-setup] ack me=%s nextClr=%s pause=%s', meName, rc.chnextClr, rc.chchainPause)
         mq.cmdf('/rs CHChain ON (NextClr: %s, Pause: %s, Tank: %s)', rc.chnextClr, rc.chchainPause, chtankstr)
     end
 end

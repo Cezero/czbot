@@ -14,6 +14,8 @@ local czactor_dispatch = require('lib.czactor_dispatch')
 
 local chchain = {}
 
+local CH_TARGET_WAIT_MS = 200
+
 --- Strip raid-chat punctuation from an mq.event capture (e.g. Buhmarez' -> Buhmarez).
 local function cleanEventToken(s)
     if not s or s == '' then return nil end
@@ -30,6 +32,11 @@ local function deferChchainGo(rc, deadline)
         chnextclr = rc.chnextClr,
         priority = bothooks.getPriority('chchainTick'),
     })
+end
+
+local function passGoImmediately(rc)
+    mq.cmdf('/rs <<Go %s>>', rc.chnextClr or '?')
+    state.clearRunState()
 end
 
 local function castCompleteHeal(rc)
@@ -103,7 +110,10 @@ local function event_CHChain(line, arg1)
 end
 
 local function event_CHChainSetup(line, arg1, arg2, arg3, arg4)
-    if arg1 == 'setup' then command_dispatcher.Dispatch('chchain', 'setup', arg2, arg3, arg4) end
+    if arg1 == 'setup' then
+        printf('[chchain-setup] event t=%d me=%s', mq.gettime(), mq.TLO.Me.Name() or '?')
+        command_dispatcher.Dispatch('chchain', 'setup', arg2, arg3, arg4)
+    end
 end
 
 local function event_CHChainStop(line)
@@ -128,7 +138,8 @@ end
 --- Deadline for current chchain round: chchainPause (tenths of sec) * 100 ms + now.
 function chchain.getDeadline(rc)
     rc = rc or state.getRunconfig()
-    return (rc.chchainPause or 0) * 100 + mq.gettime()
+    local pause = tonumber(rc.chchainPause) or 0
+    return pause * 100 + mq.gettime()
 end
 
 function chchain.registerEvents()
@@ -154,20 +165,20 @@ function chchain.OnGo(line, arg1)
     local tankid = selectHealTank(rc)
     if not tankid or tankid == 0 then
         mq.cmdf('/rs CHChain: No live tank in range, passing turn to %s', rc.chnextClr or '?')
-        deferChchainGo(rc)
+        passGoImmediately(rc)
         return
     end
     if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
-        targeting.TargetAndWait(tankid, 500)
+        targeting.TargetAndWait(tankid, CH_TARGET_WAIT_MS)
     end
     if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
         mq.cmdf('/rs CHChain: Failed to target tank %s, passing turn to %s', rc.chchainTank, rc.chnextClr or '?')
-        deferChchainGo(rc)
+        passGoImmediately(rc)
         return
     end
     if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < 400 then
         mq.cmdf('/rs SKIP ME (out of mana)')
-        deferChchainGo(rc, mq.gettime() + (rc.chchainPause or 0) * 100)
+        deferChchainGo(rc, mq.gettime() + (tonumber(rc.chchainPause) or 0) * 100)
         return
     end
     castCompleteHeal(rc)

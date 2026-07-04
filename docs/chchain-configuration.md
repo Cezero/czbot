@@ -37,7 +37,7 @@ Configure the chain on each cleric (or broadcast once so all bots configure them
 | Argument | Purpose |
 |----------|---------|
 | **cleric list** | Comma-separated rotation order. **Your toon must appear in this list** or setup fails on that client. |
-| **pause** | Optional. Delay between turns, in **tenths of a second** (`30` = 3.0 s). |
+| **pause** | Optional. **Start-to-start** delay between clerics, in **tenths of a second** (`40` = 4.0 s between cast starts). The next cleric begins Complete Heal while the prior cleric is still casting so heals land on the tank at this interval, not after each cast finishes. |
 | **tank list** | Optional. Comma-separated backup tanks. The first alive PC in zone becomes the CH target. If a tank dies or zones, the bot advances to the next name in the list. |
 
 On successful setup, each participating cleric:
@@ -109,7 +109,7 @@ sequenceDiagram
 
 1. A **`Go <ClericName>>`** message in raid say triggers the named cleric's turn (`OnGo`).
 2. That cleric targets the chain tank and casts Complete Heal.
-3. When the cast window expires (pause deadline), or after handling fizzle/skip conditions, the active cleric sends **`<<Go NextCleric>>`** via `/rs`.
+3. After the **pause** elapses from turn start (while the cast may still be in progress), the active cleric sends **`<<Go NextCleric>>`** via `/rs`. Fizzle handling recasts; tank-death mid-cast interrupts and passes immediately.
 4. The next cleric repeats the cycle.
 
 While in CHChain, the status UI shows run state **CH chain**.
@@ -124,7 +124,7 @@ While in CHChain, the status UI shows run state **CH chain**.
 - **Tank index sync:** When a cleric advances to a higher-priority tank because lower-index tanks are dead, it publishes `chchain_curtank` on the [czbot actor channel](czbot-actor-channel.md). All CHChain bots update their shared index. Watch the MQ console for `czactor send chchain_curtank` / `czactor recv chchain_curtank` to debug sync.
 - **Fizzle:** On fizzle, the bot recasts Complete Heal on the current target.
 - **Tank died mid-cast:** If the target becomes a corpse while casting, the bot interrupts and immediately passes the turn.
-- **No tank in range:** If no list entry is alive and in range for this cleric, the turn is passed after the pause.
+- **No tank in range / failed target:** The turn is passed to the next cleric immediately (no pause wait).
 
 ---
 
@@ -135,7 +135,8 @@ While in CHChain, the status UI shows run state **CH chain**.
 - Raid say wraps messages in single quotes (`'chchain start Buhmarez'`). The bot strips trailing quote characters from captured names; reload the script after updates.
 - Confirm the setup ack showed the expected tank list (`Tank: ...`). Tanks must be alive PCs in zone when setup runs, or the list will be empty and no heal target is available.
 - Use the cleric's exact in-game name in the start command (case-insensitive).
-- Confirm bots are not paused (`/czp off` or Resume in the status UI). Paused bots do not process chat events or run CHChain ticks.
+- Confirm bots are not paused (`/czp off` or Resume in the status UI). Paused bots do not run normal hooks or CHChain ticks.
+- **Setup latency:** Enable tick debug (`/cz tickdebug on`) and watch for `[chchain-setup] event` / `ack` log lines with `t=` timestamps on each cleric to compare handler timing across clients.
 - Test one cleric locally: `/cz chchain start <FirstCleric>` on that cleric's client. If that works but `/rs chchain start` does not, check that all bots hear raid say.
 
 **Turn passes but no heal is cast**

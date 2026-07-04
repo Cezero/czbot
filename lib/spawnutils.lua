@@ -932,6 +932,7 @@ end
 
 function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
+    if rc.doChchain then return end
     utils.pruneCharmSkipIds(rc)
     spawnutils.pruneFTEList(rc)
     if not spawnutils.validateAcmTarget(rc) then return end
