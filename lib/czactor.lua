@@ -155,7 +155,7 @@ function czactor.getMaOverrideNameIfAvailable()
     local rc = state.getRunconfig()
     local o = rc.ActorMaOverride
     if not o or not o.name or o.name == '' then return nil end
-    if o.until and mq.gettime() > o.until then return nil end
+    if o.expiresAt and mq.gettime() > o.expiresAt then return nil end
     if o.zone and not zonesMatch(o.zone, myZone()) then return nil end
     local ctx = charinfoutils.getLeaderContext(o.name)
     if not ctx or not ctx.alive or not ctx.sameZone then return nil end
@@ -166,7 +166,7 @@ function czactor.getMtOverrideNameIfAvailable()
     local rc = state.getRunconfig()
     local o = rc.ActorMtOverride
     if not o or not o.name or o.name == '' then return nil end
-    if o.until and mq.gettime() > o.until then return nil end
+    if o.expiresAt and mq.gettime() > o.expiresAt then return nil end
     if o.zone and not zonesMatch(o.zone, myZone()) then return nil end
     local ctx = charinfoutils.getLeaderContext(o.name)
     if not ctx or not ctx.alive or not ctx.sameZone then return nil end
@@ -222,7 +222,7 @@ local function applyMaUpdate(content, sender)
         name = name,
         seq = seq,
         ts = content.ts,
-        until = content.until,
+        expiresAt = content.expiresAt or content['until'],
         zone = content.zone,
         publisher = sender,
         reason = content.reason,
@@ -243,7 +243,7 @@ local function applyMtUpdate(content, sender)
         name = name,
         seq = seq,
         ts = content.ts,
-        until = content.until,
+        expiresAt = content.expiresAt or content['until'],
         zone = content.zone,
         publisher = sender,
         reason = content.reason,
