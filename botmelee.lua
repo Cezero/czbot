@@ -50,6 +50,25 @@ function botmelee.clearMobprobEngageGrace()
     state.getRunconfig().mobprobEngageGraceUntil = 0
 end
 
+--- Apply /cz attack engagement state (command issuer or peer receive).
+---@param spawnId number
+---@return boolean success
+---@return string|nil mobName
+function botmelee.applyAttackCommandEngage(spawnId)
+    if not spawnId or spawnId <= 0 then return false, nil end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() == 0 then return false, nil end
+    if utils.isProtectedSpawn(sp) then return false, nil end
+    if not spawnutils.isAliveEngageSpawn(sp) then return false, nil end
+    local rc = state.getRunconfig()
+    if charm.isCharmSkipped(spawnId, rc) then return false, nil end
+    charm.releaseCharmTarget(spawnId, rc)
+    rc.engageTargetId = spawnId
+    rc.attackCommandEngage = true
+    botmelee.armMobprobEngageGrace(spawnId)
+    return true, sp.CleanName() or tostring(spawnId)
+end
+
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee then botmelee.LoadMeleeConfig() end end)
 
 state.getRunconfig().mobprobtimer = 0

@@ -253,7 +253,7 @@ local function cmd_makecamp(args, str)
     end
 end
 
-local function autoRcScope()
+local function autoBroadcastScope()
     return ((mq.TLO.Raid.Members() or 0) > 0) and 'raid' or 'group'
 end
 
@@ -280,7 +280,7 @@ local function parseLeaderBroadcastArgs(args, startIdx, usage)
     end
 
     if not sub then
-        return autoRcScope(), 'on', nil
+        return autoBroadcastScope(), 'on', nil
     end
 
     return nil, nil, usage
@@ -614,27 +614,26 @@ local function cmd_attack(args)
         log.say('\ar Cannot engage protected NPC\ax')
         return
     end
-    local rc = state.getRunconfig()
-    if KillTarget then
-        local charm = require('lib.charm')
-        charm.releaseCharmTarget(KillTarget, rc)
-    end
-    rc.engageTargetId = KillTarget
-    rc.attackCommandEngage = (KillTarget ~= nil)
-    if KillTarget then
-        require('botmelee').armMobprobEngageGrace(KillTarget)
-        local msg = log.fmt('\arEngaging\ax \ay%s\ax now', mq.TLO.Spawn(KillTarget).CleanName())
-        if overrideName then
-            msg = msg .. string.format(' \at(assist: %s)\ax', overrideName)
-        end
-        printf('%s', msg)
-    else
+    if not KillTarget then
         if overrideName then
             log.say('\ar %s has no target, cannot engage\ax', overrideName)
         else
             log.say('\ar Main Assist has no target, cannot engage')
         end
+        return
     end
+    local botmelee = require('botmelee')
+    local ok, mobName = botmelee.applyAttackCommandEngage(KillTarget)
+    if not ok then
+        log.say('\ar Cannot engage target\ax')
+        return
+    end
+    czactor.publishAttackEngage(KillTarget, mobName, assistName)
+    local msg = log.fmt('\arEngaging\ax \ay%s\ax now', mobName or mq.TLO.Spawn(KillTarget).CleanName())
+    if overrideName then
+        msg = msg .. string.format(' \at(assist: %s)\ax', overrideName)
+    end
+    printf('%s', msg)
 end
 
 -- Set MT (Main Tank). Persists to config so it survives /lua run (was session-only before).
@@ -1192,7 +1191,7 @@ local function resolveSaytargetScope(args)
     if sub == 'group' or sub == 'raid' then
         return sub, 3
     end
-    return autoRcScope(), 2
+    return autoBroadcastScope(), 2
 end
 
 local function cmd_syt(args, str)

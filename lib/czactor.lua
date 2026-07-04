@@ -431,6 +431,20 @@ local function applyMaDisengage(content, sender)
     clearMaActorEngaged(state.getRunconfig(), sender)
 end
 
+local function applyAttackEngage(content, sender)
+    if not sender or sender == myName() then return end
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    local issuer = content.issuer or sender
+    if not czactor.matchesBroadcastScope(content.scope, issuer) then return end
+    local spawnId = content.spawnId
+    if not spawnId or spawnId <= 0 then return end
+    local botmelee = require('botmelee')
+    local ok, mobName = botmelee.applyAttackCommandEngage(spawnId)
+    if ok then
+        log.say('[Attack] engaging %s (%s) from %s', mobName or '?', tostring(spawnId), sender)
+    end
+end
+
 function czactor.publishMaEngaged(spawnId, mobName)
     if not spawnId or spawnId <= 0 then return end
     if _lastMaEngagedSpawnId == spawnId then return end
@@ -446,6 +460,19 @@ function czactor.publishMaDisengage(reason)
     _lastMaEngagedSpawnId = nil
     czactor.publish('ma_disengage', {
         reason = reason or 'disengage',
+        scope = roleBroadcastScope(),
+    })
+end
+
+function czactor.publishAttackEngage(spawnId, mobName, assistName)
+    if not spawnId or spawnId <= 0 then return end
+    local issuer = myName()
+    if not issuer or issuer == '' then return end
+    czactor.publish('attack', {
+        spawnId = spawnId,
+        mobName = mobName,
+        assistName = assistName,
+        issuer = issuer,
         scope = roleBroadcastScope(),
     })
 end
@@ -805,6 +832,8 @@ local function processMessage(message)
 
     if id == 'ma_engaged' then applyMaEngaged(content, sender) return end
     if id == 'ma_disengage' then applyMaDisengage(content, sender) return end
+
+    if id == 'attack' then applyAttackEngage(content, sender) return end
 
     if id == 'ot_claim' or id == 'ot_heartbeat' then
         local spawnId = content.spawnId

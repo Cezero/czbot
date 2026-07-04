@@ -29,6 +29,7 @@ CZBot peers coordinate through a dedicated **Actor mailbox** (`czbot`) on the sa
 | `release_mt` | Holder relinquishing MT (death, hover, or ineligible) |
 | `ma_engaged` | MA bot engaged a target — peers learn spawn ID immediately ([MA engage coordination](#ma-engage-coordination)) |
 | `ma_disengage` | MA bot cleared engagement — peers resume follow-leash behavior |
+| `attack` | Group/raid attack broadcast from `/cz attack` — peers engage spawn ID immediately ([Group attack](#group-attack)) |
 | `follow_me` / `follow_me_off` | Leader follow broadcast (replaces `/rc` for `/cz followme`) |
 | `camp_here` / `camp_here_off` | Leader camp broadcast (replaces `/rc` for `/cz camphere`) |
 | `chchain_baton` | CH chain baton — sole trigger for next cleric cast ([CHChain configuration](chchain-configuration.md)) |
@@ -99,6 +100,21 @@ When the **Main Assist** bot sets an engage target, it broadcasts **`ma_engaged`
 
 **Manual disengage:** `/cz disengage` on the MA broadcasts **`ma_disengage`** to peers. On a non-MA bot, it only disengages that bot locally.
 
+## Group attack
+
+When any peer runs **`/cz attack`**, it broadcasts **`attack`** with the resolved NPC spawn ID. In-scope peers (same group/raid, same zone) set `attackCommandEngage` and engage immediately, bypassing **`melee.assistpct`**.
+
+| Field | Purpose |
+|-------|---------|
+| `spawnId` | NPC spawn ID all peers should attack |
+| `scope` | `group` or `raid` |
+| `issuer` | Character who ran `/cz attack` (scope filter) |
+| `mobName` | Optional clean name |
+| `assistName` | Optional: assist name used to resolve the target |
+| `zone` | Sender zone (receivers accept only same-zone senders) |
+
+Unlike **`ma_engaged`**, which informs peers of the MA target for OT/debuff without forcing DPS melee, **`attack`** forces immediate engagement on all receivers (same as local `/cz attack`).
+
 ## Rez coordination
 
 When multiple bots have corpse rez configured, each rezzer:
@@ -144,7 +160,8 @@ Heal spells with **`offtank`** in **targetphase** target peers with a live OT cl
 - [ ] MA engages mob: peers show spawn in `/cz actor status`; OT/notmatar see target before assist-at
 - [ ] `/cz disengage` on MA broadcasts `ma_disengage`; peers resume follow nav
 - [ ] Melee bots sticking past followdistance do not disengage while MA engaged
-- [ ] `/cz followme` and `/cz camphere` work without MQRemote
+- [ ] `/cz attack` on one box: all group/raid peers engage immediately (bypass assist-at)
+- [x] `/cz followme` and `/cz camphere` work without MQRemote
 - [ ] Healer with `offtank` phase heals OT peers in band
 
 ## See also

@@ -547,7 +547,7 @@ function M.draw()
             if campAvail > 0 then
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + campAvail - campIconW - groupCampIconW - GROUP_CAMP_GAP)
             end
-            -- Make GROUP camp: set my camp here AND tell every group member to camp at their own spot via MQRemote.
+            -- Make GROUP camp: set my camp here AND tell every group member to camp at their own spot via Actor channel.
             ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
             ImGui.PushStyleColor(ImGuiCol.Text, WHITE)
             if ImGui.SmallButton(groupCampIcon .. '##group_camp') then
