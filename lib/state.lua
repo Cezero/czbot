@@ -89,14 +89,15 @@
 ---@field forageExpectCursor boolean|nil after /doability Forage: expect item on cursor; CharState /autoinv only while set
 ---@field forageCursorUntil number|nil mq.gettime() deadline for stale clear when forage yields nothing
 ---@field forageSawCursor boolean|nil true once cursor had an item after forage (clears flag when cursor empties before deadline)
---- CHChain state (set by commands.cmd_chchain / chchainSetupContinuation; read by lib.chchain).
+--- CHChain state (lib/chchain).
 ---@field doChchain boolean
+---@field chainActive boolean
 ---@field chchainCurtank number
----@field chchainPause number
 ---@field chchainTank string
----@field chchainTanklist table
----@field chnextClr string|boolean|nil
----@field chchainList string|nil
+---@field chnextClr string|nil
+---@field chchainBatonSeq number
+---@field ChHealers table
+---@field PreCH table|nil settings saved before CH chain enable
 --- Abort flags: true when abort turned off domelee/dodebuff so "abort off" can restore them.
 ---@field meleeAbort boolean
 ---@field debuffAbort boolean
@@ -111,9 +112,18 @@
 ---@field wasDeadOrHover boolean|nil true while character was dead/hovering on prior tick (rez transition detection)
 ---@field OtClaims table|nil spawnId -> { character, ts, zone } from peer ot_claim messages
 ---@field OtMyClaim table|nil { spawnId, ts } this bot's published OT claim
----@field ActorMaOverride table|nil { name, seq, ts, expiresAt?, zone?, publisher?, reason? }
----@field ActorMtOverride table|nil { name, seq, ts, expiresAt?, zone?, publisher?, reason? }
+---@field RezClaims table|nil corpseId -> { character, ts, zone } from peer rez_claim messages
+---@field RezMyClaim table|nil { corpseId, ts } this bot's published rez claim
+---@field ActorMaOverride table|nil { name, seq, ts, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
+---@field ActorMtOverride table|nil { name, seq, ts, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
+---@field MaReleased boolean|nil group MA slot vacant after in-group release_ma
+---@field MtReleased boolean|nil group MT slot vacant after in-group release_mt
+---@field MaImHolding boolean|nil this bot is actively publishing im_ma heartbeats
+---@field MtImHolding boolean|nil this bot is actively publishing im_mt heartbeats
 ---@field CzActorPeers table|nil character name -> last pong/ping time
+---@field MaActorEngaged table|nil { maName, spawnId, ts, zone?, scope? } from peer ma_engaged messages
+---@field commonSyncSeq number|nil monotonic seq for common_sync publishes from this bot
+---@field commonSyncSeqByPublisher table|nil publisher name -> last accepted common_sync seq
 
 local M = {}
 
@@ -329,12 +339,13 @@ function M.resetRunconfig()
         maCastInterruptPending = nil,
         OutOfSpace = false,
         doChchain = false,
+        chainActive = false,
         chchainCurtank = 1,
-        chchainPause = 0,
         chchainTank = '',
-        chchainTanklist = {},
         chnextClr = nil,
-        chchainList = nil,
+        chchainBatonSeq = 0,
+        ChHealers = {},
+        PreCH = nil,
         meleeAbort = false,
         debuffAbort = false,
         lastNukeIndex = nil,
@@ -348,9 +359,17 @@ function M.resetRunconfig()
         wasDeadOrHover = false,
         OtClaims = {},
         OtMyClaim = nil,
+        RezClaims = {},
+        RezMyClaim = nil,
         ActorMaOverride = nil,
         ActorMtOverride = nil,
+        MaReleased = false,
+        MtReleased = false,
+        MaImHolding = false,
+        MtImHolding = false,
         CzActorPeers = {},
+        commonSyncSeq = 0,
+        commonSyncSeqByPublisher = {},
     }
     return M._runconfig
 end

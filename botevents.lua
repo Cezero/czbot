@@ -11,7 +11,10 @@ local botpull = require('botpull')
 local spawnutils = require('lib.spawnutils')
 local combat = require('lib.combat')
 local castinterrupt = require('lib.castinterrupt')
+local tankrole = require('lib.tankrole')
+local rolelists = require('lib.rolelists')
 local log = require('lib.log')
+local common_sync = require('lib.common_sync')
 
 local botevents = {}
 
@@ -37,7 +40,7 @@ function botevents.ResetCombatSession(reason)
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
     rc.lastAssistTargetId = nil
-    require('lib.tankrole').invalidateAll()
+    tankrole.invalidateAll()
     rc.charmSkipIds = {}
     rc.MobList = {}
     spellstates.CleanMobList()
@@ -60,6 +63,7 @@ local function DelayOnZone()
     end
     botpull.DisablePull('zone')
     botconfig.refreshZoneStateFromCommon()
+    rolelists.loadFromCommon()
     MountCastFailed = false
     follow.ResumeAfterZone()
 end
@@ -248,8 +252,8 @@ function botevents.Event_MobProb(line, arg1, arg2)
 end
 
 function botevents.BindEvents()
-    chchain.registerEvents()
     chchain.registerActorHandlers()
+    common_sync.registerActorHandlers()
     follow.registerEvents()
     mq.event('Slain1', "#*#You have been slain by#*#", botevents.Event_Slain)
     mq.event('Slain2', "#*#Returning to Bind Location#*#", botevents.Event_Slain)

@@ -118,6 +118,7 @@ M._commonLoadLastError = nil
 M._commonLoadPaused = false
 M._commonLoadLastAttemptMs = 0
 M._guiDirty = false
+M._suppressCommonSyncBroadcast = false
 
 -- Consider (con) color names and name-to-index map for pull filtering and UI. Indices 1-7.
 M.ConColors = { "Grey", "Green", "Light Blue", "Blue", "White", "Yellow", "Red" }
@@ -246,7 +247,7 @@ local COMMON_LOAD_RETRY_MS = 100
 
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
-local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'noCombatZones', 'botListClassOrder' }
+local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
 
 local function commonFilePath()
     return mq.configDir .. '/' .. COMMON_FILENAME
@@ -294,7 +295,7 @@ local function tryLoadCommonTable(path)
     return common, nil
 end
 
-local function readCommonFromDisk()
+function M.readCommonFromDisk()
     local common, err = tryLoadCommonTable(commonFilePath())
     if common then return common end
     if commonFileExists(commonBakPath()) then
@@ -303,21 +304,31 @@ local function readCommonFromDisk()
     return nil
 end
 
-local function acquireCommonLock()
+local function tryAcquireCommonLockOnce()
     local path = commonLockPath()
-    for _ = 1, LOCK_MAX_ATTEMPTS do
-        local f = io.open(path, 'wx')
-        if f then
-            f:write(tostring(mq.TLO.Me.CleanName() or 'unknown'), '\n', tostring(os.time()))
-            f:close()
-            return true
-        end
+    local f = io.open(path, 'wx')
+    if f then
+        f:write(tostring(mq.TLO.Me.CleanName() or 'unknown'), '\n', tostring(os.time()))
+        f:close()
+        return true
+    end
+    return false
+end
+
+function M.tryAcquireCommonLock()
+    return tryAcquireCommonLockOnce()
+end
+
+local function acquireCommonLock(maxAttempts)
+    maxAttempts = maxAttempts or LOCK_MAX_ATTEMPTS
+    for _ = 1, maxAttempts do
+        if tryAcquireCommonLockOnce() then return true end
         mq.delay(50 + math.random(0, 150))
     end
     return false
 end
 
-local function releaseCommonLock()
+function M.releaseCommonLock()
     os.remove(commonLockPath())
 end
 
@@ -602,16 +613,8 @@ function M.initCommonAtStartup()
     log.say('Failed to load \ar%s\ax at startup: %s', path, err or 'unknown')
 end
 
-function M.saveCommon()
+local function writeCommonToDisk()
     if not M._common then return end
-    local diskCommon = readCommonFromDisk()
-    if diskCommon then
-        local merged, recovered = M.mergeCommonTables(diskCommon, M._common)
-        if recovered > 0 then
-            log.say('cz_common merge recovered %d top-level key(s) from disk', recovered)
-        end
-        M._common = merged
-    end
     local path = commonFilePath()
     local src = io.open(path, 'rb')
     if src then
@@ -627,6 +630,24 @@ function M.saveCommon()
     M._commonLastGood = M._common
 end
 
+function M.saveCommon()
+    if not M._common then return end
+    local diskCommon = M.readCommonFromDisk()
+    if diskCommon then
+        local merged, recovered = M.mergeCommonTables(diskCommon, M._common)
+        if recovered > 0 then
+            log.say('cz_common merge recovered %d top-level key(s) from disk', recovered)
+        end
+        M._common = merged
+    end
+    writeCommonToDisk()
+end
+
+--- Write M._common to disk without mergeCommonTables pre-merge (sync apply path only).
+function M.saveCommonDirect()
+    writeCommonToDisk()
+end
+
 --- Sole runtime write path: reload, mutate, save under lock.
 function M.mutateCommon(mutator)
     if mutator == nil then return false end
@@ -635,13 +656,19 @@ function M.mutateCommon(mutator)
             mq.delay(50 + math.random(0, 150))
         else
             if not M.reloadCommonReadOnly() then
-                releaseCommonLock()
+                M.releaseCommonLock()
                 log.say('Cannot save \ar%s\ax — reload failed, will retry', commonFilePath())
                 return false
             end
+            local common_sync = require('lib.common_sync')
+            local before = common_sync.deepCopy(M._common)
             mutator(M._common)
             M.saveCommon()
-            releaseCommonLock()
+            M.releaseCommonLock()
+            if not M._suppressCommonSyncBroadcast then
+                local delta = common_sync.computeDelta(before, M._common)
+                common_sync.publishAfterSave(delta, mq.TLO.Me.CleanName() or 'unknown')
+            end
             return true
         end
     end
@@ -675,14 +702,13 @@ function M.commonLoadTick()
 end
 
 --- Reload cz_common from disk (read-only) and refresh current-zone exclude/priority/charm lists and nuke flavors.
+--- Callers must also call rolelists.loadFromCommon() (kept out of config to avoid config↔rolelists cycle).
 function M.refreshZoneStateFromCommon()
     M.reloadCommonReadOnly()
     local mobfilter = require('lib.mobfilter')
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')
-    local rolelists = require('lib.rolelists')
-    rolelists.loadFromCommon()
     M.loadNukeFlavorsFromZone()
 end
 
@@ -825,7 +851,8 @@ function M.GetRoleKeys() return ROLE_KEYS end
 function M.GetRoleFields() return ROLE_FIELDS end
 
 -- Apply a role preset to THIS character: behavior flags + Tank/Assist designation, then persist.
--- Sets both config.settings (persisted) and the live runconfig (immediate effect). Returns ok, key.
+-- Sets both config.settings (persisted) and the live runconfig (immediate effect).
+-- Returns ok, key, invalidateRoles (callers should tankrole.invalidateAll() when true).
 function M.ApplyRole(roleKey)
     local key = M.NormalizeRoleKey(roleKey)
     local r = key and M.config.roles and M.config.roles[key]
@@ -852,11 +879,9 @@ function M.ApplyRole(roleKey)
         rc.AssistName = myName
     end
     rc.lastAssistTargetId = nil
-    if r.setTank or r.setAssist then
-        require('lib.tankrole').invalidateAll()
-    end
+    local invalidateRoles = (r.setTank or r.setAssist) and true or false
     M.ApplyAndPersist()
-    return true, key
+    return true, key, invalidateRoles
 end
 
 --- Swap two spell entries in a section array and persist.

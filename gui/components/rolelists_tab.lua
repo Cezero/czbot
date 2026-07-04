@@ -5,6 +5,7 @@ local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local rolelists = require('lib.rolelists')
+local tankrole = require('lib.tankrole')
 local inputs = require('gui.widgets.inputs')
 local theme = require('gui.widgets.theme')
 local section = require('gui.widgets.section')
@@ -82,7 +83,7 @@ local function drawMaAnchorSection()
         '##roles_ma_anchor_leash')
     if maLeashCh then
         botconfig.config.settings.maAnchorLeash = maLeashNew
-        require('lib.tankrole').bumpLeashGen()
+        tankrole.bumpLeashGen()
         runConfigLoaders()
     end
     if ImGui.IsItemHovered() then
@@ -144,7 +145,10 @@ local function drawRolePresetsSection()
         for _, c in ipairs(ROLE_COLS) do
             ImGui.TableNextColumn()
             if ImGui.SmallButton('Apply##rp_' .. c.key) then
-                botconfig.ApplyRole(c.key)
+                local _, _, invalidateRoles = botconfig.ApplyRole(c.key)
+                if invalidateRoles then
+                    tankrole.invalidateAll()
+                end
                 _lastApplied.label = c.label
                 _lastApplied.t = mq.gettime()
             end

@@ -6,6 +6,7 @@ local combat_tab = require('gui.components.combat_tab')
 local pull_tab = require('gui.components.pull_tab')
 local debuff_tab = require('gui.components.debuff_tab')
 local heal_tab = require('gui.components.heal_tab')
+local chchain_tab = require('gui.components.chchain_tab')
 local buff_tab = require('gui.components.buff_tab')
 local cure_tab = require('gui.components.cure_tab')
 local moblist_tab = require('gui.components.moblist_tab')
@@ -43,6 +44,7 @@ local TABS = {
     { label = 'Combat',          draw = combat_tab.draw },
     { label = 'Pull',            draw = pull_tab.draw },
     { label = 'Heal',            draw = heal_tab.draw },
+    { label = 'CH Chain',        draw = chchain_tab.draw },
     { label = 'Buff',            draw = buff_tab.draw },
     { label = 'Debuff/Mez/Nuke', draw = debuff_tab.draw },
     { label = 'Cure',            draw = cure_tab.draw },

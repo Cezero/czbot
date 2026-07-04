@@ -598,7 +598,7 @@ local function logEngageLoSBlocked(engageTargetId, context)
 end
 
 -- When no engageTargetId: stick off, attack off, pet back. Clear NPC target only when auto-attack is on (releasing a fight).
-local function disengageCombat(reason)
+function botmelee.disengageCombat(reason)
     local rc = state.getRunconfig()
     if not state.isMeleeEngaged(rc) then return end
     local engageId = rc.engageTargetId
@@ -611,6 +611,9 @@ local function disengageCombat(reason)
     _engageLosLastLogTime = 0
     _engageLosEngageId = nil
     botmelee.clearMobprobEngageGrace()
+    if tankrole.AmIMainAssist() then
+        require('lib.czactor').publishMaDisengage(reason or 'disengage')
+    end
     if myconfig.melee.offtank and engageId then
         require('lib.czactor').publishOtRelease(engageId, reason or 'disengage')
     end
@@ -621,6 +624,8 @@ local function disengageCombat(reason)
     combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
     if state.getRunState() == state.STATES.melee then state.clearRunState() end
 end
+
+local disengageCombat = botmelee.disengageCombat
 
 -- Stand, attack, and stick to the engage target for final melee positioning. Stops nav first.
 -- Idempotent: only re-issues /stick when the active stick target or command differs.
@@ -894,6 +899,9 @@ function botmelee.AdvCombat()
             else
                 rc.statusMessage = string.format('Assisting on %s (%s)', name, rc.engageTargetId)
             end
+        end
+        if tankrole.AmIMainAssist() then
+            require('lib.czactor').publishMaEngaged(rc.engageTargetId, name)
         end
         engageTarget()
     else

@@ -4,26 +4,39 @@
 local mq = require('mq')
 local actors = require('actors')
 local charinfo = require('plugin.charinfo')
-local charinfoutils = require('lib.charinfoutils')
 local state = require('lib.state')
 local log = require('lib.log')
 local czactor_dispatch = require('lib.czactor_dispatch')
+local auto_ma_mt = require('lib.auto_ma_mt')
+local tankrole = require('lib.tankrole')
 
 local czactor = {}
 
 local PROTOCOL_VER = 1
 local MAILBOX = 'czbot'
 local OT_CLAIM_TTL_MS = 5000
+local REZ_CLAIM_TTL_MS = 60000
 local PING_INTERVAL_MS = 30000
 local OT_HEARTBEAT_MS = 2000
-local ROLE_HANDOFF_INTERVAL_MS = 2000
 
 local _actor = nil
 local _inboundQueue = {}
 local _nextPingAt = 0
 local _nextOtHeartbeatAt = 0
-local _nextRoleHandoffAt = 0
 local _nextClaimPruneAt = 0
+local _nextRoleClaimsAt = 0
+local _maPublishSeq = 0
+local _mtPublishSeq = 0
+local _lastMaEngagedSpawnId = nil
+local ROLE_CLAIMS_INTERVAL_MS = 2000
+
+local function inRaid()
+    return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
+end
+
+local function roleBroadcastScope()
+    return inRaid() and 'raid' or 'group'
+end
 
 local function myName()
     return mq.TLO.Me.Name()
@@ -54,7 +67,12 @@ end
 
 local function ensureRunconfigFields(rc)
     rc.OtClaims = rc.OtClaims or {}
+    rc.RezClaims = rc.RezClaims or {}
     rc.CzActorPeers = rc.CzActorPeers or {}
+    if rc.MaReleased == nil then rc.MaReleased = false end
+    if rc.MtReleased == nil then rc.MtReleased = false end
+    if rc.MaImHolding == nil then rc.MaImHolding = false end
+    if rc.MtImHolding == nil then rc.MtImHolding = false end
 end
 
 function czactor.init()
@@ -85,63 +103,13 @@ function czactor.sendToCharacter(character, msg)
     _actor:send({ character = character }, msg)
 end
 
-local function firstAvailableFromMaList()
-    local rc = state.getRunconfig()
-    local list = rc.MaList
-    if type(list) ~= 'table' then return nil end
-    local leash = require('lib.tankrole').getAnchorLeash()
-    for _, name in ipairs(list) do
-        local ctx = charinfoutils.getLeaderContext(name)
-        if ctx and ctx.alive and ctx.sameZone then
-            if ctx.distance == nil or ctx.distance <= leash then
-                return name
-            end
-        end
-    end
-    return nil
-end
-
-local function firstAvailableFromMtList()
-    local rc = state.getRunconfig()
-    local list = rc.MtList
-    if type(list) ~= 'table' then return nil end
-    for _, name in ipairs(list) do
-        local ctx = charinfoutils.getLeaderContext(name)
-        if ctx and ctx.alive and ctx.sameZone then return name end
-    end
-    return nil
-end
-
-local function maPrimaryTloName()
-    local raidMembers = mq.TLO.Raid.Members() or 0
-    if raidMembers > 0 then
-        local n = mq.TLO.Raid.MainAssist and mq.TLO.Raid.MainAssist.Name and mq.TLO.Raid.MainAssist.Name()
-        if n and n ~= '' then return n end
-        return nil
-    end
-    local n = mq.TLO.Group.MainAssist and mq.TLO.Group.MainAssist.Name and mq.TLO.Group.MainAssist.Name()
-    if n and n ~= '' then return n end
-    return nil
-end
-
-local function isAutomaticAssist()
-    local rc = state.getRunconfig()
-    local name = rc.AssistName
-    if name == nil or name == '' then name = rc.TankName end
-    return name == 'automatic'
-end
-
-local function isAutomaticTank()
-    return state.getRunconfig().TankName == 'automatic'
-end
-
-local function nextMaSeq()
+local function nextManualMaSeq()
     local rc = state.getRunconfig()
     local cur = rc.ActorMaOverride and rc.ActorMaOverride.seq or 0
     return cur + 1
 end
 
-local function nextMtSeq()
+local function nextManualMtSeq()
     local rc = state.getRunconfig()
     local cur = rc.ActorMtOverride and rc.ActorMtOverride.seq or 0
     return cur + 1
@@ -149,36 +117,117 @@ end
 
 function czactor.publishMaUpdate(name, reason)
     if not name or name == '' then return end
-    local seq = nextMaSeq()
-    czactor.broadcast(envelope('ma_update', { name = name, seq = seq, reason = reason or 'manual' }))
+    local seq = nextManualMaSeq()
+    czactor.broadcast(envelope('ma_update', {
+        name = name,
+        seq = seq,
+        reason = reason or 'manual',
+        scope = roleBroadcastScope(),
+    }))
 end
 
 function czactor.publishMtUpdate(name, reason)
     if not name or name == '' then return end
-    local seq = nextMtSeq()
-    czactor.broadcast(envelope('mt_update', { name = name, seq = seq, reason = reason or 'manual' }))
+    local seq = nextManualMtSeq()
+    czactor.broadcast(envelope('mt_update', {
+        name = name,
+        seq = seq,
+        reason = reason or 'manual',
+        scope = roleBroadcastScope(),
+    }))
+end
+
+function czactor.publishImMa(source, listIndex)
+    _maPublishSeq = _maPublishSeq + 1
+    local rc = state.getRunconfig()
+    rc.MaImHolding = true
+    czactor.publish('im_ma', {
+        name = myName(),
+        seq = _maPublishSeq,
+        scope = roleBroadcastScope(),
+        source = source or 'list',
+        listIndex = listIndex or 0,
+    })
+end
+
+function czactor.publishImMt(source, listIndex)
+    _mtPublishSeq = _mtPublishSeq + 1
+    local rc = state.getRunconfig()
+    rc.MtImHolding = true
+    czactor.publish('im_mt', {
+        name = myName(),
+        seq = _mtPublishSeq,
+        scope = roleBroadcastScope(),
+        source = source or 'list',
+        listIndex = listIndex or 0,
+    })
+end
+
+function czactor.publishReleaseMa()
+    local rc = state.getRunconfig()
+    rc.MaImHolding = false
+    local cur = rc.ActorMaOverride
+    local me = myName()
+    if cur and cur.name and me and string.lower(cur.name) == string.lower(me) then
+        rc.ActorMaOverride = nil
+    end
+    if auto_ma_mt.isSenderInMyGroup(me) then
+        rc.MaReleased = true
+    end
+    tankrole.invalidateMa()
+    czactor.publish('release_ma', {
+        name = me,
+        scope = roleBroadcastScope(),
+    })
+end
+
+function czactor.publishReleaseMt()
+    local rc = state.getRunconfig()
+    rc.MtImHolding = false
+    local cur = rc.ActorMtOverride
+    local me = myName()
+    if cur and cur.name and me and string.lower(cur.name) == string.lower(me) then
+        rc.ActorMtOverride = nil
+    end
+    if auto_ma_mt.isSenderInMyGroup(me) then
+        rc.MtReleased = true
+    end
+    tankrole.invalidateMt()
+    czactor.publish('release_mt', {
+        name = me,
+        scope = roleBroadcastScope(),
+    })
+end
+
+local function applyRoleClaimActions(actions)
+    if not actions then return end
+    if actions.releaseMa then czactor.publishReleaseMa() end
+    if actions.releaseMt then czactor.publishReleaseMt() end
+    if actions.publishMa then
+        czactor.publishImMa(actions.publishMa.source, actions.publishMa.listIndex)
+    end
+    if actions.publishMt then
+        czactor.publishImMt(actions.publishMt.source, actions.publishMt.listIndex)
+    end
+end
+
+function czactor.runRoleClaimsTick()
+    local now = mq.gettime()
+    if now < _nextRoleClaimsAt then return end
+    _nextRoleClaimsAt = now + ROLE_CLAIMS_INTERVAL_MS
+    applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
+end
+
+function czactor.onRoleReleaseReceived()
+    applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'release' }))
 end
 
 function czactor.getMaOverrideNameIfAvailable()
-    local rc = state.getRunconfig()
-    local o = rc.ActorMaOverride
-    if not o or not o.name or o.name == '' then return nil end
-    if o.expiresAt and mq.gettime() > o.expiresAt then return nil end
-    if o.zone and not zonesMatch(o.zone, myZone()) then return nil end
-    local ctx = charinfoutils.getLeaderContext(o.name)
-    if not ctx or not ctx.alive or not ctx.sameZone then return nil end
-    return o.name
+    return auto_ma_mt.getActorMaOverrideNameIfAvailable()
 end
 
 function czactor.getMtOverrideNameIfAvailable()
-    local rc = state.getRunconfig()
-    local o = rc.ActorMtOverride
-    if not o or not o.name or o.name == '' then return nil end
-    if o.expiresAt and mq.gettime() > o.expiresAt then return nil end
-    if o.zone and not zonesMatch(o.zone, myZone()) then return nil end
-    local ctx = charinfoutils.getLeaderContext(o.name)
-    if not ctx or not ctx.alive or not ctx.sameZone then return nil end
-    return o.name
+    return auto_ma_mt.getActorMtOverrideNameIfAvailable()
 end
 
 function czactor.matchesBroadcastScope(scope, leaderName)
@@ -217,6 +266,253 @@ function czactor.broadcastCampHereOff(scope)
     czactor.broadcast(envelope('camp_here_off', { scope = scope or 'group', leader = myName() }))
 end
 
+local function acceptMaClaim(sender)
+    if not sender or sender == '' then return false end
+    if inRaid() then
+        return auto_ma_mt.isSenderInMyRaid(sender)
+    end
+    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
+    return auto_ma_mt.groupLacksActiveMa()
+end
+
+local function acceptMtClaim(sender)
+    if not sender or sender == '' then return false end
+    if inRaid() then
+        return auto_ma_mt.isSenderInMyRaid(sender)
+    end
+    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
+    return auto_ma_mt.groupLacksActiveMt()
+end
+
+local function acceptMaRelease(sender, rc)
+    if not sender or sender == '' then return false end
+    if inRaid() then
+        return auto_ma_mt.isSenderInMyRaid(sender)
+    end
+    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
+    local o = rc.ActorMaOverride
+    return o and o.name and string.lower(o.name) == string.lower(sender)
+end
+
+local function acceptMtRelease(sender, rc)
+    if not sender or sender == '' then return false end
+    if inRaid() then
+        return auto_ma_mt.isSenderInMyRaid(sender)
+    end
+    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
+    local o = rc.ActorMtOverride
+    return o and o.name and string.lower(o.name) == string.lower(sender)
+end
+
+local function shouldAcceptImClaim(content, sender, cur)
+    if not cur or not cur.name then return true end
+    local newInGroup = auto_ma_mt.isSenderInMyGroup(sender)
+    local curInGroup = cur.inGroup
+    if curInGroup == nil and cur.publisher then
+        curInGroup = auto_ma_mt.isSenderInMyGroup(cur.publisher)
+    end
+    if newInGroup and not curInGroup then return true end
+    if not newInGroup and curInGroup then return false end
+
+    local newIdx = tonumber(content.listIndex) or 999
+    local curIdx = tonumber(cur.listIndex) or (cur.source == 'primary' and 0 or 999)
+    local newSource = content.source or 'list'
+    local curSource = cur.source or 'list'
+
+    if newSource == 'primary' and curSource ~= 'primary' then return true end
+    if newSource ~= 'primary' and curSource == 'primary' then return false end
+
+    if newIdx < curIdx then return true end
+    if newIdx > curIdx then return false end
+
+    local newSeq = content.seq or 0
+    local curSeq = cur.seq or 0
+    if sender == cur.publisher then return newSeq >= curSeq end
+    return newSeq > curSeq
+end
+
+local function applyImMa(content, sender)
+    local rc = state.getRunconfig()
+    local name = content.name or sender
+    if not name or name == '' then return end
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    if not acceptMaClaim(sender) then return end
+    local cur = rc.ActorMaOverride
+    if cur and cur.reason == 'manual' then return end
+    if not shouldAcceptImClaim(content, sender, cur) then return end
+
+    local inGroup = auto_ma_mt.isSenderInMyGroup(sender)
+    rc.ActorMaOverride = {
+        name = name,
+        seq = content.seq or 0,
+        ts = content.ts,
+        zone = content.zone,
+        publisher = sender,
+        reason = 'claim',
+        scope = content.scope,
+        source = content.source,
+        listIndex = content.listIndex,
+        inGroup = inGroup,
+    }
+    if inGroup then rc.MaReleased = false end
+    tankrole.invalidateMa()
+end
+
+local function applyImMt(content, sender)
+    local rc = state.getRunconfig()
+    local name = content.name or sender
+    if not name or name == '' then return end
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    if not acceptMtClaim(sender) then return end
+    local cur = rc.ActorMtOverride
+    if cur and cur.reason == 'manual' then return end
+    if not shouldAcceptImClaim(content, sender, cur) then return end
+
+    local inGroup = auto_ma_mt.isSenderInMyGroup(sender)
+    rc.ActorMtOverride = {
+        name = name,
+        seq = content.seq or 0,
+        ts = content.ts,
+        zone = content.zone,
+        publisher = sender,
+        reason = 'claim',
+        scope = content.scope,
+        source = content.source,
+        listIndex = content.listIndex,
+        inGroup = inGroup,
+    }
+    if inGroup then rc.MtReleased = false end
+    local curtank = auto_ma_mt.handleMtOverride(name, 'claim')
+    tankrole.invalidateMt()
+    if curtank and curtank.index and curtank.tank then
+        czactor.publish('chchain_curtank', { index = curtank.index, tank = curtank.tank })
+    end
+end
+
+local function clearMaActorEngaged(rc, maName)
+    local eng = rc.MaActorEngaged
+    if not eng then return end
+    if maName and eng.maName and string.lower(eng.maName) ~= string.lower(maName) then return end
+    rc.MaActorEngaged = nil
+end
+
+local function isAliveEngageSpawnId(spawnId)
+    if not spawnId or spawnId <= 0 then return false end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() == 'Corpse' then return false end
+    return require('lib.spawnutils').isAliveEngageSpawn(sp)
+end
+
+local function namesMatch(a, b)
+    if not a or not b or a == '' or b == '' then return false end
+    return string.lower(a) == string.lower(b)
+end
+
+local function applyMaEngaged(content, sender)
+    if not sender or sender == myName() then return end
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    if not acceptMaClaim(sender) then return end
+    local spawnId = content.spawnId
+    if not spawnId or spawnId <= 0 then return end
+    local rc = state.getRunconfig()
+    rc.MaActorEngaged = {
+        maName = sender,
+        spawnId = spawnId,
+        ts = content.ts or mq.gettime(),
+        zone = content.zone,
+        scope = content.scope,
+    }
+end
+
+local function applyMaDisengage(content, sender)
+    if not sender or sender == myName() then return end
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    if not acceptMaClaim(sender) then return end
+    clearMaActorEngaged(state.getRunconfig(), sender)
+end
+
+function czactor.publishMaEngaged(spawnId, mobName)
+    if not spawnId or spawnId <= 0 then return end
+    if _lastMaEngagedSpawnId == spawnId then return end
+    _lastMaEngagedSpawnId = spawnId
+    czactor.publish('ma_engaged', {
+        spawnId = spawnId,
+        mobName = mobName,
+        scope = roleBroadcastScope(),
+    })
+end
+
+function czactor.publishMaDisengage(reason)
+    _lastMaEngagedSpawnId = nil
+    czactor.publish('ma_disengage', {
+        reason = reason or 'disengage',
+        scope = roleBroadcastScope(),
+    })
+end
+
+function czactor.getMaEngagedSpawnId(maName)
+    maName = maName or tankrole.GetAssistTargetName()
+    if not maName or maName == '' then return nil end
+    if namesMatch(maName, myName()) and tankrole.AmIMainAssist() then
+        local rc = state.getRunconfig()
+        local id = rc.engageTargetId
+        if id and id > 0 and isAliveEngageSpawnId(id) then return id end
+        return nil
+    end
+    local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    local eng = rc.MaActorEngaged
+    if not eng or not eng.spawnId or not namesMatch(eng.maName, maName) then return nil end
+    if eng.zone and not zonesMatch(eng.zone, myZone()) then return nil end
+    if not isAliveEngageSpawnId(eng.spawnId) then
+        rc.MaActorEngaged = nil
+        return nil
+    end
+    return eng.spawnId
+end
+
+function czactor.isMaEngagementActive()
+    if tankrole.AmIMainAssist() then
+        local rc = state.getRunconfig()
+        local id = rc.engageTargetId
+        return id and id > 0 and isAliveEngageSpawnId(id)
+    end
+    local maName = tankrole.GetAssistTargetName()
+    if not maName or maName == '' then return false end
+    return czactor.getMaEngagedSpawnId(maName) ~= nil
+end
+
+local function applyReleaseMa(content, sender)
+    local rc = state.getRunconfig()
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    if not acceptMaRelease(sender, rc) then return end
+    local name = content.name or sender
+    local cur = rc.ActorMaOverride
+    if cur and cur.name and name and string.lower(cur.name) ~= string.lower(name) then return end
+    clearMaActorEngaged(rc, name)
+    rc.ActorMaOverride = nil
+    if auto_ma_mt.isSenderInMyGroup(sender) then
+        rc.MaReleased = true
+    end
+    tankrole.invalidateMa()
+    czactor.onRoleReleaseReceived()
+end
+
+local function applyReleaseMt(content, sender)
+    local rc = state.getRunconfig()
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    if not acceptMtRelease(sender, rc) then return end
+    local name = content.name or sender
+    local cur = rc.ActorMtOverride
+    if cur and cur.name and name and string.lower(cur.name) ~= string.lower(name) then return end
+    rc.ActorMtOverride = nil
+    if auto_ma_mt.isSenderInMyGroup(sender) then
+        rc.MtReleased = true
+    end
+    tankrole.invalidateMt()
+    czactor.onRoleReleaseReceived()
+end
+
 local function applyMaUpdate(content, sender)
     local rc = state.getRunconfig()
     local name = content.name
@@ -234,8 +530,9 @@ local function applyMaUpdate(content, sender)
         zone = content.zone,
         publisher = sender,
         reason = content.reason,
+        inGroup = sender and auto_ma_mt.isSenderInMyGroup(sender),
     }
-    require('lib.tankrole').invalidateMa()
+    tankrole.invalidateMa()
 end
 
 local function applyMtUpdate(content, sender)
@@ -255,8 +552,13 @@ local function applyMtUpdate(content, sender)
         zone = content.zone,
         publisher = sender,
         reason = content.reason,
+        inGroup = sender and auto_ma_mt.isSenderInMyGroup(sender),
     }
-    require('lib.tankrole').invalidateMt()
+    local curtank = auto_ma_mt.handleMtOverride(name, content.reason)
+    tankrole.invalidateMt()
+    if curtank and curtank.index and curtank.tank then
+        czactor.publish('chchain_curtank', { index = curtank.index, tank = curtank.tank })
+    end
 end
 
 local function pruneOtClaims(rc)
@@ -273,6 +575,45 @@ local function setOtClaim(spawnId, character, ts, zone)
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
     rc.OtClaims[spawnId] = { character = character, ts = ts or mq.gettime(), zone = zone or myZone() }
+end
+
+local function pruneRezClaims(rc)
+    local now = mq.gettime()
+    for corpseId, claim in pairs(rc.RezClaims) do
+        if not claim or (now - (claim.ts or 0)) > REZ_CLAIM_TTL_MS then
+            rc.RezClaims[corpseId] = nil
+        end
+    end
+end
+
+local function setRezClaim(corpseId, character, ts, zone)
+    if not corpseId or corpseId <= 0 or not character then return end
+    local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    rc.RezClaims[corpseId] = { character = character, ts = ts or mq.gettime(), zone = zone or myZone() }
+end
+
+function czactor.isCorpseRezClaimedByOther(corpseId)
+    if not corpseId or corpseId <= 0 then return false end
+    local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    pruneRezClaims(rc)
+    local claim = rc.RezClaims[corpseId]
+    if not claim then return false end
+    if claim.character == myName() then return false end
+    if claim.zone and not zonesMatch(claim.zone, myZone()) then return false end
+    return true
+end
+
+function czactor.syncRezClaim(corpseId)
+    if not corpseId or corpseId <= 0 then return end
+    local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    if rc.RezMyClaim and rc.RezMyClaim.corpseId == corpseId then return end
+    local ts = mq.gettime()
+    rc.RezMyClaim = { corpseId = corpseId, ts = ts }
+    czactor.publish('rez_claim', { corpseId = corpseId })
+    setRezClaim(corpseId, myName(), ts, myZone())
 end
 
 function czactor.publishOtClaim(spawnId, mobName, primaryId)
@@ -457,6 +798,13 @@ local function processMessage(message)
 
     if id == 'ma_update' then applyMaUpdate(content, sender) return end
     if id == 'mt_update' then applyMtUpdate(content, sender) return end
+    if id == 'im_ma' then applyImMa(content, sender) return end
+    if id == 'im_mt' then applyImMt(content, sender) return end
+    if id == 'release_ma' then applyReleaseMa(content, sender) return end
+    if id == 'release_mt' then applyReleaseMt(content, sender) return end
+
+    if id == 'ma_engaged' then applyMaEngaged(content, sender) return end
+    if id == 'ma_disengage' then applyMaDisengage(content, sender) return end
 
     if id == 'ot_claim' or id == 'ot_heartbeat' then
         local spawnId = content.spawnId
@@ -477,59 +825,20 @@ local function processMessage(message)
         return
     end
 
+    if id == 'rez_claim' then
+        local corpseId = content.corpseId
+        if corpseId and corpseId > 0 and sender then
+            setRezClaim(corpseId, sender, content.ts, content.zone)
+        end
+        return
+    end
+
     if id == 'follow_me' then handleLeaderFollowMe(content) return end
     if id == 'follow_me_off' then handleLeaderFollowMeOff(content) return end
     if id == 'camp_here' then handleLeaderCampHere(content) return end
     if id == 'camp_here_off' then handleLeaderCampHereOff(content) return end
 
     if czactor_dispatch.Dispatch(content, sender) then return end
-end
-
-local function tickRoleHandoff()
-    local now = mq.gettime()
-    if now < _nextRoleHandoffAt then return end
-    _nextRoleHandoffAt = now + ROLE_HANDOFF_INTERVAL_MS
-
-    local rc = state.getRunconfig()
-    local me = myName()
-    if isAutomaticAssist() then
-        local primary = maPrimaryTloName()
-        local primaryOk = false
-        if primary then
-            local ctx = charinfoutils.getLeaderContext(primary)
-            primaryOk = ctx and ctx.alive and ctx.sameZone
-        end
-        if not primaryOk then
-            local candidate = firstAvailableFromMaList()
-            if candidate == me then
-                local cur = rc.ActorMaOverride
-                if not cur or cur.name ~= me then
-                    czactor.publishMaUpdate(me, 'death')
-                end
-            end
-        end
-    end
-
-    if isAutomaticTank() then
-        local raidMembers = mq.TLO.Raid.Members() or 0
-        local primaryOk = false
-        if raidMembers == 0 then
-            local primary = mq.TLO.Group.MainTank and mq.TLO.Group.MainTank.Name and mq.TLO.Group.MainTank.Name()
-            if primary and primary ~= '' then
-                local ctx = charinfoutils.getLeaderContext(primary)
-                primaryOk = ctx and ctx.alive and ctx.sameZone
-            end
-        end
-        if not primaryOk then
-            local candidate = firstAvailableFromMtList()
-            if candidate == me then
-                local cur = rc.ActorMtOverride
-                if not cur or cur.name ~= me then
-                    czactor.publishMtUpdate(me, 'death')
-                end
-            end
-        end
-    end
 end
 
 function czactor.tick()
@@ -551,6 +860,7 @@ function czactor.tick()
     if now >= _nextClaimPruneAt then
         _nextClaimPruneAt = now + 1000
         pruneOtClaims(rc)
+        pruneRezClaims(rc)
         if rc.OtMyClaim and rc.OtMyClaim.spawnId then
             local sid = rc.OtMyClaim.spawnId
             local sp = mq.TLO.Spawn(sid)
@@ -559,9 +869,21 @@ function czactor.tick()
                 czactor.publishOtRelease(sid, 'dead')
             end
         end
+        if rc.RezMyClaim and rc.RezMyClaim.corpseId then
+            local cid = rc.RezMyClaim.corpseId
+            local sp = mq.TLO.Spawn(cid)
+            if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() ~= 'Corpse' then
+                rc.RezMyClaim = nil
+            end
+        end
+        if rc.MaActorEngaged and rc.MaActorEngaged.spawnId then
+            if not isAliveEngageSpawnId(rc.MaActorEngaged.spawnId) then
+                rc.MaActorEngaged = nil
+            end
+        end
     end
 
-    tickRoleHandoff()
+    czactor.runRoleClaimsTick()
 end
 
 function czactor.sendPing()
@@ -569,9 +891,7 @@ function czactor.sendPing()
 end
 
 function czactor.onMaResumed()
-    if require('lib.tankrole').AmIMainAssist() then
-        czactor.publishMaUpdate(myName(), 'resume')
-    end
+    czactor.onRoleReleaseReceived()
 end
 
 function czactor.printPeerStatus()
@@ -593,9 +913,27 @@ function czactor.printStatus()
     local maO = rc.ActorMaOverride
     local mtO = rc.ActorMtOverride
     printf('  MA override: %s', maO and maO.name or '(none)')
-    if maO then printf('    seq=%s reason=%s publisher=%s', tostring(maO.seq), tostring(maO.reason), tostring(maO.publisher)) end
+    if maO then
+        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s',
+            tostring(maO.seq), tostring(maO.source), tostring(maO.listIndex),
+            tostring(maO.zone), tostring(maO.publisher), tostring(maO.inGroup))
+    end
     printf('  MT override: %s', mtO and mtO.name or '(none)')
-    if mtO then printf('    seq=%s reason=%s publisher=%s', tostring(mtO.seq), tostring(mtO.reason), tostring(mtO.publisher)) end
+    if mtO then
+        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s',
+            tostring(mtO.seq), tostring(mtO.source), tostring(mtO.listIndex),
+            tostring(mtO.zone), tostring(mtO.publisher), tostring(mtO.inGroup))
+    end
+    printf('  MaReleased=%s MtReleased=%s MaImHolding=%s MtImHolding=%s',
+        tostring(rc.MaReleased), tostring(rc.MtReleased),
+        tostring(rc.MaImHolding), tostring(rc.MtImHolding))
+    local maEng = rc.MaActorEngaged
+    if maEng and maEng.spawnId then
+        printf('  MA engaged: %s -> spawn %s (%.1fs ago)', tostring(maEng.maName),
+            tostring(maEng.spawnId), (mq.gettime() - (maEng.ts or 0)) / 1000)
+    else
+        printf('  MA engaged: (none)')
+    end
     local claimCount = 0
     for spawnId, claim in pairs(rc.OtClaims or {}) do
         claimCount = claimCount + 1
@@ -605,6 +943,17 @@ function czactor.printStatus()
     if claimCount == 0 then printf('  OT claims: (none)') end
     if rc.OtMyClaim then
         printf('  My OT claim: spawn %s', tostring(rc.OtMyClaim.spawnId))
+    end
+    pruneRezClaims(rc)
+    local rezClaimCount = 0
+    for corpseId, claim in pairs(rc.RezClaims or {}) do
+        rezClaimCount = rezClaimCount + 1
+        printf('  Rez claim corpse %s -> %s (%.1fs ago)', tostring(corpseId), tostring(claim.character),
+            (mq.gettime() - (claim.ts or 0)) / 1000)
+    end
+    if rezClaimCount == 0 then printf('  Rez claims: (none)') end
+    if rc.RezMyClaim then
+        printf('  My rez claim: corpse %s', tostring(rc.RezMyClaim.corpseId))
     end
 end
 

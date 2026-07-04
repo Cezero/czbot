@@ -108,10 +108,12 @@ local function leaderContextFromSpawn(name)
 end
 
 local function mergeCharinfoWithSpawn(charinfoCtx, spawnCtx)
-    charinfoCtx.distance = spawnCtx.distance
-    charinfoCtx.x = spawnCtx.x
-    charinfoCtx.y = spawnCtx.y
-    charinfoCtx.z = spawnCtx.z
+    if charinfoCtx.distance == nil then
+        charinfoCtx.distance = spawnCtx.distance
+    end
+    if not charinfoCtx.x then charinfoCtx.x = spawnCtx.x end
+    if not charinfoCtx.y then charinfoCtx.y = spawnCtx.y end
+    if not charinfoCtx.z then charinfoCtx.z = spawnCtx.z end
     charinfoCtx.sameZone = true
     return charinfoCtx
 end
@@ -128,6 +130,10 @@ local function leaderContextFromCharinfoPeer(name, peer)
     end
 
     local ctx = baseContextFromCharinfo(name, peer)
+    if zoneMatch == true and ctx.x and ctx.y and ctx.z then
+        ctx.sameZone = true
+        return ctx
+    end
     if ctx.distance ~= nil then
         ctx.sameZone = true
         return ctx
@@ -161,6 +167,36 @@ local function leaderContextForSelf(name)
         return spawnCtx
     end
     return nil
+end
+
+--- 2D distance to leader context (follow leash semantics); prefers ctx coords over ctx.distance.
+---@param ctx table|nil
+---@return number|nil
+function charinfoutils.leaderDistance2D(ctx)
+    if not ctx then return nil end
+    if ctx.x and ctx.y then
+        local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+        if meX and meY then
+            local dSq = utils.getDistanceSquared2D(meX, meY, ctx.x, ctx.y)
+            if dSq then return math.sqrt(dSq) end
+        end
+    end
+    return ctx.distance
+end
+
+--- 3D distance to leader context; prefers ctx coords over ctx.distance.
+---@param ctx table|nil
+---@return number|nil
+function charinfoutils.leaderDistance3D(ctx)
+    if not ctx then return nil end
+    if ctx.x and ctx.y and ctx.z then
+        local meX, meY, meZ = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+        if meX and meY and meZ then
+            local dSq = utils.getDistanceSquared3D(meX, meY, meZ, ctx.x, ctx.y, ctx.z)
+            if dSq then return math.sqrt(dSq) end
+        end
+    end
+    return ctx.distance
 end
 
 --- Normalized leader context from charinfo (bot peer) or Spawn TLO (non-bot PC).

@@ -2,11 +2,13 @@
 
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local tankrole = require('lib.tankrole')
 
 local rolelists = {}
 
 local _maListGen = 0
 local _mtListGen = 0
+local _chListGen = 0
 
 local LIST_CONFIG = {
     ma = {
@@ -17,6 +19,10 @@ local LIST_CONFIG = {
         commonKey = 'mt_list',
         runconfigKey = 'MtList',
     },
+    ch = {
+        commonKey = 'ch_healers',
+        runconfigKey = 'ChHealers',
+    },
 }
 
 function rolelists.getMaListGen()
@@ -25,6 +31,10 @@ end
 
 function rolelists.getMtListGen()
     return _mtListGen
+end
+
+function rolelists.getChListGen()
+    return _chListGen
 end
 
 local function saveList(listType, replace)
@@ -49,7 +59,8 @@ function rolelists.loadFromCommon()
     end
     _maListGen = _maListGen + 1
     _mtListGen = _mtListGen + 1
-    require('lib.tankrole').invalidateAll()
+    _chListGen = _chListGen + 1
+    tankrole.invalidateAll()
 end
 
 function rolelists.getMaList()
@@ -58,6 +69,10 @@ end
 
 function rolelists.getMtList()
     return state.getRunconfig().MtList or {}
+end
+
+function rolelists.getChHealers()
+    return state.getRunconfig().ChHealers or {}
 end
 
 function rolelists.process(listType, command)
@@ -70,10 +85,12 @@ function rolelists.process(listType, command)
     end
     if listType == 'ma' then
         _maListGen = _maListGen + 1
-        require('lib.tankrole').invalidateMa()
+        tankrole.invalidateMa()
     elseif listType == 'mt' then
         _mtListGen = _mtListGen + 1
-        require('lib.tankrole').invalidateMt()
+        tankrole.invalidateMt()
+    elseif listType == 'ch' then
+        _chListGen = _chListGen + 1
     end
 end
 

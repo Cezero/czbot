@@ -16,16 +16,16 @@ For what the MA and MT *do* once resolved (target picking, heals, offtank, pulle
 **Values:**
 
 - **Character name** — Always use that PC.
-- **`"automatic"`** — Resolve from EQ group/raid roles, then fallback lists (this document).
+- **`"automatic"`** — Resolve from actor **`im_ma`** / **`im_mt`** claims (this document).
 - **`"manual"`** — No default; set at runtime with `/cz tank` or `/cz assist`.
 
 **Key points:**
 
-- Resolution is **cached** when `"automatic"`: once MA/MT are resolved, the result is reused until the cached candidate becomes invalid (dies, leaves zone, moves out of `maAnchorLeash` for **ma_list** fallbacks) or an invalidation event occurs. Within each main-loop tick, all callers share one resolved name (no repeated lookups per tick). The Status tab shows the current resolved name with `(auto)` when the setting is `"automatic"`.
-- **Cache invalidation** forces a full re-resolve: EQ group/raid Main Assist or Main Tank assignment changes, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank` / `/cz assist`, role preset Apply with setTank/setAssist, or `maAnchorLeash` change.
-- **MA and MT resolve independently.** If `AssistName` is unset, it defaults to `TankName` at load, but when both are `"automatic"`, MA still comes from group/raid Main Assist (+ `ma_list`) and MT from group Main Tank (+ `mt_list`). They are not forced to be the same person.
-- **`TankName` defaults to `"automatic"`** in new configs. Populate **`ma_list`** and **`mt_list`** in `cz_common.lua` (or the Roles GUI) for reliable multibox fallback.
-- **Actor role overrides:** When the EQ primary MA/MT is unavailable, peers can publish **`ma_update`** / **`mt_update`** on the [CZBot Actor channel](czbot-actor-channel.md) (e.g. after MA death, the first available `ma_list` entry). Actor overrides sit **between** primary failure and `ma_list` fallback. Manual `/cz assist` / `/cz tank` (non-automatic) also publish updates.
+- Resolution is **cached** when `"automatic"`: the resolved name comes from the latest valid **`im_ma`** / **`im_mt`** actor override. **`primary_retained`** keeps the EQ primary name for `lastAssistTargetId` when no claim is active yet.
+- **Cache invalidation** forces a full re-resolve: actor claim/release, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank` / `/cz assist`, role preset Apply, or `maAnchorLeash` change.
+- **MA and MT resolve independently** via separate actor claim streams.
+- **`TankName` defaults to `"automatic"`** in new configs. Populate **`ma_list`** and **`mt_list`** in `cz_common.lua` for zone-local claim priority.
+- **Actor claims:** Eligible bots self-select using EQ primary + list priority (zone-local), publish **`im_ma`** / **`im_mt`** every **2s** while holding, and **`release_ma`** / **`release_mt`** on death/hover or when ineligible. Logic lives in **`lib/auto_ma_mt.lua`** and **`lib/czactor.lua`**. Manual `/cz assist` / `/cz tank` publish **`ma_update`** / **`mt_update`**. See [CZBot Actor channel](czbot-actor-channel.md).
 
 ---
 
@@ -35,13 +35,14 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 
 **Per-tick:** The main loop clears a tick-local memo at the start of each iteration. The first `GetAssistTargetName()` / `GetMainTankName()` call in that tick runs the cache path; subsequent calls (including `AmIMainAssist()` / `AmIMainTank()`) return the same memoized name.
 
-**Persistent cache validity** (cheap checks before a full re-resolve):
+**Persistent cache validity:**
 
 1. Raid vs group path unchanged.
-2. EQ-assigned primary (Main Assist / Main Tank) unchanged.
-3. `ma_list` / `mt_list` generation unchanged (list edits or `/cz reloadcommon`).
+2. EQ-assigned primary (Main Assist / Main Tank) unchanged (for `primary_retained`).
+3. `ma_list` / `mt_list` generation unchanged.
 4. `maAnchorLeash` generation unchanged.
-5. Cached candidate still passes availability for its source (`primary`, `list`, or `primary_retained` for dead MA with no list fallback).
+5. **`actor`** source valid until release or superseding claim (receivers do not locally detect holder death).
+6. **`primary_retained`** valid while EQ primary unchanged and no actor override present.
 
 **Invalidation events:** zone change, `/cz tank`, `/cz assist`, role preset Apply (setTank/setAssist), `ma_list`/`mt_list` GUI edits, `/cz reloadcommon`, `/cz maanchorleash`, MA leash edit in Roles GUI. Use `/cz tankrole` for a forced live diagnostic (cache cleared before printing).
 
@@ -51,30 +52,25 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 
 ```mermaid
 flowchart TD
-    subgraph ma [AssistName automatic]
-        MA1{In raid?}
-        MA1 -->|Yes| MA2[Raid.MainAssist]
-        MA1 -->|No| MA3[Group.MainAssist]
-        MA2 --> MA4{Alive and in zone?}
-        MA3 --> MA4
-        MA4 -->|Yes| MAResolved[Resolved MA]
-        MA4 -->|No| MA5[Walk ma_list in order]
-        MA5 --> MA6{First alive in zone within maAnchorLeash?}
-        MA6 -->|Yes| MAResolved
-        MA6 -->|No| MANone[No MA resolved]
+    subgraph claim [Eligible bot in zone]
+        C1[Self-select: top primary or list candidate in this zone]
+        C1 --> C2[Publish im_ma / im_mt every 2s]
     end
-    subgraph mt [TankName automatic]
-        MT1{In raid?}
-        MT1 -->|Yes| MT5[Walk mt_list in order]
-        MT1 -->|No| MT2[Group.MainTank]
-        MT2 --> MT4{Alive and in zone?}
-        MT4 -->|Yes| MTResolved[Resolved MT]
-        MT4 -->|No| MT5
-        MT5 --> MT6{First alive in zone?}
-        MT6 -->|Yes| MTResolved
-        MT6 -->|No| MTNone[No MT resolved]
+    subgraph peers [Peers same zone + scope]
+        P1[Receive im_*] --> P2[Store actor override]
+    end
+    subgraph resolve [AssistName/TankName automatic]
+        R1[Actor override name] -->|none, MA only| R2[primary_retained EQ name]
+    end
+    subgraph release [Holder dies or ineligible]
+        X1[Publish release_ma / release_mt]
+        X1 --> X2[Peers self-select new holder]
     end
 ```
+
+**Claim eligibility (claimer only):** alive, in proximity to roster peers in this zone (MA uses `maAnchorLeash`), top priority among in-zone candidates. Split raids across zones may have separate MA/MT per zone.
+
+**Receive:** scope filter + sender same-zone match; trust claim (no holder re-validation).
 
 ---
 

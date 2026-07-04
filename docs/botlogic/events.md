@@ -44,7 +44,7 @@ flowchart TB
     end
 ```
 
-Additional events are registered by **chchain** and **follow** in their own `registerEvents()` (e.g. CHChain Go, stop, start, tank, pause).
+Additional events are registered by **follow** in `registerEvents()` (group/raid chat "follow"). CH chain uses **czactor** only (no chat events).
 
 ---
 

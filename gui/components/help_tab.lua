@@ -82,7 +82,7 @@ local GROUPS = {
     } },
     { title = "CC / pets / cleric chain", cmds = {
         { "/cz charmpetsetup on|off", "Toggle charm-pet auto-setup (taunt off + assist)." },
-        { "/cz chchain <...>", "Set up the cleric Complete Heal chain." },
+        { "/cz chchain on|off|start|test|delay", "Complete Heal chain (czactor control). See CH Chain tab." },
     } },
     { title = "Diagnostics", cmds = {
         { "/cz mezdebug on|off", "Log why mez targets are picked or skipped." },

@@ -9,6 +9,7 @@ local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
 local botmove = require('botmove')
 local targeting = require('lib.targeting')
+local czactor = require('lib.czactor')
 
 local botheal = {}
 local AHThreshold = {}
@@ -152,16 +153,13 @@ end
 local function CorpseRezIdForFilter()
     local candidates = _corpseRezCandidates()
     if #candidates == 0 then return nil end
-    local bestPriority = candidates[1].priority
-    local band = {}
     for _, c in ipairs(candidates) do
-        if c.priority == bestPriority then
-            band[#band + 1] = c
-        else
-            break
+        if not czactor.isCorpseRezClaimedByOther(c.rezid) then
+            czactor.syncRezClaim(c.rezid)
+            return c.rezid
         end
     end
-    return band[math.random(1, #band)].rezid
+    return nil
 end
 
 local function healHasCorpseSpellConfigured()

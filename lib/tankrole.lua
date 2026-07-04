@@ -3,7 +3,7 @@
 -- MA = who selects targets from MobList (named-first, puller priority); DPS/offtank/non-sticky MT follow MA.
 -- "automatic" uses Group/Raid window roles: Group.MainTank, Group.MainAssist, Group.Puller.
 -- Raid has MainAssist only; MainTank and Puller always come from Group.
--- When primary is unavailable, falls back to cz_common ma_list (proximity-gated) / mt_list (in-zone only).
+-- When primary is unavailable, actor im_ma/im_mt claims (lib/czactor.lua) are the sole automatic source.
 -- Automatic resolution is cached until invalidation or the cached candidate becomes unavailable.
 -- A throttled refresh re-resolves every 2s so higher-priority MA/MT can reclaim the role after rez.
 
@@ -13,6 +13,7 @@ local state = require('lib.state')
 local charinfo = require("plugin.charinfo")
 local charinfoutils = require('lib.charinfoutils')
 local rolelists = require('lib.rolelists')
+local auto_ma_mt = require('lib.auto_ma_mt')
 local log = require('lib.log')
 
 local tankrole = {}
@@ -68,26 +69,15 @@ function tankrole.invalidateAll()
 end
 
 local function isCandidateAvailable(name, requireLeash)
-    if not name or name == '' then return false end
-    local ctx = charinfoutils.getLeaderContext(name)
-    if not ctx or not ctx.alive or not ctx.sameZone then return false end
-    if requireLeash then
-        local leash = getAnchorLeash()
-        if not ctx.distance or ctx.distance > leash then return false end
-    end
-    return true
+    return auto_ma_mt.isCandidateAvailable(name, requireLeash)
 end
 
 local function firstAvailableFromList(list, requireLeash)
-    if type(list) ~= 'table' then return nil end
-    for _, name in ipairs(list) do
-        if isCandidateAvailable(name, requireLeash) then return name end
-    end
-    return nil
+    return auto_ma_mt.firstAvailableFromList(list, requireLeash)
 end
 
 local function firstAvailableFromMtList(list)
-    return firstAvailableFromList(list, false)
+    return auto_ma_mt.firstAvailableFromMtList(list)
 end
 
 local function inRaid()
@@ -148,40 +138,18 @@ local function auditCandidate(name, requireLeash)
 end
 
 local function summarizeMaPath()
-    local raid = inRaid()
+    local rc = state.getRunconfig()
+    local actorMa = auto_ma_mt.getActorMaOverrideName()
+    if actorMa then return 'actor claim: ' .. actorMa end
     local primary = getMaPrimaryTlo()
-    if primary then
-        if isCandidateAvailable(primary, false) then
-            return string.format('primary available (%s MA): %s', raid and 'raid' or 'group', primary)
-        end
-        local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
-        if fallback then return 'ma_list fallback: ' .. fallback end
-        return 'primary retention (unavailable): ' .. primary
-    end
-    local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
-    if fallback then return 'ma_list only: ' .. fallback end
-    return 'no MA resolved'
+    if primary then return 'primary_retained (awaiting im_ma): ' .. primary end
+    return 'no MA resolved (awaiting im_ma)'
 end
 
 local function summarizeMtPath()
-    if not inRaid() then
-        local primary = getMtPrimaryTlo()
-        if primary and isCandidateAvailable(primary, false) then
-            return 'group MainTank: ' .. primary
-        end
-        if primary then
-            local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
-            if fallback then return 'group MT unavailable, mt_list fallback: ' .. fallback end
-            return 'group MT unavailable, no mt_list match'
-        end
-    else
-        local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
-        if fallback then return 'raid mt_list: ' .. fallback end
-        return 'raid mt_list walk: no match'
-    end
-    local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
-    if fallback then return 'mt_list only: ' .. fallback end
-    return 'no MT resolved'
+    local actorMt = auto_ma_mt.getActorMtOverrideName()
+    if actorMt then return 'actor claim: ' .. actorMt end
+    return 'no MT resolved (awaiting im_mt)'
 end
 
 local function printListAudit(label, list, listRequireLeash)
@@ -217,46 +185,26 @@ local function printListAudit(label, list, listRequireLeash)
     end
 end
 
----@return table { name: string|nil, source: string, primaryTlo: string|nil, inRaid: boolean }
 local function resolveAutomaticAssistFull()
     local raid = inRaid()
     local primaryTlo = getMaPrimaryTlo()
     local meta = { primaryTlo = primaryTlo, inRaid = raid }
 
+    local actorMa = auto_ma_mt.getActorMaOverrideName()
+    if actorMa then
+        meta.name = actorMa
+        meta.source = 'actor'
+        return meta
+    end
+
     if primaryTlo then
-        if isCandidateAvailable(primaryTlo, false) then
-            meta.name = primaryTlo
-            meta.source = 'primary'
-            return meta
-        end
-        local czactor = require('lib.czactor')
-        local actorMa = czactor.getMaOverrideNameIfAvailable()
-        if actorMa then
-            meta.name = actorMa
-            meta.source = 'actor'
-            return meta
-        end
-        local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
-        if fallback then
-            meta.name = fallback
-            meta.source = 'list'
-            return meta
-        end
         meta.name = primaryTlo
         meta.source = 'primary_retained'
         return meta
     end
 
-    local fallback = firstAvailableFromList(state.getRunconfig().MaList, true)
-    meta.name = fallback
-    meta.source = fallback and 'list' or nil
-    if not fallback then
-        local actorMa = require('lib.czactor').getMaOverrideNameIfAvailable()
-        if actorMa then
-            meta.name = actorMa
-            meta.source = 'actor'
-        end
-    end
+    meta.name = nil
+    meta.source = nil
     return meta
 end
 
@@ -266,22 +214,15 @@ local function resolveAutomaticTankFull()
     local primaryTlo = getMtPrimaryTlo()
     local meta = { primaryTlo = primaryTlo, inRaid = raid }
 
-    if not raid and primaryTlo and isCandidateAvailable(primaryTlo, false) then
-        meta.name = primaryTlo
-        meta.source = 'primary'
-        return meta
-    end
-
-    local actorMt = require('lib.czactor').getMtOverrideNameIfAvailable()
+    local actorMt = auto_ma_mt.getActorMtOverrideName()
     if actorMt then
         meta.name = actorMt
         meta.source = 'actor'
         return meta
     end
 
-    local fallback = firstAvailableFromMtList(state.getRunconfig().MtList)
-    meta.name = fallback
-    meta.source = fallback and 'list' or nil
+    meta.name = nil
+    meta.source = nil
     return meta
 end
 
@@ -292,19 +233,13 @@ local function isCachedMaValid(cache)
     if rolelists.getMaListGen() ~= cache.listGen then return false end
     if _leashGen ~= cache.leashGen then return false end
 
-    if cache.source == 'primary' then
-        return isCandidateAvailable(cache.name, false)
-    end
-    if cache.source == 'list' then
-        return isCandidateAvailable(cache.name, true)
-    end
     if cache.source == 'actor' then
-        return isCandidateAvailable(cache.name, false)
+        return true
     end
     if cache.source == 'primary_retained' then
         if cache.name ~= cache.primaryTlo then return false end
-        if cache.primaryTlo and isCandidateAvailable(cache.primaryTlo, false) then return false end
-        if firstAvailableFromList(state.getRunconfig().MaList, true) then return false end
+        if getMaPrimaryTlo() ~= cache.primaryTlo then return false end
+        if auto_ma_mt.getActorMaOverrideName() then return false end
         return true
     end
     return false
@@ -317,14 +252,8 @@ local function isCachedMtValid(cache)
     if rolelists.getMtListGen() ~= cache.listGen then return false end
     if _leashGen ~= cache.leashGen then return false end
 
-    if cache.source == 'primary' then
-        return isCandidateAvailable(cache.name, false)
-    end
-    if cache.source == 'list' then
-        return isCandidateAvailable(cache.name, false)
-    end
     if cache.source == 'actor' then
-        return isCandidateAvailable(cache.name, false)
+        return true
     end
     return false
 end
@@ -368,16 +297,18 @@ maybeRefreshAutomaticCache = function()
     local assistSetting = getEffectiveAssistSetting(rc)
     if assistSetting == 'automatic' then
         local oldMa = _maCache.name
+        local oldSource = _maCache.source
         local fresh = resolveAutomaticAssistFull()
-        if fresh.name ~= oldMa then
+        if fresh.name ~= oldMa or fresh.source ~= oldSource then
             log.say('MA switched to %s (was %s)', tostring(fresh.name or '(nil)'), tostring(oldMa or '(nil)'))
             storeMaCache(fresh)
         end
     end
     if rc.TankName == 'automatic' then
         local oldMt = _mtCache.name
+        local oldSource = _mtCache.source
         local fresh = resolveAutomaticTankFull()
-        if fresh.name ~= oldMt then
+        if fresh.name ~= oldMt or fresh.source ~= oldSource then
             log.say('MT switched to %s (was %s)', tostring(fresh.name or '(nil)'), tostring(oldMt or '(nil)'))
             storeMtCache(fresh)
         end
@@ -513,21 +444,33 @@ function tankrole.debugPrint()
         tankrole.AmIMainAssist() and 'yes' or 'no',
         tankrole.AmIMainTank() and 'yes' or 'no')
 
-    printListAudit('MaList', rc.MaList)
-    printListAudit('MtList', rc.MtList, false)
+    printListAudit('MaList (zone-local claim walk)', rc.MaList)
+    printListAudit('MtList (zone-local claim walk)', rc.MtList, false)
+
+    local topMa, topMaSrc, topMaIdx = auto_ma_mt.topMaCandidateInZone()
+    local topMt, topMtSrc, topMtIdx = auto_ma_mt.topMtCandidateInZone()
+    printf('  topMaCandidateInZone=%s source=%s idx=%s',
+        tostring(topMa), tostring(topMaSrc), tostring(topMaIdx))
+    printf('  topMtCandidateInZone=%s source=%s idx=%s',
+        tostring(topMt), tostring(topMtSrc), tostring(topMtIdx))
 
     printf('  MA path: %s', summarizeMaPath())
     printf('  MT path: %s', summarizeMtPath())
     if rc.ActorMaOverride then
-        printf('  Actor MA override: %s seq=%s reason=%s publisher=%s',
+        printf('  Actor MA override: %s seq=%s source=%s listIndex=%s publisher=%s zone=%s',
             tostring(rc.ActorMaOverride.name), tostring(rc.ActorMaOverride.seq),
-            tostring(rc.ActorMaOverride.reason), tostring(rc.ActorMaOverride.publisher))
+            tostring(rc.ActorMaOverride.source), tostring(rc.ActorMaOverride.listIndex),
+            tostring(rc.ActorMaOverride.publisher), tostring(rc.ActorMaOverride.zone))
     end
     if rc.ActorMtOverride then
-        printf('  Actor MT override: %s seq=%s reason=%s publisher=%s',
+        printf('  Actor MT override: %s seq=%s source=%s listIndex=%s publisher=%s zone=%s',
             tostring(rc.ActorMtOverride.name), tostring(rc.ActorMtOverride.seq),
-            tostring(rc.ActorMtOverride.reason), tostring(rc.ActorMtOverride.publisher))
+            tostring(rc.ActorMtOverride.source), tostring(rc.ActorMtOverride.listIndex),
+            tostring(rc.ActorMtOverride.publisher), tostring(rc.ActorMtOverride.zone))
     end
+    printf('  MaReleased=%s MtReleased=%s MaImHolding=%s MtImHolding=%s',
+        tostring(rc.MaReleased), tostring(rc.MtReleased),
+        tostring(rc.MaImHolding), tostring(rc.MtImHolding))
 end
 
 return tankrole

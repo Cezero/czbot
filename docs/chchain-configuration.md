@@ -1,168 +1,49 @@
 ﻿# CHChain Configuration
 
-This document explains **CHChain** (Complete Heal chain): how to configure and run a coordinated Complete Heal rotation across multiple clerics on a shared tank target. It is intended for operators running CZBot on each cleric in the chain.
-
-## Overview
-
-CHChain rotates **Complete Heal** casts across an ordered list of clerics. Each cleric takes a turn targeting the chain tank, casting Complete Heal, then passing the turn to the next cleric via raid say (`/rs`).
-
-- **Runtime only:** CHChain is enabled with `/cz chchain` commands. It is **not** stored in `cz_<CharName>.lua` and does not persist across bot restarts.
-- **Spell requirement:** Each cleric in the chain must have **Complete Heal** in their spell book.
-- **Suppressed activity:** While CHChain is active, the bot forces off normal heal, buff, debuff, melee, cure, and pull activity. Previous settings are saved on setup and restored when you **stop** the chain.
-
----
-
-## Prerequisites
-
-- Each cleric in the chain runs CZBot and has **Complete Heal** memorized or in their spell book.
-- Cleric names in the setup list must match in-game character names (comparison is case-insensitive).
-- All participating bots must hear coordination messages. Use **`/rs`** (raid say) to broadcast setup, start, tank, pause, and turn-pass messages to every client.
-
----
+CHChain rotates **Complete Heal** casts across clerics listed in **`ch_healers`** (cz_common), healing the first alive tank from **`mt_list`**. All chain control uses the **czbot actor channel**; optional chat mirror is display-only.
 
 ## Setup
 
-Configure the chain on each cleric (or broadcast once so all bots configure themselves):
+1. **Roles** tab → populate `mt_list` (tank priority).
+2. **CH Chain** tab → populate `ch_healers`, timing, options.
+3. On each cleric in the list: enable **CH Chain** (or `/cz chchain on`).
+4. Start the chain from the first cleric: **Start Chain** or `/cz chchain start`.
 
-```text
-/cz chchain setup <cleric1,cleric2,...> [pause] [tank1,tank2,...]
-```
+Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_common.lua` and auto-sync to peers via **`common_sync`** on the czactor channel. Manual **`/cz reloadcommon`** remains a fallback.
 
-**Broadcast example:**
+## Commands
 
-```text
-/rs chchain setup HealerA,HealerB,HealerC 30 MainTank,OffTank
-```
+| Command | Action |
+|---------|--------|
+| `/cz chchain on` | Enable on this cleric (must be in `ch_healers`); publishes `chchain_control start` |
+| `/cz chchain off` | Disable and restore PreCH settings; publishes stop |
+| `/cz chchain start` | Kickoff cast + `chchain_control kickoff` |
+| `/cz chchain test` | Single test cast (auto-enables if needed) |
+| `/cz chchain delay [ms]` | Set/read baton delay (ms into cast) |
 
-| Argument | Purpose |
-|----------|---------|
-| **cleric list** | Comma-separated rotation order. **Your toon must appear in this list** or setup fails on that client. |
-| **pause** | Optional. **Start-to-start** delay between clerics, in **tenths of a second** (`40` = 4.0 s between cast starts). The next cleric begins Complete Heal while the prior cleric is still casting so heals land on the tank at this interval, not after each cast finishes. |
-| **tank list** | Optional. Comma-separated backup tanks. The first alive PC in zone becomes the CH target. If a tank dies or zones, the bot advances to the next name in the list. |
+## Actor messages
 
-On successful setup, each participating cleric:
+| id | Purpose |
+|----|---------|
+| `chchain_baton` | Hand off to next cleric (sole cast trigger) |
+| `chchain_control` | `start`, `stop`, `kickoff` |
+| `chchain_curtank` | Tank index sync (failover, MT swap) |
+| `common_sync` | Auto-sync `cz_common` fields (`ch_healers`, `ch_chain`, `mt_list`, etc.) |
+| `mt_update` | Also publishes `chchain_curtank` so CH clerics retarget |
 
-- Enables CHChain mode and records who receives the next turn after them.
-- Disables **doheal**, **dobuff**, **dodebuff**, **domelee**, **docure**, and **dopull**.
-- Announces via `/rs`: `CHChain ON (NextClr: ..., Pause: ..., Tank: ...)`.
+## Cast behavior
 
----
+- Poll-based cast: baton at `broadcastDelayMs`, cancel in final `cancelWindowMs` if tank HP ≥ threshold.
+- Cast must start before baton is sent.
+- Per-cleric CH range check on `mt_list`; mana skip; fizzle recast; corpse interrupt + baton.
+- While active, normal heal/buff/debuff/melee/cure/pull are suppressed (restored on off).
 
-## Starting the chain
+## MT coordination
 
-Kick off the first cleric:
-
-```text
-/cz chchain start <FirstCleric>
-```
-
-Or broadcast:
-
-```text
-/rs chchain start HealerA
-```
-
-Only the named cleric executes their turn: target the chain tank and cast Complete Heal.
-
----
-
-## Runtime control
-
-| Command | Purpose |
-|---------|---------|
-| **/cz chchain stop** | Disable CHChain and restore settings saved before setup. Also works via `/rs chchain stop`. |
-| **/cz chchain tank \<name\>** | Change the CH target. Broadcast with `/rs chchain tank <name>`. |
-| **/cz chchain pause [val]** | Set pause (tenths of a second) or report the current value. Broadcast with `/rs chchain pause <val>`. |
-
-**Typical session:**
-
-```text
-/rs chchain setup HealerA,HealerB,HealerC 30 MainTank
-/rs chchain start HealerA
-```
-
-When finished:
-
-```text
-/rs chchain stop
-```
-
----
-
-## How rotation works
-
-Each cleric knows **chnextClr** — the next name after themselves in the setup list, wrapping back to the first cleric at the end.
-
-```mermaid
-sequenceDiagram
-    participant Leader
-    participant ClericA
-    participant ClericB
-    participant Tank
-
-    Leader->>ClericA: /rs chchain start ClericA
-    ClericA->>Tank: target and cast Complete Heal
-    ClericA->>ClericB: /rs Go ClericB>>
-    ClericB->>Tank: target and cast Complete Heal
-    ClericB->>ClericA: /rs Go ClericA>> (wrap to first in list)
-```
-
-1. A **`Go <ClericName>>`** message in raid say triggers the named cleric's turn (`OnGo`).
-2. That cleric targets the chain tank and casts Complete Heal.
-3. After the **pause** elapses from turn start (while the cast may still be in progress), the active cleric sends **`<<Go NextCleric>>`** via `/rs`. Fizzle handling recasts; tank-death mid-cast interrupts and passes immediately.
-4. The next cleric repeats the cycle.
-
-While in CHChain, the status UI shows run state **CH chain**.
-
----
-
-## Behavior during chain
-
-- **Sitting:** Clerics sit when not casting.
-- **Mana skip:** A cleric skips their turn if mana is too low (roughly below 400 after a regen buffer) and passes to the next cleric after the pause.
-- **Tank selection:** Each turn scans the tank list from the current shared index (`chchainCurtank`) onward. The first tank that is alive, in zone, and within Complete Heal range **for that cleric** is chosen. Alive but out-of-range tanks are skipped in favor of the next backup (positioning differs per cleric).
-- **Tank index sync:** When a cleric advances to a higher-priority tank because lower-index tanks are dead, it publishes `chchain_curtank` on the [czbot actor channel](czbot-actor-channel.md). All CHChain bots update their shared index. Watch the MQ console for `czactor send chchain_curtank` / `czactor recv chchain_curtank` to debug sync.
-- **Fizzle:** On fizzle, the bot recasts Complete Heal on the current target.
-- **Tank died mid-cast:** If the target becomes a corpse while casting, the bot interrupts and immediately passes the turn.
-- **No tank in range / failed target:** The turn is passed to the next cleric immediately (no pause wait).
-
----
-
-## Troubleshooting
-
-**Start does nothing after setup**
-
-- Raid say wraps messages in single quotes (`'chchain start Buhmarez'`). The bot strips trailing quote characters from captured names; reload the script after updates.
-- Confirm the setup ack showed the expected tank list (`Tank: ...`). Tanks must be alive PCs in zone when setup runs, or the list will be empty and no heal target is available.
-- Use the cleric's exact in-game name in the start command (case-insensitive).
-- Confirm bots are not paused (`/czp off` or Resume in the status UI). Paused bots do not run normal hooks or CHChain ticks.
-- **Setup latency:** Enable tick debug (`/cz tickdebug on`) and watch for `[chchain-setup] event` / `ack` log lines with `t=` timestamps on each cleric to compare handler timing across clients.
-- Test one cleric locally: `/cz chchain start <FirstCleric>` on that cleric's client. If that works but `/rs chchain start` does not, check that all bots hear raid say.
-
-**Turn passes but no heal is cast**
-
-- Watch raid say for skip messages: out of mana, no tank in range, or failed to target.
-- Ensure **Complete Heal** is in the cleric's spell book (checked at setup).
-- Check MQ console for `czactor send/recv chchain_curtank` if tanks died and peers may be on a stale index. All CHChain clerics must be czbot actor peers (`/cz actor ping`).
-
-**Chain stalls after one cast**
-
-- Status UI should show run state **CH chain** during an active turn. If it stays idle, the bot may be paused or stuck in another run state.
-- After the pause deadline, the active cleric should broadcast `<<Go NextCleric>>` via `/rs`. If that message never appears, check that `chchainTick` is running (bot not paused).
-
----
-
-## Caveats
-
-- **Replaces normal healing:** CHChain takes over entirely while active. Configure normal heal spells in [Healing configuration](healing-configuration.md) for everyday use outside a CH rotation.
-- **No persistence:** Re-run setup after restarting the bot or reloading the script.
-- **All clerics must setup:** Each client only enables CHChain if its own name is in the cleric list. A broadcast setup command configures every bot that hears it and is listed.
-- **Internal details:** Hook logic, run-state transitions, and event registration are documented in [hook-chchain](botlogic/hook-chchain.md).
-
----
+When **`mt_update`** fires (manual `/cz tank`, auto MT death, etc.), all CH-enabled bots update curtank via `chchain_curtank`. Manual tank swaps also promote the name to front of `mt_list`.
 
 ## See also
 
-- [Healing configuration](healing-configuration.md) — normal heal loop, bands, and runtime heal commands.
-- [Commands and configuration reference](commands-and-configuration-reference.md) — full `/cz chchain` command listing.
-- [Raid mode](raid-mode.md) — raid save/load and raid mechanic mode (separate from CHChain).
+- [CZBot Actor channel](czbot-actor-channel.md)
+- [Automatic MA/MT Selection](automatic-ma-mt-selection.md) — `mt_list`, `lib/auto_ma_mt.lua`
+- [Hook: chchainTick](botlogic/hook-chchain.md)

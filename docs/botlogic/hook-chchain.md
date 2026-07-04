@@ -5,29 +5,27 @@
 
 ## Logic
 
-The hook only runs when runState is **chchain**. CH chain is started by the **OnGo** event (e.g. "Go NextChar>>"); the tick then waits for cast to finish or deadline, then passes the turn with /rs.
+Runs when runState is **chchain**. Cast is started by **`chchain_baton`** on the czactor channel (or local kickoff). The tick polls the cast: baton at delay, cancel window, fizzle/corpse handling.
 
 ```mermaid
 flowchart TB
     Start[chchainTick] --> State{runState == chchain?}
     State -->|No| End[return]
-    State -->|Yes| Payload{payload.chnextclr?}
-    Payload -->|No| Clear[clearRunState, return]
-    Payload -->|Yes| Fizzle{Cast.Result == CAST_FIZZLE?}
-    Fizzle -->|Yes| Recast[/cast Complete Heal, return]
-    Fizzle -->|No| Corpse{CastTimeLeft > 0 and target corpse?}
-    Corpse -->|Yes| Interrupt[/rs interrupt, /rs Go chnextclr, clearRunState]
-    Corpse -->|No| Deadline{mq.gettime() >= deadline?}
-    Deadline -->|Yes| Pass[/rs Go chnextclr, clearRunState]
-    Deadline -->|No| Sit{not sitting and not casting? /sit on}
-    Sit --> End2[return]
+    State -->|Yes| Fizzle{CAST_FIZZLE?}
+    Fizzle -->|Yes| Recast[recast CH]
+    Fizzle -->|No| Corpse{target corpse?}
+    Corpse -->|Yes| Baton[passBaton czactor]
+    Corpse -->|No| Casting{still casting?}
+    Casting -->|Yes| Delay{broadcastDelayMs elapsed?}
+    Delay -->|Yes| Baton
+    Casting -->|No| Done[clicky optional clear state]
+    Casting -->|Yes| CancelWindow{HP >= threshold in cancel window?}
+    CancelWindow -->|Yes| StopCast[stopcast clear]
 ```
 
-**OnGo (event):** When the Go message is for this character and dochchain is on: select first alive in-range tank from the tank list; target with a short wait (200 ms). On success, start Complete Heal and setRunState('chchain', { deadline, chnextclr, priority }) where **deadline = now + pause** (start-to-start rotation — Go fires mid-cast). No tank in range or failed target → immediate `<<Go chnextClr>>`. Out of mana → skip after pause via deferChchainGo.
+**OnBaton:** czactor `chchain_baton` for this cleric → target first alive in-range tank from `mt_list` → cast Complete Heal → set runState with tank name and cast start time.
 
 ## See also
 
-- [CHChain configuration](../chchain-configuration.md) — operator setup and commands
+- [CHChain configuration](../chchain-configuration.md)
 - [README](README.md)
-- [Run state machine](run-state-machine.md)
-- [Events](events.md) — chchain registers its own events

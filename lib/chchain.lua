@@ -1,48 +1,115 @@
--- CHChain (Complete Heal chain) logic. State in state.getRunconfig(): doChchain, chchainCurtank, chchainPause, chchainTank, chchainTanklist, chnextClr.
--- State diagram: OnGo (Go >>me<<) sets runState chchain with deadline; chchainTick either clears (pass Go) or re-sets state (fizzle/skip).
+-- CH Chain (Complete Heal chain): czactor control plane, chV2 poll-based cast logic.
+-- Healers: cz_common ch_healers. Tanks: mt_list via lib/auto_ma_mt.
 
 local mq = require('mq')
+local botconfig = require('lib.config')
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
 local spellutils = require('lib.spellutils')
-local command_dispatcher = require('lib.command_dispatcher')
 local casting = require('lib.casting')
 local utils = require('lib.utils')
 local czactor = require('lib.czactor')
 local czactor_dispatch = require('lib.czactor_dispatch')
+local auto_ma_mt = require('lib.auto_ma_mt')
+local tankrole = require('lib.tankrole')
+local log = require('lib.log')
 
 local chchain = {}
 
 local CH_TARGET_WAIT_MS = 200
+local EVENT_PUMP_MS = 50
+local MANA_SKIP_BUFFER = 400
 
---- Strip raid-chat punctuation from an mq.event capture (e.g. Buhmarez' -> Buhmarez).
-local function cleanEventToken(s)
-    if not s or s == '' then return nil end
-    local token = s:match('%S+')
-    if not token then return nil end
-    return token:gsub("^['\"]+", ''):gsub("['\"]+$", '')
+local DEFAULT_CH_CHAIN = {
+    enabled = true,
+    broadcastDelayMs = 5000,
+    cancelWindowMs = 500,
+    healthThreshold = 95,
+    castStartTimeoutMs = 1500,
+    mirrorEnabled = false,
+    mirrorChannel = 'rsay',
+    mirrorCasts = false,
+    clickyEnabled = false,
+    clickyItem = 'None',
+}
+
+local MIRROR_CHANNELS = { 'rsay', 'shout', 'gsay', 'ooc', 'say' }
+
+local function meName()
+    return mq.TLO.Me.CleanName() or mq.TLO.Me.Name()
 end
 
-chchain.cleanEventToken = cleanEventToken
+local function namesEqual(a, b)
+    if not a or not b then return false end
+    return string.lower(a) == string.lower(b)
+end
 
-local function deferChchainGo(rc, deadline)
-    state.setRunState(state.STATES.chchain, {
-        deadline = deadline or chchain.getDeadline(rc),
-        chnextclr = rc.chnextClr,
-        priority = bothooks.getPriority('chchainTick'),
+local function nextBatonSeq(rc)
+    rc.chchainBatonSeq = (rc.chchainBatonSeq or 0) + 1
+    return rc.chchainBatonSeq
+end
+
+local function mergeDefaults(settings)
+    settings = settings or {}
+    local out = {}
+    for k, v in pairs(DEFAULT_CH_CHAIN) do
+        out[k] = settings[k]
+        if out[k] == nil then out[k] = v end
+    end
+    return out
+end
+
+function chchain.getSettings()
+    local common = botconfig.getCommon()
+    return mergeDefaults(common.ch_chain)
+end
+
+function chchain.ensureDefaultsInCommon()
+    local common = botconfig.getCommon()
+    if type(common.ch_chain) ~= 'table' then
+        botconfig.mutateCommon(function(c)
+            if type(c.ch_chain) ~= 'table' then
+                c.ch_chain = mergeDefaults(nil)
+            end
+        end)
+    end
+end
+
+function chchain.saveSettings(partial)
+    if type(partial) ~= 'table' then return end
+    botconfig.mutateCommon(function(common)
+        common.ch_chain = mergeDefaults(common.ch_chain)
+        for k, v in pairs(partial) do
+            common.ch_chain[k] = v
+        end
+    end)
+end
+
+function chchain.mirrorSay(fmt, ...)
+    local settings = chchain.getSettings()
+    if not settings.mirrorEnabled then return end
+    local channel = settings.mirrorChannel or 'rsay'
+    local msg = string.format(fmt, ...)
+    mq.cmdf('/%s %s', channel, msg)
+end
+
+function chchain.publishBaton(healerName, tankName)
+    local rc = state.getRunconfig()
+    local seq = nextBatonSeq(rc)
+    czactor.publish('chchain_baton', {
+        healer = healerName,
+        seq = seq,
+        tank = tankName or rc.chchainTank,
     })
+    chchain.mirrorSay('your next %s', healerName or '?')
 end
 
-local function passGoImmediately(rc)
-    mq.cmdf('/rs <<Go %s>>', rc.chnextClr or '?')
-    state.clearRunState()
-end
-
-local function castCompleteHeal(rc)
-    spellutils.AutoinvIfCursorBlockingCast()
-    mq.cmdf('/multiline ; /cast "Complete Heal" ; /rs CH >> %s << (pause:%s mana:%s)', rc.chchainTank, rc.chchainPause,
-        mq.TLO.Me.PctMana())
+function chchain.publishControl(action, healerName)
+    czactor.publish('chchain_control', {
+        action = action,
+        healer = healerName,
+    })
 end
 
 local function isTankInCHRange(tankid)
@@ -54,7 +121,16 @@ local function isTankInCHRange(tankid)
     return distSq and distSq <= (spellRange * spellRange)
 end
 
---- Update curtank index/name when index >= current. Returns true if state changed forward.
+local function safeTankHp(name)
+    if not name or name == '' then return 0 end
+    local sp = mq.TLO.Spawn('pc =' .. name)
+    if sp and sp.ID() and sp.ID() > 0 then
+        local hp = sp.PctHPs()
+        if type(hp) == 'number' then return hp end
+    end
+    return 0
+end
+
 local function advanceCurtank(rc, index, tankName)
     if not rc.doChchain then return false end
     if not index or not tankName or tankName == '' then return false end
@@ -79,147 +155,330 @@ local function applyCurtank(content, sender)
     advanceCurtank(rc, idx, name)
 end
 
---- First alive tank from chchainCurtank onward that is in Complete Heal range for this cleric.
 local function selectHealTank(rc)
-    local list = rc.chchainTanklist
+    local list = rc.MtList
     if not list or #list == 0 then return nil end
     local startIdx = rc.chchainCurtank or 1
-    if startIdx < 1 then startIdx = 1 end
+    local tid, idx, name = auto_ma_mt.firstAliveMtFromIndex(list, startIdx, isTankInCHRange)
+    if tid and idx and name then
+        local prev = rc.chchainCurtank or 1
+        if advanceCurtank(rc, idx, name) and idx > prev then
+            czactor.publish('chchain_curtank', { index = idx, tank = name })
+        end
+        return tid, name
+    end
+    return nil
+end
 
-    for idx = startIdx, #list do
-        local name = list[idx]
-        if name and name ~= '' then
-            local sp = mq.TLO.Spawn('=' .. name)
-            if sp and sp.Type() == 'PC' and sp.ID() and sp.ID() > 0 then
-                local tid = sp.ID()
-                if isTankInCHRange(tid) then
-                    local prev = rc.chchainCurtank or 1
-                    if advanceCurtank(rc, idx, name) and idx > prev then
-                        czactor.publish('chchain_curtank', { index = idx, tank = name })
-                    end
-                    return tid
-                end
-            end
+local function getMyHealerIndex()
+    local my = meName()
+    if not my then return 1 end
+    local list = state.getRunconfig().ChHealers or {}
+    for i, name in ipairs(list) do
+        if namesEqual(name, my) then return i end
+    end
+    return 1
+end
+
+local function getNextHealerName()
+    local list = state.getRunconfig().ChHealers or {}
+    if #list < 2 then return list[1] end
+    local idx = getMyHealerIndex()
+    return list[(idx % #list) + 1]
+end
+
+local function computeNextClr(me)
+    local list = state.getRunconfig().ChHealers or {}
+    if #list == 0 then return nil end
+    for i, name in ipairs(list) do
+        if namesEqual(name, me) then
+            if i < #list then return list[i + 1] end
+            return list[1]
+        end
+    end
+    return list[1]
+end
+
+local function findCompleteHealGem()
+    for i = 1, 12 do
+        local g = mq.TLO.Me.Gem(i)
+        if g and g.Name() and g.Name():lower():find('complete heal', 1, true) then
+            return i
         end
     end
     return nil
 end
 
-local function event_CHChain(line, arg1)
-    return chchain.OnGo(line, arg1)
+local function useClickyIfEnabled()
+    local settings = chchain.getSettings()
+    if not settings.clickyEnabled or settings.clickyItem == 'None' or settings.clickyItem == '' then return end
+    if mq.TLO.Me.Casting() then return end
+    if not mq.TLO.FindItem(settings.clickyItem)() then return end
+    mq.cmd('/useitem "' .. settings.clickyItem .. '"')
 end
 
-local function event_CHChainSetup(line, arg1, arg2, arg3, arg4)
-    if arg1 == 'setup' then
-        printf('[chchain-setup] event t=%d me=%s', mq.gettime(), mq.TLO.Me.Name() or '?')
-        command_dispatcher.Dispatch('chchain', 'setup', arg2, arg3, arg4)
+local function suppressNormalActivity()
+    local rc = state.getRunconfig()
+    if rc.PreCH then return end
+    rc.PreCH = {
+        dodebuff = botconfig.config.settings.dodebuff,
+        dobuff = botconfig.config.settings.dobuff,
+        domelee = botconfig.config.settings.domelee,
+        doheal = botconfig.config.settings.doheal,
+        docure = botconfig.config.settings.docure,
+        dopull = rc.dopull,
+    }
+    botconfig.config.settings.dodebuff = false
+    botconfig.config.settings.dobuff = false
+    botconfig.config.settings.domelee = false
+    botconfig.config.settings.doheal = false
+    botconfig.config.settings.docure = false
+    rc.dopull = false
+end
+
+local function restorePreCH()
+    local rc = state.getRunconfig()
+    local pre = rc.PreCH
+    if not pre then return end
+    if pre.dodebuff ~= nil then botconfig.config.settings.dodebuff = pre.dodebuff end
+    if pre.dobuff ~= nil then botconfig.config.settings.dobuff = pre.dobuff end
+    if pre.domelee ~= nil then botconfig.config.settings.domelee = pre.domelee end
+    if pre.doheal ~= nil then botconfig.config.settings.doheal = pre.doheal end
+    if pre.docure ~= nil then botconfig.config.settings.docure = pre.docure end
+    if pre.dopull ~= nil then rc.dopull = pre.dopull end
+    rc.PreCH = nil
+end
+
+function chchain.isMeInHealerList()
+    local me = meName()
+    if not me then return false end
+    for _, name in ipairs(state.getRunconfig().ChHealers or {}) do
+        if namesEqual(name, me) then return true end
+    end
+    return false
+end
+
+function chchain.enable()
+    if not chchain.isMeInHealerList() then
+        log.say('CHChain: %s not in ch_healers', meName() or '?')
+        return false
+    end
+    if not mq.TLO.Me.Book('complete heal')() then
+        log.say('CHChain: Complete Heal not in book')
+        return false
+    end
+    local rc = state.getRunconfig()
+    suppressNormalActivity()
+    rc.doChchain = true
+    rc.chainActive = true
+    rc.chnextClr = computeNextClr(meName())
+    rc.chchainCurtank = 1
+    if rc.MtList and rc.MtList[1] then
+        rc.chchainTank = rc.MtList[1]
+    end
+    rc.chchainBatonSeq = 0
+    log.say('CHChain enabled (next: %s)', tostring(rc.chnextClr))
+    return true
+end
+
+function chchain.disable()
+    local rc = state.getRunconfig()
+    rc.doChchain = false
+    rc.chainActive = false
+    restorePreCH()
+    state.clearRunState()
+    log.say('CHChain disabled')
+end
+
+local function passBaton(rc)
+    local nextName = getNextHealerName()
+    if not nextName then return end
+    chchain.publishBaton(nextName, rc.chchainTank)
+end
+
+local function beginCastState(tankName, castStartMs)
+    local settings = chchain.getSettings()
+    state.setRunState(state.STATES.chchain, {
+        tank = tankName,
+        castStart = castStartMs or mq.gettime(),
+        broadcasted = false,
+        cancelled = false,
+        priority = bothooks.getPriority('chchainTick'),
+    })
+end
+
+function chchain.startCast(testOnly)
+    local rc = state.getRunconfig()
+    local settings = chchain.getSettings()
+    if not rc.doChchain then return false end
+    if not testOnly and not rc.chainActive then return false end
+    if state.getRunState() == state.STATES.chchain then return false end
+
+    local tankid, tankName = selectHealTank(rc)
+    if not tankid or not tankName then
+        log.say('CHChain: no alive tank in mt_list')
+        chchain.mirrorSay('No alive tank!')
+        if not testOnly then passBaton(rc) end
+        return false
+    end
+
+    if mq.TLO.Target.ID() ~= tankid then
+        targeting.TargetAndWait(tankid, CH_TARGET_WAIT_MS)
+    end
+    if mq.TLO.Target.ID() ~= tankid then
+        log.say('CHChain: failed to target %s', tankName)
+        if not testOnly then passBaton(rc) end
+        return false
+    end
+
+    if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < MANA_SKIP_BUFFER then
+        log.say('CHChain: skip (out of mana)')
+        chchain.mirrorSay('skip (out of mana)')
+        if not testOnly then passBaton(rc) end
+        return false
+    end
+
+    local gem = findCompleteHealGem()
+    if not gem then
+        log.say('CHChain: Complete Heal not memorized')
+        chchain.mirrorSay('Complete Heal not memorized - cannot chain!')
+        return false
+    end
+
+    spellutils.AutoinvIfCursorBlockingCast()
+    mq.cmdf('/casting "Complete Heal|gem%d"', gem)
+
+    local waited = 0
+    while not mq.TLO.Me.Casting() and waited < settings.castStartTimeoutMs do
+        mq.doevents()
+        mq.delay(EVENT_PUMP_MS)
+        waited = waited + EVENT_PUMP_MS
+    end
+    if not mq.TLO.Me.Casting() then
+        log.say('CHChain: cast failed to start')
+        return false
+    end
+
+    if settings.mirrorCasts then
+        chchain.mirrorSay('Casting CH on %s', tankName)
+    end
+
+    beginCastState(tankName, mq.gettime())
+    return true
+end
+
+local function onBaton(content)
+    local rc = state.getRunconfig()
+    if not rc.doChchain or not rc.chainActive then return end
+    local healer = content.healer
+    if not healer or not namesEqual(healer, meName()) then return end
+    local seq = tonumber(content.seq) or 0
+    if seq > 0 and seq <= (rc.chchainBatonSeq or 0) then return end
+    if seq > 0 then rc.chchainBatonSeq = seq end
+    if content.tank and content.tank ~= '' then
+        local idx = auto_ma_mt.indexInList(rc.MtList, content.tank)
+        if idx then advanceCurtank(rc, idx, content.tank) end
+    end
+    chchain.startCast(false)
+end
+
+local function onControl(content)
+    local rc = state.getRunconfig()
+    local action = content.action
+    if action == 'start' then
+        rc.chainActive = true
+    elseif action == 'stop' then
+        rc.chainActive = false
+        state.clearRunState()
+    elseif action == 'kickoff' then
+        rc.chainActive = true
+        local healer = content.healer
+        if healer and namesEqual(healer, meName()) then
+            rc.chchainBatonSeq = 0
+            chchain.startCast(false)
+        end
     end
 end
 
-local function event_CHChainStop(line)
-    if string.find(line, 'stop') then command_dispatcher.Dispatch('chchain', 'stop') end
-end
-
-local function event_CHChainStart(line, arg1, argN)
-    local cleanname = cleanEventToken(arg1)
-    if cleanname then command_dispatcher.Dispatch('chchain', 'start', cleanname) end
-end
-
-local function event_CHChainTank(line, arg1, argN)
-    local cleanname = cleanEventToken(arg1)
-    if cleanname and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'tank', cleanname) end
-end
-
-local function event_CHChainPause(line, arg1, argN)
-    local cleanval = cleanEventToken(arg1) or arg1
-    if cleanval and state.getRunconfig().doChchain then command_dispatcher.Dispatch('chchain', 'pause', cleanval) end
-end
-
---- Deadline for current chchain round: chchainPause (tenths of sec) * 100 ms + now.
-function chchain.getDeadline(rc)
-    rc = rc or state.getRunconfig()
-    local pause = tonumber(rc.chchainPause) or 0
-    return pause * 100 + mq.gettime()
-end
-
 function chchain.registerEvents()
-    mq.event('CHChain', "#*#Go #1#>>#*#", event_CHChain)
-    mq.event('CHChainStop', "#*#chchain stop#*#", event_CHChainStop)
-    mq.event('CHChainStart', "#*#chchain start #1#'", event_CHChainStart)
-    mq.event('CHChainTank', "#*#chchain tank #1#'", event_CHChainTank)
-    mq.event('CHChainPause', "#*#chchain pause #1#'", event_CHChainPause)
-    mq.event('CHChainSetup', "#*#chchain #1# #2# #3# #4#", event_CHChainSetup)
+    -- CH chain control is czactor-only; no chat events.
 end
 
 function chchain.registerActorHandlers()
     czactor_dispatch.RegisterHandler('chchain_curtank', applyCurtank)
+    czactor_dispatch.RegisterHandler('chchain_baton', onBaton)
+    czactor_dispatch.RegisterHandler('chchain_control', onControl)
 end
 
-function chchain.OnGo(line, arg1)
-    local rc = state.getRunconfig()
-    local myName = mq.TLO.Me.Name()
-    arg1 = cleanEventToken(arg1)
-    if not arg1 or not myName or string.lower(arg1) ~= string.lower(myName) then return false end
-    if not rc.doChchain then return false end
-    local chtimer = chchain.getDeadline(rc)
-    local tankid = selectHealTank(rc)
-    if not tankid or tankid == 0 then
-        mq.cmdf('/rs CHChain: No live tank in range, passing turn to %s', rc.chnextClr or '?')
-        passGoImmediately(rc)
-        return
-    end
-    if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
-        targeting.TargetAndWait(tankid, CH_TARGET_WAIT_MS)
-    end
-    if rc.chchainTank and mq.TLO.Target.ID() ~= tankid then
-        mq.cmdf('/rs CHChain: Failed to target tank %s, passing turn to %s', rc.chchainTank, rc.chnextClr or '?')
-        passGoImmediately(rc)
-        return
-    end
-    if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < 400 then
-        mq.cmdf('/rs SKIP ME (out of mana)')
-        deferChchainGo(rc, mq.gettime() + (tonumber(rc.chchainPause) or 0) * 100)
-        return
-    end
-    castCompleteHeal(rc)
-    state.setRunState(state.STATES.chchain, { deadline = chtimer, chnextclr = rc.chnextClr, priority = bothooks.getPriority('chchainTick') })
-end
-
---- One tick of chchain state: fizzle handling, target-died interrupt, deadline (pass Go), sit when not casting.
 function chchain.Tick()
     local p = state.getRunStatePayload()
-    if not p or not p.chnextclr then state.clearRunState() return end
+    if not p or not p.tank then
+        state.clearRunState()
+        return
+    end
+
+    local rc = state.getRunconfig()
+    local settings = chchain.getSettings()
+    local tank = p.tank
+
     if casting.result() == 'CAST_FIZZLE' then
         spellutils.AutoinvIfCursorBlockingCast()
         casting.clear()
-        castCompleteHeal(state.getRunconfig())
+        local gem = findCompleteHealGem()
+        if gem then mq.cmdf('/casting "Complete Heal|gem%d"', gem) end
+        p.castStart = mq.gettime()
+        p.broadcasted = false
         return
     end
+
     if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
-        mq.cmdf('/rs CHChain: Target died, interrupting cast')
         casting.interrupt()
-        mq.cmdf('/rs <<Go %s>>', p.chnextclr)
+        chchain.mirrorSay('target died, passing baton')
+        passBaton(rc)
         state.clearRunState()
         return
     end
-    if mq.gettime() >= (p.deadline or 0) then
-        mq.cmdf('/rs <<Go %s>>', p.chnextclr)
-        state.clearRunState()
+
+    if mq.TLO.Me.Casting() and (mq.TLO.Me.CastTimeLeft() or 0) > 0 then
+        local elapsed = mq.gettime() - (p.castStart or mq.gettime())
+        if not p.broadcasted and elapsed >= settings.broadcastDelayMs then
+            passBaton(rc)
+            p.broadcasted = true
+        end
+        if (mq.TLO.Me.CastTimeLeft() or 0) <= settings.cancelWindowMs then
+            local hp = safeTankHp(tank)
+            if hp >= settings.healthThreshold then
+                mq.cmd('/stopcast')
+                p.cancelled = true
+                chchain.mirrorSay('Stopped CH - %s at %d%%', tank, hp)
+                state.clearRunState()
+                return
+            end
+        end
         return
     end
-    if not mq.TLO.Me.Sitting() and (mq.TLO.Me.CastTimeLeft() or 0) == 0 then
-        mq.cmd('/sit on')
+
+    if not p.broadcasted then
+        passBaton(rc)
     end
+
+    if not p.cancelled then
+        useClickyIfEnabled()
+    end
+    state.clearRunState()
 end
 
 function chchain.getHookFn(name)
     if name == 'chchainTick' then
-        return function(hookName)
+        return function(_hookName)
             if state.getRunState() ~= state.STATES.chchain then return end
             chchain.Tick()
         end
     end
     return nil
 end
+
+chchain.MIRROR_CHANNELS = MIRROR_CHANNELS
+chchain.DEFAULT_CH_CHAIN = DEFAULT_CH_CHAIN
 
 return chchain

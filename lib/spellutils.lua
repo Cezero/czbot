@@ -1575,10 +1575,15 @@ function spellutils.GetAssistInfo(includeTarget, assistpct)
 
     local unavailable = isAssistUnavailable(assistName, assistid)
     local assistar, assistarhp
-    if not unavailable then
+    local actorTar = require('lib.czactor').getMaEngagedSpawnId(assistName)
+    if actorTar and actorTar > 0 and utils.isAliveEngageSpawn(mq.TLO.Spawn(actorTar)) then
+        assistar = actorTar
+        assistarhp = mq.TLO.Spawn(actorTar).PctHPs()
+    end
+    if not assistar and not unavailable then
         local _, _, t, h = getLeaderPcTargetInfo(assistName, true)
         assistar, assistarhp = t, h
-    elseif assistName == mq.TLO.Me.Name() then
+    elseif not assistar and assistName == mq.TLO.Me.Name() then
         local t, h = selfTargetIdFromMobList()
         if t then assistar, assistarhp = t, h end
     end

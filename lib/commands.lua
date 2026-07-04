@@ -33,6 +33,9 @@ local command_dispatcher = require('lib.command_dispatcher')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
 local czactor = require('lib.czactor')
+local tankrole = require('lib.tankrole')
+local rolelists = require('lib.rolelists')
+local common_sync = require('lib.common_sync')
 local targeting = require('lib.targeting')
 local log = require('lib.log')
 local unpack = unpack
@@ -520,7 +523,7 @@ end
 -- Reload shared common config from disk, then refresh current-zone runtime derived lists/state.
 -- This is useful when multiple bots share `cz_common.lua` and one bot edits via UI.
 local function cmd_reloadcommon(args)
-    botconfig.refreshZoneStateFromCommon()
+    common_sync.reloadAllFromCommon()
     local zone = mq.TLO.Zone.ShortName()
     zone = zone and zone ~= '' and zone or '<unknown>'
     log.say('Reloaded \agcz_common.lua\ax and refreshed zone state (zone=%s).', zone)
@@ -567,9 +570,23 @@ local function cmd_leash(args)
     end
 end
 
+local function cmd_disengage(args)
+    local botmelee = require('botmelee')
+    local tankrole = require('lib.tankrole')
+    if not state.isMeleeEngaged(state.getRunconfig()) then
+        log.say('Not engaged')
+        return
+    end
+    botmelee.disengageCombat('command')
+    if tankrole.AmIMainAssist() then
+        log.say('\arDisengage\ax: MA released target and broadcast to group')
+    else
+        log.say('\arDisengage\ax: released current target')
+    end
+end
+
 -- Engage MA's target, or (if name given) that player's target for this engagement only.
 local function cmd_attack(args)
-    local tankrole = require('lib.tankrole')
     local assistName
     local overrideName -- used for messages when args[2] was a specific player name
     if args[2] and args[2]:match('%S') then
@@ -626,7 +643,7 @@ local function cmd_tank(args)
     local name = M.normalizeRoleNameArg(args[2])
     state.getRunconfig().TankName = name
     botconfig.config.settings.TankName = name
-    require('lib.tankrole').invalidateAll()
+    tankrole.invalidateAll()
     botconfig.ApplyAndPersist()
     log.say('Setting tank to %s (saved)', name)
     if name ~= 'automatic' then
@@ -643,7 +660,7 @@ local function cmd_assist(args)
     rc.AssistName = name
     rc.lastAssistTargetId = nil
     botconfig.config.settings.AssistName = name
-    require('lib.tankrole').invalidateAll()
+    tankrole.invalidateAll()
     botconfig.ApplyAndPersist()
     log.say('Setting assist to %s (saved)', name)
     if name ~= 'automatic' then
@@ -652,7 +669,7 @@ local function cmd_assist(args)
 end
 
 local function cmd_tankrole(_args)
-    require('lib.tankrole').debugPrint()
+    tankrole.debugPrint()
 end
 
 local function cmd_actor(args)
@@ -733,7 +750,10 @@ local function cmd_engagextargetonly(args)
 end
 
 local function cmd_role(args)
-    local ok, key = botconfig.ApplyRole(args[2])
+    local ok, key, invalidateRoles = botconfig.ApplyRole(args[2])
+    if invalidateRoles then
+        tankrole.invalidateAll()
+    end
     if ok then
         log.say('Applied role preset: \ag%s\ax', key)
     else
@@ -943,7 +963,7 @@ local function cmd_maanchorleash(args)
         return
     end
     botconfig.config.settings.maAnchorLeash = val
-    require('lib.tankrole').bumpLeashGen()
+    tankrole.bumpLeashGen()
     log.say('Setting maAnchorLeash to %s', val)
 end
 
@@ -1229,80 +1249,50 @@ local function cmd_saytarget(args, str)
     cmd_syt({ 'syt', tostring(targetId), message }, '')
 end
 
--- CHChain: stop, setup, start, tank, pause
+-- CHChain: on, off, start, test, delay
 local function cmd_chchain(args)
-    local rc = state.getRunconfig()
-    if args[2] == 'stop' and rc.doChchain then
-        rc.doChchain = false
-        log.say('\arDisabling\ax CHChain')
-        mq.cmd('/rs CHCHain OFF')
-        if state.getRunconfig().PreCH['dodebuff'] then
-            botconfig.config.settings.dodebuff = state.getRunconfig().PreCH
-                ['dodebuff']
-        end
-        if state.getRunconfig().PreCH['dobuff'] then
-            botconfig.config.settings.dobuff = state.getRunconfig().PreCH
-                ['dobuff']
-        end
-        if state.getRunconfig().PreCH['domelee'] then
-            botconfig.config.settings.domelee = state.getRunconfig().PreCH
-                ['domelee']
-        end
-        if state.getRunconfig().PreCH['doheal'] then
-            botconfig.config.settings.doheal = state.getRunconfig().PreCH
-                ['doheal']
-        end
-        if state.getRunconfig().PreCH['dopull'] then
-            state.getRunconfig().dopull = state.getRunconfig().PreCH['dopull']
-        end
-        if state.getRunconfig().PreCH['docure'] then
-            botconfig.config.settings.docure = state.getRunconfig().PreCH
-                ['docure']
-        end
+    local sub = args[2] and string.lower(args[2])
+    if not sub then
+        log.say('Usage: /cz chchain on|off|start|test|delay <ms>')
+        return
     end
-    if args[2] == 'setup' then
-        local spell = 'complete heal'
-        if not rc.doChchain then
-            state.getRunconfig().PreCH = utils.DeepCopy(botconfig.config.settings)
-            state.getRunconfig().PreCH.dopull = state.getRunconfig().dopull
+    if sub == 'on' then
+        if chchain.enable() then
+            chchain.publishControl('start')
         end
-        local tmpchchainlist = args[3]
-        local aminlist = false
-        local meName = mq.TLO.Me.Name()
-        if not meName then return false end
-        for v in string.gmatch(tmpchchainlist, "([^,]+)") do
-            if string.lower(v) == string.lower(meName) then aminlist = true end
-        end
-        if not aminlist then return false end
-        if not mq.TLO.Me.Book(spell)() then
-            log.say('CZBot CHChain: Spell %s not found in your book, failed to start CHChain', spell)
-            return false
-        end
-        M.chchainSetupContinuation({ args[3], args[4], args[5] })
+        return
     end
-    if args[2] == 'start' then
-        local meName = mq.TLO.Me.Name()
-        local startName = chchain.cleanEventToken(args[3])
-        if startName and meName and string.lower(startName) == string.lower(meName) then
-            chchain.OnGo('start', meName)
+    if sub == 'off' or sub == 'stop' then
+        chchain.publishControl('stop')
+        chchain.disable()
+        return
+    end
+    if sub == 'start' then
+        chchain.publishControl('kickoff', meName())
+        chchain.startCast(false)
+        return
+    end
+    if sub == 'test' then
+        if not state.getRunconfig().doChchain then chchain.enable() end
+        chchain.startCast(true)
+        return
+    end
+    if sub == 'delay' then
+        local v = tonumber(args[3])
+        if not v then
+            log.say('CH delay: %d ms', chchain.getSettings().broadcastDelayMs)
+            return
         end
+        if v < 100 then v = v * 1000 end
+        chchain.saveSettings({ broadcastDelayMs = math.max(0, math.min(30000, v)) })
+        log.say('CH delay set to %d ms', v)
+        return
     end
-    if args[2] == 'tank' then
-        local tankName = chchain.cleanEventToken(args[3])
-        if tankName then
-            local sp = mq.TLO.Spawn('=' .. tankName)
-            if sp and sp.Type() == 'PC' and sp.ID() and sp.ID() > 0 then
-                rc.chchainTank = tankName
-                rc.chchainTanklist = {}
-            end
-        end
-        mq.cmdf('/rs CHChain tank: %s', rc.chchainTank)
-    end
-    if args[2] == 'pause' then
-        local pauseVal = chchain.cleanEventToken(args[3]) or args[3]
-        if pauseVal then rc.chchainPause = pauseVal end
-        mq.cmdf('/rs CHChain pause: %s', rc.chchainPause)
-    end
+    log.say('Usage: /cz chchain on|off|start|test|delay <ms>')
+end
+
+local function meName()
+    return mq.TLO.Me.CleanName() or mq.TLO.Me.Name()
 end
 
 local function cmd_draghack(args)
@@ -1461,6 +1451,7 @@ local handlers = {
     reloadcommon = cmd_reloadcommon,
     reloadczcommon = cmd_reloadcommon,
     abort = cmd_abort,
+    disengage = cmd_disengage,
     leash = cmd_leash,
     attack = cmd_attack,
     tank = cmd_tank,
@@ -1556,53 +1547,6 @@ function M.Parse(...)
 end
 
 M.czpause = state.czpause
-
---- Called to finish CHChain setup. setupArgs = { chchainlist, chchainpause, tanklist }.
-function M.chchainSetupContinuation(setupArgs)
-    if not setupArgs or not setupArgs[1] then return end
-    local rc = state.getRunconfig()
-    rc.chchainList = setupArgs[1]
-    rc.chnextClr = nil
-    local clericlisttbl = {}
-    local meName = mq.TLO.Me.Name()
-    if not meName then return false end
-    for v in string.gmatch(rc.chchainList, "([^,]+)") do
-        table.insert(clericlisttbl, v)
-        if rc.chnextClr then
-            rc.chnextClr = v
-            break
-        end
-        if string.lower(v) == string.lower(meName) then
-            rc.doChchain = true
-            rc.chnextClr = true
-        end
-    end
-    if rc.chnextClr == true then rc.chnextClr = clericlisttbl[1] end
-    if rc.doChchain then
-        rc.chchainPause = setupArgs[2]
-        rc.chchainTanklist = {}
-        if setupArgs[3] then
-            for v in string.gmatch(setupArgs[3], "([^,]+)") do
-                local vtrim = v:sub(-1) == "'" and v:sub(1, -2) or v
-                if mq.TLO.Spawn('=' .. vtrim).Type() == 'PC' then
-                    table.insert(rc.chchainTanklist, vtrim)
-                    print('adding ' .. vtrim .. ' to tank list')
-                end
-            end
-        end
-        rc.chchainTank = rc.chchainTanklist[1]
-        rc.chchainCurtank = 1
-        local chtankstr = table.concat(rc.chchainTanklist, ",")
-        botconfig.config.settings.dodebuff = false
-        botconfig.config.settings.dobuff = false
-        botconfig.config.settings.domelee = false
-        botconfig.config.settings.doheal = false
-        botconfig.config.settings.docure = false
-        state.getRunconfig().dopull = false
-        log.say('[chchain-setup] ack me=%s nextClr=%s pause=%s', meName, rc.chnextClr, rc.chchainPause)
-        mq.cmdf('/rs CHChain ON (NextClr: %s, Pause: %s, Tank: %s)', rc.chnextClr, rc.chchainPause, chtankstr)
-    end
-end
 
 mq.bind('/cz', M.Parse)
 mq.bind('/czshow', botgui.UIEnable)

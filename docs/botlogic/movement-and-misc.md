@@ -31,6 +31,12 @@ See [hook-dopull](hook-dopull.md) for when doPull decides to call StartPull (cha
 
 ---
 
+## Follow navigation
+
+When the follow leader is an MQCharinfo peer in the same zone, follow uses charinfo-published coordinates (`peer.Zone.X/Y/Z`) for distance checks and issues `/nav locxyz` instead of `/nav id`. This keeps follow accurate when the local spawn entity stops updating at long range. Non-peer leaders (regular PCs not on charinfo) continue to use spawn-id navigation.
+
+---
+
 ## Unstuck (doMovementCheck → FollowAndStuckCheck → TickUnstuck / UnStuck)
 
 runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, nudge_wait. If pathing stalls, unstuck escalates into repeated nudge + re-nav attempts before applying cooldown.
@@ -39,17 +45,17 @@ runState **unstuck** is set by `botmove.UnStuck()` with phases: nav_wait5, nudge
 stateDiagram-v2
     direction LR
     [*] --> tryPathExists: UnStuck, followid far
-    tryPathExists --> nav_wait5: PathExists, /nav to followid
+    tryPathExists --> nav_wait5: PathExists, nav to leader
     nav_wait5 --> [*]: follow success or distance improved
     nav_wait5 --> nudge_wait: 5s deadline and no progress
-    nudge_wait --> nav_wait5: release forward, /nav to followid
+    nudge_wait --> nav_wait5: release forward, re-nav to leader
     nav_wait5 --> [*]: retries exhausted -> cooldown
     [*] --> nudge_wait: PathExists failed
 ```
 
-- **TickUnstuck:** Called unconditionally at the start of `FollowAndStuckCheck` (alongside `TickReturnToFollowAfterEngage`), so the phase machine keeps advancing even when `shouldCallFollow` is false. Clears unstuck on follow success: 3D distance <= acleash, or 2D distance < followdistance with nav inactive.
-- **UnStuck:** Entry only when followid is set, nav is active, and distance >= acleash. If already in unstuck, delegates to `TickUnstuck` before entry guards. Otherwise try PathExists → nav to followid and set `nav_wait5` (5s). If PathExists fails, immediately start nudge recovery.
-- **tickUnstuckPhase:** Checks `clearUnstuckOnFollowSuccess` first. `nav_wait5`: on deadline, if distance improved by 10 vs phase-start `p.stuckdistance`, set cooldown and clear; if no progress, increment retry count, nudge, then transition to `nudge_wait`. `nudge_wait`: release forward and reissue `/nav id ...`, then return to `nav_wait5`. After retry limit, apply 60s cooldown and clear.
+- **TickUnstuck:** Called unconditionally at the start of `FollowAndStuckCheck` (alongside `TickReturnToFollowAfterEngage`), so the phase machine keeps advancing even when `shouldCallFollow` is false. Clears unstuck on follow success: 3D distance <= acleash, or 2D distance < followdistance with nav inactive. Distance for charinfo peers is computed from charinfo coords.
+- **UnStuck:** Entry only when follow target is valid, nav is active, and distance >= acleash. If already in unstuck, delegates to `TickUnstuck` before entry guards. Otherwise try PathExists → nav to leader (`locxyz` for charinfo peers, `id` otherwise) and set `nav_wait5` (5s). If PathExists fails, immediately start nudge recovery.
+- **tickUnstuckPhase:** Checks `clearUnstuckOnFollowSuccess` first. `nav_wait5`: on deadline, if distance improved by 10 vs phase-start `p.stuckdistance`, set cooldown and clear; if no progress, increment retry count, nudge, then transition to `nudge_wait`. `nudge_wait`: release forward and reissue nav to leader, then return to `nav_wait5`. After retry limit, apply 60s cooldown and clear. Unstuck payload keys on `followname` (charinfo) or `followid` (spawn).
 - **updateStuckTimerWithinLeash:** When within acleash, extends stucktimer and also clears unstuck if still set.
 - **MQ2AutoSize dependency removed:** unstuck no longer changes character size and no longer requires MQ2AutoSize to perform recovery movement.
 
@@ -93,7 +99,7 @@ Phases:
 - **delay_400:** After 400ms, set phase nav_wait with 10s deadline.
 - **nav_wait:** When nav inactive or 10s deadline, clearRunState.
 
-StartReturnToFollowAfterEngage does: stick off, attack off, target self, FollowCall (nav to followid), then setRunState engage_return_follow phase delay_400.
+StartReturnToFollowAfterEngage does: stick off, attack off, target self, FollowCall (nav to leader via charinfo locxyz or spawn id), then setRunState engage_return_follow phase delay_400.
 
 ---
 

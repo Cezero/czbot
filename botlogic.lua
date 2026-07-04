@@ -11,6 +11,8 @@ local botevents = require('botevents')
 local utils = require('lib.utils')
 local tankrole = require('lib.tankrole')
 local aggro = require('lib.aggro')
+local czactor = require('lib.czactor')
+local rolelists = require('lib.rolelists')
 local charinfo = require('plugin.charinfo')
 local botpull = require('botpull')
 local botmelee = require('botmelee')
@@ -191,7 +193,7 @@ local function charState_DeadOrHover()
             rc.HoverTimer = 0
             rc.HoverEchoTimer = 0
             rc.wasDeadOrHover = false
-            require('lib.czactor').onMaResumed()
+            czactor.onMaResumed()
             mq.cmd('/squelch /multiline ; /attack off ; /mqtarget clear ; /stick off')
         end
         return false
@@ -203,6 +205,8 @@ local function charState_DeadOrHover()
         follow.StopFollow('death')
         botmove.ClearCamp('death')
         rc.wasDeadOrHover = true
+        if tankrole.AmIMainAssist() then czactor.publishReleaseMa() end
+        if tankrole.AmIMainTank() then czactor.publishReleaseMt() end
     end
 
     state.setRunState(state.STATES.dead, nil)
@@ -403,7 +407,7 @@ function botlogic.StartUp(...)
     mobfilter.process('exclude', 'zone')
     mobfilter.process('priority', 'zone')
     mobfilter.process('charm', 'zone')
-    require('lib.rolelists').loadFromCommon()
+    rolelists.loadFromCommon()
     local comkeytable = botconfig.getCommon()
     if not comkeytable.raidlist then comkeytable.raidlist = {} end
     --make sure char isnt doing anything already (stop nav, clear cursor, ect)
@@ -411,7 +415,7 @@ function botlogic.StartUp(...)
     state.getRunconfig().maAdoptSelectedTarget = true
     mq.imgui.init('debuggui', botgui.getUpdateFn())
     _registerBuiltinHooks()
-    require('lib.czactor').init()
+    czactor.init()
     hookregistry.registerAllFromConfig()
     --check startup scripts NTA
     --check each section
