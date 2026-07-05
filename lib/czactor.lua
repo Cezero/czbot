@@ -16,10 +16,12 @@ local PROTOCOL_VER = 1
 local MAILBOX = 'czbot'
 local OT_CLAIM_TTL_MS = 5000
 local REZ_CLAIM_TTL_MS = 60000
-local PING_INTERVAL_MS = 30000
+local PING_INTERVAL_MS = 60000
 local OT_HEARTBEAT_MS = 2000
 local TICK_STALE_MS = 60000
 local PEER_RECENT_MS = 90000
+local CZACTOR_TICK_MS = 250
+local TRAFFIC_WINDOW_MS = 60000
 
 local _actor = nil
 local _inboundQueue = {}
@@ -30,11 +32,15 @@ local _lastInitFailureLoggedAt = 0
 local _initFailCount = 0
 local _lastInitError = nil
 local _everRegistered = false
+local _nextCzactorTickAt = 0
+local _trafficWindowStart = 0
+local _trafficRecv = 0
+local _trafficSendBroadcast = 0
+local _trafficSendUnicast = 0
 local processMessage
 
 local INLINE_IMMEDIATE_IDS = {
     ping = true,
-    pong = true,
     follow_me = true,
     follow_me_off = true,
 }
@@ -121,6 +127,60 @@ local function ensureRunconfigFields(rc)
     if rc.MtImHolding == nil then rc.MtImHolding = false end
 end
 
+local function nameJitterMs(name, intervalMs)
+    name = name or myName() or ''
+    intervalMs = intervalMs or 1
+    if intervalMs < 1 then intervalMs = 1 end
+    local h = 0
+    for i = 1, #name do
+        h = (h * 31 + string.byte(name, i)) % intervalMs
+    end
+    return h
+end
+
+local function resetTrafficWindowIfNeeded(now)
+    if _trafficWindowStart == 0 or (now - _trafficWindowStart) >= TRAFFIC_WINDOW_MS then
+        _trafficWindowStart = now
+        _trafficRecv = 0
+        _trafficSendBroadcast = 0
+        _trafficSendUnicast = 0
+    end
+end
+
+local function recordRecv()
+    local now = mq.gettime()
+    resetTrafficWindowIfNeeded(now)
+    _trafficRecv = _trafficRecv + 1
+end
+
+local function recordSendBroadcast()
+    local now = mq.gettime()
+    resetTrafficWindowIfNeeded(now)
+    _trafficSendBroadcast = _trafficSendBroadcast + 1
+end
+
+local function recordSendUnicast()
+    local now = mq.gettime()
+    resetTrafficWindowIfNeeded(now)
+    _trafficSendUnicast = _trafficSendUnicast + 1
+end
+
+local function touchPeer(sender)
+    if not sender or sender == '' then return end
+    local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    rc.CzActorPeers[sender] = mq.gettime()
+end
+
+local function scheduleInitialTimers(now)
+    local me = myName() or ''
+    _nextPingAt = now + nameJitterMs(me, PING_INTERVAL_MS)
+    _nextRoleClaimsAt = now + nameJitterMs(me, ROLE_CLAIMS_INTERVAL_MS)
+    _nextClaimPruneAt = now + nameJitterMs(me, 1000)
+    _nextOtHeartbeatAt = now + nameJitterMs(me, OT_HEARTBEAT_MS)
+    _maEngagedHeartbeatNext = now + nameJitterMs(me, MA_ENGAGED_HEARTBEAT_MS)
+end
+
 ---@param quietOnFail boolean|nil when true, suppress failure log (caller handles throttled logging)
 ---@return boolean true when mailbox registered successfully
 function czactor.init(quietOnFail)
@@ -138,6 +198,7 @@ function czactor.init(quietOnFail)
     local ok, result = pcall(function()
         return actors.register(MAILBOX, function(message)
             if not message then return end
+            recordRecv()
             local content = message.content
             if type(content) ~= 'table' then return end
             if shouldProcessInline(content) then
@@ -171,12 +232,17 @@ function czactor.init(quietOnFail)
             log.say('[czactor] mailbox %s registration FAILED%s', MAILBOX, detail)
         end
     end
-    _nextPingAt = mq.gettime()
+    scheduleInitialTimers(now)
+    _trafficWindowStart = now
+    _trafficRecv = 0
+    _trafficSendBroadcast = 0
+    _trafficSendUnicast = 0
     return _actor ~= nil
 end
 
 function czactor.broadcast(msg)
     if not _actor then return end
+    recordSendBroadcast()
     _actor:send(msg)
 end
 
@@ -189,6 +255,7 @@ end
 
 function czactor.sendToCharacter(character, msg)
     if not _actor or not character or character == '' then return end
+    recordSendUnicast()
     _actor:send({ character = character, mailbox = MAILBOX }, msg)
 end
 
@@ -610,7 +677,7 @@ function czactor.tickMaEngagedHeartbeat(spawnId, mobName)
     if not spawnId or spawnId <= 0 then return end
     local now = mq.gettime()
     if now < _maEngagedHeartbeatNext then return end
-    _maEngagedHeartbeatNext = now + MA_ENGAGED_HEARTBEAT_MS
+    _maEngagedHeartbeatNext = now + MA_ENGAGED_HEARTBEAT_MS + nameJitterMs(myName(), MA_ENGAGED_HEARTBEAT_MS)
     czactor.publishMaEngaged(spawnId, mobName, true)
 end
 
@@ -910,7 +977,7 @@ function czactor.syncOtClaimForEngage(spawnId, mobName, maTarId)
     local rc = state.getRunconfig()
     if rc.OtMyClaim and rc.OtMyClaim.spawnId == spawnId then
         if mq.gettime() >= _nextOtHeartbeatAt then
-            _nextOtHeartbeatAt = mq.gettime() + OT_HEARTBEAT_MS
+            _nextOtHeartbeatAt = mq.gettime() + OT_HEARTBEAT_MS + nameJitterMs(myName(), OT_HEARTBEAT_MS)
             czactor.broadcast(envelope('ot_heartbeat', {
                 spawnId = spawnId,
                 mobName = mobName,
@@ -975,21 +1042,12 @@ processMessage = function(message)
     if type(content) ~= 'table' then return end
     if content.ver and content.ver ~= PROTOCOL_VER then return end
     local sender = senderCharacter(message)
+    touchPeer(sender)
     local id = content.id
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
 
-    if id == 'ping' then
-        if sender then rc.CzActorPeers[sender] = mq.gettime() end
-        if sender and sender ~= myName() then
-            czactor.sendToCharacter(sender, envelope('pong', {}))
-        end
-        return
-    end
-    if id == 'pong' then
-        if sender then rc.CzActorPeers[sender] = mq.gettime() end
-        return
-    end
+    if id == 'ping' or id == 'pong' then return end
 
     if id == 'ma_update' then applyMaUpdate(content, sender) return end
     if id == 'mt_update' then applyMtUpdate(content, sender) return end
@@ -1056,6 +1114,10 @@ end
 
 function czactor.tick()
     local now = mq.gettime()
+    if now < _nextCzactorTickAt then return end
+    _nextCzactorTickAt = now + CZACTOR_TICK_MS
+    resetTrafficWindowIfNeeded(now)
+
     if _lastTickAt > 0 and (now - _lastTickAt) > TICK_STALE_MS then
         if (now - _tickStaleLoggedAt) > TICK_STALE_MS then
             _tickStaleLoggedAt = now
@@ -1166,6 +1228,8 @@ function czactor.printStatus()
     printf('  czactor: mailbox=%s lastTick=%s queue=%d peersRecent=%d/%d follow=%s catchUp=%s',
         _actor and 'ok' or 'MISSING', lastTickAge, #_inboundQueue, recent, total,
         followLabel, tostring(rc.followCatchUp == true))
+    printf('  traffic (60s): recv=%d sendBroadcast=%d sendUnicast=%d',
+        _trafficRecv, _trafficSendBroadcast, _trafficSendUnicast)
     if not _actor then
         printf('  WARNING: czbot mailbox MISSING — Actor messages (followme, camphere, attack, MA/MT) are not sent or received.')
         local initAge = _lastInitAttemptAt > 0 and string.format('%.1fs ago', (now - _lastInitAttemptAt) / 1000) or 'never'

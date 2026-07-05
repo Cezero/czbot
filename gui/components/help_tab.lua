@@ -33,7 +33,7 @@ local GROUPS = {
         { "/cz assist status", "Print MA/MT resolution diagnostics." },
         { "/cz role <tank|ma|dps|healer>", "Apply a role preset: behavior flags + tank/assist designation." },
         { "/cz offtank", "Toggle off-tank mode for this character." },
-        { "/cz actor ping|status|reinit", "Czbot Actor channel: ping peers, show claims/role overrides, or re-register mailbox." },
+        { "/cz actor ping|status|reinit", "Czbot Actor channel: ping (diagnostic), status (includes 60s traffic counters), re-register mailbox." },
         { "/cz attack", "Manually engage your current target (overrides XTarget-only)." },
         { "/cz cast <alias>", "Cast a configured spell/ability by its alias." },
     } },

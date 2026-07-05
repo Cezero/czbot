@@ -11,17 +11,22 @@ CZBot peers coordinate through a dedicated **Actor mailbox** (`czbot`) on the sa
 
 | Command | Purpose |
 |---------|---------|
-| `/cz actor ping` | Broadcast ping; list charinfo peers and last czbot reply time |
-| `/cz actor status` | Peers, MA/MT Actor overrides, OT claims, rez claims, MA engaged target |
+| `/cz actor ping` | Broadcast ping (diagnostic); peers update liveness from any czbot message, not unicast replies |
+| `/cz actor status` | Peers, MA/MT Actor overrides, OT claims, rez claims, MA engaged target, 60s traffic counters |
 | `/cz actor reinit` | Re-register the `czbot` mailbox immediately (recovery when `mailbox=MISSING`) |
 
-If `/cz actor status` shows **`mailbox=MISSING`**, this client cannot send or receive Actor messages (`followme`, `camphere`, `attack`, MA/MT coordination, etc.). The bot retries registration every 30s automatically; use **`/cz actor reinit`** for immediate recovery, or restart the czbot macro. On a follower stuck following after a missed `follow_me_off`, use **`/cz stop`** locally until the mailbox recovers.
+If `/cz actor status` shows **`mailbox=MISSING`**, this client cannot send or receive Actor messages (`followme`, `camphere`, `attack`, MA/MT coordination, etc.). The bot retries registration every 60s automatically; use **`/cz actor reinit`** for immediate recovery, or restart the czbot macro. On a follower stuck following after a missed `follow_me_off`, use **`/cz stop`** locally until the mailbox recovers.
+
+**Peer liveness:** `CzActorPeers` timestamps update when **any** inbound czbot message is received (role heartbeats, combat broadcasts, etc.). Periodic broadcast `ping` (every 60s, staggered per bot) is diagnostic only — receivers do **not** send unicast `pong` replies.
+
+**Traffic line:** `traffic (60s): recv=… sendBroadcast=… sendUnicast=…` on `/cz actor status` — rolling counters for Actor bus load diagnosis.
 
 ## Message types
 
 | id | Purpose |
 |----|---------|
-| `ping` / `pong` | Peer discovery |
+| `ping` | Optional diagnostic broadcast (no unicast reply; liveness from any message) |
+| `pong` | Deprecated (ignored if received from older peers) |
 | `ot_claim` / `ot_release` / `ot_heartbeat` | Off-tank add coordination (last-writer-wins on conflicts) |
 | `rez_claim` | Rez coordination — peer excludes claimed corpse for 60s ([Rez coordination](#rez-coordination)) |
 | `ma_update` | Manual session MA override from `/cz assist set <name>` (beats automatic claims) |
