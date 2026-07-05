@@ -48,6 +48,7 @@ end
 --- Suppress MobProb /nav briefly after acquiring a new engage target (avoids early swing LoS/range spam).
 ---@param engageId number|nil
 function botmelee.armMobprobEngageGrace(engageId)
+    if state.getRunconfig().domobprob ~= true then return end
     if not engageId or engageId <= 0 then return end
     local graceMs = getMobprobEngageGraceMs()
     if graceMs <= 0 then return end

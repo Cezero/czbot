@@ -33,6 +33,14 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | --------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **togglesongs** | `on` / `off` or toggle | **Bard only.** Turn MQ2Twist singing on or off without pausing the bot. Default **on** at start. When off, the bot issues `/twist stop` and sends no further `/twist` commands (including twist-once for mez or pull engage). Status tab **Songs** toggle is the same setting. See [Bard configuration](bard-configuration.md). |
 
+### Combat session toggles
+
+These affect runtime only (not saved to the config file). They reset when the bot restarts.
+
+| Command     | Arguments              | Purpose                                                                                                                                 |
+| ----------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **mobprob** | `on` / `off` or toggle | Turn MobProb on or off. When on, the bot `/nav`s to the engage target on "too far away" / "cannot see target" / "can't hit from here" (within acleash, throttled, respects engage grace). Default **off** at start. Ignored while **MasterPause** is on. Tune grace via **melee.mobprobEngageGraceMs** (Combat tab). |
+
 ### Movement and camp
 
 | Command      | Arguments                | Purpose                                                                                                                                                                                                                                                   |
@@ -275,7 +283,7 @@ Combat abilities (disciplines, /doability) are configured as **debuff** entries 
 ## Where to configure
 
 - **Config file:** Edit **`cz_<CharName>.lua`** in your MQ config directory. Reload by re-running the bot or using **import** / **setvar**.
-- **Runtime only (not in config file):** **ExcludeList**, **PriorityList**, **CharmList**, **MaList**, **MtList** (pull exclude/priority, charm targets, and [MA/MT fallback mirrors](automatic-ma-mt-selection.md#ma_list-and-mt_list)), **pullarc** (directional pull), bard **dosongs** (twist on/off via **/cz togglesongs** or Status **Songs**), and **no-combat zone Enabled checkboxes** (temporary disable per zone for the session) are set at runtime via **/cz exclude**, **/cz priority**, **/cz charm** (add/remove), **/cz xarc**, **/cz togglesongs**, or the GUI **Mob lists** / **Roles** tabs. Per-zone mob lists are stored in **cz_common.lua** under **zones**[*zoneShortName*] (**excludelist**, **prioritylist**, **charmlist**, **nukeFlavors**, **nukeFlavorsAutoDisabled**, **immune**). Global **noCombatZones**, **ma_list**, and **mt_list** are also in **cz_common.lua** (top-level, not under zones). Changes to lists and no-combat zones are saved automatically when you add or remove entries in the GUI or via commands.
+- **Runtime only (not in config file):** **ExcludeList**, **PriorityList**, **CharmList**, **MaList**, **MtList** (pull exclude/priority, charm targets, and [MA/MT fallback mirrors](automatic-ma-mt-selection.md#ma_list-and-mt_list)), **pullarc** (directional pull), bard **dosongs** (twist on/off via **/cz togglesongs** or Status **Songs**), **domobprob** (MobProb /nav on/off via **/cz mobprob**; default off), and **no-combat zone Enabled checkboxes** (temporary disable per zone for the session) are set at runtime via **/cz exclude**, **/cz priority**, **/cz charm** (add/remove), **/cz xarc**, **/cz togglesongs**, **/cz mobprob**, or the GUI **Mob lists** / **Roles** tabs. Per-zone mob lists are stored in **cz_common.lua** under **zones**[*zoneShortName*] (**excludelist**, **prioritylist**, **charmlist**, **nukeFlavors**, **nukeFlavorsAutoDisabled**, **immune**). Global **noCombatZones**, **ma_list**, and **mt_list** are also in **cz_common.lua** (top-level, not under zones). Changes to lists and no-combat zones are saved automatically when you add or remove entries in the GUI or via commands.
 - **Both:** Most options can be set in the config file or at runtime via **/cz setvar** (e.g. **setvar settings.petassist true**), which writes back to the config file.
 
 For protected NPCs, bind-point stealth, and no-combat zone behavior, see [Safety and stealth](safety-and-stealth.md).

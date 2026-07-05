@@ -56,6 +56,7 @@ local GROUPS = {
         { "/cz burn [seconds|off]", "Open a burn window; debuffs with a Burn band phase cast during it." },
         { "/cz togglenuke", "Toggle nuke usage." },
         { "/cz togglesongs", "Toggle the bard song twist." },
+        { "/cz mobprob on|off", "Toggle MobProb /nav on LoS/range errors (default off)." },
         { "/cz evadepct <n>", "Rogue: PctAggro at which to dump aggro with Hide." },
         { "/cz stickcmd <command>", "Set the /stick command used when engaging." },
     } },

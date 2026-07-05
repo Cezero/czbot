@@ -225,6 +225,8 @@ end
 
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
+    if MasterPause == true then return true end
+    if rc.domobprob ~= true then return true end
     local reason = mobProbReason(line)
     if rc.mobprobEngageGraceUntil and rc.mobprobEngageGraceUntil > mq.gettime() then
         log.say('[MobProb] ignored (engage grace): %s', reason)

@@ -129,6 +129,19 @@ local function cmd_togglesongs(args)
     log.say('Songs %s', rc.dosongs ~= false and 'on' or 'off')
 end
 
+local function cmd_mobprob(args)
+    local rc = state.getRunconfig()
+    local function mobprobOn() return rc.domobprob == true end
+    if args[2] == 'on' then
+        rc.domobprob = true
+    elseif args[2] == 'off' then
+        rc.domobprob = false
+    else
+        rc.domobprob = not mobprobOn()
+    end
+    log.say('MobProb %s', rc.domobprob == true and 'on' or 'off')
+end
+
 local function cmd_togglecampacleash(args)
     local rc = state.getRunconfig()
     if rc.campstatus ~= true or not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y then
@@ -1572,6 +1585,7 @@ local handlers = {
     raid = cmd_raid,
     togglenuke = cmd_togglenuke,
     togglesongs = cmd_togglesongs,
+    mobprob = cmd_mobprob,
     togglecampacleash = cmd_togglecampacleash,
     addjunk = cmd_addjunk,
     foragezone = cmd_foragezone,
