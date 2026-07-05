@@ -13,6 +13,7 @@ local charm = require('lib.charm')
 local spellstates = require('lib.spellstates')
 local spellutils = require('lib.spellutils')
 local log = require('lib.log')
+local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
 local botmelee = {}
 
@@ -23,6 +24,16 @@ local _engageLosBlocked = false
 local _engageLosLastLogTime = 0
 local _engageLosEngageId = nil
 local ENGAGE_LOS_LOG_INTERVAL_MS = 3000
+local MA_DISENGAGE_BROADCAST_REASONS = {
+    command = true,
+    protected_spawn = true,
+}
+
+local function shouldBroadcastMaDisengage(reason, engageId)
+    if reason and MA_DISENGAGE_BROADCAST_REASONS[reason] then return true end
+    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then return true end
+    return false
+end
 
 function botmelee.LoadMeleeConfig()
 end
@@ -441,16 +452,18 @@ end
 local function isAssistTargetEngageable(maTarId, rc, assistName, hp, assistpct)
     if not maTarId or maTarId <= 0 then return false end
     if charm.isCharmSkipped(maTarId, rc) then return false end
-    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then return false end
-    hp = hp or mq.TLO.Spawn(maTarId).PctHPs()
+    local spawn = mq.TLO.Spawn(maTarId)
+    if not spawnutils.isAliveEngageSpawn(spawn) then return false end
+    if not spawnutils.isNpcEngageTarget(spawn) then return false end
+    if assistName and assistName ~= '' then
+        local actorTar = require('lib.czactor').getMaEngagedSpawnId(assistName)
+        if actorTar and actorTar == maTarId then return true end
+    end
+    hp = hp or spawn.PctHPs()
     if not hp or hp > assistpct then return false end
     if not spawnutils.isCampAcleashEnforced(rc) then return true end
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == maTarId then return true end
-    end
-    if assistName and assistName ~= '' then
-        local actorTar = require('lib.czactor').getMaEngagedSpawnId(assistName)
-        if actorTar and actorTar == maTarId then return true end
     end
     if rc.lastAssistTargetId == maTarId then return true end
     return false
@@ -513,6 +526,18 @@ local function isValidMaSelectedTarget(spawnId, rc)
     return true
 end
 
+local function maTargetFallbackWithoutMobList(rc)
+    local curId = mq.TLO.Target.ID()
+    if isValidMaSelectedTarget(curId, rc) then return curId end
+    if not tankrole.AmIMainAssist() then return nil end
+    local info = charinfo.GetInfo(mq.TLO.Me.Name())
+    if info and info.Target and info.Target.ID then
+        local tid = info.Target.ID
+        if isValidMaSelectedTarget(tid, rc) then return tid end
+    end
+    return nil
+end
+
 -- MA bot only: choose target from MobList independent of MT.
 -- Sticky: keep current alive target unless a named appears while on a non-named.
 -- Returns chosen id or nil.
@@ -565,7 +590,9 @@ local function selectMATarget()
         end
     end
 
-    if not rc.MobList or not rc.MobList[1] then return nil end
+    if not rc.MobList or not rc.MobList[1] then
+        return maTargetFallbackWithoutMobList(rc)
+    end
 
     -- Initial pick: named first, then closest engageable (mez/distance rules).
     local namedId = findClosestEngageableNamed(rc.MobList)
@@ -653,7 +680,7 @@ function botmelee.disengageCombat(reason)
     _engageLosLastLogTime = 0
     _engageLosEngageId = nil
     botmelee.clearMobprobEngageGrace()
-    if tankrole.AmIMainAssist() then
+    if tankrole.AmIMainAssist() and shouldBroadcastMaDisengage(reason, engageId) then
         require('lib.czactor').publishMaDisengage(reason or 'disengage')
     end
     if myconfig.melee.offtank and engageId then
@@ -949,7 +976,9 @@ function botmelee.AdvCombat()
             end
         end
         if tankrole.AmIMainAssist() then
-            require('lib.czactor').publishMaEngaged(rc.engageTargetId, name)
+            local czactor = require('lib.czactor')
+            czactor.publishMaEngaged(rc.engageTargetId, name)
+            czactor.tickMaEngagedHeartbeat(rc.engageTargetId, name)
         end
         engageTarget()
     elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] then

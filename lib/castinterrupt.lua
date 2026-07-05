@@ -64,14 +64,20 @@ local function eventMobNameMatchesSpawn(spawnId, eventName)
     return mobNamesMatch(eventName, sp.Name() or '', sp.CleanName() or '')
 end
 
-local function diagFail(reason, mobName, extra)
+local function isPcCasterName(name)
+    if not name or name == '' then return false end
+    local sp = mq.TLO.Spawn('pc =' .. name)
+    return sp and sp.ID() and sp.ID() > 0 and sp.Type() == 'PC'
+end
+
+local function diagFail(reason, casterName, extra)
     local now = mq.gettime()
     if now < _diagNextTime then return end
     _diagNextTime = now + DIAG_THROTTLE_MS
     local assistName = tankrole.GetAssistTargetName()
     local _, _, maTargetId = spellutils.GetAssistInfo(true)
-    log.say('[CH interrupt] blocked: %s (mob=%s ma=%s maTarget=%s mobs=%s%s)',
-        reason, tostring(mobName), tostring(assistName), tostring(maTargetId), tostring(state.getMobCount()),
+    log.say('[MA cast interrupt] blocked: %s (caster=%s ma=%s maTarget=%s mobs=%s%s)',
+        reason, tostring(casterName), tostring(assistName), tostring(maTargetId), tostring(state.getMobCount()),
         extra and (' ' .. extra) or '')
 end
 
@@ -166,7 +172,7 @@ local function executeInterrupt(targetId, spellIndex)
         local botdebuff = require('botdebuff')
         local ok = botdebuff.CastBardMezOnce(spellIndex, targetId, runPriority, INTERRUPT_REASON)
         if not ok then
-            log.say('[CH interrupt] failed: bard mez could not start \ag%s\ax on \at%s\ax', spellName,
+            log.say('[MA cast interrupt] failed: bard mez could not start \ag%s\ax on \at%s\ax', spellName,
                 targetName)
         end
         return ok
@@ -176,7 +182,7 @@ local function executeInterrupt(targetId, spellIndex)
     if ok then
         log.say('interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, INTERRUPT_REASON)
     else
-        log.say('[CH interrupt] failed: CastSpell returned false for \ag%s\ax on \at%s\ax', spellName,
+        log.say('[MA cast interrupt] failed: CastSpell returned false for \ag%s\ax on \at%s\ax', spellName,
             targetName)
     end
     return ok
@@ -231,20 +237,19 @@ end
 
 function castinterrupt.tryInterruptMaCast(mobName)
     if not mobName or mobName == '' then return false end
-    if not passesGates(mobName) then return false end
+    if isPcCasterName(mobName) then return false end
+
     local assistName, _, maTargetId = spellutils.GetAssistInfo(true)
     if not maTargetId or maTargetId == 0 then
         diagFail('no MA target', mobName, assistName and ('(ma=' .. assistName .. ')') or nil)
         return false
     end
-    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTargetId)) then
-        diagFail('MA target not alive', mobName, 'id=' .. tostring(maTargetId))
+    if not eventMobNameMatchesSpawn(maTargetId, mobName) then
         return false
     end
-    if not eventMobNameMatchesSpawn(maTargetId, mobName) then
-        local sp = mq.TLO.Spawn(maTargetId)
-        diagFail('event name mismatch', mobName,
-            string.format('spawn=%s/%s', sp.CleanName() or '', sp.Name() or ''))
+    if not passesGates(mobName) then return false end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTargetId)) then
+        diagFail('MA target not alive', mobName, 'id=' .. tostring(maTargetId))
         return false
     end
     local spellIndex, entry = findInterruptSpellIndex(maTargetId)
@@ -259,7 +264,7 @@ function castinterrupt.tryInterruptMaCast(mobName)
     end
     if executeInterrupt(maTargetId, spellIndex) then return true end
     if entry then
-        log.say('[CH interrupt] failed after executeInterrupt for \ag%s\ax on \at%s\ax', entry.spell or '?',
+        log.say('[MA cast interrupt] failed after executeInterrupt for \ag%s\ax on \at%s\ax', entry.spell or '?',
             targetDisplayName(maTargetId))
     end
     return false

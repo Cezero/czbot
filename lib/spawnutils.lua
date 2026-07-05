@@ -277,6 +277,12 @@ function spawnutils.shouldPreserveStickyEngage(rc)
             return true
         end
     end
+    local assistName = tankrole.GetAssistTargetName()
+    if assistName and assistName ~= '' and not tankrole.AmIMainAssist() then
+        local czactor = require('lib.czactor')
+        local actorTar = czactor.getMaEngagedSpawnId(assistName)
+        if actorTar and actorTar == rc.engageTargetId then return true end
+    end
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == rc.engageTargetId then return true end
     end

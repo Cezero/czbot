@@ -1505,6 +1505,13 @@ local function selfTargetIdFromMobList()
     return nil, nil
 end
 
+local function filterNpcEngageTargetId(targetId)
+    if not targetId or targetId == 0 then return nil end
+    local sp = mq.TLO.Spawn(targetId)
+    if not require('lib.spawnutils').isNpcEngageTarget(sp) then return nil end
+    return targetId
+end
+
 --- Resolve a leader PC's spawn id and optional NPC target (charinfo, /assist fallback, self MobList).
 local function getLeaderPcTargetInfo(leaderName, includeTarget)
     if not leaderName or leaderName == '' then return nil, nil, nil, nil end
@@ -1523,6 +1530,10 @@ local function getLeaderPcTargetInfo(leaderName, includeTarget)
     if includeTarget and leaderName == mq.TLO.Me.Name() and (not tartar or tartar == 0) then
         local t, h = selfTargetIdFromMobList()
         if t then tartar, tartarhp = t, h end
+    end
+    if tartar then
+        tartar = filterNpcEngageTargetId(tartar)
+        if not tartar then tartarhp = nil end
     end
     if tartar == 0 then tartar = nil end
     return leaderName, leaderid, tartar, tartarhp
@@ -1577,6 +1588,7 @@ function spellutils.GetAssistInfo(includeTarget, assistpct)
     local unavailable = isAssistUnavailable(assistName, assistid)
     local assistar, assistarhp
     local actorTar = require('lib.czactor').getMaEngagedSpawnId(assistName)
+    actorTar = actorTar and filterNpcEngageTargetId(actorTar) or nil
     if actorTar and actorTar > 0 and utils.isAliveEngageSpawn(mq.TLO.Spawn(actorTar)) then
         assistar = actorTar
         assistarhp = mq.TLO.Spawn(actorTar).PctHPs()

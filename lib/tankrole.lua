@@ -230,6 +230,15 @@ local function resolveAutomaticTankFull()
         return meta
     end
 
+    if raid then
+        local top = auto_ma_mt.topMtCandidateInZone()
+        if top then
+            meta.name = top
+            meta.source = 'list_readonly'
+            return meta
+        end
+    end
+
     meta.name = nil
     meta.source = nil
     return meta
@@ -263,6 +272,12 @@ local function isCachedMtValid(cache)
 
     if cache.source == 'actor' then
         return true
+    end
+    if cache.source == 'list_readonly' then
+        if not inRaid() then return false end
+        if auto_ma_mt.getActorMtOverrideName() then return false end
+        local top = auto_ma_mt.topMtCandidateInZone()
+        return top and cache.name == top
     end
     return false
 end

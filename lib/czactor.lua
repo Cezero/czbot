@@ -28,6 +28,16 @@ local _nextRoleClaimsAt = 0
 local _maPublishSeq = 0
 local _mtPublishSeq = 0
 local _lastMaEngagedSpawnId = nil
+local _maEngagedHeartbeatNext = 0
+local MA_ENGAGED_HEARTBEAT_MS = 2000
+
+local MA_DISENGAGE_TRANSIENT_REASONS = {
+    no_engage_target = true,
+    engage_not_allowed = true,
+    beyond_follow_distance = true,
+    outside_camp_pin = true,
+    moblist_empty = true,
+}
 local ROLE_CLAIMS_INTERVAL_MS = 2000
 local applyImMa
 local applyImMt
@@ -490,6 +500,17 @@ local function applyMaDisengage(content, sender)
     if not sender or sender == myName() then return end
     if content.zone and not zonesMatch(content.zone, myZone()) then return end
     if not acceptMaClaim(sender) then return end
+    local reason = content.reason
+    if MA_DISENGAGE_TRANSIENT_REASONS[reason] then
+        local rc = state.getRunconfig()
+        local eng = rc.MaActorEngaged
+        if eng and eng.spawnId and namesMatch(eng.maName, sender) and isAliveEngageSpawnId(eng.spawnId) then
+            local assistName = tankrole.GetAssistTargetName()
+            if assistName and namesMatch(sender, assistName) then
+                return
+            end
+        end
+    end
     clearMaActorEngaged(state.getRunconfig(), sender)
 end
 
@@ -507,9 +528,9 @@ local function applyAttackEngage(content, sender)
     end
 end
 
-function czactor.publishMaEngaged(spawnId, mobName)
+function czactor.publishMaEngaged(spawnId, mobName, force)
     if not spawnId or spawnId <= 0 then return end
-    if _lastMaEngagedSpawnId == spawnId then return end
+    if not force and _lastMaEngagedSpawnId == spawnId then return end
     _lastMaEngagedSpawnId = spawnId
     czactor.publish('ma_engaged', {
         spawnId = spawnId,
@@ -518,8 +539,18 @@ function czactor.publishMaEngaged(spawnId, mobName)
     })
 end
 
+--- Re-broadcast ma_engaged while MA holds engageTargetId (followers recover missed messages).
+function czactor.tickMaEngagedHeartbeat(spawnId, mobName)
+    if not spawnId or spawnId <= 0 then return end
+    local now = mq.gettime()
+    if now < _maEngagedHeartbeatNext then return end
+    _maEngagedHeartbeatNext = now + MA_ENGAGED_HEARTBEAT_MS
+    czactor.publishMaEngaged(spawnId, mobName, true)
+end
+
 function czactor.publishMaDisengage(reason)
     _lastMaEngagedSpawnId = nil
+    _maEngagedHeartbeatNext = 0
     czactor.publish('ma_disengage', {
         reason = reason or 'disengage',
         scope = roleBroadcastScope(),
