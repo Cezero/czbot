@@ -315,18 +315,25 @@ function auto_ma_mt.groupLacksActiveMt()
     return true
 end
 
---- Trust-based: return stored actor override name (no holder re-validation).
+--- True when an actor override entry refers to a live, in-zone holder.
+---@param override table|nil
+---@param requireMaLeash boolean|nil when true, ma_list leash applies to the holder name
+function auto_ma_mt.isActorHolderAvailable(override, requireMaLeash)
+    if not override or not override.name or override.name == '' then return false end
+    if override.expiresAt and mq.gettime() > override.expiresAt then return false end
+    return auto_ma_mt.isCandidateAvailable(override.name, requireMaLeash == true)
+end
+
+--- Return stored actor override name when the holder is still available.
 function auto_ma_mt.getActorMaOverrideName()
     local o = state.getRunconfig().ActorMaOverride
-    if not o or not o.name or o.name == '' then return nil end
-    if o.expiresAt and mq.gettime() > o.expiresAt then return nil end
+    if not auto_ma_mt.isActorHolderAvailable(o, false) then return nil end
     return o.name
 end
 
 function auto_ma_mt.getActorMtOverrideName()
     local o = state.getRunconfig().ActorMtOverride
-    if not o or not o.name or o.name == '' then return nil end
-    if o.expiresAt and mq.gettime() > o.expiresAt then return nil end
+    if not auto_ma_mt.isActorHolderAvailable(o, false) then return nil end
     return o.name
 end
 
@@ -336,6 +343,23 @@ end
 
 function auto_ma_mt.getActorMtOverrideNameIfAvailable()
     return auto_ma_mt.getActorMtOverrideName()
+end
+
+--- Clear actor overrides whose holder is no longer available (missed release_ma/release_mt).
+---@return boolean clearedMa
+---@return boolean clearedMt
+function auto_ma_mt.sweepStaleActorOverrides()
+    local rc = state.getRunconfig()
+    local clearedMa, clearedMt = false, false
+    if rc.ActorMaOverride and not auto_ma_mt.isActorHolderAvailable(rc.ActorMaOverride, false) then
+        rc.ActorMaOverride = nil
+        clearedMa = true
+    end
+    if rc.ActorMtOverride and not auto_ma_mt.isActorHolderAvailable(rc.ActorMtOverride, false) then
+        rc.ActorMtOverride = nil
+        clearedMt = true
+    end
+    return clearedMa, clearedMt
 end
 
 --- Evaluate whether this bot should publish im_* or release_*.

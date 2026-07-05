@@ -379,6 +379,9 @@ function czactor.runRoleClaimsTick()
     local now = mq.gettime()
     if now < _nextRoleClaimsAt then return end
     _nextRoleClaimsAt = now + ROLE_CLAIMS_INTERVAL_MS
+    local clearedMa, clearedMt = auto_ma_mt.sweepStaleActorOverrides()
+    if clearedMa then tankrole.invalidateMa() end
+    if clearedMt then tankrole.invalidateMt() end
     applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
 end
 
@@ -471,6 +474,9 @@ local function acceptMtRelease(sender, rc)
 end
 
 local function shouldAcceptImClaim(content, sender, cur)
+    if cur and cur.name and not auto_ma_mt.isActorHolderAvailable(cur, false) then
+        cur = nil
+    end
     if not cur or not cur.name then return true end
     local newInGroup = auto_ma_mt.isSenderInMyGroup(sender)
     local curInGroup = cur.inGroup

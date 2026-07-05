@@ -3,7 +3,8 @@
 -- MA = who selects targets from MobList (named-first, puller priority); DPS/offtank/non-sticky MT follow MA.
 -- "automatic" uses Group/Raid window roles: Group.MainTank, Group.MainAssist, Group.Puller.
 -- Raid has MainAssist only; MainTank and Puller always come from Group.
--- When primary is unavailable, actor im_ma/im_mt claims (lib/czactor.lua) are the sole automatic source.
+-- When primary is unavailable, actor im_ma/im_mt claims and ma_list/mt_list (list_readonly) provide fallback.
+-- Actor overrides are invalidated when the holder is dead, out of zone, or expired.
 -- Automatic resolution is cached until invalidation or the cached candidate becomes unavailable.
 -- A throttled refresh re-resolves every 2s so higher-priority MA/MT can reclaim the role after rez.
 
@@ -147,17 +148,25 @@ local function auditCandidate(name, requireLeash)
 end
 
 local function summarizeMaPath()
-    local rc = state.getRunconfig()
     local actorMa = auto_ma_mt.getActorMaOverrideName()
     if actorMa then return 'actor claim: ' .. actorMa end
     local primary = getMaPrimaryTlo()
-    if primary then return 'primary_retained (awaiting im_ma): ' .. primary end
-    return 'no MA resolved (awaiting im_ma)'
+    if primary and isCandidateAvailable(primary, false) then
+        return 'primary_retained: ' .. primary
+    end
+    local top = auto_ma_mt.topMaCandidateInZone()
+    if top then return 'list_readonly: ' .. top end
+    if primary then return 'primary unavailable: ' .. primary end
+    return 'no MA resolved'
 end
 
 local function summarizeMtPath()
     local actorMt = auto_ma_mt.getActorMtOverrideName()
     if actorMt then return 'actor claim: ' .. actorMt end
+    if inRaid() then
+        local top = auto_ma_mt.topMtCandidateInZone()
+        if top then return 'list_readonly: ' .. top end
+    end
     return 'no MT resolved (awaiting im_mt)'
 end
 
@@ -206,9 +215,16 @@ local function resolveAutomaticAssistFull()
         return meta
     end
 
-    if primaryTlo then
+    if primaryTlo and isCandidateAvailable(primaryTlo, false) then
         meta.name = primaryTlo
         meta.source = 'primary_retained'
+        return meta
+    end
+
+    local top = auto_ma_mt.topMaCandidateInZone()
+    if top then
+        meta.name = top
+        meta.source = 'list_readonly'
         return meta
     end
 
@@ -252,13 +268,19 @@ local function isCachedMaValid(cache)
     if _leashGen ~= cache.leashGen then return false end
 
     if cache.source == 'actor' then
-        return true
+        local o = state.getRunconfig().ActorMaOverride
+        return auto_ma_mt.isActorHolderAvailable(o, false)
     end
     if cache.source == 'primary_retained' then
         if cache.name ~= cache.primaryTlo then return false end
         if getMaPrimaryTlo() ~= cache.primaryTlo then return false end
         if auto_ma_mt.getActorMaOverrideName() then return false end
-        return true
+        return isCandidateAvailable(cache.primaryTlo, false)
+    end
+    if cache.source == 'list_readonly' then
+        if auto_ma_mt.getActorMaOverrideName() then return false end
+        local top = auto_ma_mt.topMaCandidateInZone()
+        return top and cache.name == top
     end
     return false
 end
@@ -271,7 +293,8 @@ local function isCachedMtValid(cache)
     if _leashGen ~= cache.leashGen then return false end
 
     if cache.source == 'actor' then
-        return true
+        local o = state.getRunconfig().ActorMtOverride
+        return auto_ma_mt.isActorHolderAvailable(o, false)
     end
     if cache.source == 'list_readonly' then
         if not inRaid() then return false end
@@ -324,6 +347,10 @@ maybeRefreshAutomaticCache = function()
     local now = mq.gettime()
     if now < _nextRefreshAt then return end
     _nextRefreshAt = now + REFRESH_INTERVAL_MS
+
+    local clearedMa, clearedMt = auto_ma_mt.sweepStaleActorOverrides()
+    if clearedMa then tankrole.invalidateMa() end
+    if clearedMt then tankrole.invalidateMt() end
 
     local rc = state.getRunconfig()
     local assistSetting = getEffectiveAssistSetting(rc)
