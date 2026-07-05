@@ -144,7 +144,7 @@ local function debuffCustomSection(entry, idPrefix, onChanged)
             id = idPrefix .. '_stopwhen',
             label = 'Stop when:',
             labelTooltip =
-            'Bards: matar debuffs with stopWhen use /twist once when needed instead of joining the combat twist. Skip cast when target already has any of these (e.g. Slowed for Occlusion of Sound after slow lands).',
+            'Bards: matar debuffs with stopWhen join the combat twist until the condition is met (e.g. Slowed), then are omitted. Skip cast when target already has any of these categories.',
             options = STOPWHEN_OPTIONS,
             value = entry.stopWhen or {},
             columns = 4,

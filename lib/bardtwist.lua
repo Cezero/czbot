@@ -181,13 +181,22 @@ function bardtwist.BuildCombatTwistList()
             local ok, mod = pcall(require, 'botdebuff')
             if ok then botdebuff = mod end
         end
+        local spellutils = package.loaded['lib.spellutils']
+        if not spellutils then
+            local ok, mod = pcall(require, 'lib.spellutils')
+            if ok then spellutils = mod end
+        end
+        local maTargetId
+        if spellutils then
+            local _, _, tar = spellutils.GetAssistInfo(true)
+            maTargetId = (tar and tar > 0) and tar or nil
+        end
         for i = 1, #debuffs do
             local entry = debuffs[i]
             if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
                 if debuffHasMatar(entry) then
-                    local conditional = botdebuff and botdebuff.BardMatarDebuffIsConditional
-                        and botdebuff.BardMatarDebuffIsConditional(i)
-                    if not conditional then
+                    if botdebuff and botdebuff.BardMatarDebuffInCombatTwist
+                        and botdebuff.BardMatarDebuffInCombatTwist(i, maTargetId) then
                         out[#out + 1] = entry.gem
                     end
                 end

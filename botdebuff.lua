@@ -175,31 +175,62 @@ local function DebuffSpawnNeedsSpell(entry, ctx, spawn, phase)
     return spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
 end
 
---- True when a bard matar debuff uses twist-once (not permanent combat twist).
-function botdebuff.BardMatarDebuffIsConditional(spellIndex)
-    if mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
+local function bardMatarDebuffEntry(spellIndex)
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' then return nil, nil end
     local entry = botconfig.getSpellEntry('debuff', spellIndex)
-    if not entry or entry.enabled == false then return false end
+    if not entry or entry.enabled == false then return nil, nil end
     local gem = entry.gem
-    if type(gem) ~= 'number' or gem < 1 or gem > 12 then return false end
-    if spellutils.IsMezSpell(entry) then return false end
+    if type(gem) ~= 'number' or gem < 1 or gem > 12 then return nil, nil end
+    if spellutils.IsMezSpell(entry) then return nil, nil end
     local db = DebuffBands[spellIndex]
-    if not db or not db.matar then return false end
+    if not db or not db.matar then return nil, nil end
+    return entry, db
+end
+
+--- True when a bard matar debuff has stopWhen (sing-until; combat twist, not twist-once).
+function botdebuff.BardMatarDebuffHasStopWhen(spellIndex)
+    local entry = bardMatarDebuffEntry(spellIndex)
+    return entry and entry.stopWhen and #entry.stopWhen > 0 or false
+end
+
+--- True when a bard matar debuff uses twist-once (dontStack, precondition, restrictive HP).
+--- stopWhen alone uses sustained combat twist instead.
+function botdebuff.BardMatarDebuffUsesTwistOnce(spellIndex)
+    local entry, db = bardMatarDebuffEntry(spellIndex)
+    if not entry then return false end
     if type(entry.precondition) == 'string' then
         local pre = entry.precondition:match('^%s*(.-)%s*$') or entry.precondition
         if pre ~= '' and pre ~= 'true' then return true end
     end
     if entry.dontStack and #entry.dontStack > 0 then return true end
-    if entry.stopWhen and #entry.stopWhen > 0 then return true end
     local assistpct = (botconfig.config.melee and botconfig.config.melee.assistpct) or 99
     local mobMax = db.mobMax or 100
     if mobMax < 100 and mobMax ~= assistpct then return true end
     return false
 end
 
+--- True when a bard matar debuff is conditional (twist-once or stopWhen combat twist).
+function botdebuff.BardMatarDebuffIsConditional(spellIndex)
+    return botdebuff.BardMatarDebuffUsesTwistOnce(spellIndex)
+        or botdebuff.BardMatarDebuffHasStopWhen(spellIndex)
+end
+
+--- True when a bard matar debuff gem belongs in the combat twist for maTargetId (or nil MA).
+function botdebuff.BardMatarDebuffInCombatTwist(spellIndex, maTargetId)
+    if botdebuff.BardMatarDebuffUsesTwistOnce(spellIndex) then return false end
+    local entry = bardMatarDebuffEntry(spellIndex)
+    if not entry then return false end
+    if entry.stopWhen and #entry.stopWhen > 0 and maTargetId then
+        if spellutils.SpawnHasStopWhenCategory(maTargetId, entry.stopWhen) then
+            return false
+        end
+    end
+    return true
+end
+
 --- True when a conditional matar debuff should be sung via twist-once (or cast via doDebuff).
 function botdebuff.MatarDebuffNeededForTwist(index)
-    if not botdebuff.BardMatarDebuffIsConditional(index) then return false end
+    if not botdebuff.BardMatarDebuffUsesTwistOnce(index) then return false end
     local entry = botconfig.getSpellEntry('debuff', index)
     if not entry or entry.enabled == false then return false end
     if spellutils.IsMezSpell(entry) then return false end
@@ -521,6 +552,20 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     return nil, nil
 end
 
+--- Same assistpct / MobList gate as resolveMeleeAssistTarget for setting engageTargetId.
+local function matarTargetPassesAssistEngageGate(evalId, rc)
+    if not evalId or evalId <= 0 then return false end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(evalId)) then return false end
+    local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
+    local hp = mq.TLO.Spawn(evalId).PctHPs()
+    if not hp or hp > assistpct then return false end
+    if not spawnutils.isCampAcleashEnforced(rc) then return true end
+    for _, v in ipairs(rc.MobList or {}) do
+        if v.ID() == evalId then return true end
+    end
+    return false
+end
+
 local function DebuffOnBeforeCast(i, EvalID, targethit)
     local myconfig = botconfig.config
     local entry = botconfig.getSpellEntry('debuff', i)
@@ -547,14 +592,16 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
             -- Sticky MT: keep melee/pets on MT target even if the matar debuff is aimed at MA target.
             local _, _, mtTargetId = spellutils.GetTankInfo(true)
             if mtTargetId and mtTargetId ~= 0 then
-                rc.engageTargetId = mtTargetId
-                botmelee.armMobprobEngageGrace(mtTargetId)
                 desiredPetTargetId = mtTargetId
-            else
+                if matarTargetPassesAssistEngageGate(mtTargetId, rc) then
+                    rc.engageTargetId = mtTargetId
+                    botmelee.armMobprobEngageGrace(mtTargetId)
+                end
+            elseif matarTargetPassesAssistEngageGate(EvalID, rc) then
                 rc.engageTargetId = EvalID
                 botmelee.armMobprobEngageGrace(EvalID)
             end
-        elseif not myconfig.melee.offtank then
+        elseif not myconfig.melee.offtank and matarTargetPassesAssistEngageGate(EvalID, rc) then
             rc.engageTargetId = EvalID
             botmelee.armMobprobEngageGrace(EvalID)
         end
@@ -637,7 +684,14 @@ local function finishBardTwistOnceWait(rc, w, opts)
     if recordDebuff and w.singingStarted and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
         updateBardTwistOnceDebuffState(w.entry, w.EvalID)
     end
-    if w.EvalID and (rc.engageTargetId == w.EvalID or not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID))) then
+    if w.targethit == 'notmatar' then
+        if w.EvalID and (rc.engageTargetId == w.EvalID or not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID))) then
+            rc.engageTargetId = nil
+            if rc.lastAssistTargetId == w.EvalID then
+                rc.lastAssistTargetId = nil
+            end
+        end
+    elseif w.targethit == 'matar' and w.EvalID and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
         rc.engageTargetId = nil
         if rc.lastAssistTargetId == w.EvalID then
             rc.lastAssistTargetId = nil
@@ -803,7 +857,7 @@ local function DebuffCheckBardTwistOnceCast(spellIndex, EvalID, targethit, sub, 
         return botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, nil)
     end
     if targethit == 'matar' then
-        if botdebuff.BardMatarDebuffIsConditional(spellIndex) then
+        if botdebuff.BardMatarDebuffUsesTwistOnce(spellIndex) then
             return botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, nil)
         end
         -- Unconditional matar: sustained by combat twist, not a separate cast.

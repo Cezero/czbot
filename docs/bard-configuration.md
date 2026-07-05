@@ -67,7 +67,7 @@ buff = {
 
 ### Example debuff block (minimal)
 
-**matar** = unconditional matar stays in combat twist; **conditional matar** (restrictive HP max, dontStack, stopWhen, precondition) = twist-once. **notmatar** = twist-once (target add, sing once, re-target MA). Optional **bard.mez_remez_sec** for re-apply before duration ends.
+**matar** = unconditional matar stays in combat twist; **stopWhen** matar joins combat twist until the condition is met; **conditional matar** (restrictive HP max, dontStack, precondition) = twist-once. **notmatar** = twist-once (target add, sing once, re-target MA). Optional **bard.mez_remez_sec** for re-apply before duration ends.
 
 ```lua
 debuff = {
@@ -133,13 +133,15 @@ Configure in **pull.spell** (same block as the pull method): set **gem** to the 
 
 ## matar debuffs (MA target)
 
-For **BRD**, **matar** debuffs split into two paths:
+For **BRD**, **matar** debuffs split into three paths:
 
 **Unconditional matar** (default HP band with `max` equal to **assistpct** or 100, and no **dontStack**, **stopWhen**, or **precondition**): the gem stays in the **combat twist** and cycles with your buff songs.
 
-**Conditional matar** (any of: **dontStack**, **stopWhen**, **precondition**, or HP **max** below 100 and not equal to **melee.assistpct**): the gem is **not** in the combat twist. When the debuff is needed, the bot runs `/twist once <gem>` (same flow as mez): MQ2Twist sings once then auto-resumes the buff combat twist. Re-applies when the debuff has ≤ **bard.mez_remez_sec** (default 6) seconds remaining.
+**stopWhen matar** (e.g. Occlusion of Sound with `stopWhen = { 'Slowed' }`): the gem is included in the **combat twist** from the start of the fight and cycles until the MA target has any listed category (e.g. any slow). When the condition is met, the bot issues a new `/twist` without that gem. This is **not** twist-once.
 
-Example: snare with `max = 50` and `dontStack = { 'Snared' }` is conditional (twist-once). A dot with `max = 99` and `assistpct = 99` is unconditional (combat twist).
+**Twist-once matar** (any of: **dontStack**, **precondition**, or HP **max** below 100 and not equal to **melee.assistpct**): the gem is **not** in the combat twist. When the debuff is needed, the bot runs `/twist once <gem>` (same flow as mez): MQ2Twist sings once then auto-resumes the buff combat twist. Re-applies when the debuff has ≤ **bard.mez_remez_sec** (default 6) seconds remaining. If **stopWhen** is combined with any twist-once trigger, twist-once wins.
+
+Example: snare with `max = 50` and `dontStack = { 'Snared' }` is twist-once. Occlusion with `stopWhen = { 'Slowed' }` is combat twist until slowed. A dot with `max = 99` and `assistpct = 99` is unconditional (combat twist).
 
 ---
 
@@ -153,13 +155,13 @@ For **BRD**, **notmatar** debuffs (mez or any add-only debuff) do **not** use a 
 4. Updates debuff state and optionally sets a **re-apply timer** (see below).
 5. Re-targets the MA.
 
-**Conditional matar** debuffs use the same twist-once flow (steps 2–4) but do not turn attack off and do not re-target the MA afterward. See [matar debuffs](#matar-debuffs-ma-target) above.
+**Twist-once matar** debuffs use the same twist-once flow (steps 2–4) but do not turn attack off and do not re-target the MA afterward. See [matar debuffs](#matar-debuffs-ma-target) above.
 
 ### Re-apply timer (mez_remez_sec)
 
 Optional **config.bard**:
 
-- **mez_remez_sec** — Seconds before a twist-once debuff duration ends to re-apply (e.g. re-mez, refresh snare). Default **6** if omitted. Applies to **notmatar** and **conditional matar** debuffs with a duration. When the timer expires, the bot runs the twist-once flow again.
+- **mez_remez_sec** — Seconds before a twist-once debuff duration ends to re-apply (e.g. re-mez, refresh snare). Default **6** if omitted. Applies to **notmatar** and **twist-once matar** debuffs with a duration. When the timer expires, the bot runs the twist-once flow again.
 
 The re-apply timer is set **whenever** a twist-once wait ends (when the bot stops waiting for the song to finish), even if song start was not detected (e.g. so adds still get re-mezzed). Only the debuff-landed state is skipped when the song was never seen. When the spell has no duration in spell data, re-apply uses a fixed **12 second** interval.
 
@@ -182,9 +184,9 @@ The "already on target" and resist handling for debuffs treat bards specially (e
 | Area              | What to do                                                                                                                                                                                                                                         |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Buffs**         | Use **groupbuff** / **pc** bands for Group AE songs. Twist membership = **inIdle** / **inCombat**. Numeric gem buffs are sustained by MQ2Twist only; the buff hook does not cast them. Item/alt buffs cast normally. |
-| **Default twist** | Idle = inIdle buffs (not near bind; includes pull travel); combat = inCombat buffs + unconditional matar debuffs. Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI. Bind stealth stops idle twist near primary bind. |
+| **Default twist** | Idle = inIdle buffs (not near bind; includes pull travel); combat = inCombat buffs + unconditional matar debuffs + stopWhen matar debuffs (until condition met). Item/alt buffs are cast normally; for clickies in twist use MQ2Twist INI. Bind stealth stops idle twist near primary bind. |
 | **Pull**          | Idle twist continues during pull travel. Use **pull.spell** with a numeric **gem** (and **spell** name) for the agro song.                                                                                                         |
-| **Debuffs**       | **matar** unconditional → combat twist. **matar** conditional (dontStack/stopWhen/precondition/restrictive max) → twist-once. **notmatar** → twist-once; **bard.mez_remez_sec** (default 6) re-applies before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
+| **Debuffs**       | **matar** unconditional → combat twist. **matar** stopWhen → combat twist until condition met. **matar** twist-once (dontStack/precondition/restrictive max) → twist-once. **notmatar** → twist-once; **bard.mez_remez_sec** (default 6) re-applies before duration ends. See [Debuffing](debuffing-configuration.md) and [Mezzing](mezzing-configuration.md). |
 | **Cures**         | No special config; twist stops then resumes after cast.                                                                                                                                                                                            |
 | **Interrupts**    | Automatic; the bot does not interrupt bard casts.                                                                                                                                                                                                  |
 | **Movement**      | Automatic; bards can move while casting.                                                                                                                                                                                                           |
