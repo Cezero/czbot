@@ -80,11 +80,19 @@ end
 function czactor.init()
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
-    if _actor then return end
+    if _actor then
+        pcall(function() actors.unregister(_actor) end)
+        _actor = nil
+    end
     _actor = actors.register(MAILBOX, function(message)
-        if type(message) ~= 'table' or type(message.content) ~= 'table' then return end
+        if not message then return end
+        local content = message.content
+        if type(content) ~= 'table' then return end
         _inboundQueue[#_inboundQueue + 1] = message
     end)
+    if not _actor then
+        printf('czactor: mailbox %s registration failed', MAILBOX)
+    end
     _nextPingAt = mq.gettime()
 end
 
@@ -102,7 +110,7 @@ end
 
 function czactor.sendToCharacter(character, msg)
     if not _actor or not character or character == '' then return end
-    _actor:send({ character = character }, msg)
+    _actor:send({ character = character, mailbox = MAILBOX }, msg)
 end
 
 local function nextManualMaSeq()
@@ -853,7 +861,7 @@ local function handleLeaderCampHereOff(content)
 end
 
 local function processMessage(message)
-    if type(message) ~= 'table' then return end
+    if not message then return end
     local content = message.content
     if type(content) ~= 'table' then return end
     if content.ver and content.ver ~= PROTOCOL_VER then return end
