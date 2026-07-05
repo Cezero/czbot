@@ -44,7 +44,11 @@ local TABS = {
     { label = 'Combat',          draw = combat_tab.draw },
     { label = 'Pull',            draw = pull_tab.draw },
     { label = 'Heal',            draw = heal_tab.draw },
-    { label = 'CH Chain',        draw = chchain_tab.draw },
+    {
+        label = 'CH Chain',
+        draw = chchain_tab.draw,
+        visible = function() return mq.TLO.Me.Class.ShortName() == 'CLR' end,
+    },
     { label = 'Buff',            draw = buff_tab.draw },
     { label = 'Debuff/Mez/Nuke', draw = debuff_tab.draw },
     { label = 'Cure',            draw = cure_tab.draw },
@@ -74,9 +78,11 @@ local function updateImGui()
         ImGui.Spacing()
         if ImGui.BeginTabBar('CZBot GUI') then
             for _, tab in ipairs(TABS) do
-                if ImGui.BeginTabItem(tab.label) then
-                    tab.draw()
-                    ImGui.EndTabItem()
+                if not tab.visible or tab.visible() then
+                    if ImGui.BeginTabItem(tab.label) then
+                        tab.draw()
+                        ImGui.EndTabItem()
+                    end
                 end
             end
             ImGui.EndTabBar()
