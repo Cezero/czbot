@@ -114,8 +114,15 @@ end
 local function isFollowEngagementActive(rc)
     rc = rc or state.getRunconfig()
     if require('lib.czactor').isMaEngagementActive() then return true end
+    if hasActiveFollow(rc) and not rc.followCatchUp then
+        return false
+    end
     local id = rc.engageTargetId or 0
     return id ~= 0
+end
+
+function botmove.hasActiveFollow(rc)
+    return hasActiveFollow(rc or state.getRunconfig())
 end
 
 local function shouldSuppressFollowNav(rc)

@@ -6,6 +6,7 @@ local mq = require('mq')
 local state = require('lib.state')
 local botmove = require('botmove')
 local botpull = require('botpull')
+local combat = require('lib.combat')
 local charinfo = require("plugin.charinfo")
 local log = require('lib.log')
 
@@ -31,8 +32,12 @@ function follow.StopFollow(reason)
             bardtwist.EnsureDefaultTwistRunning()
         end
     end
-    if reason == 'death' then
-        log.say('\arFollow OFF (death)\ax')
+    if hadFollow then
+        if reason == 'death' then
+            log.say('\arFollow OFF (death)\ax')
+        else
+            log.say('[Follow] OFF (%s)', reason or 'command')
+        end
     end
     return true
 end
@@ -44,6 +49,11 @@ function follow.StartFollow(name)
     end
     if not name or name == '' then return false end
     local rc = state.getRunconfig()
+    rc.engageTargetId = nil
+    rc.attackCommandEngage = nil
+    rc.lastAssistTargetId = nil
+    rc.followCatchUp = false
+    combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
     local campSet = rc.campstatus or (rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z))
     if campSet then botmove.MakeCamp('off') end
     botpull.DisablePull('follow')
@@ -60,9 +70,15 @@ function follow.StartFollow(name)
     end
 
     local spawn = mq.TLO.Spawn('=' .. name)
-    if not spawn then return false end
+    if not spawn then
+        log.say('[Follow] could not resolve leader %s (no peer/spawn)', name)
+        return false
+    end
     local followId = spawn.ID()
-    if not followId then return false end
+    if not followId then
+        log.say('[Follow] could not resolve leader spawn id for %s', name)
+        return false
+    end
     rc.followid = followId
     rc.followname = name
     rc.stucktimer = mq.gettime() + 60000

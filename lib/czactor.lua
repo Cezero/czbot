@@ -828,7 +828,11 @@ end
 
 local function handleLeaderFollowMe(content)
     if content.leader == myName() then return end
-    if not czactor.matchesBroadcastScope(content.scope, content.leader) then return end
+    if not czactor.matchesBroadcastScope(content.scope, content.leader) then
+        log.say('[Follow] ignored follow_me from %s (scope=%s)', content.leader, content.scope or 'group')
+        return
+    end
+    log.say('[Follow] follow_me from %s (scope=%s)', content.leader, content.scope or 'group')
     require('lib.follow').StartFollow(content.leader)
 end
 

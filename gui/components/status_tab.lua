@@ -145,7 +145,7 @@ local function getSteadyStateLabel()
         return label
     end
     if rc.campstatus then return 'Idle at camp' end
-    if rc.followid and rc.followid > 0 then
+    if (rc.followname and rc.followname ~= '') or (rc.followid and rc.followid > 0) then
         if rc.travelMode then
             local name = (rc.followname and rc.followname ~= '') and rc.followname or '—'
             return 'Travel (following ' .. name .. ')'
@@ -485,7 +485,7 @@ function M.draw()
             ImGui.SetCursorPosX(startX + availX / 2 - textW / 2)
             ImGui.Text('%s', followLabel)
             ImGui.SameLine()
-            if rc.followid and rc.followid > 0 then
+            if (rc.followname and rc.followname ~= '') or (rc.followid and rc.followid > 0) then
                 local stopIcon = Icons.FA_STOP_CIRCLE
                 local stopIconW = (select(1, ImGui.CalcTextSize(stopIcon)) or 0) + style.FramePadding.x * 2
                 local followAvail = select(1, ImGui.GetContentRegionAvail())
@@ -503,7 +503,7 @@ function M.draw()
             ImGui.Spacing()
             ImGui.TextColored(WHITE, '%s', 'Following: ')
             ImGui.SameLine(0, 2)
-            if rc.followid and rc.followid > 0 and rc.followname and rc.followname ~= '' then
+            if rc.followname and rc.followname ~= '' then
                 ImGui.TextColored(LIGHT_GREY, '%s', rc.followname)
             else
                 ImGui.TextColored(LIGHT_GREY, '%s', 'unset')

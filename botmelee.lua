@@ -934,12 +934,10 @@ function botmelee.AdvCombat()
             require('lib.czactor').publishMaEngaged(rc.engageTargetId, name)
         end
         engageTarget()
-    elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] then
+    elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] and not botmove.hasActiveFollow(rc) then
         -- Camp combat active but assist not valid yet (e.g. above assistpct): keep song/debuff
         -- context without resetting attack/stick every tick.
-        if rc.engageTargetId and not hasAliveEngageTarget(rc) then
-            rc.engageTargetId = nil
-        end
+        rc.engageTargetId = nil
     else
         disengageCombat('no_engage_target')
     end
