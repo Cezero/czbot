@@ -450,6 +450,7 @@ local function clearMaActorEngaged(rc, maName)
     if not eng then return end
     if maName and eng.maName and string.lower(eng.maName) ~= string.lower(maName) then return end
     rc.MaActorEngaged = nil
+    rc.followCatchUp = false
 end
 
 local function isAliveEngageSpawnId(spawnId)
@@ -471,6 +472,8 @@ local function applyMaEngaged(content, sender)
     local spawnId = content.spawnId
     if not spawnId or spawnId <= 0 then return end
     local rc = state.getRunconfig()
+    local prev = rc.MaActorEngaged
+    local isNew = not prev or prev.spawnId ~= spawnId
     rc.MaActorEngaged = {
         maName = sender,
         spawnId = spawnId,
@@ -478,6 +481,9 @@ local function applyMaEngaged(content, sender)
         zone = content.zone,
         scope = content.scope,
     }
+    if isNew then
+        require('botmove').onFollowEngagementStarted(rc)
+    end
 end
 
 local function applyMaDisengage(content, sender)
@@ -978,6 +984,7 @@ function czactor.tick()
         if rc.MaActorEngaged and rc.MaActorEngaged.spawnId then
             if not isAliveEngageSpawnId(rc.MaActorEngaged.spawnId) then
                 rc.MaActorEngaged = nil
+                rc.followCatchUp = false
             end
         end
     end

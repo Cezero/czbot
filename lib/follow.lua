@@ -23,6 +23,7 @@ function follow.StopFollow(reason)
     botmove.ClearFollowMovementState()
     rc.followid = 0
     rc.followname = ''
+    rc.followCatchUp = false
     rc.travelMode = false
     if wasTravelMode then
         local ok, bardtwist = pcall(require, 'lib.bardtwist')

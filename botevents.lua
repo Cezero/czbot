@@ -39,6 +39,7 @@ function botevents.ResetCombatSession(reason)
     rc.statusMessage = ''
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
+    rc.followCatchUp = false
     rc.lastAssistTargetId = nil
     tankrole.invalidateAll()
     rc.charmSkipIds = {}

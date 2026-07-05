@@ -7,6 +7,8 @@
 
 DoMelee resolves who to engage (MA picker, separate MT follower, offtank, or DPS) and then either engages that target or disengages. When runState is **engage_return_follow**, it only runs botmove.TickReturnToFollowAfterEngage and returns.
 
+**Follow catch-up:** When **`followCatchUp`** is true (follow active, engagement started while beyond **`followdistance`**), doMelee returns immediately so the bot keeps nav toward the leader until **`FollowAndStuckCheck`** clears the flag.
+
 ```mermaid
 flowchart TB
     Start[doMelee] --> EngageReturn{runState == engage_return_follow?}

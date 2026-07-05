@@ -13,6 +13,7 @@
 ---@field AlertList number
 ---@field followid number
 ---@field followname string
+---@field followCatchUp boolean|nil true while closing to leader after engage start; cleared once within followdistance
 ---@field TankName string
 ---@field AssistName string
 ---@field ExcludeList table
@@ -269,6 +270,7 @@ function M.resetRunconfig()
         AlertList = 20,
         followid = 0,
         followname = '',
+        followCatchUp = false,
         TankName = '',
         AssistName = '',
         ExcludeList = {},

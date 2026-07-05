@@ -96,7 +96,11 @@ When the **Main Assist** bot sets an engage target, it broadcasts **`ma_engaged`
 
 - OT add selection, notmatar debuffing, and other MA-target-aware logic see the spawn ID immediately (no assist-at percentage wait).
 - DPS melee still waits for **`melee.assistpct`** unless overridden with **`/cz attack`**.
-- Follow-leash behavior is suppressed (`followdistance` disengage, follow nav, cast interrupts) until disengage or the engaged mob dies.
+- Follow-leash behavior while MA is engaged uses an explicit **`followCatchUp`** flag on followers with active follow:
+  - On **`ma_engaged`**, if the bot is beyond **`followdistance`**, **`followCatchUp`** is set: follow nav continues, combat (`doMelee`) is deferred, and spell hooks defer while closing.
+  - Once within **`followdistance`**, **`followCatchUp`** clears and follow nav stays suppressed for the rest of the engagement (combat maneuvering may exceed follow distance without re-following the leader).
+  - Followers already within leash at engage start skip catch-up; follow is suppressed immediately.
+  - Cleared on **`ma_disengage`**, local disengage, **`StopFollow`**, death, or zone reset.
 
 **Manual disengage:** `/cz disengage` on the MA broadcasts **`ma_disengage`** to peers. On a non-MA bot, it only disengages that bot locally.
 

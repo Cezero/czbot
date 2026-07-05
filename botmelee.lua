@@ -63,8 +63,13 @@ function botmelee.applyAttackCommandEngage(spawnId)
     local rc = state.getRunconfig()
     if charm.isCharmSkipped(spawnId, rc) then return false, nil end
     charm.releaseCharmTarget(spawnId, rc)
+    local prevEngageId = rc.engageTargetId
+    local isNewEngage = not prevEngageId or prevEngageId ~= spawnId
     rc.engageTargetId = spawnId
     rc.attackCommandEngage = true
+    if isNewEngage then
+        botmove.onFollowEngagementStarted(rc)
+    end
     botmelee.armMobprobEngageGrace(spawnId)
     return true, sp.CleanName() or tostring(spawnId)
 end
@@ -639,6 +644,7 @@ function botmelee.disengageCombat(reason)
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
     rc.allMezzedEngageId = nil
+    rc.followCatchUp = false
     if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
     combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
     if state.getRunState() == state.STATES.melee then state.clearRunState() end
@@ -902,8 +908,13 @@ function botmelee.AdvCombat()
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
 
     if id then
+        local prevEngageId = rc.engageTargetId
+        local isNewEngage = not prevEngageId or prevEngageId ~= id
         botmelee.armMobprobEngageGrace(id)
         rc.engageTargetId = id
+        if isNewEngage and not rc.MaActorEngaged then
+            botmove.onFollowEngagementStarted(rc)
+        end
         local name = mq.TLO.Spawn(rc.engageTargetId).CleanName() or tostring(rc.engageTargetId)
         local cs = rc.CurSpell
         local curSpellBusy = cs and cs.sub and cs.phase and
@@ -968,6 +979,7 @@ function botmelee.getHookFn(name)
             end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             local rc = state.getRunconfig()
+            if rc.followCatchUp then return end
             if rc.bardTwistOnceWait and mq.TLO.Me.Class.ShortName() == 'BRD' then return end
             if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
                 disengageCombat('beyond_follow_distance')

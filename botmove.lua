@@ -88,10 +88,9 @@ local function issueFollowNav(rc, ctx, opts)
     end
 end
 
---- True when follow is active and 2D distance to leader >= settings.followdistance.
-function botmove.isBeyondFollowDistance()
-    if require('lib.czactor').isMaEngagementActive() then return false end
-    local rc = state.getRunconfig()
+--- True when follow is active and 2D distance to leader >= settings.followdistance (raw; no engage override).
+local function rawBeyondFollowDistance(rc)
+    rc = rc or state.getRunconfig()
     if not hasActiveFollow(rc) then return false end
     local ctx = getFollowLeaderContext(rc)
     if followUsesCharinfoNav(ctx) then
@@ -110,6 +109,47 @@ function botmove.isBeyondFollowDistance()
     local followdistanceSq = myconfig.settings.followdistanceSq
     if not dSq or not followdistanceSq then return false end
     return dSq >= followdistanceSq
+end
+
+local function isFollowEngagementActive(rc)
+    rc = rc or state.getRunconfig()
+    if require('lib.czactor').isMaEngagementActive() then return true end
+    local id = rc.engageTargetId or 0
+    return id ~= 0
+end
+
+local function shouldSuppressFollowNav(rc)
+    rc = rc or state.getRunconfig()
+    return hasActiveFollow(rc)
+        and isFollowEngagementActive(rc)
+        and not rc.followCatchUp
+end
+
+local function tickFollowCatchUp(rc)
+    if not rc.followCatchUp then return end
+    if not hasActiveFollow(rc) or not isFollowEngagementActive(rc) then
+        rc.followCatchUp = false
+        return
+    end
+    if not rawBeyondFollowDistance(rc) then
+        rc.followCatchUp = false
+    end
+end
+
+--- Arm follow catch-up on engagement start when follow is active and bot is beyond followdistance.
+function botmove.onFollowEngagementStarted(rc)
+    rc = rc or state.getRunconfig()
+    if not hasActiveFollow(rc) then return end
+    rc.followCatchUp = rawBeyondFollowDistance(rc)
+end
+
+--- True when follow is active and 2D distance to leader >= settings.followdistance.
+function botmove.isBeyondFollowDistance()
+    local rc = state.getRunconfig()
+    if hasActiveFollow(rc) and isFollowEngagementActive(rc) and not rc.followCatchUp then
+        return false
+    end
+    return rawBeyondFollowDistance(rc)
 end
 
 local function followSpawnMatchesName(spawnId, followname)
@@ -164,9 +204,7 @@ local function refreshFollowId()
 end
 
 local function shouldCallFollow(rc)
-    if require('lib.czactor').isMaEngagementActive() then return false end
-    local engageId = rc.engageTargetId or 0
-    if engageId ~= 0 then return false end
+    if shouldSuppressFollowNav(rc) then return false end
     local ctx = getFollowLeaderContext(rc)
     if followUsesCharinfoNav(ctx) then
         local d2 = charinfoutils.leaderDistance2D(ctx)
@@ -787,6 +825,7 @@ function botmove.FollowAndStuckCheck()
     botmove.TickReturnToFollowAfterEngage()
     botmove.TickUnstuck()
     local rc = state.getRunconfig()
+    tickFollowCatchUp(rc)
     if not hasActiveFollow(rc) then return end
     if (rc.followid and rc.followid > 0) or (rc.followname and rc.followname ~= '') then
         refreshFollowId()
