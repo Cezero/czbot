@@ -74,7 +74,8 @@ function auto_ma_mt.isCandidateAvailable(name, requireLeash)
     if not ctx or not ctx.alive or not ctx.sameZone then return false end
     if requireLeash then
         local leash = getAnchorLeash()
-        if not ctx.distance or ctx.distance > leash then return false end
+        local dist = charinfoutils.leaderDistance2D(ctx)
+        if not dist or dist > leash then return false end
     end
     return true
 end
@@ -235,8 +236,9 @@ function auto_ma_mt.topMaCandidateInZone()
     end
     local list = state.getRunconfig().MaList
     if type(list) ~= 'table' then return nil end
+    local requireLeash = not inRaid()
     for i, name in ipairs(list) do
-        if auto_ma_mt.isCandidateAvailable(name, true) then
+        if auto_ma_mt.isCandidateAvailable(name, requireLeash) then
             return name, 'list', i
         end
     end

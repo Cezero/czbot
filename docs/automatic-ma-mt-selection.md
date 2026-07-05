@@ -43,7 +43,7 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 4. `maAnchorLeash` generation unchanged.
 5. **`actor`** source valid while the holder is alive and in-zone and heartbeats arrive within **2 intervals (~4s)**; cleared when unavailable or heartbeats stop.
 6. **`primary_retained`** valid while EQ primary is unchanged, available (alive/in-zone), and no actor override present.
-7. **`list_readonly`** valid while no actor override and `topMaCandidateInZone()` / `topMtCandidateInZone()` still returns the cached name (MT raid-only for automatic resolution; MA uses list walk whenever primary is unavailable).
+7. **`list_readonly`** valid while no actor override and the cached name still matches `topMaCandidateInZone()` (or `topMtCandidateInZone()` raid MA fallback) / `topMtCandidateInZone()` for MT.
 
 **Invalidation events:** zone change, `/cz tank set`, `/cz assist set`, role preset Apply (setTank/setAssist), `ma_list`/`mt_list` GUI edits, `/cz reloadcommon`, `/cz maanchorleash`, MA leash edit in Roles GUI. Use `/cz tank status` (or `/cz tankrole`) for a forced live diagnostic (cache cleared before printing).
 
@@ -108,7 +108,7 @@ When no primary is available (or in raid for MT):
 
 1. Walk the list **in order** — first eligible name wins.
 2. Candidate must be **alive** and in the **same zone**.
-3. **`ma_list` only:** candidate must be within **`maAnchorLeash`** of this bot.
+3. **`ma_list` only (group):** candidate must be within **`maAnchorLeash`** of this bot. In **raid**, `ma_list` uses alive/in-zone only (same as **`mt_list`**).
 4. **`mt_list`:** no leash — healers gate on spell range separately.
 
 **Common gotcha:** If the EQ-assigned MA is alive in your zone but 200 units away, bots still follow that MA. **`ma_list`** entries only matter when the primary fails the alive/in-zone check (or for distance beyond leash). **`mt_list`** applies the same alive/in-zone rules without a leash cap.
@@ -123,7 +123,7 @@ CZBot looks up each candidate via **MQCharInfo** (bot peers) or **Spawn TLO** (n
 |-------|---------------------|--------------------|--------------------|
 | Alive | Yes | Yes | Yes |
 | Same zone | Yes | Yes | Yes |
-| Within `maAnchorLeash` | No | Yes | No |
+| Within `maAnchorLeash` | No | Yes (group only) | No |
 
 **Alive (MQCharInfo peer):**
 
@@ -190,7 +190,7 @@ Editable on the Roles tab (**MA leash**). Can also be set at runtime (persists t
 
 **Used for three features:**
 
-1. **`ma_list` fallback** — max distance for MA list candidates (not applied to `mt_list`).
+1. **`ma_list` fallback (group)** — max distance for MA list candidates (not applied to `mt_list` or to `ma_list` in raid).
 2. **MA camp anchor** — when `maCampAnchor` is on, mob bubble centers on the resolved MA within this distance.
 3. **Combat target inject** — when `maCampAnchor` is on, injects the MA's (then MT's) ATTACK target into MobList if the leader is within leash.
 
@@ -225,7 +225,7 @@ mt_list = { "WarriorMa", "SkOfftank" },
 
 - Set **Raid Main Assist** in the EQ raid window.
 - Maintain **`mt_list`** with your heal priority — automatic MT does **not** use group Main Tank in raid.
-- **`ma_list`** still applies when raid MA is unavailable (with leash). **`mt_list`** applies alive/in-zone only (no leash).
+- **`ma_list`** still applies when raid MA is unavailable (in-zone only, no leash — same as **`mt_list`**). If `ma_list` has no eligible entry, MA falls back to the top **`mt_list`** candidate in raid.
 
 ### Legacy: everyone assists the tank
 

@@ -156,6 +156,10 @@ local function summarizeMaPath()
     end
     local top = auto_ma_mt.topMaCandidateInZone()
     if top then return 'list_readonly: ' .. top end
+    if inRaid() then
+        top = auto_ma_mt.topMtCandidateInZone()
+        if top then return 'list_readonly (mt_list): ' .. top end
+    end
     if primary then return 'primary unavailable: ' .. primary end
     return 'no MA resolved'
 end
@@ -203,6 +207,14 @@ local function printListAudit(label, list, listRequireLeash)
     end
 end
 
+local function resolveMaListReadonlyTop()
+    local top = auto_ma_mt.topMaCandidateInZone()
+    if not top and inRaid() then
+        top = auto_ma_mt.topMtCandidateInZone()
+    end
+    return top
+end
+
 local function resolveAutomaticAssistFull()
     local raid = inRaid()
     local primaryTlo = getMaPrimaryTlo()
@@ -221,7 +233,7 @@ local function resolveAutomaticAssistFull()
         return meta
     end
 
-    local top = auto_ma_mt.topMaCandidateInZone()
+    local top = resolveMaListReadonlyTop()
     if top then
         meta.name = top
         meta.source = 'list_readonly'
@@ -279,7 +291,7 @@ local function isCachedMaValid(cache)
     end
     if cache.source == 'list_readonly' then
         if auto_ma_mt.getActorMaOverrideName() then return false end
-        local top = auto_ma_mt.topMaCandidateInZone()
+        local top = resolveMaListReadonlyTop()
         return top and cache.name == top
     end
     return false
@@ -514,7 +526,7 @@ function tankrole.debugPrint()
         tankrole.AmIMainAssist() and 'yes' or 'no',
         tankrole.AmIMainTank() and 'yes' or 'no')
 
-    printListAudit('MaList (zone-local claim walk)', rc.MaList)
+    printListAudit('MaList (zone-local claim walk)', rc.MaList, not raid)
     printListAudit('MtList (zone-local claim walk)', rc.MtList, false)
 
     local topMa, topMaSrc, topMaIdx = auto_ma_mt.topMaCandidateInZone()
