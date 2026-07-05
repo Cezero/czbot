@@ -1,5 +1,6 @@
 -- Shared automatic MA/MT list utilities: zone-local claims, list walks, promotion.
--- Used by lib/tankrole.lua, lib/czactor.lua, and lib/chchain.lua.
+-- Used by lib/tankrole.lua, lib/czactor.lua, lib/chchain.lua, and lib/rolelists.lua.
+-- ma_list/mt_list generation counters invalidate tankrole automatic-resolution caches.
 
 local mq = require('mq')
 local botconfig = require('lib.config')
@@ -7,6 +8,25 @@ local charinfoutils = require('lib.charinfoutils')
 local state = require('lib.state')
 
 local auto_ma_mt = {}
+
+local _maListGen = 0
+local _mtListGen = 0
+
+function auto_ma_mt.getMaListGen()
+    return _maListGen
+end
+
+function auto_ma_mt.getMtListGen()
+    return _mtListGen
+end
+
+function auto_ma_mt.bumpMaListGen()
+    _maListGen = _maListGen + 1
+end
+
+function auto_ma_mt.bumpMtListGen()
+    _mtListGen = _mtListGen + 1
+end
 
 local function getAnchorLeash()
     local settings = botconfig.config.settings

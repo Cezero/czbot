@@ -12,7 +12,6 @@ local botconfig = require('lib.config')
 local state = require('lib.state')
 local charinfo = require("plugin.charinfo")
 local charinfoutils = require('lib.charinfoutils')
-local rolelists = require('lib.rolelists')
 local auto_ma_mt = require('lib.auto_ma_mt')
 local log = require('lib.log')
 
@@ -28,6 +27,9 @@ local _tickMemo = {
     tankName = nil,
     assistResolved = false,
     tankResolved = false,
+    maListGen = nil,
+    mtListGen = nil,
+    leashGen = nil,
 }
 local maybeRefreshAutomaticCache
 
@@ -43,6 +45,9 @@ function tankrole.beginTick()
     _tickMemo.tankResolved = false
     _tickMemo.assistName = nil
     _tickMemo.tankName = nil
+    _tickMemo.maListGen = nil
+    _tickMemo.mtListGen = nil
+    _tickMemo.leashGen = nil
     maybeRefreshAutomaticCache()
 end
 
@@ -55,12 +60,16 @@ function tankrole.invalidateMa()
     _maCache = {}
     _tickMemo.assistResolved = false
     _tickMemo.assistName = nil
+    _tickMemo.maListGen = nil
+    _tickMemo.leashGen = nil
 end
 
 function tankrole.invalidateMt()
     _mtCache = {}
     _tickMemo.tankResolved = false
     _tickMemo.tankName = nil
+    _tickMemo.mtListGen = nil
+    _tickMemo.leashGen = nil
 end
 
 function tankrole.invalidateAll()
@@ -230,7 +239,7 @@ local function isCachedMaValid(cache)
     if not cache.name or not cache.source then return false end
     if inRaid() ~= cache.inRaid then return false end
     if getMaPrimaryTlo() ~= cache.primaryTlo then return false end
-    if rolelists.getMaListGen() ~= cache.listGen then return false end
+    if auto_ma_mt.getMaListGen() ~= cache.listGen then return false end
     if _leashGen ~= cache.leashGen then return false end
 
     if cache.source == 'actor' then
@@ -249,7 +258,7 @@ local function isCachedMtValid(cache)
     if not cache.name or not cache.source then return false end
     if inRaid() ~= cache.inRaid then return false end
     if getMtPrimaryTlo() ~= cache.primaryTlo then return false end
-    if rolelists.getMtListGen() ~= cache.listGen then return false end
+    if auto_ma_mt.getMtListGen() ~= cache.listGen then return false end
     if _leashGen ~= cache.leashGen then return false end
 
     if cache.source == 'actor' then
@@ -264,7 +273,7 @@ local function storeMaCache(result)
         source = result.source,
         primaryTlo = result.primaryTlo,
         inRaid = result.inRaid,
-        listGen = rolelists.getMaListGen(),
+        listGen = auto_ma_mt.getMaListGen(),
         leashGen = _leashGen,
     }
 end
@@ -275,7 +284,7 @@ local function storeMtCache(result)
         source = result.source,
         primaryTlo = result.primaryTlo,
         inRaid = result.inRaid,
-        listGen = rolelists.getMtListGen(),
+        listGen = auto_ma_mt.getMtListGen(),
         leashGen = _leashGen,
     }
 end
@@ -316,13 +325,17 @@ maybeRefreshAutomaticCache = function()
 end
 
 local function resolveAutomaticAssistName()
-    if _tickMemo.assistResolved then
+    if _tickMemo.assistResolved
+        and _tickMemo.maListGen == auto_ma_mt.getMaListGen()
+        and _tickMemo.leashGen == _leashGen then
         return _tickMemo.assistName
     end
 
     if _maCache.name and isCachedMaValid(_maCache) then
         _tickMemo.assistName = _maCache.name
         _tickMemo.assistResolved = true
+        _tickMemo.maListGen = auto_ma_mt.getMaListGen()
+        _tickMemo.leashGen = _leashGen
         return _maCache.name
     end
 
@@ -330,17 +343,23 @@ local function resolveAutomaticAssistName()
     storeMaCache(result)
     _tickMemo.assistName = result.name
     _tickMemo.assistResolved = true
+    _tickMemo.maListGen = auto_ma_mt.getMaListGen()
+    _tickMemo.leashGen = _leashGen
     return result.name
 end
 
 local function resolveAutomaticTankName()
-    if _tickMemo.tankResolved then
+    if _tickMemo.tankResolved
+        and _tickMemo.mtListGen == auto_ma_mt.getMtListGen()
+        and _tickMemo.leashGen == _leashGen then
         return _tickMemo.tankName
     end
 
     if _mtCache.name and isCachedMtValid(_mtCache) then
         _tickMemo.tankName = _mtCache.name
         _tickMemo.tankResolved = true
+        _tickMemo.mtListGen = auto_ma_mt.getMtListGen()
+        _tickMemo.leashGen = _leashGen
         return _mtCache.name
     end
 
@@ -348,6 +367,8 @@ local function resolveAutomaticTankName()
     storeMtCache(result)
     _tickMemo.tankName = result.name
     _tickMemo.tankResolved = true
+    _tickMemo.mtListGen = auto_ma_mt.getMtListGen()
+    _tickMemo.leashGen = _leashGen
     return result.name
 end
 
