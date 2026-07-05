@@ -62,8 +62,12 @@ local MA_DISENGAGE_TRANSIENT_REASONS = {
     moblist_empty = true,
 }
 local ROLE_CLAIMS_INTERVAL_MS = 2000
+local ROLE_CLAIM_MISSED_HEARTBEATS = 2
+local ROLE_CLAIM_HEARTBEAT_TIMEOUT_MS = ROLE_CLAIMS_INTERVAL_MS * ROLE_CLAIM_MISSED_HEARTBEATS
 local applyImMa
 local applyImMt
+local clearMaActorEngaged
+local isRoleClaimHeartbeatStale
 
 local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
@@ -375,16 +379,6 @@ local function applyRoleClaimActions(actions)
     end
 end
 
-function czactor.runRoleClaimsTick()
-    local now = mq.gettime()
-    if now < _nextRoleClaimsAt then return end
-    _nextRoleClaimsAt = now + ROLE_CLAIMS_INTERVAL_MS
-    local clearedMa, clearedMt = auto_ma_mt.sweepStaleActorOverrides()
-    if clearedMa then tankrole.invalidateMa() end
-    if clearedMt then tankrole.invalidateMt() end
-    applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
-end
-
 function czactor.onRoleReleaseReceived()
     applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'release' }))
 end
@@ -536,6 +530,7 @@ applyImMa = function(content, sender)
         name = name,
         seq = content.seq or 0,
         ts = content.ts,
+        lastHeartbeatAt = content.ts or mq.gettime(),
         zone = content.zone,
         publisher = sender,
         reason = 'claim',
@@ -581,6 +576,7 @@ applyImMt = function(content, sender)
         name = name,
         seq = content.seq or 0,
         ts = content.ts,
+        lastHeartbeatAt = content.ts or mq.gettime(),
         zone = content.zone,
         publisher = sender,
         reason = 'claim',
@@ -599,7 +595,75 @@ applyImMt = function(content, sender)
     tankrole.invalidateMt()
 end
 
-local function clearMaActorEngaged(rc, maName)
+isRoleClaimHeartbeatStale = function(override, now)
+    if not override or not override.name then return false end
+    if override.reason ~= 'claim' then return false end
+    local last = override.lastHeartbeatAt or override.ts
+    if not last then return false end
+    now = now or mq.gettime()
+    return (now - last) > ROLE_CLAIM_HEARTBEAT_TIMEOUT_MS
+end
+
+local function expireMaClaimOverride()
+    local rc = state.getRunconfig()
+    local o = rc.ActorMaOverride
+    if not o then return false end
+    clearMaActorEngaged(rc, o.name)
+    rc.ActorMaOverride = nil
+    if o.inGroup then rc.MaReleased = true end
+    tankrole.invalidateMa()
+    return true
+end
+
+local function expireMtClaimOverride()
+    local rc = state.getRunconfig()
+    local o = rc.ActorMtOverride
+    if not o then return false end
+    rc.ActorMtOverride = nil
+    if o.inGroup then rc.MtReleased = true end
+    tankrole.invalidateMt()
+    return true
+end
+
+--- Expire unavailable or heartbeat-stale im_ma/im_mt overrides; re-run claim selection when any cleared.
+---@param now number|nil mq.gettime() for tests; defaults to current time
+---@return boolean anyExpired
+function czactor.sweepExpiredRoleClaims(now)
+    now = now or mq.gettime()
+    local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    local anyExpired = false
+
+    if rc.ActorMaOverride then
+        if not auto_ma_mt.isActorHolderAvailable(rc.ActorMaOverride, false)
+            or isRoleClaimHeartbeatStale(rc.ActorMaOverride, now) then
+            expireMaClaimOverride()
+            anyExpired = true
+        end
+    end
+    if rc.ActorMtOverride then
+        if not auto_ma_mt.isActorHolderAvailable(rc.ActorMtOverride, false)
+            or isRoleClaimHeartbeatStale(rc.ActorMtOverride, now) then
+            expireMtClaimOverride()
+            anyExpired = true
+        end
+    end
+
+    if anyExpired then
+        czactor.onRoleReleaseReceived()
+    end
+    return anyExpired
+end
+
+function czactor.runRoleClaimsTick()
+    local now = mq.gettime()
+    if now < _nextRoleClaimsAt then return end
+    _nextRoleClaimsAt = now + ROLE_CLAIMS_INTERVAL_MS
+    czactor.sweepExpiredRoleClaims(now)
+    applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
+end
+
+clearMaActorEngaged = function(rc, maName)
     local eng = rc.MaActorEngaged
     if not eng then return end
     if maName and eng.maName and string.lower(eng.maName) ~= string.lower(maName) then return end
@@ -1249,17 +1313,23 @@ function czactor.printStatus()
     local mtO = rc.ActorMtOverride
     printf('  MA override: %s', maO and maO.name or '(none)')
     if maO then
-        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s',
+        local hb = maO.reason == 'claim' and isRoleClaimHeartbeatStale(maO, now) and ' STALE' or ''
+        local lastHb = maO.lastHeartbeatAt or maO.ts
+        local hbAge = lastHb and string.format('%.1fs ago%s', (now - lastHb) / 1000, hb) or 'unknown'
+        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s heartbeat=%s',
             tostring(maO.seq), tostring(maO.source), tostring(maO.listIndex),
             tostring(maO.zone), tostring(maO.publisher), tostring(maO.inGroup),
-            tostring(maO.reason))
+            tostring(maO.reason), hbAge)
     end
     printf('  MT override: %s', mtO and mtO.name or '(none)')
     if mtO then
-        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s',
+        local hb = mtO.reason == 'claim' and isRoleClaimHeartbeatStale(mtO, now) and ' STALE' or ''
+        local lastHb = mtO.lastHeartbeatAt or mtO.ts
+        local hbAge = lastHb and string.format('%.1fs ago%s', (now - lastHb) / 1000, hb) or 'unknown'
+        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s heartbeat=%s',
             tostring(mtO.seq), tostring(mtO.source), tostring(mtO.listIndex),
             tostring(mtO.zone), tostring(mtO.publisher), tostring(mtO.inGroup),
-            tostring(mtO.reason))
+            tostring(mtO.reason), hbAge)
     end
     printf('  MaReleased=%s MtReleased=%s MaImHolding=%s MtImHolding=%s',
         tostring(rc.MaReleased), tostring(rc.MtReleased),

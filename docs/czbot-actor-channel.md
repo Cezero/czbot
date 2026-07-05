@@ -153,9 +153,13 @@ When `AssistName` or `TankName` is **`automatic`**, MA/MT resolution uses **`im_
 | `listIndex` | 1-based list index; `0` for primary |
 | `zone` | Claimer's zone (receivers accept only same-zone senders) |
 
+Receivers store `lastHeartbeatAt` on the override and expire the claim after **2 missed heartbeats (~4s)** if no `release_*` arrives.
+
 **Release messages (`release_ma` / `release_mt`):** sent immediately on death/hover or when the holder becomes ineligible. Receivers run self-select and may publish a new `im_*` on the same tick.
 
-**Receive rules:** scope filter (raid-strict; group allows cross-group assist when the group lacks an active MA/MT), sender same-zone filter, priority merge on conflict (in-group beats out-of-group). Receivers trust claims — no holder alive/leash re-check.
+**Heartbeat expiry:** Receivers track `lastHeartbeatAt` on each accepted `im_ma` / `im_mt` (`reason=claim`). If the holder sends no accepted heartbeat for **2 intervals (~4s)**, peers clear the override and re-run claim selection — same net effect as `release_ma` / `release_mt`. Manual `ma_update` / `mt_update` overrides are not subject to heartbeat expiry.
+
+**Receive rules:** scope filter (raid-strict; group allows cross-group assist when the group lacks an active MA/MT), sender same-zone filter, priority merge on conflict (in-group beats out-of-group). Overrides are also cleared when the holder is dead/out of zone or misses heartbeats (see above).
 
 **Manual overrides:** `/cz assist set <name>` and `/cz tank set <name>` publish **`ma_update`** / **`mt_update`**, which beat automatic `im_*` claims until cleared. CH-enabled bots update local curtank from these messages without a separate `chchain_curtank` broadcast.
 
@@ -169,6 +173,7 @@ Heal spells with **`offtank`** in **targetphase** target peers with a live OT cl
 - [ ] Two OTs on same camp pick different adds; conflict yields to newer claim
 - [ ] OT idles when all adds claimed
 - [ ] MA death: holder publishes `release_ma`; next eligible bot publishes `im_ma`; peers adopt within one heartbeat
+- [ ] MA holder stops heartbeating (kill, `/czp off`, missed release): peers clear override after ~4s and failover
 - [ ] MA engages mob: peers show spawn in `/cz actor status`; OT/notmatar see target before assist-at
 - [ ] `/cz disengage` on MA broadcasts `ma_disengage`; peers resume follow nav
 - [ ] Melee bots sticking past followdistance do not disengage while MA engaged

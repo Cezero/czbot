@@ -115,8 +115,8 @@
 ---@field OtMyClaim table|nil { spawnId, ts } this bot's published OT claim
 ---@field RezClaims table|nil corpseId -> { character, ts, zone } from peer rez_claim messages
 ---@field RezMyClaim table|nil { corpseId, ts } this bot's published rez claim
----@field ActorMaOverride table|nil { name, seq, ts, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
----@field ActorMtOverride table|nil { name, seq, ts, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
+---@field ActorMaOverride table|nil { name, seq, ts, lastHeartbeatAt?, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
+---@field ActorMtOverride table|nil { name, seq, ts, lastHeartbeatAt?, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
 ---@field MaReleased boolean|nil group MA slot vacant after in-group release_ma
 ---@field MtReleased boolean|nil group MT slot vacant after in-group release_mt
 ---@field MaImHolding boolean|nil this bot is actively publishing im_ma heartbeats

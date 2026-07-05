@@ -348,9 +348,7 @@ maybeRefreshAutomaticCache = function()
     if now < _nextRefreshAt then return end
     _nextRefreshAt = now + REFRESH_INTERVAL_MS
 
-    local clearedMa, clearedMt = auto_ma_mt.sweepStaleActorOverrides()
-    if clearedMa then tankrole.invalidateMa() end
-    if clearedMt then tankrole.invalidateMt() end
+    require('lib.czactor').sweepExpiredRoleClaims(now)
 
     local rc = state.getRunconfig()
     local assistSetting = getEffectiveAssistSetting(rc)

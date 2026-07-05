@@ -41,7 +41,7 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 2. EQ-assigned primary (Main Assist / Main Tank) unchanged (for `primary_retained`).
 3. `ma_list` / `mt_list` generation unchanged.
 4. `maAnchorLeash` generation unchanged.
-5. **`actor`** source valid while the holder is alive and in-zone; cleared automatically when unavailable (missed `release_*` self-heals on the 2s tick).
+5. **`actor`** source valid while the holder is alive and in-zone and heartbeats arrive within **2 intervals (~4s)**; cleared when unavailable or heartbeats stop.
 6. **`primary_retained`** valid while EQ primary is unchanged, available (alive/in-zone), and no actor override present.
 7. **`list_readonly`** valid while no actor override and `topMaCandidateInZone()` / `topMtCandidateInZone()` still returns the cached name (MT raid-only for automatic resolution; MA uses list walk whenever primary is unavailable).
 
@@ -73,7 +73,7 @@ flowchart TD
 
 **Claim eligibility (claimer only):** alive, in proximity to roster peers in this zone (MA uses `maAnchorLeash`), top priority among in-zone candidates. Split raids across zones may have separate MA/MT per zone.
 
-**Receive:** scope filter + sender same-zone match. Stale overrides (holder dead/out of zone) are ignored when accepting new `im_*` claims and cleared on the periodic role-claim tick.
+**Receive:** scope filter + sender same-zone match. Stale overrides (holder dead/out of zone, or **2 missed `im_*` heartbeats ~4s**) are cleared and treated like `release_ma` / `release_mt`.
 
 ---
 
