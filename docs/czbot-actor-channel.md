@@ -13,6 +13,9 @@ CZBot peers coordinate through a dedicated **Actor mailbox** (`czbot`) on the sa
 |---------|---------|
 | `/cz actor ping` | Broadcast ping; list charinfo peers and last czbot reply time |
 | `/cz actor status` | Peers, MA/MT Actor overrides, OT claims, rez claims, MA engaged target |
+| `/cz actor reinit` | Re-register the `czbot` mailbox immediately (recovery when `mailbox=MISSING`) |
+
+If `/cz actor status` shows **`mailbox=MISSING`**, this client cannot send or receive Actor messages (`followme`, `camphere`, `attack`, MA/MT coordination, etc.). The bot retries registration every 30s automatically; use **`/cz actor reinit`** for immediate recovery, or restart the czbot macro. On a follower stuck following after a missed `follow_me_off`, use **`/cz stop`** locally until the mailbox recovers.
 
 ## Message types
 

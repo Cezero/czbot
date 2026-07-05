@@ -25,6 +25,11 @@ local _actor = nil
 local _inboundQueue = {}
 local _lastTickAt = 0
 local _tickStaleLoggedAt = 0
+local _lastInitAttemptAt = 0
+local _lastInitFailureLoggedAt = 0
+local _initFailCount = 0
+local _lastInitError = nil
+local _everRegistered = false
 local processMessage
 
 local INLINE_IMMEDIATE_IDS = {
@@ -116,31 +121,58 @@ local function ensureRunconfigFields(rc)
     if rc.MtImHolding == nil then rc.MtImHolding = false end
 end
 
-function czactor.init()
+---@param quietOnFail boolean|nil when true, suppress failure log (caller handles throttled logging)
+---@return boolean true when mailbox registered successfully
+function czactor.init(quietOnFail)
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
+    local now = mq.gettime()
+    _lastInitAttemptAt = now
     if _actor then
         pcall(function() actors.unregister(_actor) end)
         _actor = nil
     end
     _inboundQueue = {}
-    _lastTickAt = mq.gettime()
-    _actor = actors.register(MAILBOX, function(message)
-        if not message then return end
-        local content = message.content
-        if type(content) ~= 'table' then return end
-        if shouldProcessInline(content) then
-            safeProcessInbound(message)
-            return
-        end
-        _inboundQueue[#_inboundQueue + 1] = message
+    _lastTickAt = now
+    local registerErr
+    local ok, result = pcall(function()
+        return actors.register(MAILBOX, function(message)
+            if not message then return end
+            local content = message.content
+            if type(content) ~= 'table' then return end
+            if shouldProcessInline(content) then
+                safeProcessInbound(message)
+                return
+            end
+            _inboundQueue[#_inboundQueue + 1] = message
+        end)
     end)
-    if _actor then
-        log.say('czactor: mailbox %s registered', MAILBOX)
+    if ok and result then
+        _actor = result
+    elseif ok then
+        registerErr = 'actors.register returned nil'
     else
-        log.say('[czactor] mailbox %s registration FAILED', MAILBOX)
+        registerErr = tostring(result)
+    end
+    if _actor then
+        if _everRegistered or _initFailCount > 0 then
+            log.say('czactor: mailbox %s re-registered', MAILBOX)
+        else
+            log.say('czactor: mailbox %s registered', MAILBOX)
+        end
+        _everRegistered = true
+        _initFailCount = 0
+        _lastInitError = nil
+    else
+        _initFailCount = _initFailCount + 1
+        _lastInitError = registerErr
+        if not quietOnFail then
+            local detail = registerErr and (' (' .. registerErr .. ')') or ''
+            log.say('[czactor] mailbox %s registration FAILED%s', MAILBOX, detail)
+        end
     end
     _nextPingAt = mq.gettime()
+    return _actor ~= nil
 end
 
 function czactor.broadcast(msg)
@@ -905,7 +937,11 @@ local function handleLeaderFollowMe(content)
 end
 
 local function handleLeaderFollowMeOff(content)
-    if not czactor.matchesBroadcastScope(content.scope, content.leader) then return end
+    if not czactor.matchesBroadcastScope(content.scope, content.leader) then
+        log.say('[Follow] ignored follow_me_off from %s (scope=%s)', content.leader, content.scope or 'group')
+        return
+    end
+    log.say('[Follow] follow_me_off from %s (scope=%s)', content.leader, content.scope or 'group')
     require('lib.follow').StopFollow('command')
 end
 
@@ -1031,7 +1067,18 @@ function czactor.tick()
     end
     _lastTickAt = now
 
-    if not _actor then return end
+    if not _actor then
+        if _lastInitAttemptAt == 0 or (now - _lastInitAttemptAt) >= PING_INTERVAL_MS then
+            czactor.init(true)
+            if not _actor and (now - _lastInitFailureLoggedAt) >= PING_INTERVAL_MS then
+                _lastInitFailureLoggedAt = now
+                local detail = _lastInitError and (' (' .. _lastInitError .. ')') or ''
+                log.say('[czactor] mailbox %s still missing (failCount=%d%s); retrying every %ds',
+                    MAILBOX, _initFailCount, detail, PING_INTERVAL_MS / 1000)
+            end
+        end
+        return
+    end
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
 
@@ -1119,6 +1166,14 @@ function czactor.printStatus()
     printf('  czactor: mailbox=%s lastTick=%s queue=%d peersRecent=%d/%d follow=%s catchUp=%s',
         _actor and 'ok' or 'MISSING', lastTickAge, #_inboundQueue, recent, total,
         followLabel, tostring(rc.followCatchUp == true))
+    if not _actor then
+        printf('  WARNING: czbot mailbox MISSING — Actor messages (followme, camphere, attack, MA/MT) are not sent or received.')
+        local initAge = _lastInitAttemptAt > 0 and string.format('%.1fs ago', (now - _lastInitAttemptAt) / 1000) or 'never'
+        printf('  lastInitAttempt=%s initFailCount=%d', initAge, _initFailCount)
+        if _lastInitError then
+            printf('  lastInitError=%s', _lastInitError)
+        end
+    end
     czactor.printPeerStatus()
     local maO = rc.ActorMaOverride
     local mtO = rc.ActorMtOverride

@@ -81,7 +81,7 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **tank**         | `set <name>` / `automatic` / `status` | Set Main Tank (`set` persists). `status` prints MA/MT diagnostics. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |
 | **assist**       | `set <name>` / `automatic` / `status` | Set Main Assist. `status` prints MA/MT diagnostics. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |
 | **offtank**      | `on` / `off` or toggle  | Enable/disable offtank behavior.                                                                                  |
-| **actor**        | `ping` / `status`       | CZBot Actor channel diagnostics (peers, OT claims, MA/MT overrides). See [CZBot Actor channel](czbot-actor-channel.md). |
+| **actor**        | `ping` / `status` / `reinit` | CZBot Actor channel diagnostics (peers, OT claims, MA/MT overrides). **`reinit`** re-registers the mailbox when `mailbox=MISSING`. See [CZBot Actor channel](czbot-actor-channel.md). |
 | **tankrole**     | —                       | Alias for `/cz tank status` — automatic MA/MT resolution diagnostics.                                           |
 | **stickcmd**     | `<string>`              | Set stick command (e.g. `hold uw 7`).                                                                             |
 | **targetfilter** | `0` / `1` / `2`         | Filter for mob list: 0 = NPC + aggressive + LOS (pull only aggressive), 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
