@@ -916,10 +916,11 @@ end
 
 -- Resolve engageTargetId from role (MA picker / MT follower / OT / DPS), then engage or disengage.
 function botmelee.AdvCombat()
+    local rc = state.getRunconfig()
+    if rc.followCatchUp then return end
     local assistName = tankrole.GetAssistTargetName()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
-    local rc = state.getRunconfig()
     local aeLooseId = aeTankGrab(rc)
 
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Type() == 'PC' then

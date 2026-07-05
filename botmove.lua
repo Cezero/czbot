@@ -125,6 +125,13 @@ function botmove.hasActiveFollow(rc)
     return hasActiveFollow(rc or state.getRunconfig())
 end
 
+--- True when follow is armed and leader is beyond followdistance (for catch-up on StartFollow).
+function botmove.armFollowCatchUp(rc)
+    rc = rc or state.getRunconfig()
+    if not hasActiveFollow(rc) then return false end
+    return rawBeyondFollowDistance(rc)
+end
+
 local function shouldSuppressFollowNav(rc)
     rc = rc or state.getRunconfig()
     return hasActiveFollow(rc)

@@ -18,9 +18,21 @@ local OT_CLAIM_TTL_MS = 5000
 local REZ_CLAIM_TTL_MS = 60000
 local PING_INTERVAL_MS = 30000
 local OT_HEARTBEAT_MS = 2000
+local TICK_STALE_MS = 60000
+local PEER_RECENT_MS = 90000
 
 local _actor = nil
 local _inboundQueue = {}
+local _lastTickAt = 0
+local _tickStaleLoggedAt = 0
+local processMessage
+
+local INLINE_IMMEDIATE_IDS = {
+    ping = true,
+    pong = true,
+    follow_me = true,
+    follow_me_off = true,
+}
 local _nextPingAt = 0
 local _nextOtHeartbeatAt = 0
 local _nextClaimPruneAt = 0
@@ -56,6 +68,23 @@ end
 
 local function myZone()
     return mq.TLO.Zone.ShortName() or ''
+end
+
+local function namesMatch(a, b)
+    if not a or not b or a == '' or b == '' then return false end
+    return string.lower(a) == string.lower(b)
+end
+
+local function shouldProcessInline(content)
+    return content and content.id and INLINE_IMMEDIATE_IDS[content.id] == true
+end
+
+local function safeProcessInbound(message)
+    if not processMessage then return end
+    local ok, err = pcall(processMessage, message)
+    if not ok then
+        log.say('[czactor] processMessage error: %s', tostring(err))
+    end
 end
 
 local function zonesMatch(a, b)
@@ -94,14 +123,22 @@ function czactor.init()
         pcall(function() actors.unregister(_actor) end)
         _actor = nil
     end
+    _inboundQueue = {}
+    _lastTickAt = mq.gettime()
     _actor = actors.register(MAILBOX, function(message)
         if not message then return end
         local content = message.content
         if type(content) ~= 'table' then return end
+        if shouldProcessInline(content) then
+            safeProcessInbound(message)
+            return
+        end
         _inboundQueue[#_inboundQueue + 1] = message
     end)
-    if not _actor then
-        printf('czactor: mailbox %s registration failed', MAILBOX)
+    if _actor then
+        log.say('czactor: mailbox %s registered', MAILBOX)
+    else
+        log.say('[czactor] mailbox %s registration FAILED', MAILBOX)
     end
     _nextPingAt = mq.gettime()
 end
@@ -263,17 +300,19 @@ function czactor.matchesBroadcastScope(scope, leaderName)
     scope = scope or 'group'
     local me = myName()
     if scope == 'peers' then
-        return leaderName == me or charinfo.GetInfo(leaderName) ~= nil
+        return namesMatch(leaderName, me) or charinfo.GetInfo(leaderName) ~= nil
     end
     if scope == 'raid' then
         local raidMembers = mq.TLO.Raid.Members() or 0
-        if raidMembers <= 0 then return false end
-        for i = 1, raidMembers do
-            if mq.TLO.Raid.Member(i).Name() == leaderName then return true end
+        if raidMembers > 0 then
+            for i = 1, raidMembers do
+                if namesMatch(mq.TLO.Raid.Member(i).Name(), leaderName) then return true end
+            end
         end
-        return leaderName == me
+        if mq.TLO.Group.Member(leaderName).Index() then return true end
+        return namesMatch(leaderName, me)
     end
-    if leaderName == me then return true end
+    if namesMatch(leaderName, me) then return true end
     if mq.TLO.Group.Member(leaderName).Index() then return true end
     return false
 end
@@ -468,11 +507,6 @@ local function isAliveEngageSpawnId(spawnId)
     local sp = mq.TLO.Spawn(spawnId)
     if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() == 'Corpse' then return false end
     return require('lib.spawnutils').isAliveEngageSpawn(sp)
-end
-
-local function namesMatch(a, b)
-    if not a or not b or a == '' or b == '' then return false end
-    return string.lower(a) == string.lower(b)
 end
 
 local function applyMaEngaged(content, sender)
@@ -858,7 +892,10 @@ function czactor.syncOtClaimForEngage(spawnId, mobName, maTarId)
 end
 
 local function handleLeaderFollowMe(content)
-    if content.leader == myName() then return end
+    if namesMatch(content.leader, myName()) then
+        log.say('[Follow] ignored follow_me (self leader)')
+        return
+    end
     if not czactor.matchesBroadcastScope(content.scope, content.leader) then
         log.say('[Follow] ignored follow_me from %s (scope=%s)', content.leader, content.scope or 'group')
         return
@@ -896,7 +933,7 @@ local function handleLeaderCampHereOff(content)
     if rc.campstatus then require('botmove').MakeCamp('off') end
 end
 
-local function processMessage(message)
+processMessage = function(message)
     if not message then return end
     local content = message.content
     if type(content) ~= 'table' then return end
@@ -982,13 +1019,25 @@ local function processMessage(message)
 end
 
 function czactor.tick()
+    local now = mq.gettime()
+    if _lastTickAt > 0 and (now - _lastTickAt) > TICK_STALE_MS then
+        if (now - _tickStaleLoggedAt) > TICK_STALE_MS then
+            _tickStaleLoggedAt = now
+            log.say('[czactor] tick stale (%.1fs, queue=%d); re-init mailbox',
+                (now - _lastTickAt) / 1000, #_inboundQueue)
+        end
+        czactor.init()
+        now = mq.gettime()
+    end
+    _lastTickAt = now
+
     if not _actor then return end
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
 
     while _inboundQueue[1] ~= nil do
         local msg = table.remove(_inboundQueue, 1)
-        if msg then processMessage(msg) end
+        if msg then safeProcessInbound(msg) end
     end
 
     local now = mq.gettime()
@@ -1047,9 +1096,29 @@ function czactor.printPeerStatus()
     end
 end
 
+local function countRecentCzActorPeers(rc, withinMs)
+    local now = mq.gettime()
+    local total, recent = 0, 0
+    for _, name in ipairs(charinfo.GetPeers()) do
+        total = total + 1
+        local last = rc.CzActorPeers[name]
+        if last and (now - last) <= withinMs then
+            recent = recent + 1
+        end
+    end
+    return recent, total
+end
+
 function czactor.printStatus()
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
+    local now = mq.gettime()
+    local lastTickAge = _lastTickAt > 0 and string.format('%.1fs ago', (now - _lastTickAt) / 1000) or 'never'
+    local recent, total = countRecentCzActorPeers(rc, PEER_RECENT_MS)
+    local followLabel = (rc.followname and rc.followname ~= '') and rc.followname or '(none)'
+    printf('  czactor: mailbox=%s lastTick=%s queue=%d peersRecent=%d/%d follow=%s catchUp=%s',
+        _actor and 'ok' or 'MISSING', lastTickAge, #_inboundQueue, recent, total,
+        followLabel, tostring(rc.followCatchUp == true))
     czactor.printPeerStatus()
     local maO = rc.ActorMaOverride
     local mtO = rc.ActorMtOverride

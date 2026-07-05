@@ -52,7 +52,6 @@ function follow.StartFollow(name)
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
     rc.lastAssistTargetId = nil
-    rc.followCatchUp = false
     combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
     local campSet = rc.campstatus or (rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z))
     if campSet then botmove.MakeCamp('off') end
@@ -65,7 +64,9 @@ function follow.StartFollow(name)
         local followId = spawn and spawn.ID()
         rc.followid = (followId and followId > 0) and followId or 0
         rc.stucktimer = mq.gettime() + 60000
+        rc.followCatchUp = botmove.armFollowCatchUp(rc)
         log.say('\auFollowing\ax ON %s', name)
+        botmove.FollowCall()
         return true
     end
 
@@ -82,7 +83,9 @@ function follow.StartFollow(name)
     rc.followid = followId
     rc.followname = name
     rc.stucktimer = mq.gettime() + 60000
+    rc.followCatchUp = botmove.armFollowCatchUp(rc)
     log.say('\auFollowing\ax ON %s', spawn.CleanName())
+    botmove.FollowCall()
     return true
 end
 
