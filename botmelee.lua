@@ -437,6 +437,32 @@ local function resolveMtFollowTarget()
     return nil
 end
 
+-- True when spawn may be melee-engaged at assistpct (MobList, ma_engaged peer, or lastAssist cache).
+local function isAssistTargetEngageable(maTarId, rc, assistName, hp, assistpct)
+    if not maTarId or maTarId <= 0 then return false end
+    if charm.isCharmSkipped(maTarId, rc) then return false end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then return false end
+    hp = hp or mq.TLO.Spawn(maTarId).PctHPs()
+    if not hp or hp > assistpct then return false end
+    if not spawnutils.isCampAcleashEnforced(rc) then return true end
+    for _, v in ipairs(rc.MobList or {}) do
+        if v.ID() == maTarId then return true end
+    end
+    if assistName and assistName ~= '' then
+        local actorTar = require('lib.czactor').getMaEngagedSpawnId(assistName)
+        if actorTar and actorTar == maTarId then return true end
+    end
+    if rc.lastAssistTargetId == maTarId then return true end
+    return false
+end
+
+--- Same assistpct gate as resolveMeleeAssistTarget for setting engageTargetId (exported for debuff).
+function botmelee.matarTargetPassesAssistEngageGate(evalId, rc)
+    rc = rc or state.getRunconfig()
+    local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
+    return isAssistTargetEngageable(evalId, rc, tankrole.GetAssistTargetName(), nil, assistpct)
+end
+
 -- DPS: return MA's target when MA is engaging and in MobList at assistpct; else cached target when MA dead/hover.
 local function resolveMeleeAssistTarget(assistName, assistpct)
     local rc = state.getRunconfig()
@@ -452,16 +478,8 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
     end
 
     local hp = maTarHp or mq.TLO.Spawn(maTarId).PctHPs()
-    if not spawnutils.isCampAcleashEnforced(rc) and hp and (hp <= assistpct) then
-        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then
-            return maTarId
-        end
-        return nil
-    end
-    for _, v in ipairs(rc.MobList) do
-        if v.ID() == maTarId and hp and (hp <= assistpct) then
-            return maTarId
-        end
+    if isAssistTargetEngageable(maTarId, rc, assistName, hp, assistpct) then
+        return maTarId
     end
     return nil
 end
@@ -934,10 +952,15 @@ function botmelee.AdvCombat()
             require('lib.czactor').publishMaEngaged(rc.engageTargetId, name)
         end
         engageTarget()
-    elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] and not botmove.hasActiveFollow(rc) then
-        -- Camp combat active but assist not valid yet (e.g. above assistpct): keep song/debuff
+    elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] then
+        -- Camp/follow-hunt combat active but assist not valid yet (e.g. above assistpct): keep song/debuff
         -- context without resetting attack/stick every tick.
-        rc.engageTargetId = nil
+        local keepId = rc.engageTargetId
+        if keepId and botmelee.matarTargetPassesAssistEngageGate(keepId, rc) then
+            engageTarget()
+        else
+            rc.engageTargetId = nil
+        end
     else
         disengageCombat('no_engage_target')
     end

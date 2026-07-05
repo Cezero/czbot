@@ -167,9 +167,9 @@ The re-apply timer is set **whenever** a twist-once wait ends (when the bot stop
 
 ---
 
-## Mez and melee (known limitation)
+## Mez and melee
 
-When mezzing a **notmatar** (an add), the bot turns attack off, targets the add, and uses the twist-once flow. After the cast it re-targets the MA. The bard may not re-engage melee until the add is dead or mez is cleared; be aware when using a bard for mezzing.
+When mezzing a **notmatar** (an add), the bot turns attack off, targets the add, and uses the twist-once flow. After the cast it re-targets the MA and re-engages melee on the MA target when **assistpct** is met (including when the add is still alive but mez failed or the mob is immune). assistpct gating is unchanged: the bard does not stick while the MA target is above **melee.assistpct**.
 
 ---
 

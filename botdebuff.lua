@@ -554,16 +554,7 @@ end
 
 --- Same assistpct / MobList gate as resolveMeleeAssistTarget for setting engageTargetId.
 local function matarTargetPassesAssistEngageGate(evalId, rc)
-    if not evalId or evalId <= 0 then return false end
-    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(evalId)) then return false end
-    local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
-    local hp = mq.TLO.Spawn(evalId).PctHPs()
-    if not hp or hp > assistpct then return false end
-    if not spawnutils.isCampAcleashEnforced(rc) then return true end
-    for _, v in ipairs(rc.MobList or {}) do
-        if v.ID() == evalId then return true end
-    end
-    return false
+    return botmelee.matarTargetPassesAssistEngageGate(evalId, rc)
 end
 
 local function DebuffOnBeforeCast(i, EvalID, targethit)
@@ -616,8 +607,9 @@ end
 --- Re-target the MA's NPC target (not the MA player) and sync engageTargetId.
 local function retargetMaTargetAfterBardMez()
     local rc = state.getRunconfig()
-    local _, _, maTargetId = spellutils.GetAssistInfo(true)
-    if maTargetId and maTargetId ~= 0 then
+    local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
+    local _, _, maTargetId = spellutils.GetAssistInfo(true, assistpct)
+    if maTargetId and maTargetId ~= 0 and matarTargetPassesAssistEngageGate(maTargetId, rc) then
         targeting.TargetAndWait(maTargetId, 500)
         rc.engageTargetId = maTargetId
         botmelee.armMobprobEngageGrace(maTargetId)
@@ -704,6 +696,9 @@ local function finishBardTwistOnceWait(rc, w, opts)
     end
     if w.targethit == 'notmatar' then
         retargetMaTargetAfterBardMez()
+        if myconfig.settings.domelee and state.getMobCount() > 0 then
+            botmelee.AdvCombat()
+        end
     end
     local fightEnded = state.getMobCount() <= 0
         or (w.EvalID and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)))
