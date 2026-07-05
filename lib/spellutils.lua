@@ -11,6 +11,7 @@ local castutils = require('lib.castutils')
 local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
+local premem = require('lib.premem')
 local botmove = require('botmove')
 local log = require('lib.log')
 local spellutils = {}
@@ -1938,8 +1939,9 @@ function spellutils.clearCastingStateOrResume()
     castinterrupt.tickPending()
 end
 
---- True when MQ2Cast is memorizing (spell into gem). Cast.Status() contains 'M'; no cast bar yet (CastTimeLeft 0) to distinguish from HoT channeling.
+--- True when memorizing a spell into a gem (cast engine or premem background load).
 function spellutils.IsMemorizing()
+    if premem.isPending() then return true end
     local rc = state.getRunconfig()
     if not rc.CurSpell or (not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib) then return false end
     return casting.isMemorizing()

@@ -13,6 +13,7 @@
 local mq = require('mq')
 local botconfig = require('lib.config')
 local state = require('lib.state')
+local casting = require('lib.casting')
 
 local premem = {}
 
@@ -25,6 +26,25 @@ local _debug = false
 function premem.SetDebug(on) _debug = on and true or false end
 function premem.IsDebug() return _debug end
 function premem.requestCheck() _nextCheck = 0 end
+
+--- True while a premem-issued /memspell is still in progress (gem wrong or within wait window).
+function premem.isPending()
+    local rc = state.getRunconfig()
+    local p = rc.prememPending
+    if not p then return false end
+    if mq.gettime() >= (p.untilMs or 0) then
+        rc.prememPending = nil
+        return false
+    end
+    if p.gem and p.spell then
+        local inGem = mq.TLO.Me.Gem(p.gem)() or ''
+        if string.lower(inGem) == string.lower(p.spell) then
+            rc.prememPending = nil
+            return false
+        end
+    end
+    return true
+end
 
 local function dbg(fmt, ...)
     if _debug then printf('\ay[premem]\ax ' .. fmt, ...) end
@@ -66,6 +86,8 @@ end
 -- Only issue a /memspell when it can't interfere with anything: out of combat, no camp mobs, not casting,
 -- not moving (matches the existing "abort mem to keep moving" rule), and alive.
 local function safeToMem()
+    if premem.isPending() then return false end
+    if casting.isMemorizing() then return false end
     if mq.TLO.Me.Combat() then return false end
     if (tonumber(state.getMobCount()) or 0) > 0 then return false end
     if mq.TLO.Me.Casting() then return false end
@@ -87,6 +109,11 @@ function premem.tick()
         if string.lower(inGem) ~= string.lower(spell) then
             if mq.TLO.Me.Book(spell)() then
                 dbg('memorizing %s into gem %d (had: %s)', spell, gem, (inGem ~= '' and inGem or 'empty'))
+                state.getRunconfig().prememPending = {
+                    gem = gem,
+                    spell = spell,
+                    untilMs = mq.gettime() + POST_MEM_WAIT_MS,
+                }
                 mq.cmdf('/memspell %s "%s"', tostring(gem), spell)
                 _nextCheck = mq.gettime() + POST_MEM_WAIT_MS
                 return -- one gem per pass; recheck after it finishes

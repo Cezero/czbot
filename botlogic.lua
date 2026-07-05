@@ -124,7 +124,7 @@ local function charState_Always()
         (mq.TLO.Me.PctEndurance() > sitendur + SIT_HYSTERESIS_PCT)
     end
     -- if sitting and must stand or (above hysteresis and not casting), stand. Do not stand for mana while casting/memorizing.
-    if mq.TLO.Me.Sitting() and (mustStand or (aboveSitHysteresis and state.getRunState() ~= state.STATES.casting)) then
+    if mq.TLO.Me.Sitting() and (mustStand or (aboveSitHysteresis and state.getRunState() ~= state.STATES.casting and not spellutils.IsMemorizing())) then
         mq.cmd('/stand')
     end
     -- if not sitting and want to sit, sit
