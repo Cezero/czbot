@@ -297,6 +297,14 @@ local function getEffectiveAssistSetting(rc)
     return name
 end
 
+local function getEffectiveTankSetting(rc)
+    local name = rc.TankName
+    if name == nil or name == '' then
+        name = rc.AssistName
+    end
+    return name
+end
+
 maybeRefreshAutomaticCache = function()
     local now = mq.gettime()
     if now < _nextRefreshAt then return end
@@ -313,7 +321,7 @@ maybeRefreshAutomaticCache = function()
             storeMaCache(fresh)
         end
     end
-    if rc.TankName == 'automatic' then
+    if getEffectiveTankSetting(rc) == 'automatic' then
         local oldMt = _mtCache.name
         local oldSource = _mtCache.source
         local fresh = resolveAutomaticTankFull()
@@ -395,7 +403,8 @@ end
 --- Return the Main Tank's character name (who gets heals). Reads TankName from runconfig.
 ---@return string|nil
 function tankrole.GetMainTankName()
-    local name = state.getRunconfig().TankName
+    local rc = state.getRunconfig()
+    local name = getEffectiveTankSetting(rc)
     if name == nil or name == '' then return nil end
     if name == 'automatic' then
         return resolveAutomaticTankName()
@@ -478,16 +487,22 @@ function tankrole.debugPrint()
     printf('  MA path: %s', summarizeMaPath())
     printf('  MT path: %s', summarizeMtPath())
     if rc.ActorMaOverride then
-        printf('  Actor MA override: %s seq=%s source=%s listIndex=%s publisher=%s zone=%s',
+        printf('  Actor MA override: %s seq=%s source=%s listIndex=%s publisher=%s zone=%s reason=%s',
             tostring(rc.ActorMaOverride.name), tostring(rc.ActorMaOverride.seq),
             tostring(rc.ActorMaOverride.source), tostring(rc.ActorMaOverride.listIndex),
-            tostring(rc.ActorMaOverride.publisher), tostring(rc.ActorMaOverride.zone))
+            tostring(rc.ActorMaOverride.publisher), tostring(rc.ActorMaOverride.zone),
+            tostring(rc.ActorMaOverride.reason))
+    else
+        printf('  Actor MA override: (none)')
     end
     if rc.ActorMtOverride then
-        printf('  Actor MT override: %s seq=%s source=%s listIndex=%s publisher=%s zone=%s',
+        printf('  Actor MT override: %s seq=%s source=%s listIndex=%s publisher=%s zone=%s reason=%s',
             tostring(rc.ActorMtOverride.name), tostring(rc.ActorMtOverride.seq),
             tostring(rc.ActorMtOverride.source), tostring(rc.ActorMtOverride.listIndex),
-            tostring(rc.ActorMtOverride.publisher), tostring(rc.ActorMtOverride.zone))
+            tostring(rc.ActorMtOverride.publisher), tostring(rc.ActorMtOverride.zone),
+            tostring(rc.ActorMtOverride.reason))
+    else
+        printf('  Actor MT override: (none)')
     end
     printf('  MaReleased=%s MtReleased=%s MaImHolding=%s MtImHolding=%s',
         tostring(rc.MaReleased), tostring(rc.MtReleased),

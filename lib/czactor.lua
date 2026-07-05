@@ -29,6 +29,8 @@ local _maPublishSeq = 0
 local _mtPublishSeq = 0
 local _lastMaEngagedSpawnId = nil
 local ROLE_CLAIMS_INTERVAL_MS = 2000
+local applyImMa
+local applyImMt
 
 local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
@@ -141,26 +143,34 @@ function czactor.publishImMa(source, listIndex)
     _maPublishSeq = _maPublishSeq + 1
     local rc = state.getRunconfig()
     rc.MaImHolding = true
-    czactor.publish('im_ma', {
+    local fields = {
         name = myName(),
         seq = _maPublishSeq,
         scope = roleBroadcastScope(),
         source = source or 'list',
         listIndex = listIndex or 0,
-    })
+    }
+    local content = envelope('im_ma', fields)
+    applyImMa(content, myName())
+    czactor_dispatch.logSend('im_ma', fields)
+    czactor.broadcast(content)
 end
 
 function czactor.publishImMt(source, listIndex)
     _mtPublishSeq = _mtPublishSeq + 1
     local rc = state.getRunconfig()
     rc.MtImHolding = true
-    czactor.publish('im_mt', {
+    local fields = {
         name = myName(),
         seq = _mtPublishSeq,
         scope = roleBroadcastScope(),
         source = source or 'list',
         listIndex = listIndex or 0,
-    })
+    }
+    local content = envelope('im_mt', fields)
+    applyImMt(content, myName())
+    czactor_dispatch.logSend('im_mt', fields)
+    czactor.broadcast(content)
 end
 
 function czactor.publishReleaseMa()
@@ -325,21 +335,39 @@ local function shouldAcceptImClaim(content, sender, cur)
     if newIdx < curIdx then return true end
     if newIdx > curIdx then return false end
 
-    local newSeq = content.seq or 0
-    local curSeq = cur.seq or 0
+    local newSeq = tonumber(content.seq) or 0
+    local curSeq = tonumber(cur.seq) or 0
     if sender == cur.publisher then return newSeq >= curSeq end
     return newSeq > curSeq
 end
 
-local function applyImMa(content, sender)
+applyImMa = function(content, sender)
     local rc = state.getRunconfig()
     local name = content.name or sender
-    if not name or name == '' then return end
-    if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMaClaim(sender) then return end
+    if not name or name == '' then
+        czactor_dispatch.logRoleClaimReject('im_ma', 'empty name', sender)
+        return
+    end
+    if content.zone and not zonesMatch(content.zone, myZone()) then
+        czactor_dispatch.logRoleClaimReject('im_ma', 'zone mismatch', sender,
+            string.format('msgZone=%s myZone=%s', tostring(content.zone), tostring(myZone())))
+        return
+    end
+    if not acceptMaClaim(sender) then
+        czactor_dispatch.logRoleClaimReject('im_ma', 'acceptMaClaim', sender)
+        return
+    end
     local cur = rc.ActorMaOverride
-    if cur and cur.reason == 'manual' then return end
-    if not shouldAcceptImClaim(content, sender, cur) then return end
+    if cur and cur.reason == 'manual' then
+        czactor_dispatch.logRoleClaimReject('im_ma', 'manual override active', sender,
+            string.format('cur=%s', tostring(cur.name)))
+        return
+    end
+    if not shouldAcceptImClaim(content, sender, cur) then
+        czactor_dispatch.logRoleClaimReject('im_ma', 'shouldAcceptImClaim', sender,
+            string.format('cur=%s seq=%s', tostring(cur and cur.name), tostring(cur and cur.seq)))
+        return
+    end
 
     local inGroup = auto_ma_mt.isSenderInMyGroup(sender)
     rc.ActorMaOverride = {
@@ -358,15 +386,33 @@ local function applyImMa(content, sender)
     tankrole.invalidateMa()
 end
 
-local function applyImMt(content, sender)
+applyImMt = function(content, sender)
     local rc = state.getRunconfig()
     local name = content.name or sender
-    if not name or name == '' then return end
-    if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMtClaim(sender) then return end
+    if not name or name == '' then
+        czactor_dispatch.logRoleClaimReject('im_mt', 'empty name', sender)
+        return
+    end
+    if content.zone and not zonesMatch(content.zone, myZone()) then
+        czactor_dispatch.logRoleClaimReject('im_mt', 'zone mismatch', sender,
+            string.format('msgZone=%s myZone=%s', tostring(content.zone), tostring(myZone())))
+        return
+    end
+    if not acceptMtClaim(sender) then
+        czactor_dispatch.logRoleClaimReject('im_mt', 'acceptMtClaim', sender)
+        return
+    end
     local cur = rc.ActorMtOverride
-    if cur and cur.reason == 'manual' then return end
-    if not shouldAcceptImClaim(content, sender, cur) then return end
+    if cur and cur.reason == 'manual' then
+        czactor_dispatch.logRoleClaimReject('im_mt', 'manual override active', sender,
+            string.format('cur=%s', tostring(cur.name)))
+        return
+    end
+    if not shouldAcceptImClaim(content, sender, cur) then
+        czactor_dispatch.logRoleClaimReject('im_mt', 'shouldAcceptImClaim', sender,
+            string.format('cur=%s seq=%s', tostring(cur and cur.name), tostring(cur and cur.seq)))
+        return
+    end
 
     local inGroup = auto_ma_mt.isSenderInMyGroup(sender)
     rc.ActorMtOverride = {
@@ -382,11 +428,16 @@ local function applyImMt(content, sender)
         inGroup = inGroup,
     }
     if inGroup then rc.MtReleased = false end
-    local curtank = auto_ma_mt.handleMtOverride(name, 'claim')
-    tankrole.invalidateMt()
-    if curtank and curtank.index and curtank.tank then
-        czactor.publish('chchain_curtank', { index = curtank.index, tank = curtank.tank })
+    local prevName = cur and cur.name
+    local nameChanged = not prevName or not name
+        or string.lower(prevName) ~= string.lower(name)
+    if nameChanged then
+        local curtank = auto_ma_mt.handleMtOverride(name, 'claim')
+        if curtank and curtank.index and curtank.tank then
+            czactor.publish('chchain_curtank', { index = curtank.index, tank = curtank.tank })
+        end
     end
+    tankrole.invalidateMt()
 end
 
 local function clearMaActorEngaged(rc, maName)
@@ -825,10 +876,26 @@ local function processMessage(message)
 
     if id == 'ma_update' then applyMaUpdate(content, sender) return end
     if id == 'mt_update' then applyMtUpdate(content, sender) return end
-    if id == 'im_ma' then applyImMa(content, sender) return end
-    if id == 'im_mt' then applyImMt(content, sender) return end
-    if id == 'release_ma' then applyReleaseMa(content, sender) return end
-    if id == 'release_mt' then applyReleaseMt(content, sender) return end
+    if id == 'im_ma' then
+        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
+        applyImMa(content, sender)
+        return
+    end
+    if id == 'im_mt' then
+        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
+        applyImMt(content, sender)
+        return
+    end
+    if id == 'release_ma' then
+        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
+        applyReleaseMa(content, sender)
+        return
+    end
+    if id == 'release_mt' then
+        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
+        applyReleaseMt(content, sender)
+        return
+    end
 
     if id == 'ma_engaged' then applyMaEngaged(content, sender) return end
     if id == 'ma_disengage' then applyMaDisengage(content, sender) return end
@@ -943,15 +1010,17 @@ function czactor.printStatus()
     local mtO = rc.ActorMtOverride
     printf('  MA override: %s', maO and maO.name or '(none)')
     if maO then
-        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s',
+        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s',
             tostring(maO.seq), tostring(maO.source), tostring(maO.listIndex),
-            tostring(maO.zone), tostring(maO.publisher), tostring(maO.inGroup))
+            tostring(maO.zone), tostring(maO.publisher), tostring(maO.inGroup),
+            tostring(maO.reason))
     end
     printf('  MT override: %s', mtO and mtO.name or '(none)')
     if mtO then
-        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s',
+        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s',
             tostring(mtO.seq), tostring(mtO.source), tostring(mtO.listIndex),
-            tostring(mtO.zone), tostring(mtO.publisher), tostring(mtO.inGroup))
+            tostring(mtO.zone), tostring(mtO.publisher), tostring(mtO.inGroup),
+            tostring(mtO.reason))
     end
     printf('  MaReleased=%s MtReleased=%s MaImHolding=%s MtImHolding=%s',
         tostring(rc.MaReleased), tostring(rc.MtReleased),
@@ -984,6 +1053,14 @@ function czactor.printStatus()
     if rc.RezMyClaim then
         printf('  My rez claim: corpse %s', tostring(rc.RezMyClaim.corpseId))
     end
+end
+
+function czactor.SetRoleClaimLogDebug(on)
+    czactor_dispatch.SetRoleClaimLogDebug(on)
+end
+
+function czactor.IsRoleClaimLogDebug()
+    return czactor_dispatch.IsRoleClaimLogDebug()
 end
 
 function czactor.getHookFn(name)

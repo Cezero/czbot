@@ -812,6 +812,19 @@ local function cmd_tickdebug(args)
     log.say('Tick debug logging %s', tickprof.IsDebug() and 'on' or 'off')
 end
 
+local function cmd_actordebug(args)
+    local czactor = require('lib.czactor')
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        czactor.SetRoleClaimLogDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        czactor.SetRoleClaimLogDebug(false)
+    else
+        czactor.SetRoleClaimLogDebug(not czactor.IsRoleClaimLogDebug())
+    end
+    log.say('Actor role-claim debug logging %s', czactor.IsRoleClaimLogDebug() and 'on' or 'off')
+end
+
 local function cmd_burn(args)
     local arg = args[2] and string.lower(args[2]) or ''
     if arg == 'off' or arg == 'stop' or arg == '0' then
@@ -1470,6 +1483,7 @@ local handlers = {
     buffdebug = cmd_buffdebug,
     barddebug = cmd_barddebug,
     tickdebug = cmd_tickdebug,
+    actordebug = cmd_actordebug,
     charmpetsetup = cmd_charmpetsetup,
     aetank = cmd_aetank,
     aetankmezzer = cmd_aetankmezzer,

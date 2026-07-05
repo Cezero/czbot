@@ -58,7 +58,10 @@ local function isAutomaticAssist()
 end
 
 local function isAutomaticTank()
-    return state.getRunconfig().TankName == 'automatic'
+    local rc = state.getRunconfig()
+    local name = rc.TankName
+    if name == nil or name == '' then name = rc.AssistName end
+    return name == 'automatic'
 end
 
 local function meAlive()
