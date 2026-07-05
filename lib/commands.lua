@@ -636,10 +636,14 @@ local function cmd_attack(args)
     printf('%s', msg)
 end
 
--- Set MT (Main Tank). Persists to config so it survives /lua run (was session-only before).
-local function cmd_tank(args)
-    if not args[2] then return end
-    local name = M.normalizeRoleNameArg(args[2])
+local TANK_USAGE = 'Usage: /cz tank set <name>|automatic|status  (/cz tankrole = status)'
+
+local function setTankName(name)
+    if not name or name == '' then
+        log.say(TANK_USAGE)
+        return
+    end
+    name = M.normalizeRoleNameArg(name)
     state.getRunconfig().TankName = name
     botconfig.config.settings.TankName = name
     tankrole.invalidateAll()
@@ -651,10 +655,35 @@ local function cmd_tank(args)
     mq.TLO.Target.TargetOfTarget()
 end
 
--- Set MA (Main Assist). Persists to config so it survives /lua run (was session-only before).
-local function cmd_assist(args)
-    if not args[2] then return end
-    local name = M.normalizeRoleNameArg(args[2])
+local function cmd_tank(args)
+    local sub = args[2] and string.lower(args[2])
+    if not sub then
+        log.say(TANK_USAGE)
+        return
+    end
+    if sub == 'status' then
+        tankrole.debugPrint()
+        return
+    end
+    if sub == 'automatic' then
+        setTankName('automatic')
+        return
+    end
+    if sub == 'set' then
+        setTankName(args[3])
+        return
+    end
+    log.say('Unknown subcommand "%s". %s', tostring(args[2]), TANK_USAGE)
+end
+
+local ASSIST_USAGE = 'Usage: /cz assist set <name>|automatic|status'
+
+local function setAssistName(name)
+    if not name or name == '' then
+        log.say(ASSIST_USAGE)
+        return
+    end
+    name = M.normalizeRoleNameArg(name)
     local rc = state.getRunconfig()
     rc.AssistName = name
     rc.lastAssistTargetId = nil
@@ -665,6 +694,27 @@ local function cmd_assist(args)
     if name ~= 'automatic' then
         czactor.publishMaUpdate(name, 'manual')
     end
+end
+
+local function cmd_assist(args)
+    local sub = args[2] and string.lower(args[2])
+    if not sub then
+        log.say(ASSIST_USAGE)
+        return
+    end
+    if sub == 'status' then
+        tankrole.debugPrint()
+        return
+    end
+    if sub == 'automatic' then
+        setAssistName('automatic')
+        return
+    end
+    if sub == 'set' then
+        setAssistName(args[3])
+        return
+    end
+    log.say('Unknown subcommand "%s". %s', tostring(args[2]), ASSIST_USAGE)
 end
 
 local function cmd_tankrole(_args)

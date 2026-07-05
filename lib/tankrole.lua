@@ -442,7 +442,7 @@ function tankrole.AmIMainAssist()
     return tankrole.GetAssistTargetName() == mq.TLO.Me.Name()
 end
 
---- Print automatic MA/MT resolution diagnostics (/cz tankrole).
+--- Print automatic MA/MT resolution diagnostics (/cz tank status, /cz tankrole).
 function tankrole.debugPrint()
     tankrole.invalidateAll()
 

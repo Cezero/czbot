@@ -10,22 +10,22 @@ For what the MA and MT *do* once resolved (target picking, heals, offtank, pulle
 
 | Setting | Config path | Runtime command |
 |---------|-------------|-----------------|
-| Main Tank | `settings.TankName` | `/cz tank <name>` or `/cz tank automatic` |
-| Main Assist | `settings.AssistName` | `/cz assist <name>` or `/cz assist automatic` |
+| Main Tank | `settings.TankName` | `/cz tank set <name>` or `/cz tank automatic` |
+| Main Assist | `settings.AssistName` | `/cz assist set <name>` or `/cz assist automatic` |
 
 **Values:**
 
 - **Character name** — Always use that PC.
 - **`"automatic"`** — Resolve from actor **`im_ma`** / **`im_mt`** claims (this document).
-- **`"manual"`** — No default; set at runtime with `/cz tank` or `/cz assist`.
+- **`"manual"`** — No default; set at runtime with `/cz tank set` or `/cz assist set`.
 
 **Key points:**
 
 - Resolution is **cached** when `"automatic"`: the resolved name comes from the latest valid **`im_ma`** / **`im_mt`** actor override. **`primary_retained`** keeps the EQ primary name for `lastAssistTargetId` when no claim is active yet.
-- **Cache invalidation** forces a full re-resolve: actor claim/release, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank` / `/cz assist`, role preset Apply, or `maAnchorLeash` change.
+- **Cache invalidation** forces a full re-resolve: actor claim/release, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank set` / `/cz assist set`, role preset Apply, or `maAnchorLeash` change.
 - **MA and MT resolve independently** via separate actor claim streams.
 - **`TankName` defaults to `"automatic"`** in new configs. Populate **`ma_list`** and **`mt_list`** in `cz_common.lua` for zone-local claim priority.
-- **Actor claims:** Eligible bots self-select using EQ primary + list priority (zone-local), publish **`im_ma`** / **`im_mt`** every **2s** while holding, and **`release_ma`** / **`release_mt`** on death/hover or when ineligible. Logic lives in **`lib/auto_ma_mt.lua`** and **`lib/czactor.lua`**. Manual `/cz assist` / `/cz tank` publish **`ma_update`** / **`mt_update`**. See [CZBot Actor channel](czbot-actor-channel.md).
+- **Actor claims:** Eligible bots self-select using EQ primary + list priority (zone-local), publish **`im_ma`** / **`im_mt`** every **2s** while holding, and **`release_ma`** / **`release_mt`** on death/hover or when ineligible. Logic lives in **`lib/auto_ma_mt.lua`** and **`lib/czactor.lua`**. Manual `/cz assist set` / `/cz tank set` publish **`ma_update`** / **`mt_update`**. See [CZBot Actor channel](czbot-actor-channel.md).
 
 ---
 
@@ -44,7 +44,7 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 5. **`actor`** source valid until release or superseding claim (receivers do not locally detect holder death).
 6. **`primary_retained`** valid while EQ primary unchanged and no actor override present.
 
-**Invalidation events:** zone change, `/cz tank`, `/cz assist`, role preset Apply (setTank/setAssist), `ma_list`/`mt_list` GUI edits, `/cz reloadcommon`, `/cz maanchorleash`, MA leash edit in Roles GUI. Use `/cz tankrole` for a forced live diagnostic (cache cleared before printing).
+**Invalidation events:** zone change, `/cz tank set`, `/cz assist set`, role preset Apply (setTank/setAssist), `ma_list`/`mt_list` GUI edits, `/cz reloadcommon`, `/cz maanchorleash`, MA leash edit in Roles GUI. Use `/cz tank status` (or `/cz tankrole`) for a forced live diagnostic (cache cleared before printing).
 
 ---
 
@@ -241,14 +241,17 @@ No automatic resolution or fallback lists involved. Both roles resolve to `MyTan
 
 | Command / UI | Purpose |
 |--------------|---------|
-| `/cz tank automatic` | Set MT to automatic for this session (runtime runconfig). |
-| `/cz assist automatic` | Set MA to automatic for this session. |
+| `/cz tank automatic` | Set MT to automatic (persisted). |
+| `/cz tank set <name>` | Set MT to a fixed name (persisted). |
+| `/cz assist automatic` | Set MA to automatic (persisted). |
+| `/cz assist set <name>` | Set MA to a fixed name (persisted). |
 | Status tab | Shows resolved Assist Name and Tank Name; `(auto)` suffix when setting is automatic. |
 | `/cz reloadcommon` | Reload `cz_common.lua` and refresh `ma_list` / `mt_list` mirrors. |
-| `/cz tankrole` | Print automatic MA/MT resolution details (settings, list candidates, pass/fail per entry, `peerZone` for charinfo debugging). |
+| `/cz tank status` | Print automatic MA/MT resolution details (settings, list candidates, pass/fail per entry, `peerZone` for charinfo debugging). |
+| `/cz tankrole` | Alias for `/cz tank status`. |
 | `/cz mobfilter` | Prints MA distance, `inAttack`, target ID, and inject eligibility for the selected spawn. |
 
-`/cz tank` and `/cz assist` with a fixed name override automatic for the session only; char config file is unchanged unless you use `setvar` or edit the file.
+`/cz tank set` and `/cz assist set` with a fixed name override automatic; changes persist to the char config file.
 
 ---
 

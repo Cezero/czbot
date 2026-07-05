@@ -27,9 +27,10 @@ Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_co
 |----|---------|
 | `chchain_baton` | Hand off to next cleric (sole cast trigger) |
 | `chchain_control` | `start`, `stop`, `kickoff` |
-| `chchain_curtank` | Tank index sync (failover, MT swap) |
+| `chchain_curtank` | Tank index sync during active chain (failover while casting) |
 | `common_sync` | Auto-sync `cz_common` fields (`ch_healers`, `ch_chain`, `mt_list`, etc.) |
-| `mt_update` | Also publishes `chchain_curtank` so CH clerics retarget |
+| `mt_update` | Manual `/cz tank set <name>` — CH-enabled bots update local curtank (no `chchain_curtank` broadcast) |
+| `im_mt` | Automatic MT claims — CH-enabled bots update local curtank on adoption (no `chchain_curtank` broadcast) |
 
 ## Cast behavior
 
@@ -40,7 +41,7 @@ Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_co
 
 ## MT coordination
 
-When **`mt_update`** fires (manual `/cz tank`, auto MT death, etc.), all CH-enabled bots update curtank via `chchain_curtank`. Manual tank swaps also promote the name to front of `mt_list`.
+When **`mt_update`** or **`im_mt`** changes the MT, CH-enabled bots update **`chchainCurtank`** locally via `chchain.syncCurtankFromMtName`. **`chchain_curtank`** is broadcast only during active chain failover (`selectHealTank`) or when the chain is enabled. Manual `/cz tank set` also promotes the name to front of `mt_list` when reason is `manual`.
 
 ## See also
 

@@ -141,6 +141,17 @@ local function advanceCurtank(rc, index, tankName)
     return true
 end
 
+--- Local curtank index sync when MT changes (im_mt / mt_update). Does not broadcast.
+function chchain.syncCurtankFromMtName(name, reason)
+    if not name or name == '' then return end
+    local rc = state.getRunconfig()
+    if not rc.doChchain then return end
+    local curtank = auto_ma_mt.handleMtOverride(name, reason)
+    if curtank and curtank.index and curtank.tank then
+        advanceCurtank(rc, curtank.index, curtank.tank)
+    end
+end
+
 local function applyCurtank(content, sender)
     local rc = state.getRunconfig()
     if not rc.doChchain then return end

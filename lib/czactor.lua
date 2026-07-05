@@ -440,10 +440,7 @@ applyImMt = function(content, sender)
     local nameChanged = not prevName or not name
         or string.lower(prevName) ~= string.lower(name)
     if nameChanged then
-        local curtank = auto_ma_mt.handleMtOverride(name, 'claim')
-        if curtank and curtank.index and curtank.tank then
-            czactor.publish('chchain_curtank', { index = curtank.index, tank = curtank.tank })
-        end
+        require('lib.chchain').syncCurtankFromMtName(name, 'claim')
     end
     tankrole.invalidateMt()
 end
@@ -640,11 +637,8 @@ local function applyMtUpdate(content, sender)
         reason = content.reason,
         inGroup = sender and auto_ma_mt.isSenderInMyGroup(sender),
     }
-    local curtank = auto_ma_mt.handleMtOverride(name, content.reason)
+    require('lib.chchain').syncCurtankFromMtName(name, content.reason or 'manual')
     tankrole.invalidateMt()
-    if curtank and curtank.index and curtank.tank then
-        czactor.publish('chchain_curtank', { index = curtank.index, tank = curtank.tank })
-    end
 end
 
 local function pruneOtClaims(rc)

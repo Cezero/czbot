@@ -80,7 +80,7 @@ When **`settings.tankAllMobs`** is `true` and this bot is the **Main Tank**, it 
 
 ## Runtime control
 
-- **Set Main Tank:** `/cz tank <name>` or `/cz tank automatic`.
+- **Set Main Tank:** `/cz tank set <name>` or `/cz tank automatic`.
 - **Set stick command:** `/cz stickcmd <string>` (e.g. `/cz stickcmd hold uw 7`).
 - **Set camp leash:** `/cz acleash <number>` — max distance from camp for targeting and mob list.
 - **Make camp / return:** Make camp is controlled via movement (e.g. makecamp on/off/return). When camp is set, the bot returns to camp when beyond leash; **acleash** and **zradius** define the valid area.

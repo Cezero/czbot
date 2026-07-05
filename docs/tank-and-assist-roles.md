@@ -23,20 +23,20 @@ If **AssistName** is unset, it falls back to **TankName** — the MT bot becomes
 
 ### TankName (Main Tank)
 
-- **Where:** Config file under `settings.TankName`, or at runtime with `/cz tank <name>` or `/cz tank automatic`.
+- **Where:** Config file under `settings.TankName`, or at runtime with `/cz tank set <name>` or `/cz tank automatic`.
 - **Values:**
   - **Character name** — Healers focus on this character. If this bot is also the effective MA (AssistName unset or same name), it selects camp targets.
-  - **`"manual"`** — No default MT; set at runtime with `/cz tank SomeName`.
+  - **`"manual"`** — No default MT; set at runtime with `/cz tank set SomeName`.
   - **`"automatic"`** — Resolve from the EQ group Main Tank role (not in raid), then **`mt_list`** fallback. In raid, **`mt_list` only**. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
 
 Healers always use the resolved MT. MT bots do **not** pick mobs unless they are also the effective MA.
 
 ### AssistName (Main Assist)
 
-- **Where:** Config file under `settings.AssistName`, or at runtime with `/cz assist <name>` or `/cz assist automatic`.
+- **Where:** Config file under `settings.AssistName`, or at runtime with `/cz assist set <name>` or `/cz assist automatic`.
 - **Values:**
   - **Character name** — DPS/offtank/separate MT follow this character's target. MA bot selects from MobList.
-  - **`"manual"`** — No default MA; set at runtime with `/cz assist SomeName`.
+  - **`"manual"`** — No default MA; set at runtime with `/cz assist set SomeName`.
   - **`"automatic"`** — Resolve from raid/group Main Assist, then **`ma_list`** fallback. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
 
 If **AssistName** is unset, it defaults to **TankName** (legacy "everyone assists the tank").

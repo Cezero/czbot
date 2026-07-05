@@ -40,8 +40,23 @@ function M.isRoleClaimDebugId(id)
     return ROLE_CLAIM_DEBUG_IDS[id] == true
 end
 
+local function isChchainId(id)
+    return type(id) == 'string' and id:find('^chchain_', 1, true) ~= nil
+end
+
+local function shouldLogChchain()
+    if _roleClaimLogDebug then return true end
+    local ok, st = pcall(require, 'lib.state')
+    if ok then
+        local rc = st.getRunconfig()
+        if rc and rc.doChchain then return true end
+    end
+    return false
+end
+
 function M.logSend(id, fields)
     if ROLE_CLAIM_DEBUG_IDS[id] and not _roleClaimLogDebug then return end
+    if isChchainId(id) and not shouldLogChchain() then return end
     printf('czactor send %s: %s', tostring(id), M.formatFields(fields))
 end
 
@@ -77,7 +92,9 @@ function M.Dispatch(content, sender)
     local id = content and content.id
     local fn = id and _handlers[id]
     if not fn then return false end
-    M.logRecv(id, sender, content)
+    if not isChchainId(id) or shouldLogChchain() then
+        M.logRecv(id, sender, content)
+    end
     fn(content, sender)
     return true
 end

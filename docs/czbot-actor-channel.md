@@ -21,8 +21,8 @@ CZBot peers coordinate through a dedicated **Actor mailbox** (`czbot`) on the sa
 | `ping` / `pong` | Peer discovery |
 | `ot_claim` / `ot_release` / `ot_heartbeat` | Off-tank add coordination (last-writer-wins on conflicts) |
 | `rez_claim` | Rez coordination — peer excludes claimed corpse for 60s ([Rez coordination](#rez-coordination)) |
-| `ma_update` | Manual session MA override from `/cz assist <name>` (beats automatic claims) |
-| `mt_update` | Manual session MT override from `/cz tank <name>`; also publishes `chchain_curtank` |
+| `ma_update` | Manual session MA override from `/cz assist set <name>` (beats automatic claims) |
+| `mt_update` | Manual session MT override from `/cz tank set <name>` |
 | `im_ma` | Automatic MA claim — holder heartbeats every 2s while eligible |
 | `im_mt` | Automatic MT claim — holder heartbeats every 2s while eligible |
 | `release_ma` | Holder relinquishing MA (death, hover, or ineligible) |
@@ -34,7 +34,7 @@ CZBot peers coordinate through a dedicated **Actor mailbox** (`czbot`) on the sa
 | `camp_here` / `camp_here_off` | Leader camp broadcast (replaces `/rc` for `/cz camphere`) |
 | `chchain_baton` | CH chain baton — sole trigger for next cleric cast ([CHChain configuration](chchain-configuration.md)) |
 | `chchain_control` | CH chain start / stop / kickoff |
-| `chchain_curtank` | CHChain shared tank index/name ([CHChain configuration](chchain-configuration.md)) |
+| `chchain_curtank` | CHChain tank index sync during active chain (failover, enable) — not sent for `im_mt` / `mt_update` |
 | `common_sync` | Propagate `cz_common.lua` changes to peers (delta snapshot after any persisted edit) |
 
 Protocol version: **1** (`ver` field on every message).
@@ -145,7 +145,7 @@ When `AssistName` or `TankName` is **`automatic`**, MA/MT resolution uses **`im_
 
 **Receive rules:** scope filter (raid-strict; group allows cross-group assist when the group lacks an active MA/MT), sender same-zone filter, priority merge on conflict (in-group beats out-of-group). Receivers trust claims — no holder alive/leash re-check.
 
-**Manual overrides:** `/cz assist <name>` and `/cz tank <name>` publish **`ma_update`** / **`mt_update`**, which beat automatic `im_*` claims until cleared.
+**Manual overrides:** `/cz assist set <name>` and `/cz tank set <name>` publish **`ma_update`** / **`mt_update`**, which beat automatic `im_*` claims until cleared. CH-enabled bots update local curtank from these messages without a separate `chchain_curtank` broadcast.
 
 ## Healer OT band
 

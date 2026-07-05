@@ -56,7 +56,7 @@ flowchart LR
 ## Runtime control
 
 - **Toggle offtank:** `/cz offtank on` or `/cz offtank off`, or `/cz offtank` to toggle.
-- **Set MA:** `/cz assist <name>` or `/cz assist automatic` (required for offtank behavior).
+- **Set MA:** `/cz assist set <name>` or `/cz assist automatic` (required for offtank behavior).
 - **Diagnostics:** `/cz actor status` — OT claims and peer state.
 
 ---
