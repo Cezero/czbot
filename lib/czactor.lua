@@ -821,6 +821,7 @@ function czactor.syncOtClaimForEngage(spawnId, mobName, maTarId)
 end
 
 local function handleLeaderFollowMe(content)
+    if content.leader == myName() then return end
     if not czactor.matchesBroadcastScope(content.scope, content.leader) then return end
     require('lib.follow').StartFollow(content.leader)
 end
