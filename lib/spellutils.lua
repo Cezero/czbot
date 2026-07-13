@@ -680,14 +680,35 @@ function spellutils.PeerGetBuffDuration(peerInfo, spellid)
     return findDur(peerInfo.ShortBuff)
 end
 
+--- Remaining duration ms for spellid on peer PetBuff, or nil if absent.
+function spellutils.PeerGetPetBuffDuration(peerInfo, spellid)
+    if not peerInfo or not spellid or not peerInfo.PetBuff then return nil end
+    for _, b in ipairs(peerInfo.PetBuff) do
+        if b and b.Spell and (b.Spell.ID == spellid or tostring(b.Spell.ID) == tostring(spellid)) then
+            local dur = b.Duration
+            if type(dur) == 'number' and dur >= 0 then return dur end
+            return 0
+        end
+    end
+    return nil
+end
+
 -- (peerName, spellId) → mq.gettime() when next presence check is due.
--- When duration >= 60s, recheck at most every 60s; when < 60s, every tick.
 local BUFF_SKIP_LONG_MS = 60000
 local _buffSkipUntil = {} -- [peerName][spellId] = nextDueMs
 
 local function buffSkipKey(peerName, spellId)
     if not peerName or peerName == '' or not spellId then return nil, nil end
     return peerName, spellId
+end
+
+local function buffSkipArm(name, sid, untilMs)
+    local bySpell = _buffSkipUntil[name]
+    if not bySpell then
+        bySpell = {}
+        _buffSkipUntil[name] = bySpell
+    end
+    bySpell[sid] = untilMs
 end
 
 --- True when this peer+spell is still within a long-duration skip window (skip full eval).
@@ -709,25 +730,34 @@ function spellutils.BuffSkipClear(peerName, spellId)
 end
 
 --- Arm skip from observed remaining duration (ms). Returns true if caller should treat as "still up" (no cast).
+--- When dur >= refresh threshold, arms for min(dur - refresh, 60s) so mid-band (24–60s) is covered.
 function spellutils.BuffSkipObserveDuration(peerName, spellId, durationMs)
     local name, sid = buffSkipKey(peerName, spellId)
     if not name then return false end
     if durationMs == nil then
+        return false
+    end
+    if durationMs < BUFF_REFRESH_THRESHOLD_MS then
         spellutils.BuffSkipClear(name, sid)
         return false
     end
-    if durationMs >= BUFF_SKIP_LONG_MS then
-        local bySpell = _buffSkipUntil[name]
-        if not bySpell then
-            bySpell = {}
-            _buffSkipUntil[name] = bySpell
-        end
-        bySpell[sid] = mq.gettime() + BUFF_SKIP_LONG_MS
+    local skipFor = durationMs - BUFF_REFRESH_THRESHOLD_MS
+    if skipFor > BUFF_SKIP_LONG_MS then skipFor = BUFF_SKIP_LONG_MS end
+    if skipFor < 500 then
+        -- Very near refresh: check every tick.
+        spellutils.BuffSkipClear(name, sid)
         return true
     end
-    -- Under 60s: check every tick; clear any long skip.
-    spellutils.BuffSkipClear(name, sid)
-    return durationMs >= BUFF_REFRESH_THRESHOLD_MS
+    buffSkipArm(name, sid, mq.gettime() + skipFor)
+    return true
+end
+
+--- Buff is present but Duration missing/nil: arm a full 60s skip (do not clear).
+function spellutils.BuffSkipObservePresent(peerName, spellId)
+    local name, sid = buffSkipKey(peerName, spellId)
+    if not name then return false end
+    buffSkipArm(name, sid, mq.gettime() + BUFF_SKIP_LONG_MS)
+    return true
 end
 
 --- Clear skip after we successfully cast a buff onto a peer (fresh Duration next observe).
@@ -739,6 +769,7 @@ function spellutils.BuffSkipClearForCast(EvalID, spellId)
             local peer = charinfo.GetInfo(peers[i])
             if peer and peer.ID == EvalID then
                 spellutils.BuffSkipClear(peers[i], spellId)
+                spellutils.BuffSkipClear(peers[i] .. '#pet', spellId)
                 return
             end
         end
@@ -746,6 +777,7 @@ function spellutils.BuffSkipClearForCast(EvalID, spellId)
     local name = mq.TLO.Spawn(EvalID).CleanName() or mq.TLO.Spawn(EvalID).Name()
     if name and name ~= '' then
         spellutils.BuffSkipClear(name, spellId)
+        spellutils.BuffSkipClear(name .. '#pet', spellId)
     end
 end
 

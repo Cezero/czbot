@@ -201,12 +201,13 @@ end
 
 -- Shared get-targets helpers for buff/cure/heal GetTargetsForPhase.
 -- opts for getTargetsGroupMember: botsFirst (add bots in group first), excludeBotsFromGroup (in group loop skip names that have charinfo), excludeSelfAndTank (heal/buff: skip tank in group loop).
-local function addPcEntries(out, names, count, filterFn)
+local function addPcEntries(out, names, count, filterFn, context)
     if not names then return end
     count = count or #names
+    local byName = context and context.peerByName
     for i = 1, count do
         local name = names[i]
-        local peer = name and charinfo.GetInfo(name)
+        local peer = (byName and byName[name]) or (name and charinfo.GetInfo(name))
         if peer and (not filterFn or filterFn(name)) then
             local id = peer.ID
             if id and id > 0 then
@@ -262,7 +263,7 @@ function castutils.getTargetsGroupMember(context, opts)
     local out = {}
     opts = opts or {}
     if opts.botsFirst and context.bots then
-        addPcEntries(out, context.bots, #context.bots, function(name) return mq.TLO.Group.Member(name).ID() end)
+        addPcEntries(out, context.bots, #context.bots, function(name) return mq.TLO.Group.Member(name).ID() end, context)
     end
     if mq.TLO.Group.Members() and mq.TLO.Group.Members() > 0 then
         for i = 1, mq.TLO.Group.Members() do
@@ -294,7 +295,7 @@ function castutils.getTargetsPc(context, opts)
     if opts and opts.excludeTank and context and context.tank then
         filterFn = function(name) return name ~= context.tank end
     end
-    addPcEntries(out, bots, context.botcount, filterFn)
+    addPcEntries(out, bots, context.botcount, filterFn, context)
     return out
 end
 
@@ -309,9 +310,10 @@ function castutils.getTargetsPet(context)
     local out = {}
     if not context.bots then return out end
     local n = context.botcount or #context.bots
+    local byName = context.peerByName
     for i = 1, n do
         local name = context.bots[i]
-        local peer = name and charinfo.GetInfo(name)
+        local peer = (byName and byName[name]) or (name and charinfo.GetInfo(name))
         local petid = peer and peer.PetID
         if (not petid or petid <= 0) and name then
             petid = mq.TLO.Spawn('pc =' .. name).Pet.ID()
