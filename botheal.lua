@@ -605,12 +605,17 @@ local function fillHealPeerMaps(context)
                 end
             end
         end
+        -- Non-Charinfo group members: probe real HP; do not treat "unknown" as injured.
         if mq.TLO.Group.Members() and mq.TLO.Group.Members() > 0 then
             for i = 1, mq.TLO.Group.Members() do
-                local grpname = mq.TLO.Group.Member(i).Name()
+                local member = mq.TLO.Group.Member(i)
+                local grpname = member and member.Name()
                 if grpname and not context.peerByName[grpname] then
-                    gate.groupmember = true
-                    break
+                    local pct = member.PctHPs and member.PctHPs()
+                    if pct and pctInAnyHealBand(pct, 'groupmember') then
+                        gate.groupmember = true
+                        break
+                    end
                 end
             end
         end
@@ -639,12 +644,17 @@ local function fillHealPeerMaps(context)
         end
     end
     if selfNeedsGroupheal then gate.groupheal = true end
+    -- Non-Charinfo group members: probe real HP; do not treat "unknown" as injured.
     if mq.TLO.Group.Members() and mq.TLO.Group.Members() > 0 then
         for i = 1, mq.TLO.Group.Members() do
-            local grpname = mq.TLO.Group.Member(i).Name()
+            local member = mq.TLO.Group.Member(i)
+            local grpname = member and member.Name()
             if grpname and not context.peerByName[grpname] then
-                gate.groupmember = true
-                break
+                local pct = member.PctHPs and member.PctHPs()
+                if pct and pctInAnyHealBand(pct, 'groupmember') then
+                    gate.groupmember = true
+                    break
+                end
             end
         end
     end
@@ -824,10 +834,12 @@ function botheal.HealCheck(runPriority)
         return healBuildContext()
     end)
     if not ctx then return false end
-    ctx.meX = mq.TLO.Me.X()
-    ctx.meY = mq.TLO.Me.Y()
-    ctx.healSnap = {}
-    fillHealPeerMaps(ctx)
+    tickprof.span('peer_maps', function()
+        ctx.meX = mq.TLO.Me.X()
+        ctx.meY = mq.TLO.Me.Y()
+        ctx.healSnap = {}
+        fillHealPeerMaps(ctx)
+    end)
 
     local contextBySpell = { [1] = ctx }
     local entryValidCache = {}
