@@ -142,11 +142,16 @@ local function getMeBuffState(meBuffCache, spell)
     return present and true or false, duration
 end
 
-local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, tanktar, meBuffCache)
+local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, tanktar, hoist, spellMeta)
     if not BuffClass[index] then return nil, nil end
-    local selfKey = mq.TLO.Me.Name() or '__self__'
+    local selfKey = (hoist and hoist.selfKey) or (mq.TLO.Me.Name() or '__self__')
+    local meBuffCache = hoist and hoist.meBuffCache
     if myclass ~= 'BRD' then
-        local mypetid = mq.TLO.Me.Pet.ID()
+        local mypetid = hoist and hoist.myPetId
+        if mypetid == nil then
+            mypetid = mq.TLO.Me.Pet.ID()
+            if hoist then hoist.myPetId = mypetid end
+        end
         if BuffClass[index].petspell and IconCheck(index, myid, selfKey) and mypetid == 0 then
             local hasBuff = select(1, getMeBuffState(meBuffCache, spell))
             if not hasBuff then
@@ -172,8 +177,16 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
                     return nil, nil
                 end
                 -- Below refresh threshold: only recast if we have cast time + free slot.
-                local mycasttime = mq.TLO.Spell(spell).MyCastTime()
-                local freebuffslots = mq.TLO.Me.FreeBuffSlots()
+                local mycasttime = spellMeta and spellMeta.myCastTime
+                if mycasttime == nil then
+                    mycasttime = mq.TLO.Spell(spell).MyCastTime()
+                    if spellMeta then spellMeta.myCastTime = mycasttime end
+                end
+                local freebuffslots = hoist and hoist.freeBuffSlots
+                if freebuffslots == nil then
+                    freebuffslots = mq.TLO.Me.FreeBuffSlots()
+                    if hoist then hoist.freeBuffSlots = freebuffslots end
+                end
                 if not (buffdur and buffdur < spellutils.BUFF_REFRESH_THRESHOLD_MS and mycasttime and mycasttime > 0 and freebuffslots and freebuffslots > 0) then
                     spellutils.BuffLog('skip self %s: still up', spell)
                     return nil, nil
@@ -181,9 +194,13 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             elseif spellid then
                 spellutils.BuffSkipClear(selfKey, spellid)
             end
-            -- Defer Stacks/TargetType until we know we may need to cast.
+            -- Defer Stacks until we know we may need to cast.
             if IconCheck(index, myid, selfKey) then
-                local stacks = mq.TLO.Spell(spell).Stacks()
+                local stacks = spellMeta and spellMeta.stacks
+                if stacks == nil then
+                    stacks = mq.TLO.Spell(spell).Stacks()
+                    if spellMeta then spellMeta.stacks = stacks end
+                end
                 if not stacks then
                     spellutils.BuffLog('skip self %s: will not stack', spell)
                     return nil, nil
@@ -526,7 +543,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
     phase = phase or targethit
     local myclass = hoist and hoist.myclass or mq.TLO.Me.Class.ShortName()
 
-    -- BuffSkip fast-path: avoid Me.Buff / peer scans when skip window is active.
+    -- BuffSkip fast-path (meta pre-warmed): no Me.Buff / peer / Stacks.
     local preMeta = (spellCache and spellCache[spellIndex]) or _buffSpellMeta[spellIndex]
     local preSid = preMeta and preMeta.sid
     if preSid then
@@ -556,12 +573,16 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
     end
 
     if phase == 'self' then
-        return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar, hoist and hoist.meBuffCache)
+        return tickprof.span('self_eval', function()
+            return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar, hoist, cached)
+        end)
     end
     if phase == 'tank' then
-        local id, hit = BuffEvalTank(spellIndex, entry, spell, sid, rangeSq, tank, tankid)
-        if id == targetId then return id, hit end
-        return nil, nil
+        return tickprof.span('tank_eval', function()
+            local id, hit = BuffEvalTank(spellIndex, entry, spell, sid, rangeSq, tank, tankid)
+            if id == targetId then return id, hit end
+            return nil, nil
+        end)
     end
     if phase == 'groupbuff' then
         return BuffEvalGroupBuff(spellIndex, entry, spell, sid, range, aeRange)
@@ -667,10 +688,9 @@ function botbuff.BuffCheck(runPriority)
         myclass = mq.TLO.Me.Class.ShortName(),
         selfKey = mq.TLO.Me.Name() or '__self__',
         meBuffCache = meBuffCache,
+        myPetId = mq.TLO.Me.Pet.ID(),
+        freeBuffSlots = mq.TLO.Me.FreeBuffSlots(),
     }
-    local function needsSpell(spellIndex, targetId, targethit, context, phase)
-        return buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
-    end
     local function cachedEntryValid(i)
         local cached = entryValidCache[i]
         if cached ~= nil then return cached end
@@ -705,6 +725,45 @@ function botbuff.BuffCheck(runPriority)
         entryValidCache[i] = ok
         return ok
     end
+
+    -- Pre-warm spell meta so BuffSkip fast-path always has sid.
+    for i = 1, count do
+        if cachedEntryValid(i) then
+            getOrBuildSpellCache(i, spellCache)
+        end
+    end
+
+    --- True when every valid self/tank-band spell is inside BuffSkip (skip whole phase targets).
+    local function allBandSpellsBuffSkipped(phase)
+        local any = false
+        for i = 1, count do
+            if cachedEntryValid(i) and buffBandHasPhase(i, phase) then
+                local bc = BuffClass[i]
+                local meta = spellCache[i] or getOrBuildSpellCache(i, spellCache)
+                if not meta or not meta.sid then return false end
+                if phase == 'self' then
+                    if bc.petspell then return false end
+                    if bc.self then
+                        any = true
+                        if not spellutils.BuffSkipIsActive(hoist.selfKey, meta.sid) then return false end
+                    end
+                elseif phase == 'tank' then
+                    if bc.tank then
+                        if not hoist.tank then return false end
+                        any = true
+                        if not spellutils.BuffSkipIsActive(hoist.tank, meta.sid) then return false end
+                    end
+                end
+            end
+        end
+        return any
+    end
+    local skipSelfTargets = allBandSpellsBuffSkipped('self')
+    local skipTankTargets = allBandSpellsBuffSkipped('tank')
+
+    local function needsSpell(spellIndex, targetId, targethit, context, phase)
+        return buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
+    end
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
@@ -716,6 +775,8 @@ function botbuff.BuffCheck(runPriority)
     end
     local cursor = spellutils.getResumeCursor('doBuff')
     local function getTargets(phase, context)
+        if phase == 'self' and skipSelfTargets then return {} end
+        if phase == 'tank' and skipTankTargets then return {} end
         if not pcphasethrottle.allow('buff', cursor, phase) then return {} end
         return buffGetTargetsForPhase(phase, context)
     end
