@@ -28,6 +28,10 @@ local buffHeavyNextAt = 0
 local buffHeavySkipRemaining = 0
 --- True for this pass when skip countdown consumed a light pass at beginBuffPass.
 local buffHeavyBlockedThisPass = false
+--- True if any throttled RR phase called allow() this pass.
+local buffRrAsked = false
+--- First deny reason seen this pass when an RR phase was asked but not granted: cooldown|interval.
+local buffDenyReason = nil
 
 --- nextAt[section][phase] = mq.gettime() when next allow is ok
 local nextAt = {}
@@ -35,6 +39,8 @@ local nextAt = {}
 --- Call at start of each BuffCheck so only one RR phase may run this pass.
 function pcphasethrottle.beginBuffPass()
     buffPassGrant = nil
+    buffRrAsked = false
+    buffDenyReason = nil
     buffHeavyBlockedThisPass = buffHeavySkipRemaining > 0
     if buffHeavyBlockedThisPass then
         buffHeavySkipRemaining = buffHeavySkipRemaining - 1
@@ -44,6 +50,19 @@ end
 --- RR phase granted this BuffCheck (nil if light / self+tank only).
 function pcphasethrottle.getBuffPassGrant()
     return buffPassGrant
+end
+
+--- Summarize this BuffCheck after spellcheck: mode=heavy|light and phase or reason.
+--- @return string mode
+--- @return string|nil detail phase name (heavy) or reason (light)
+function pcphasethrottle.noteBuffPassEnd()
+    if buffPassGrant then
+        return 'heavy', buffPassGrant
+    end
+    if not buffRrAsked then
+        return 'light', 'no_rr_phase'
+    end
+    return 'light', buffDenyReason or 'denied'
 end
 
 ---@param section string 'buff'|'cure'|'heal'
@@ -71,10 +90,17 @@ function pcphasethrottle.allow(section, resumeCursor, phase)
     local now = mq.gettime()
 
     if section == 'buff' then
+        buffRrAsked = true
         if buffPassGrant == phase then return true end
         if buffPassGrant ~= nil then return false end
-        if buffHeavyBlockedThisPass then return false end
-        if now < buffHeavyNextAt then return false end
+        if buffHeavyBlockedThisPass then
+            if not buffDenyReason then buffDenyReason = 'cooldown' end
+            return false
+        end
+        if now < buffHeavyNextAt then
+            if not buffDenyReason then buffDenyReason = 'interval' end
+            return false
+        end
 
         local n = #BUFF_RR_ORDER
         local chosenIdx = ((buffRrNext - 1) % n) + 1

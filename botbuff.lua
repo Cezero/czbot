@@ -122,13 +122,36 @@ local function BuffEvalBotNeedsBuff(botid, botname, spellid, rangeSq, index, tar
     return nil, nil
 end
 
-local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, tanktar)
+local function getMeBuffState(meBuffCache, spell)
+    if not spell then return false, nil end
+    if meBuffCache then
+        local hit = meBuffCache[spell]
+        if hit ~= nil then return hit.present, hit.duration end
+    end
+    local present = mq.TLO.Me.Buff(spell)() or mq.TLO.Me.Song(spell)()
+    local duration = nil
+    if present then
+        duration = mq.TLO.Me.Buff(spell).Duration()
+        if duration == nil and mq.TLO.Me.Song(spell).Duration then
+            duration = mq.TLO.Me.Song(spell).Duration()
+        end
+    end
+    if meBuffCache then
+        meBuffCache[spell] = { present = present and true or false, duration = duration }
+    end
+    return present and true or false, duration
+end
+
+local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, tanktar, meBuffCache)
     if not BuffClass[index] then return nil, nil end
     local selfKey = mq.TLO.Me.Name() or '__self__'
     if myclass ~= 'BRD' then
         local mypetid = mq.TLO.Me.Pet.ID()
-        if BuffClass[index].petspell and IconCheck(index, myid, selfKey) and mypetid == 0 and not (mq.TLO.Me.Buff(spell)() or mq.TLO.Me.Song(spell)()) then
-            return myid, 'petspell'
+        if BuffClass[index].petspell and IconCheck(index, myid, selfKey) and mypetid == 0 then
+            local hasBuff = select(1, getMeBuffState(meBuffCache, spell))
+            if not hasBuff then
+                return myid, 'petspell'
+            end
         end
         if BuffClass[index].petspell and mypetid > 0 then
             return nil, nil
@@ -138,9 +161,8 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
                 spellutils.BuffLog('skip self %s: duration skip window', spell)
                 return nil, nil
             end
-            local buff = mq.TLO.Me.Buff(spell)() or mq.TLO.Me.Song(spell)()
+            local buff, buffdur = getMeBuffState(meBuffCache, spell)
             if buff then
-                local buffdur = mq.TLO.Me.Buff(spell).Duration()
                 if spellid and buffdur and spellutils.BuffSkipObserveDuration(selfKey, spellid, buffdur) then
                     spellutils.BuffLog('skip self %s: still up', spell)
                     return nil, nil
@@ -159,12 +181,14 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             elseif spellid then
                 spellutils.BuffSkipClear(selfKey, spellid)
             end
+            -- Defer Stacks/TargetType until we know we may need to cast.
             if IconCheck(index, myid, selfKey) then
                 local stacks = mq.TLO.Spell(spell).Stacks()
-                local tartype = mq.TLO.Spell(spell).TargetType()
-                if tartype == 'Self' and stacks then return myid, 'self' end
-                if stacks then return myid, 'self' end
-                spellutils.BuffLog('skip self %s: will not stack', spell)
+                if not stacks then
+                    spellutils.BuffLog('skip self %s: will not stack', spell)
+                    return nil, nil
+                end
+                return myid, 'self'
             else
                 spellutils.BuffLog('skip self %s: already present (icon)', spell)
             end
@@ -497,6 +521,27 @@ end
 
 --- phase must be the RunPhaseFirstSpellCheck phase (no groupmember→pc fallthrough).
 local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
+    local bc = BuffClass[spellIndex]
+    if not bc then return nil, nil end
+    phase = phase or targethit
+    local myclass = hoist and hoist.myclass or mq.TLO.Me.Class.ShortName()
+
+    -- BuffSkip fast-path: avoid Me.Buff / peer scans when skip window is active.
+    local preMeta = (spellCache and spellCache[spellIndex]) or _buffSpellMeta[spellIndex]
+    local preSid = preMeta and preMeta.sid
+    if preSid then
+        if phase == 'self' and bc.self and not bc.petspell then
+            local selfKey = (hoist and hoist.selfKey) or (mq.TLO.Me.Name() or '__self__')
+            if spellutils.BuffSkipIsActive(selfKey, preSid) then
+                return nil, nil
+            end
+        elseif phase == 'tank' and bc.tank and hoist and hoist.tank then
+            if spellutils.BuffSkipIsActive(hoist.tank, preSid) then
+                return nil, nil
+            end
+        end
+    end
+
     local cached = getOrBuildSpellCache(spellIndex, spellCache)
     if not cached then return nil, nil end
     local entry, spell, sid = cached.entry, cached.spell, cached.sid
@@ -505,15 +550,13 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
     local tankid = hoist and hoist.tankid or context.tankid
     local tanktar = hoist and hoist.tanktar
     local myid = hoist and hoist.myid or mq.TLO.Me.ID()
-    local myclass = hoist and hoist.myclass or mq.TLO.Me.Class.ShortName()
-    phase = phase or targethit
 
     if myclass == 'BRD' and type(entry.gem) == 'number' then
         return nil, nil
     end
 
     if phase == 'self' then
-        return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar)
+        return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar, hoist and hoist.meBuffCache)
     end
     if phase == 'tank' then
         local id, hit = BuffEvalTank(spellIndex, entry, spell, sid, rangeSq, tank, tankid)
@@ -613,14 +656,17 @@ function botbuff.BuffCheck(runPriority)
     pcphasethrottle.beginBuffPass()
     local spellCache = {}
     local entryValidCache = {}
-    local tanktar = ctx.tank and charinfo.GetInfo(ctx.tank) and charinfo.GetInfo(ctx.tank).Target
-        and charinfo.GetInfo(ctx.tank).Target.ID or nil
+    local meBuffCache = {}
+    local tankPeer = ctx.tank and charinfo.GetInfo(ctx.tank) or nil
+    local tanktar = tankPeer and tankPeer.Target and tankPeer.Target.ID or nil
     local hoist = {
         tank = ctx.tank,
         tankid = ctx.tankid,
         tanktar = tanktar,
         myid = mq.TLO.Me.ID(),
         myclass = mq.TLO.Me.Class.ShortName(),
+        selfKey = mq.TLO.Me.Name() or '__self__',
+        meBuffCache = meBuffCache,
     }
     local function needsSpell(spellIndex, targetId, targethit, context, phase)
         return buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
@@ -677,9 +723,13 @@ function botbuff.BuffCheck(runPriority)
         return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,
             needsSpell, ctx, options)
     end)
-    local rrPhase = pcphasethrottle.getBuffPassGrant()
-    if rrPhase and tickprof.IsDebug() and tickprof.IsSpans() then
-        log.say('[tick] buff.rr phase=%s', rrPhase)
+    if tickprof.IsDebug() and tickprof.IsSpans() then
+        local mode, detail = pcphasethrottle.noteBuffPassEnd()
+        if mode == 'heavy' then
+            log.say('[tick] buff.pass mode=heavy phase=%s', detail)
+        else
+            log.say('[tick] buff.pass mode=light reason=%s', detail)
+        end
     end
     return result
 end
