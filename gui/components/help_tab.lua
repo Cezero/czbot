@@ -53,6 +53,7 @@ local GROUPS = {
         { "/cz aetank on|off", "AE-tank: as MT, taunt all XTarget mobs near camp (auto-off when a mezzer is in group)." },
         { "/cz aetankmezzer on|off", "Let AE-tank run even with an Enchanter/Bard in group (e.g. a non-mezzing bard)." },
         { "/cz premem on|off", "Pre-memorize the configured gembar during downtime so combat spells don't memorize mid-fight." },
+        { "/cz antiafk on|off", "Toggle anti-AFK (random sit/stand or micro-nudge after ~3–4 min true idle)." },
         { "/cz burn [seconds|off]", "Open a burn window; debuffs with a Burn band phase cast during it." },
         { "/cz togglenuke", "Toggle nuke usage." },
         { "/cz togglesongs", "Toggle the bard song twist." },

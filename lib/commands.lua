@@ -925,6 +925,19 @@ local function cmd_premem(args)
     log.say('Pre-memorize gembar %s', (botconfig.config.settings.premem ~= false) and 'on' or 'off')
 end
 
+local function cmd_antiafk(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botconfig.config.settings.antiAfk = true
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botconfig.config.settings.antiAfk = false
+    else
+        botconfig.config.settings.antiAfk = not (botconfig.config.settings.antiAfk ~= false)
+    end
+    botconfig.ApplyAndPersist()
+    log.say('Anti-AFK %s', (botconfig.config.settings.antiAfk ~= false) and 'on' or 'off')
+end
+
 local function cmd_prememdebug(args)
     local premem = require('lib.premem')
     local mode = args[2] and string.lower(args[2]) or ''
@@ -1552,6 +1565,7 @@ local handlers = {
     aetankmezzer = cmd_aetankmezzer,
     aetankdebug = cmd_aetankdebug,
     premem = cmd_premem,
+    antiafk = cmd_antiafk,
     prememdebug = cmd_prememdebug,
     scribe = cmd_scribe,
     autoscribe = cmd_autoscribe,

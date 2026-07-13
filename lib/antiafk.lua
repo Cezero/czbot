@@ -4,6 +4,7 @@ local mq = require('mq')
 local state = require('lib.state')
 local spellutils = require('lib.spellutils')
 local log = require('lib.log')
+local botconfig = require('lib.config')
 
 local M = {}
 
@@ -130,6 +131,8 @@ local function fireAction()
 end
 
 function M.tick()
+    if botconfig.config.settings.antiAfk == false then return end
+
     local now = mq.gettime()
 
     local snap = takeSnapshot()

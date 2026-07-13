@@ -23,7 +23,7 @@ flowchart LR
 
 - **runRunWhenPausedHooks()** — Always runs. Executes every hook that was registered with `runWhenPaused = true` (e.g. network sync). Currently no hooks use this.
 - **runNormalHooks()** — Runs only when `MasterPause` is not set. Its behavior depends on `runState` and the current payload.
-- **antiafk.tick()** — Always runs after hook passes (including when paused). Fires a random sit/stand or micro-nudge only after 3–4 min of continuous true idle; any movement, combat, casting, or bot activity resets the idle window. See [`lib/antiafk.lua`](../../lib/antiafk.lua).
+- **antiafk.tick()** — Always runs after hook passes (including when paused), unless **`settings.antiAfk`** is off. Fires a random sit/stand or micro-nudge only after 3–4 min of continuous true idle; any movement, combat, casting, or bot activity resets the idle window. See [`lib/antiafk.lua`](../../lib/antiafk.lua).
 
 ### When runState is `dead`
 

@@ -99,6 +99,7 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **aetankmezzer** | `on` / `off` or toggle  | Allow AE-tank even with Enchanter/Bard in group.                                                                  |
 | **burn**         | `[seconds]` / `off`     | Open or close a burn window. Debuffs with a **burn** band phase cast only while the window is active. Status tab **Burn** button does the same. Default window length if seconds omitted. |
 | **premem**       | `on` / `off` or toggle  | Pre-memorize uniquely assigned gems during downtime. See [Spell maintenance](spell-maintenance.md).               |
+| **antiafk**      | `on` / `off` or toggle  | Anti-AFK: random sit/stand or micro-nudge after ~3–4 min true idle. Status tab flag or **`settings.antiAfk`**. |
 | **autoscribe**   | `on` / `off` or toggle  | After a level-up, scribe new scrolls from bags when out of combat (one scroll per misc tick).                     |
 | **scribe**       | —                       | Scribe all usable scrolls in bags now (blocking; downtime only).                                                  |
 | **upgrades**     | —                       | List configured spells with a higher rank in your spellbook.                                                      |
@@ -228,6 +229,7 @@ return StoredConfig
 | **tankAllMobs**  | `false`       | AE-tank: MT taunt-cycles loose XTarget adds. Opt-in. See [Tanking configuration](tanking-configuration.md#ae-tank). |
 | **aeTankIgnoreMezzer** | `false` | When `true`, AE-tank runs even if an Enchanter or Bard is in group. |
 | **premem**       | `true`        | Pre-memorize uniquely assigned spell gems during downtime. See [Spell maintenance](spell-maintenance.md). |
+| **antiAfk**      | `true`        | Anti-AFK: random sit/stand or micro-nudge after ~3–4 min true idle. Status tab flag or **`/cz antiafk`**. |
 | **autoScribe**   | `true`        | Scribe new scrolls after level-up when safe (incremental). |
 | **upgradeCheck** | `true`        | Background scan for higher spell ranks in book; announces on Status tab / **`/cz upgrades`**. |
 | **charmPetAutoSetup** | `true`   | After charm lands, configure pet (taunt off, assist). |

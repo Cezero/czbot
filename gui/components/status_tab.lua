@@ -76,6 +76,7 @@ local DO_FLAGS = {
     { key = 'domount',  label = 'Mount',  tt = 'Summon/use a mount when traveling.' },
     { key = 'dosit',    label = 'Sit',    tt = 'Sit to recover mana/endurance when idle and safe.' },
     { key = 'doforage', label = 'Forage', tt = 'Use the Forage skill periodically.' },
+    { key = 'antiAfk',  label = 'Anti-AFK', tt = 'Random sit/stand or micro-nudge after ~3–4 min of continuous true idle.' },
 }
 
 local SONGS_FLAG = { key = 'dosongs', label = 'Songs', tt = 'Bard: keep the song twist running.' }
