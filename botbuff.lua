@@ -18,6 +18,10 @@ local BuffClass = {}
 local bardtwist = require('lib.bardtwist')
 --- Module-level spell meta (id/range/ae) cleared on buff config reload.
 local _buffSpellMeta = {}
+--- Phase -> spell index lists; rebuilt on buff config reload (stable until then).
+local _buffIndicesByPhase = {}
+--- Assigned after buffBandHasPhase / getOrBuildSpellCache exist.
+local rebuildBuffIndicesByPhase
 
 local function defaultBuffEntry()
     return botconfig.getDefaultSpellEntry('buff')
@@ -25,6 +29,7 @@ end
 
 function botbuff.LoadBuffConfig()
     _buffSpellMeta = {}
+    _buffIndicesByPhase = {}
     castutils.LoadSpellSectionConfig('buff', {
         defaultEntry = defaultBuffEntry,
         bandsKey = 'buff',
@@ -34,6 +39,9 @@ function botbuff.LoadBuffConfig()
             buffphase.sanitizeRuntimePhases(entry, BuffClass[i])
         end,
     })
+    if rebuildBuffIndicesByPhase then
+        rebuildBuffIndicesByPhase()
+    end
 end
 
 castutils.RegisterSectionLoader('buff', 'dobuff', botbuff.LoadBuffConfig)
@@ -547,6 +555,29 @@ local function getOrBuildSpellCache(spellIndex, spellCache)
     return cached
 end
 
+--- One walk of 1..count fills all phase index lists (invalidated on LoadBuffConfig).
+rebuildBuffIndicesByPhase = function()
+    local count = botconfig.getSpellCount('buff')
+    local byPhase = {}
+    for _, p in ipairs(BUFF_PHASE_ORDER) do
+        byPhase[p] = {}
+    end
+    for i = 1, count do
+        -- Warm isGroupAE so pet/mypet band probes are correct without hot-path TLO.
+        getOrBuildSpellCache(i, nil)
+        for _, p in ipairs(BUFF_PHASE_ORDER) do
+            if buffBandHasPhase(i, p) then
+                byPhase[p][#byPhase[p] + 1] = i
+            end
+        end
+    end
+    _buffIndicesByPhase = byPhase
+end
+-- Config may have loaded before this assignment; rebuild if bands exist but cache empty.
+if botconfig.getSpellCount('buff') > 0 and not next(_buffIndicesByPhase) then
+    rebuildBuffIndicesByPhase()
+end
+
 --- phase must be the RunPhaseFirstSpellCheck phase (no groupmember→pc fallthrough).
 local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
     local bc = BuffClass[spellIndex]
@@ -775,7 +806,9 @@ function botbuff.BuffCheck(runPriority)
     local skipTankTargets = allBandSpellsBuffSkipped('tank')
 
     local function needsSpell(spellIndex, targetId, targethit, context, phase)
-        return buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
+        return tickprof.span('needs', function()
+            return buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
+        end)
     end
     local options = {
         skipInterruptForBRD = true,
@@ -784,14 +817,17 @@ function botbuff.BuffCheck(runPriority)
         entryValid = cachedEntryValid,
     }
     local cursor = spellutils.getResumeCursor('doBuff')
-    -- Pass-local: one getSpellIndicesForPhase per phase; RR allow once per throttled phase.
+    -- Pass-local deny/grant overlay; module cache supplies the real index lists.
     local indicesByPhase = {}
     local rrAllowByPhase = {}
+    if not next(_buffIndicesByPhase) then
+        rebuildBuffIndicesByPhase()
+    end
     local function getSpellIndices(phase, _target)
         local cached = indicesByPhase[phase]
         if cached then return cached end
         return tickprof.span('indices', function()
-            -- Light / already-granted: deny via allow() without band scan.
+            -- Light / already-granted: deny via allow() without grant work.
             if BUFF_RR_THROTTLED[phase] and rrAllowByPhase[phase] ~= true
                 and (rrAllowByPhase[phase] == false or pcphasethrottle.buffRrWouldDeny(phase)) then
                 if rrAllowByPhase[phase] == nil then
@@ -800,11 +836,14 @@ function botbuff.BuffCheck(runPriority)
                 indicesByPhase[phase] = {}
                 return indicesByPhase[phase]
             end
-            local list = spellutils.getSpellIndicesForPhase(count, phase, buffBandHasPhase)
-            -- Empty band: do not call allow (RR skips phases with no spells).
-            if not list or #list == 0 then
-                indicesByPhase[phase] = list or {}
-                return indicesByPhase[phase]
+            local list = _buffIndicesByPhase[phase] or {}
+            -- Truly empty band: tip-strict RR may skip this tip.
+            if #list == 0 then
+                if BUFF_RR_THROTTLED[phase] then
+                    pcphasethrottle.noteBuffPhaseEmpty(phase)
+                end
+                indicesByPhase[phase] = list
+                return list
             end
             if BUFF_RR_THROTTLED[phase] then
                 local allowed = rrAllowByPhase[phase]
@@ -813,6 +852,7 @@ function botbuff.BuffCheck(runPriority)
                     rrAllowByPhase[phase] = allowed
                 end
                 if not allowed then
+                    -- Has spells but not tip / denied — do not mark empty.
                     indicesByPhase[phase] = {}
                     return indicesByPhase[phase]
                 end
@@ -831,10 +871,14 @@ function botbuff.BuffCheck(runPriority)
                 rrAllowByPhase[phase] = allowed
             end
             if not allowed then return {} end
-            return buffGetTargetsForPhase(phase, context)
+            return tickprof.span('targets', function()
+                return buffGetTargetsForPhase(phase, context)
+            end)
         end
         if not pcphasethrottle.allow('buff', cursor, phase) then return {} end
-        return buffGetTargetsForPhase(phase, context)
+        return tickprof.span('targets', function()
+            return buffGetTargetsForPhase(phase, context)
+        end)
     end
     local result = tickprof.span('spellcheck', function()
         return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,

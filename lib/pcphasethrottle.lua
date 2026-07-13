@@ -30,8 +30,10 @@ local buffHeavySkipRemaining = 0
 local buffHeavyBlockedThisPass = false
 --- True if any throttled RR phase called allow() this pass.
 local buffRrAsked = false
---- First deny reason this pass: cooldown|interval|already_granted.
+--- First deny reason this pass: cooldown|interval|already_granted|not_tip.
 local buffDenyReason = nil
+--- Phases with no spell indices this pass (tip-strict RR may skip these).
+local buffPhaseEmpty = {}
 
 --- nextAt[section][phase] = mq.gettime() when next allow is ok
 local nextAt = {}
@@ -41,6 +43,7 @@ function pcphasethrottle.beginBuffPass()
     buffPassGrant = nil
     buffRrAsked = false
     buffDenyReason = nil
+    buffPhaseEmpty = {}
     buffHeavyBlockedThisPass = buffHeavySkipRemaining > 0
     if buffHeavyBlockedThisPass then
         buffHeavySkipRemaining = buffHeavySkipRemaining - 1
@@ -52,8 +55,15 @@ function pcphasethrottle.getBuffPassGrant()
     return buffPassGrant
 end
 
+--- Mark a throttled phase as having no spell indices this pass (no allow side effects).
+function pcphasethrottle.noteBuffPhaseEmpty(phase)
+    if phase then
+        buffPhaseEmpty[phase] = true
+    end
+end
+
 --- True if allow('buff', ...) would deny without granting (no side effects).
---- Used to skip getSpellIndicesForPhase on light / already-granted passes.
+--- Used to skip index work on light / already-granted passes. Does not model not_tip.
 function pcphasethrottle.buffRrWouldDeny(phase)
     if not phase or not THROTTLED.buff or not THROTTLED.buff[phase] then return false end
     if buffPassGrant == phase then return false end
@@ -116,8 +126,8 @@ function pcphasethrottle.allow(section, resumeCursor, phase)
             return false
         end
 
-        -- Walk from buffRrNext; grant when `phase` appears. Earlier RR slots that never
-        -- call allow() this pass (no spell indices) are skipped so the cursor cannot stick.
+        -- Tip-strict: from buffRrNext, skip only phases marked empty this pass.
+        -- Grant only when asked phase is the tip; otherwise deny (not_tip).
         local n = #BUFF_RR_ORDER
         for offset = 0, n - 1 do
             local i = ((buffRrNext - 1 + offset) % n) + 1
@@ -129,8 +139,11 @@ function pcphasethrottle.allow(section, resumeCursor, phase)
                 buffRrNext = (i % n) + 1
                 return true
             end
+            if not buffPhaseEmpty[cand] then
+                if not buffDenyReason then buffDenyReason = 'not_tip' end
+                return false
+            end
         end
-        -- phase not in BUFF_RR_ORDER (should not happen for throttled buff phases)
         if not buffDenyReason then buffDenyReason = 'denied' end
         return false
     end
