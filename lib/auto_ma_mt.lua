@@ -271,7 +271,10 @@ function auto_ma_mt.canClaimMt()
     return true
 end
 
-local function shouldClaimMa()
+--- @return boolean claim
+--- @return string|nil source 'primary'|'list'
+--- @return number|nil listIndex
+function auto_ma_mt.shouldClaimMa()
     if not isAutomaticAssist() or not meAlive() then return false end
     if not auto_ma_mt.canClaimMa() then return false end
     if not auto_ma_mt.hasRosterProximityInZone(true) then return false end
@@ -280,7 +283,10 @@ local function shouldClaimMa()
     return true, source, listIndex
 end
 
-local function shouldClaimMt()
+--- @return boolean claim
+--- @return string|nil source 'primary'|'list'
+--- @return number|nil listIndex
+function auto_ma_mt.shouldClaimMt()
     if not isAutomaticTank() or not meAlive() then return false end
     if not auto_ma_mt.canClaimMt() then return false end
     if not auto_ma_mt.hasRosterProximityInZone(false) then return false end
@@ -364,9 +370,11 @@ function auto_ma_mt.sweepStaleActorOverrides()
     return clearedMa, clearedMt
 end
 
---- Evaluate whether this bot should publish im_* or release_*.
+--- Evaluate whether this bot should publish im_*, release_*, or ask whos_*.
+--- Holders publish im_* only when first claiming (not every tick). Peers without a
+--- usable actor override ask whos_* so the holder can respond once.
 ---@param opts table|nil { trigger = 'release'|'periodic' }
----@return table actions { releaseMa?, publishMa?, releaseMt?, publishMt? }
+---@return table actions { releaseMa?, publishMa?, askWhosMa?, releaseMt?, publishMt?, askWhosMt? }
 function auto_ma_mt.evaluateRoleClaims(opts)
     opts = opts or {}
     local rc = state.getRunconfig()
@@ -374,19 +382,26 @@ function auto_ma_mt.evaluateRoleClaims(opts)
     if not me or me == '' then return {} end
 
     local actions = {}
-    local claimMa, maSource, maIdx = shouldClaimMa()
-    local claimMt, mtSource, mtIdx = shouldClaimMt()
+    local claimMa, maSource, maIdx = auto_ma_mt.shouldClaimMa()
+    local claimMt, mtSource, mtIdx = auto_ma_mt.shouldClaimMt()
 
     if rc.MaImHolding and (not isAutomaticAssist() or not claimMa) then
         actions.releaseMa = true
-    elseif claimMa then
+    elseif claimMa and not rc.MaImHolding then
         actions.publishMa = { source = maSource, listIndex = maIdx or 0 }
+    elseif opts.trigger ~= 'release'
+        and isAutomaticAssist() and not claimMa and not auto_ma_mt.getActorMaOverrideName() then
+        -- On release, the next claimer publishes im_*; ask only on periodic if still missing.
+        actions.askWhosMa = true
     end
 
     if rc.MtImHolding and (not isAutomaticTank() or not claimMt) then
         actions.releaseMt = true
-    elseif claimMt then
+    elseif claimMt and not rc.MtImHolding then
         actions.publishMt = { source = mtSource, listIndex = mtIdx or 0 }
+    elseif opts.trigger ~= 'release'
+        and isAutomaticTank() and not claimMt and not auto_ma_mt.getActorMtOverrideName() then
+        actions.askWhosMt = true
     end
 
     return actions

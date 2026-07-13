@@ -22,25 +22,26 @@ local TICK_STALE_MS = 60000
 local PEER_RECENT_MS = 90000
 local CZACTOR_TICK_MS = 250
 local TRAFFIC_WINDOW_MS = 60000
+local INBOUND_QUEUE_WARN_DEPTH = 100
 
 local _actor = nil
 local _inboundQueue = {}
 local _lastTickAt = 0
 local _tickStaleLoggedAt = 0
 local _lastInitAttemptAt = 0
-local _lastInitFailureLoggedAt = 0
-local _initFailCount = 0
 local _lastInitError = nil
-local _everRegistered = false
 local _nextCzactorTickAt = 0
 local _trafficWindowStart = 0
 local _trafficRecv = 0
 local _trafficSendBroadcast = 0
 local _trafficSendUnicast = 0
+local _queueDepthWarnLoggedAt = 0
 local processMessage
 
 local INLINE_IMMEDIATE_IDS = {
     ping = true,
+}
+local FOLLOW_PRIORITY_IDS = {
     follow_me = true,
     follow_me_off = true,
 }
@@ -53,6 +54,8 @@ local _mtPublishSeq = 0
 local _lastMaEngagedSpawnId = nil
 local _maEngagedHeartbeatNext = 0
 local MA_ENGAGED_HEARTBEAT_MS = 2000
+local _lastImMaPublishAt = 0
+local _lastImMtPublishAt = 0
 
 local MA_DISENGAGE_TRANSIENT_REASONS = {
     no_engage_target = true,
@@ -62,12 +65,11 @@ local MA_DISENGAGE_TRANSIENT_REASONS = {
     moblist_empty = true,
 }
 local ROLE_CLAIMS_INTERVAL_MS = 2000
-local ROLE_CLAIM_MISSED_HEARTBEATS = 2
-local ROLE_CLAIM_HEARTBEAT_TIMEOUT_MS = ROLE_CLAIMS_INTERVAL_MS * ROLE_CLAIM_MISSED_HEARTBEATS
 local applyImMa
 local applyImMt
 local clearMaActorEngaged
-local isRoleClaimHeartbeatStale
+local _lastWhosMaAt = 0
+local _lastWhosMtAt = 0
 
 local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
@@ -107,9 +109,50 @@ local function zonesMatch(a, b)
     return string.lower(a) == string.lower(b)
 end
 
-local function senderCharacter(message)
-    if not message or not message.sender then return nil end
-    return message.sender.character
+local function senderCharacter(inbound)
+    if not inbound then return nil end
+    if type(inbound.sender) == 'string' then return inbound.sender end
+    if inbound.sender and inbound.sender.character then return inbound.sender.character end
+    return nil
+end
+
+local function inboundEntryFromActorMessage(message)
+    local senderTable = message.sender
+    return {
+        content = message.content,
+        sender = senderTable and senderTable.character or nil,
+    }
+end
+
+local function maybeWarnQueueDepth()
+    local depth = #_inboundQueue
+    if depth < INBOUND_QUEUE_WARN_DEPTH then return end
+    local now = mq.gettime()
+    if (now - _queueDepthWarnLoggedAt) < TRAFFIC_WINDOW_MS then return end
+    _queueDepthWarnLoggedAt = now
+    log.say('[czactor] inbound queue depth %d (threshold %d) — drain may be lagging',
+        depth, INBOUND_QUEUE_WARN_DEPTH)
+end
+
+local function enqueueInbound(entry)
+    local id = entry.content and entry.content.id
+    if id and FOLLOW_PRIORITY_IDS[id] then
+        table.insert(_inboundQueue, 1, entry)
+    else
+        _inboundQueue[#_inboundQueue + 1] = entry
+    end
+    maybeWarnQueueDepth()
+end
+
+local function destroyActorMailbox()
+    if not _actor then return end
+    pcall(function() actors.unregister(_actor) end)
+    _actor = nil
+    collectgarbage('collect')
+end
+
+local function mailboxStatusLabel()
+    return _actor and 'ok' or 'MISSING'
 end
 
 local function envelope(id, fields)
@@ -185,18 +228,22 @@ local function scheduleInitialTimers(now)
     _maEngagedHeartbeatNext = now + nameJitterMs(me, MA_ENGAGED_HEARTBEAT_MS)
 end
 
----@param quietOnFail boolean|nil when true, suppress failure log (caller handles throttled logging)
+function czactor.shutdown()
+    destroyActorMailbox()
+    _inboundQueue = {}
+end
+
+--- Register the czbot mailbox once at macro startup. Safe to call again (no-op).
 ---@return boolean true when mailbox registered successfully
-function czactor.init(quietOnFail)
+function czactor.init()
+    if _actor then
+        log.say('[czactor] init called but mailbox already registered')
+        return true
+    end
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
     local now = mq.gettime()
     _lastInitAttemptAt = now
-    if _actor then
-        pcall(function() actors.unregister(_actor) end)
-        _actor = nil
-    end
-    _inboundQueue = {}
     _lastTickAt = now
     local registerErr
     local ok, result = pcall(function()
@@ -205,11 +252,12 @@ function czactor.init(quietOnFail)
             recordRecv()
             local content = message.content
             if type(content) ~= 'table' then return end
+            local entry = inboundEntryFromActorMessage(message)
             if shouldProcessInline(content) then
-                safeProcessInbound(message)
+                safeProcessInbound(entry)
                 return
             end
-            _inboundQueue[#_inboundQueue + 1] = message
+            enqueueInbound(entry)
         end)
     end)
     if ok and result then
@@ -220,21 +268,12 @@ function czactor.init(quietOnFail)
         registerErr = tostring(result)
     end
     if _actor then
-        if _everRegistered or _initFailCount > 0 then
-            log.say('czactor: mailbox %s re-registered', MAILBOX)
-        else
-            log.say('czactor: mailbox %s registered', MAILBOX)
-        end
-        _everRegistered = true
-        _initFailCount = 0
+        log.say('czactor: mailbox %s registered', MAILBOX)
         _lastInitError = nil
     else
-        _initFailCount = _initFailCount + 1
         _lastInitError = registerErr
-        if not quietOnFail then
-            local detail = registerErr and (' (' .. registerErr .. ')') or ''
-            log.say('[czactor] mailbox %s registration FAILED%s', MAILBOX, detail)
-        end
+        local detail = registerErr and (' (' .. registerErr .. ')') or ''
+        log.say('[czactor] mailbox %s registration FAILED%s — restart the macro', MAILBOX, detail)
     end
     scheduleInitialTimers(now)
     _trafficWindowStart = now
@@ -299,6 +338,7 @@ end
 
 function czactor.publishImMa(source, listIndex)
     _maPublishSeq = _maPublishSeq + 1
+    _lastImMaPublishAt = mq.gettime()
     local rc = state.getRunconfig()
     rc.MaImHolding = true
     local fields = {
@@ -316,6 +356,7 @@ end
 
 function czactor.publishImMt(source, listIndex)
     _mtPublishSeq = _mtPublishSeq + 1
+    _lastImMtPublishAt = mq.gettime()
     local rc = state.getRunconfig()
     rc.MtImHolding = true
     local fields = {
@@ -367,6 +408,18 @@ function czactor.publishReleaseMt()
     })
 end
 
+function czactor.publishWhosMa()
+    local fields = { scope = roleBroadcastScope() }
+    czactor_dispatch.logSend('whos_ma', fields)
+    czactor.broadcast(envelope('whos_ma', fields))
+end
+
+function czactor.publishWhosMt()
+    local fields = { scope = roleBroadcastScope() }
+    czactor_dispatch.logSend('whos_mt', fields)
+    czactor.broadcast(envelope('whos_mt', fields))
+end
+
 local function applyRoleClaimActions(actions)
     if not actions then return end
     if actions.releaseMa then czactor.publishReleaseMa() end
@@ -376,6 +429,15 @@ local function applyRoleClaimActions(actions)
     end
     if actions.publishMt then
         czactor.publishImMt(actions.publishMt.source, actions.publishMt.listIndex)
+    end
+    local now = mq.gettime()
+    if actions.askWhosMa and (now - _lastWhosMaAt) >= ROLE_CLAIMS_INTERVAL_MS then
+        _lastWhosMaAt = now
+        czactor.publishWhosMa()
+    end
+    if actions.askWhosMt and (now - _lastWhosMtAt) >= ROLE_CLAIMS_INTERVAL_MS then
+        _lastWhosMtAt = now
+        czactor.publishWhosMt()
     end
 end
 
@@ -530,7 +592,6 @@ applyImMa = function(content, sender)
         name = name,
         seq = content.seq or 0,
         ts = content.ts,
-        lastHeartbeatAt = content.ts or mq.gettime(),
         zone = content.zone,
         publisher = sender,
         reason = 'claim',
@@ -576,7 +637,6 @@ applyImMt = function(content, sender)
         name = name,
         seq = content.seq or 0,
         ts = content.ts,
-        lastHeartbeatAt = content.ts or mq.gettime(),
         zone = content.zone,
         publisher = sender,
         reason = 'claim',
@@ -593,15 +653,6 @@ applyImMt = function(content, sender)
         require('lib.chchain').syncCurtankFromMtName(name, 'claim')
     end
     tankrole.invalidateMt()
-end
-
-isRoleClaimHeartbeatStale = function(override, now)
-    if not override or not override.name then return false end
-    if override.reason ~= 'claim' then return false end
-    local last = override.lastHeartbeatAt or override.ts
-    if not last then return false end
-    now = now or mq.gettime()
-    return (now - last) > ROLE_CLAIM_HEARTBEAT_TIMEOUT_MS
 end
 
 local function expireMaClaimOverride()
@@ -625,7 +676,7 @@ local function expireMtClaimOverride()
     return true
 end
 
---- Expire unavailable or heartbeat-stale im_ma/im_mt overrides; re-run claim selection when any cleared.
+--- Expire unavailable im_ma/im_mt overrides; re-run claim selection when any cleared.
 ---@param now number|nil mq.gettime() for tests; defaults to current time
 ---@return boolean anyExpired
 function czactor.sweepExpiredRoleClaims(now)
@@ -635,15 +686,13 @@ function czactor.sweepExpiredRoleClaims(now)
     local anyExpired = false
 
     if rc.ActorMaOverride then
-        if not auto_ma_mt.isActorHolderAvailable(rc.ActorMaOverride, false)
-            or isRoleClaimHeartbeatStale(rc.ActorMaOverride, now) then
+        if not auto_ma_mt.isActorHolderAvailable(rc.ActorMaOverride, false) then
             expireMaClaimOverride()
             anyExpired = true
         end
     end
     if rc.ActorMtOverride then
-        if not auto_ma_mt.isActorHolderAvailable(rc.ActorMtOverride, false)
-            or isRoleClaimHeartbeatStale(rc.ActorMtOverride, now) then
+        if not auto_ma_mt.isActorHolderAvailable(rc.ActorMtOverride, false) then
             expireMtClaimOverride()
             anyExpired = true
         end
@@ -661,6 +710,56 @@ function czactor.runRoleClaimsTick()
     _nextRoleClaimsAt = now + ROLE_CLAIMS_INTERVAL_MS
     czactor.sweepExpiredRoleClaims(now)
     applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
+end
+
+local function respondToWhosMa()
+    local rc = state.getRunconfig()
+    local claim, source, listIndex = auto_ma_mt.shouldClaimMa()
+    local now = mq.gettime()
+    if claim then
+        if rc.MaImHolding and (now - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then
+            return
+        end
+        czactor.publishImMa(source, listIndex)
+        return
+    end
+    if rc.MaImHolding then
+        if (now - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
+        local o = rc.ActorMaOverride
+        czactor.publishImMa(o and o.source or 'list', o and o.listIndex or 0)
+    end
+end
+
+local function respondToWhosMt()
+    local rc = state.getRunconfig()
+    local claim, source, listIndex = auto_ma_mt.shouldClaimMt()
+    local now = mq.gettime()
+    if claim then
+        if rc.MtImHolding and (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then
+            return
+        end
+        czactor.publishImMt(source, listIndex)
+        return
+    end
+    if rc.MtImHolding then
+        if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
+        local o = rc.ActorMtOverride
+        czactor.publishImMt(o and o.source or 'list', o and o.listIndex or 0)
+    end
+end
+
+local function applyWhosMa(content, sender)
+    if sender and namesMatch(sender, myName()) then return end
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    if not acceptMaClaim(sender) then return end
+    respondToWhosMa()
+end
+
+local function applyWhosMt(content, sender)
+    if sender and namesMatch(sender, myName()) then return end
+    if content.zone and not zonesMatch(content.zone, myZone()) then return end
+    if not acceptMtClaim(sender) then return end
+    respondToWhosMt()
 end
 
 clearMaActorEngaged = function(rc, maName)
@@ -1106,12 +1205,12 @@ local function handleLeaderCampHereOff(content)
     if rc.campstatus then require('botmove').MakeCamp('off') end
 end
 
-processMessage = function(message)
-    if not message then return end
-    local content = message.content
+processMessage = function(inbound)
+    if not inbound then return end
+    local content = inbound.content
     if type(content) ~= 'table' then return end
     if content.ver and content.ver ~= PROTOCOL_VER then return end
-    local sender = senderCharacter(message)
+    local sender = senderCharacter(inbound)
     touchPeer(sender)
     local id = content.id
     local rc = state.getRunconfig()
@@ -1139,6 +1238,16 @@ processMessage = function(message)
     if id == 'release_mt' then
         czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
         applyReleaseMt(content, sender)
+        return
+    end
+    if id == 'whos_ma' then
+        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
+        applyWhosMa(content, sender)
+        return
+    end
+    if id == 'whos_mt' then
+        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
+        applyWhosMt(content, sender)
         return
     end
 
@@ -1183,6 +1292,7 @@ processMessage = function(message)
 end
 
 function czactor.tick()
+    if not _actor then return end
     local now = mq.gettime()
     if now < _nextCzactorTickAt then return end
     _nextCzactorTickAt = now + CZACTOR_TICK_MS
@@ -1191,26 +1301,12 @@ function czactor.tick()
     if _lastTickAt > 0 and (now - _lastTickAt) > TICK_STALE_MS then
         if (now - _tickStaleLoggedAt) > TICK_STALE_MS then
             _tickStaleLoggedAt = now
-            log.say('[czactor] tick stale (%.1fs, queue=%d); re-init mailbox',
+            log.say('[czactor] tick stale (%.1fs, queue=%d) — check mainloop/hooks',
                 (now - _lastTickAt) / 1000, #_inboundQueue)
         end
-        czactor.init()
-        now = mq.gettime()
     end
     _lastTickAt = now
 
-    if not _actor then
-        if _lastInitAttemptAt == 0 or (now - _lastInitAttemptAt) >= PING_INTERVAL_MS then
-            czactor.init(true)
-            if not _actor and (now - _lastInitFailureLoggedAt) >= PING_INTERVAL_MS then
-                _lastInitFailureLoggedAt = now
-                local detail = _lastInitError and (' (' .. _lastInitError .. ')') or ''
-                log.say('[czactor] mailbox %s still missing (failCount=%d%s); retrying every %ds',
-                    MAILBOX, _initFailCount, detail, PING_INTERVAL_MS / 1000)
-            end
-        end
-        return
-    end
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
 
@@ -1295,41 +1391,44 @@ function czactor.printStatus()
     local lastTickAge = _lastTickAt > 0 and string.format('%.1fs ago', (now - _lastTickAt) / 1000) or 'never'
     local recent, total = countRecentCzActorPeers(rc, PEER_RECENT_MS)
     local followLabel = (rc.followname and rc.followname ~= '') and rc.followname or '(none)'
+    local mailboxLabel = mailboxStatusLabel()
     printf('  czactor: mailbox=%s lastTick=%s queue=%d peersRecent=%d/%d follow=%s catchUp=%s',
-        _actor and 'ok' or 'MISSING', lastTickAge, #_inboundQueue, recent, total,
+        mailboxLabel, lastTickAge, #_inboundQueue, recent, total,
         followLabel, tostring(rc.followCatchUp == true))
+    if #_inboundQueue >= INBOUND_QUEUE_WARN_DEPTH then
+        printf('  WARNING: inbound queue depth %d (threshold %d)', #_inboundQueue, INBOUND_QUEUE_WARN_DEPTH)
+    end
     printf('  traffic (60s): recv=%d sendBroadcast=%d sendUnicast=%d',
         _trafficRecv, _trafficSendBroadcast, _trafficSendUnicast)
-    if not _actor then
-        printf('  WARNING: czbot mailbox MISSING — Actor messages (followme, camphere, attack, MA/MT) are not sent or received.')
+    if mailboxLabel == 'MISSING' then
+        printf('  WARNING: czbot mailbox not registered — Actor messages (followme, camphere, attack, MA/MT) are not sent or received. Restart the macro.')
         local initAge = _lastInitAttemptAt > 0 and string.format('%.1fs ago', (now - _lastInitAttemptAt) / 1000) or 'never'
-        printf('  lastInitAttempt=%s initFailCount=%d', initAge, _initFailCount)
+        printf('  lastInitAttempt=%s', initAge)
         if _lastInitError then
             printf('  lastInitError=%s', _lastInitError)
         end
+    elseif _lastTickAt > 0 and (now - _lastTickAt) > TICK_STALE_MS then
+        printf('  WARNING: czactor tick stale (%.1fs) — mainloop or hooks may be blocked',
+            (now - _lastTickAt) / 1000)
     end
     czactor.printPeerStatus()
     local maO = rc.ActorMaOverride
     local mtO = rc.ActorMtOverride
     printf('  MA override: %s', maO and maO.name or '(none)')
     if maO then
-        local hb = maO.reason == 'claim' and isRoleClaimHeartbeatStale(maO, now) and ' STALE' or ''
-        local lastHb = maO.lastHeartbeatAt or maO.ts
-        local hbAge = lastHb and string.format('%.1fs ago%s', (now - lastHb) / 1000, hb) or 'unknown'
-        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s heartbeat=%s',
+        local claimAge = maO.ts and string.format('%.1fs ago', (now - maO.ts) / 1000) or 'unknown'
+        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s claimed=%s',
             tostring(maO.seq), tostring(maO.source), tostring(maO.listIndex),
             tostring(maO.zone), tostring(maO.publisher), tostring(maO.inGroup),
-            tostring(maO.reason), hbAge)
+            tostring(maO.reason), claimAge)
     end
     printf('  MT override: %s', mtO and mtO.name or '(none)')
     if mtO then
-        local hb = mtO.reason == 'claim' and isRoleClaimHeartbeatStale(mtO, now) and ' STALE' or ''
-        local lastHb = mtO.lastHeartbeatAt or mtO.ts
-        local hbAge = lastHb and string.format('%.1fs ago%s', (now - lastHb) / 1000, hb) or 'unknown'
-        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s heartbeat=%s',
+        local claimAge = mtO.ts and string.format('%.1fs ago', (now - mtO.ts) / 1000) or 'unknown'
+        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s claimed=%s',
             tostring(mtO.seq), tostring(mtO.source), tostring(mtO.listIndex),
             tostring(mtO.zone), tostring(mtO.publisher), tostring(mtO.inGroup),
-            tostring(mtO.reason), hbAge)
+            tostring(mtO.reason), claimAge)
     end
     printf('  MaReleased=%s MtReleased=%s MaImHolding=%s MtImHolding=%s',
         tostring(rc.MaReleased), tostring(rc.MtReleased),

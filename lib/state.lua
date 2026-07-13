@@ -116,12 +116,12 @@
 ---@field OtMyClaim table|nil { spawnId, ts } this bot's published OT claim
 ---@field RezClaims table|nil corpseId -> { character, ts, zone } from peer rez_claim messages
 ---@field RezMyClaim table|nil { corpseId, ts } this bot's published rez claim
----@field ActorMaOverride table|nil { name, seq, ts, lastHeartbeatAt?, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
----@field ActorMtOverride table|nil { name, seq, ts, lastHeartbeatAt?, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
+---@field ActorMaOverride table|nil { name, seq, ts, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
+---@field ActorMtOverride table|nil { name, seq, ts, zone?, publisher?, reason?, scope?, source?, listIndex?, inGroup? }
 ---@field MaReleased boolean|nil group MA slot vacant after in-group release_ma
 ---@field MtReleased boolean|nil group MT slot vacant after in-group release_mt
----@field MaImHolding boolean|nil this bot is actively publishing im_ma heartbeats
----@field MtImHolding boolean|nil this bot is actively publishing im_mt heartbeats
+---@field MaImHolding boolean|nil this bot currently holds the automatic MA role (answers whos_ma)
+---@field MtImHolding boolean|nil this bot currently holds the automatic MT role (answers whos_mt)
 ---@field CzActorPeers table|nil character name -> last pong/ping time
 ---@field MaActorEngaged table|nil { maName, spawnId, ts, zone?, scope? } from peer ma_engaged messages
 ---@field commonSyncSeq number|nil monotonic seq for common_sync publishes from this bot

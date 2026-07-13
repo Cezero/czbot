@@ -437,6 +437,7 @@ function botlogic.mainloop()
         tickprof.endTick(tick, paused)
         mq.delay(100)
     end
+    czactor.shutdown()
 end
 
 -- Register all MQ events (zone reset lives in botevents.OnZoneChange).

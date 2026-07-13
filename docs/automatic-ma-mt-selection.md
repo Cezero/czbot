@@ -25,7 +25,7 @@ For what the MA and MT *do* once resolved (target picking, heals, offtank, pulle
 - **Cache invalidation** forces a full re-resolve: actor claim/release, stale override sweep, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank set` / `/cz assist set`, role preset Apply, or `maAnchorLeash` change.
 - **MA and MT resolve independently** via separate actor claim streams.
 - **`TankName` defaults to `"automatic"`** in new configs. Populate **`ma_list`** and **`mt_list`** in `cz_common.lua` for zone-local claim priority.
-- **Actor claims:** Eligible bots self-select using EQ primary + list priority (zone-local), publish **`im_ma`** / **`im_mt`** every **2s** while holding, and **`release_ma`** / **`release_mt`** on death/hover or when ineligible. Logic lives in **`lib/auto_ma_mt.lua`** and **`lib/czactor.lua`**. Manual `/cz assist set` / `/cz tank set` publish **`ma_update`** / **`mt_update`**. See [CZBot Actor channel](czbot-actor-channel.md).
+- **Actor claims:** Eligible bots self-select using EQ primary + list priority (zone-local), publish **`im_ma`** / **`im_mt`** once when claiming (and when answering **`whos_ma`** / **`whos_mt`**), and **`release_ma`** / **`release_mt`** on death/hover or when ineligible. Peers without a usable actor override ask **`whos_*`** (debounced ~2s). Logic lives in **`lib/auto_ma_mt.lua`** and **`lib/czactor.lua`**. Manual `/cz assist set` / `/cz tank set` publish **`ma_update`** / **`mt_update`**. See [CZBot Actor channel](czbot-actor-channel.md).
 
 ---
 
@@ -41,7 +41,7 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 2. EQ-assigned primary (Main Assist / Main Tank) unchanged (for `primary_retained`).
 3. `ma_list` / `mt_list` generation unchanged.
 4. `maAnchorLeash` generation unchanged.
-5. **`actor`** source valid while the holder is alive and in-zone and heartbeats arrive within **2 intervals (~4s)**; cleared when unavailable or heartbeats stop.
+5. **`actor`** source valid while the holder is alive and in-zone; cleared when unavailable (death/out of zone without needing a heartbeat).
 6. **`primary_retained`** valid while EQ primary is unchanged, available (alive/in-zone), and no actor override present.
 7. **`list_readonly`** valid while no actor override and the cached name still matches `topMaCandidateInZone()` (or `topMtCandidateInZone()` raid MA fallback) / `topMtCandidateInZone()` for MT.
 
@@ -55,7 +55,11 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 flowchart TD
     subgraph claim [Eligible bot in zone]
         C1[Self-select: top primary or list candidate in this zone]
-        C1 --> C2[Publish im_ma / im_mt every 2s]
+        C1 --> C2[Publish im_ma / im_mt once]
+    end
+    subgraph ask [Peer automatic, no actor override]
+        A1[Publish whos_ma / whos_mt]
+        A1 --> A2[Holder answers with one im_*]
     end
     subgraph peers [Peers same zone + scope]
         P1[Receive im_*] --> P2[Store actor override]
@@ -67,13 +71,13 @@ flowchart TD
     end
     subgraph release [Holder dies or ineligible]
         X1[Publish release_ma / release_mt]
-        X1 --> X2[Peers self-select new holder]
+        X1 --> X2[Next eligible publishes one im_*]
     end
 ```
 
 **Claim eligibility (claimer only):** alive, in proximity to roster peers in this zone (MA uses `maAnchorLeash`), top priority among in-zone candidates. Split raids across zones may have separate MA/MT per zone.
 
-**Receive:** scope filter + sender same-zone match. Stale overrides (holder dead/out of zone, or **2 missed `im_*` heartbeats ~4s**) are cleared and treated like `release_ma` / `release_mt`.
+**Receive:** scope filter + sender same-zone match. Overrides whose holder is dead/out of zone are cleared and treated like `release_ma` / `release_mt`. Peers that still lack an override publish `whos_*` until answered.
 
 ---
 

@@ -66,7 +66,6 @@ local function DelayOnZone()
     botconfig.refreshZoneStateFromCommon()
     rolelists.loadFromCommon()
     MountCastFailed = false
-    require('lib.czactor').init()
     follow.ResumeAfterZone()
 end
 

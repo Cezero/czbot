@@ -41,8 +41,11 @@ local function zoneShortNamesMatch(a, b)
 end
 
 local function aliveFromCharinfoPeer(peer)
-    return not charinfoutils.peerHasAnyState(peer, UNAVAILABLE_STATE_FLAGS)
-        and (peer.PctHPs == nil or peer.PctHPs > 0)
+    if charinfoutils.peerHasAnyState(peer, UNAVAILABLE_STATE_FLAGS) then
+        return false
+    end
+    local pct = peer.PctHPs()
+    return pct == nil or pct > 0
 end
 
 local function baseContextFromCharinfo(name, peer)

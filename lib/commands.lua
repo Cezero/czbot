@@ -741,14 +741,8 @@ local function cmd_actor(args)
         czactor.printPeerStatus()
     elseif sub == 'status' then
         czactor.printStatus()
-    elseif sub == 'reinit' then
-        if czactor.init() then
-            log.say('czactor: mailbox czbot ok')
-        else
-            log.say('[czactor] mailbox czbot reinit FAILED')
-        end
     else
-        log.say('Usage: /cz actor ping|status|reinit')
+        log.say('Usage: /cz actor ping|status')
     end
 end
 

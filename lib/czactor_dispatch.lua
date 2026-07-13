@@ -10,6 +10,8 @@ local SKIP_KEYS = { id = true, ver = true, ts = true, zone = true }
 local ROLE_CLAIM_DEBUG_IDS = {
     im_ma = true,
     im_mt = true,
+    whos_ma = true,
+    whos_mt = true,
     release_ma = true,
     release_mt = true,
 }

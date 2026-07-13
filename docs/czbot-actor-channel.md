@@ -13,11 +13,10 @@ CZBot peers coordinate through a dedicated **Actor mailbox** (`czbot`) on the sa
 |---------|---------|
 | `/cz actor ping` | Broadcast ping (diagnostic); peers update liveness from any czbot message, not unicast replies |
 | `/cz actor status` | Peers, MA/MT Actor overrides, OT claims, rez claims, MA engaged target, 60s traffic counters |
-| `/cz actor reinit` | Re-register the `czbot` mailbox immediately (recovery when `mailbox=MISSING`) |
 
-If `/cz actor status` shows **`mailbox=MISSING`**, this client cannot send or receive Actor messages (`followme`, `camphere`, `attack`, MA/MT coordination, etc.). The bot retries registration every 60s automatically; use **`/cz actor reinit`** for immediate recovery, or restart the czbot macro. On a follower stuck following after a missed `follow_me_off`, use **`/cz stop`** locally until the mailbox recovers.
+The `czbot` mailbox is registered once at macro startup and removed on macro exit. If `/cz actor status` shows **`mailbox=MISSING`**, registration failed at startup — **restart the czbot macro** (or the EQ client if a prior session left a stale mailbox). Actor coordination (`followme`, `camphere`, `attack`, MA/MT, etc.) will not work until registration succeeds.
 
-**Peer liveness:** `CzActorPeers` timestamps update when **any** inbound czbot message is received (role heartbeats, combat broadcasts, etc.). Periodic broadcast `ping` (every 60s, staggered per bot) is diagnostic only — receivers do **not** send unicast `pong` replies.
+**Peer liveness:** `CzActorPeers` timestamps update when **any** inbound czbot message is received (role claims, combat broadcasts, etc.). Periodic broadcast `ping` (every 60s, staggered per bot) is diagnostic only — receivers do **not** send unicast `pong` replies.
 
 **Traffic line:** `traffic (60s): recv=… sendBroadcast=… sendUnicast=…` on `/cz actor status` — rolling counters for Actor bus load diagnosis.
 
@@ -31,8 +30,10 @@ If `/cz actor status` shows **`mailbox=MISSING`**, this client cannot send or re
 | `rez_claim` | Rez coordination — peer excludes claimed corpse for 60s ([Rez coordination](#rez-coordination)) |
 | `ma_update` | Manual session MA override from `/cz assist set <name>` (beats automatic claims) |
 | `mt_update` | Manual session MT override from `/cz tank set <name>` |
-| `im_ma` | Automatic MA claim — holder heartbeats every 2s while eligible |
-| `im_mt` | Automatic MT claim — holder heartbeats every 2s while eligible |
+| `im_ma` | Automatic MA claim — published once on claim / takeover and when answering `whos_ma` |
+| `im_mt` | Automatic MT claim — published once on claim / takeover and when answering `whos_mt` |
+| `whos_ma` | Peer asking who holds MA (automatic mode, no usable actor override) |
+| `whos_mt` | Peer asking who holds MT (automatic mode, no usable actor override) |
 | `release_ma` | Holder relinquishing MA (death, hover, or ineligible) |
 | `release_mt` | Holder relinquishing MT (death, hover, or ineligible) |
 | `ma_engaged` | MA bot engaged a target — peers learn spawn ID immediately ([MA engage coordination](#ma-engage-coordination)) |
@@ -142,24 +143,24 @@ There is no release message — a successful rez removes the corpse from the can
 
 When `AssistName` or `TankName` is **`automatic`**, MA/MT resolution uses **`im_ma`** / **`im_mt`** actor claims (see [Automatic MA/MT Selection](automatic-ma-mt-selection.md)).
 
-**Claim messages (`im_ma` / `im_mt`):**
+**Claim messages (`im_ma` / `im_mt`):** published once when a bot first claims the role (or takes over after `release_*`), and once when answering a scoped `whos_*` request. Holders do **not** periodically rebroadcast.
 
 | Field | Purpose |
 |-------|---------|
 | `name` | Claimer character name |
-| `seq` | Monotonic per-holder counter (heartbeat every 2s) |
+| `seq` | Monotonic per-holder counter |
 | `scope` | `group` or `raid` |
 | `source` | `primary` (EQ role) or `list` (`ma_list` / `mt_list`) |
 | `listIndex` | 1-based list index; `0` for primary |
 | `zone` | Claimer's zone (receivers accept only same-zone senders) |
 
-Receivers store `lastHeartbeatAt` on the override and expire the claim after **2 missed heartbeats (~4s)** if no `release_*` arrives.
+**Who-is messages (`whos_ma` / `whos_mt`):** automatic peers with no usable actor override publish these (debounced ~2s) until an `im_*` arrives. Same `scope` / `zone` envelope as claims. The current holder (or eligible claimer) responds with one `im_*` broadcast; in-scope peers adopt it.
 
-**Release messages (`release_ma` / `release_mt`):** sent immediately on death/hover or when the holder becomes ineligible. Receivers run self-select and may publish a new `im_*` on the same tick.
+**Release messages (`release_ma` / `release_mt`):** sent immediately on death/hover or when the holder becomes ineligible. Receivers run self-select and the next eligible bot may publish a new `im_*` on the same tick. Peers that still lack an override after that ask `whos_*` on the next periodic tick.
 
-**Heartbeat expiry:** Receivers track `lastHeartbeatAt` on each accepted `im_ma` / `im_mt` (`reason=claim`). If the holder sends no accepted heartbeat for **2 intervals (~4s)**, peers clear the override and re-run claim selection — same net effect as `release_ma` / `release_mt`. Manual `ma_update` / `mt_update` overrides are not subject to heartbeat expiry.
+**Unavailable holder:** Overrides are cleared when the holder is dead/out of zone (missed `release_*`, e.g. crash). That triggers the same re-claim / `whos_*` path. Manual `ma_update` / `mt_update` overrides are not cleared by availability sweep the same way claim overrides are.
 
-**Receive rules:** scope filter (raid-strict; group allows cross-group assist when the group lacks an active MA/MT), sender same-zone filter, priority merge on conflict (in-group beats out-of-group). Overrides are also cleared when the holder is dead/out of zone or misses heartbeats (see above).
+**Receive rules:** scope filter (raid-strict; group allows cross-group assist when the group lacks an active MA/MT), sender same-zone filter, priority merge on conflict (in-group beats out-of-group).
 
 **Manual overrides:** `/cz assist set <name>` and `/cz tank set <name>` publish **`ma_update`** / **`mt_update`**, which beat automatic `im_*` claims until cleared. CH-enabled bots update local curtank from these messages without a separate `chchain_curtank` broadcast.
 
@@ -172,8 +173,9 @@ Heal spells with **`offtank`** in **targetphase** target peers with a live OT cl
 - [ ] `/cz actor ping` shows all box peers
 - [ ] Two OTs on same camp pick different adds; conflict yields to newer claim
 - [ ] OT idles when all adds claimed
-- [ ] MA death: holder publishes `release_ma`; next eligible bot publishes `im_ma`; peers adopt within one heartbeat
-- [ ] MA holder stops heartbeating (kill, `/czp off`, missed release): peers clear override after ~4s and failover
+- [ ] MA death: holder publishes `release_ma`; next eligible bot publishes `im_ma`; peers adopt
+- [ ] MA holder gone without release (kill, `/czp off`): peers clear override when holder unavailable; next claim or `whos_ma` → `im_ma` failover
+- [ ] Startup / zone: peers without MA publish `whos_ma`; holder answers once with `im_ma`; then quiet until death/release
 - [ ] MA engages mob: peers show spawn in `/cz actor status`; OT/notmatar see target before assist-at
 - [ ] `/cz disengage` on MA broadcasts `ma_disengage`; peers resume follow nav
 - [ ] Melee bots sticking past followdistance do not disengage while MA engaged
