@@ -59,16 +59,17 @@ local function HPEvalContext(index, shared)
     local entry = botconfig.getSpellEntry('heal', index)
     if not entry then return nil end
     local gem = entry.gem
-    local tank, tankid, bots, botcount, tanknbid
+    local tank, tankid, bots, botcount, tanknbid, peerByName
     if shared then
         tank, tankid = shared.tank, shared.tankid
         bots, botcount = shared.bots, shared.botcount
         tanknbid = shared.tanknbid
+        peerByName = shared.peerByName
     else
         tank, tankid = spellutils.GetTankInfo(false)
-        botcount = charinfo.GetPeerCnt()
-        bots = spellutils.GetBotListOrdered()
-        tanknbid = tank and charinfo.GetInfo(tank) ~= nil
+        bots, peerByName = spellutils.GetBotListOrderedWithPeers()
+        botcount = bots and #bots or 0
+        tanknbid = tank and ((peerByName and peerByName[tank]) or charinfo.GetInfo(tank)) ~= nil
     end
     local spellEntity = spellutils.GetSpellEntity(entry)
     if not spellEntity then
@@ -85,6 +86,7 @@ local function HPEvalContext(index, shared)
             tanknbid = tanknbid,
             botcount = botcount,
             bots = bots,
+            peerByName = peerByName,
         }
     end
     local spell = spellEntity.Name and spellEntity.Name() or entry.spell
@@ -101,6 +103,7 @@ local function HPEvalContext(index, shared)
         tanknbid = tanknbid,
         botcount = botcount,
         bots = bots,
+        peerByName = peerByName,
     }
 end
 
@@ -535,6 +538,7 @@ local function pctInAnyHealBand(pct, phase)
 end
 
 --- One GetInfo per peer for the HealCheck: fill healSnap, peerNameById, peerByName, healthyGate.
+--- Reuses context.peerByName from GetBotListOrderedWithPeers when present (no second GetInfo pass).
 local function fillHealPeerMaps(context)
     local meX = context.meX
     local meY = context.meY
@@ -564,40 +568,43 @@ local function fillHealPeerMaps(context)
     local selfNeedsGroupheal = myPct and pctInAnyHealBand(myPct, 'groupheal')
     local injuredEmpty = injuredSet and next(injuredSet) == nil
 
+    local function snapPeer(name, peer)
+        context.peerByName[name] = peer
+        local id = peer.ID
+        if not id or id <= 0 then return nil end
+        context.peerNameById[id] = name
+        local distSq
+        local zone = peer.Zone
+        if zone and zone.X ~= nil and zone.Y ~= nil then
+            distSq = utils.getDistanceSquared2D(meX, meY, zone.X, zone.Y)
+        end
+        local snap = {
+            name = name,
+            peer = peer,
+            pct = peer.PctHPs,
+            distSq = distSq,
+            petId = peer.PetID,
+            petHp = peer.PetHP,
+        }
+        context.healSnap[id] = snap
+        return snap
+    end
+
     -- Healthy fast path: no injured peers and self not in groupheal band — skip peer HP band scans.
     -- Pets are not in GetInjuredPeers; still band-check PetHP while building identity snaps.
     if injuredEmpty and not selfNeedsGroupheal then
         for i = 1, n do
             local name = bots[i]
             if name then
-                local peer = charinfo.GetInfo(name)
+                local peer = context.peerByName[name] or charinfo.GetInfo(name)
                 if peer then
-                    context.peerByName[name] = peer
-                    local id = peer.ID
-                    if id and id > 0 then
-                        context.peerNameById[id] = name
-                        local distSq
-                        local zone = peer.Zone
-                        if zone and zone.X ~= nil and zone.Y ~= nil then
-                            distSq = utils.getDistanceSquared2D(meX, meY, zone.X, zone.Y)
-                        end
-                        local snap = {
-                            name = name,
-                            peer = peer,
-                            pct = peer.PctHPs,
-                            distSq = distSq,
-                            petId = peer.PetID,
-                            petHp = peer.PetHP,
-                        }
-                        context.healSnap[id] = snap
-                        if snap.petId and snap.petId > 0 and snap.petHp ~= nil then
-                            if pctInAnyHealBand(snap.petHp, 'pet') then gate.pet = true end
-                        end
+                    local snap = snapPeer(name, peer)
+                    if snap and snap.petId and snap.petId > 0 and snap.petHp ~= nil then
+                        if pctInAnyHealBand(snap.petHp, 'pet') then gate.pet = true end
                     end
                 end
             end
         end
-        -- Non-peer groupmates are not in healSnap; keep groupmember open so Spawn fallback can run.
         if mq.TLO.Group.Members() and mq.TLO.Group.Members() > 0 then
             for i = 1, mq.TLO.Group.Members() do
                 local grpname = mq.TLO.Group.Member(i).Name()
@@ -614,33 +621,16 @@ local function fillHealPeerMaps(context)
     for i = 1, n do
         local name = bots[i]
         if name then
-            local peer = charinfo.GetInfo(name)
+            local peer = context.peerByName[name] or charinfo.GetInfo(name)
             if peer then
-                context.peerByName[name] = peer
-                local id = peer.ID
-                if id and id > 0 then
-                    context.peerNameById[id] = name
-                    local distSq
-                    local zone = peer.Zone
-                    if zone and zone.X ~= nil and zone.Y ~= nil then
-                        distSq = utils.getDistanceSquared2D(meX, meY, zone.X, zone.Y)
-                    end
-                    local snap = {
-                        name = name,
-                        peer = peer,
-                        pct = peer.PctHPs,
-                        distSq = distSq,
-                        petId = peer.PetID,
-                        petHp = peer.PetHP,
-                    }
-                    context.healSnap[id] = snap
+                local snap = snapPeer(name, peer)
+                if snap then
                     local checkBands = not injuredSet or injuredSet[name]
                     if checkBands and snap.pct ~= nil then
                         if pctInAnyHealBand(snap.pct, 'pc') then gate.pc = true end
                         if pctInAnyHealBand(snap.pct, 'groupmember') then gate.groupmember = true end
                         if pctInAnyHealBand(snap.pct, 'groupheal') then gate.groupheal = true end
                     end
-                    -- Pet HP isn't in GetInjuredPeers; always band-check pets that exist.
                     if snap.petId and snap.petId > 0 and snap.petHp ~= nil then
                         if pctInAnyHealBand(snap.petHp, 'pet') then gate.pet = true end
                     end
@@ -649,7 +639,6 @@ local function fillHealPeerMaps(context)
         end
     end
     if selfNeedsGroupheal then gate.groupheal = true end
-    -- Non-peer groupmates are not in healSnap; keep groupmember open so Spawn fallback can run.
     if mq.TLO.Group.Members() and mq.TLO.Group.Members() > 0 then
         for i = 1, mq.TLO.Group.Members() do
             local grpname = mq.TLO.Group.Member(i).Name()
@@ -848,6 +837,7 @@ function botheal.HealCheck(runPriority)
         bots = ctx.bots,
         botcount = ctx.botcount,
         tanknbid = ctx.tanknbid,
+        peerByName = ctx.peerByName,
     }
     local function cachedHealContext(spellIndex)
         local cached = contextBySpell[spellIndex]

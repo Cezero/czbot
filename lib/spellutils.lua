@@ -1087,30 +1087,40 @@ function spellutils.GetClassOrderPriority(classShortName)
     return priority[string.lower(tostring(classShortName or ''))] or 9999
 end
 
---- Tick-local memo for GetBotListOrdered (heal + buff share one sorted list per mainloop tick).
-local _botListOrderedMemo = { list = nil }
+--- Tick-local memo for GetBotListOrdered (heal + buff share one sorted list + peer map per mainloop tick).
+local _botListOrderedMemo = { list = nil, peerByName = nil }
 
 function spellutils.beginTick()
     _botListOrderedMemo.list = nil
+    _botListOrderedMemo.peerByName = nil
 end
 
---- Returns table of bot names from charinfo.GetPeers(), sorted by class order (healers first, then tanks, casters, DPS).
---- Order is configurable via botconfig.getCommon().botListClassOrder (array of lowercase class short names).
-function spellutils.GetBotListOrdered()
-    if _botListOrderedMemo.list then return _botListOrderedMemo.list end
+--- Returns sorted bot names and a name→peer map (one GetInfo per peer for the tick).
+--- @return string[]|nil bots
+--- @return table|nil peerByName
+function spellutils.GetBotListOrderedWithPeers()
+    if _botListOrderedMemo.list then
+        return _botListOrderedMemo.list, _botListOrderedMemo.peerByName
+    end
     local bots = charinfo.GetPeers()
+    local peerByName = {}
     if not bots or #bots == 0 then
         _botListOrderedMemo.list = bots
-        return bots
+        _botListOrderedMemo.peerByName = peerByName
+        return bots, peerByName
     end
     local priority = _getBotListClassPriority()
     local classByName = {}
     for _, name in ipairs(bots) do
         local cls
         local peer = charinfo.GetInfo(name)
-        if peer and peer.Class and type(peer.Class.ShortName) == 'string' then
-            cls = peer.Class.ShortName
-        else
+        if peer then
+            peerByName[name] = peer
+            if peer.Class and type(peer.Class.ShortName) == 'string' then
+                cls = peer.Class.ShortName
+            end
+        end
+        if not cls then
             cls = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
         end
         classByName[name] = cls and string.lower(cls) or ''
@@ -1122,6 +1132,14 @@ function spellutils.GetBotListOrdered()
         return (a or '') < (b or '')
     end)
     _botListOrderedMemo.list = bots
+    _botListOrderedMemo.peerByName = peerByName
+    return bots, peerByName
+end
+
+--- Returns table of bot names from charinfo.GetPeers(), sorted by class order (healers first, then tanks, casters, DPS).
+--- Order is configurable via botconfig.getCommon().botListClassOrder (array of lowercase class short names).
+function spellutils.GetBotListOrdered()
+    local bots = spellutils.GetBotListOrderedWithPeers()
     return bots
 end
 

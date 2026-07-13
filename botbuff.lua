@@ -11,6 +11,7 @@ local buffphase = require('lib.buffphase')
 local botmove = require('botmove')
 local pcphasethrottle = require('lib.pcphasethrottle')
 local tickprof = require('lib.tickprof')
+local log = require('lib.log')
 
 local botbuff = {}
 local BuffClass = {}
@@ -672,10 +673,15 @@ function botbuff.BuffCheck(runPriority)
         if not pcphasethrottle.allow('buff', cursor, phase) then return {} end
         return buffGetTargetsForPhase(phase, context)
     end
-    return tickprof.span('spellcheck', function()
+    local result = tickprof.span('spellcheck', function()
         return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,
             needsSpell, ctx, options)
     end)
+    local rrPhase = pcphasethrottle.getBuffPassGrant()
+    if rrPhase and tickprof.IsDebug() and tickprof.IsSpans() then
+        log.say('[tick] buff.rr phase=%s', rrPhase)
+    end
+    return result
 end
 
 --- True when a PC corpse within acleash belongs to a current group member (cleric defers buff for rez focus).

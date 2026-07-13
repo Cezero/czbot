@@ -4,7 +4,10 @@ local mq = require('mq')
 
 local pcphasethrottle = {}
 
-local INTERVAL_MS = 1000
+-- Wall-clock belt; pass cooldown is the main light/heavy spacer at ~1Hz BuffCheck.
+local INTERVAL_MS = 2000
+--- After a heavy RR grant, force this many following BuffChecks to stay light (self/tank only).
+local BUFF_HEAVY_SKIP_PASSES = 2
 
 --- Phases that are rate-limited per section. Others always allowed.
 local THROTTLED = {
@@ -21,6 +24,10 @@ local buffRrNext = 1
 local buffPassGrant = nil
 --- Shared wall-clock: next time any RR heavy phase may be granted.
 local buffHeavyNextAt = 0
+--- Remaining BuffChecks that must stay light after a heavy grant.
+local buffHeavySkipRemaining = 0
+--- True for this pass when skip countdown consumed a light pass at beginBuffPass.
+local buffHeavyBlockedThisPass = false
 
 --- nextAt[section][phase] = mq.gettime() when next allow is ok
 local nextAt = {}
@@ -28,6 +35,15 @@ local nextAt = {}
 --- Call at start of each BuffCheck so only one RR phase may run this pass.
 function pcphasethrottle.beginBuffPass()
     buffPassGrant = nil
+    buffHeavyBlockedThisPass = buffHeavySkipRemaining > 0
+    if buffHeavyBlockedThisPass then
+        buffHeavySkipRemaining = buffHeavySkipRemaining - 1
+    end
+end
+
+--- RR phase granted this BuffCheck (nil if light / self+tank only).
+function pcphasethrottle.getBuffPassGrant()
+    return buffPassGrant
 end
 
 ---@param section string 'buff'|'cure'|'heal'
@@ -57,6 +73,7 @@ function pcphasethrottle.allow(section, resumeCursor, phase)
     if section == 'buff' then
         if buffPassGrant == phase then return true end
         if buffPassGrant ~= nil then return false end
+        if buffHeavyBlockedThisPass then return false end
         if now < buffHeavyNextAt then return false end
 
         local n = #BUFF_RR_ORDER
@@ -66,6 +83,7 @@ function pcphasethrottle.allow(section, resumeCursor, phase)
 
         buffPassGrant = chosen
         buffHeavyNextAt = now + INTERVAL_MS
+        buffHeavySkipRemaining = BUFF_HEAVY_SKIP_PASSES
         buffRrNext = (chosenIdx % n) + 1
         return true
     end
