@@ -648,9 +648,12 @@ function spellutils.DistanceCheck(Sub, ID, EvalID)
     return spellutils.DistanceCheckByName(entry.spell, EvalID)
 end
 
--- Returns true if peer has spellid in Buff or ShortBuff (rich array scan).
+-- Returns true if peer has spellid in Buff or ShortBuff (C++ O(1) when HasBuff exists).
 function spellutils.PeerHasBuff(peerInfo, spellid)
-    if not peerInfo then return false end
+    if not peerInfo or not spellid then return false end
+    if peerInfo.HasBuff then
+        return peerInfo:HasBuff(spellid)
+    end
     local function has(list)
         if not list then return false end
         for _, b in ipairs(list) do
@@ -664,6 +667,9 @@ end
 --- Remaining duration ms for spellid on peer Buff/ShortBuff, or nil if absent.
 function spellutils.PeerGetBuffDuration(peerInfo, spellid)
     if not peerInfo or not spellid then return nil end
+    if peerInfo.GetBuffDuration then
+        return peerInfo:GetBuffDuration(spellid)
+    end
     local function findDur(list)
         if not list then return nil end
         for _, b in ipairs(list) do
@@ -682,7 +688,11 @@ end
 
 --- Remaining duration ms for spellid on peer PetBuff, or nil if absent.
 function spellutils.PeerGetPetBuffDuration(peerInfo, spellid)
-    if not peerInfo or not spellid or not peerInfo.PetBuff then return nil end
+    if not peerInfo or not spellid then return nil end
+    if peerInfo.GetPetBuffDuration then
+        return peerInfo:GetPetBuffDuration(spellid)
+    end
+    if not peerInfo.PetBuff then return nil end
     for _, b in ipairs(peerInfo.PetBuff) do
         if b and b.Spell and (b.Spell.ID == spellid or tostring(b.Spell.ID) == tostring(spellid)) then
             local dur = b.Duration
@@ -783,7 +793,11 @@ end
 
 -- Returns true if peer's pet has spellid in PetBuff.
 function spellutils.PeerHasPetBuff(peerInfo, spellid)
-    if not peerInfo or not peerInfo.PetBuff then return false end
+    if not peerInfo or not spellid then return false end
+    if peerInfo.HasPetBuff then
+        return peerInfo:HasPetBuff(spellid)
+    end
+    if not peerInfo.PetBuff then return false end
     for _, b in ipairs(peerInfo.PetBuff) do
         if b and b.Spell and (b.Spell.ID == spellid or tostring(b.Spell.ID) == tostring(spellid)) then return true end
     end
