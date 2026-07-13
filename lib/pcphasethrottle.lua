@@ -52,6 +52,17 @@ function pcphasethrottle.getBuffPassGrant()
     return buffPassGrant
 end
 
+--- True if allow('buff', ...) would deny without granting (no side effects).
+--- Used to skip getSpellIndicesForPhase on light / already-granted passes.
+function pcphasethrottle.buffRrWouldDeny(phase)
+    if not phase or not THROTTLED.buff or not THROTTLED.buff[phase] then return false end
+    if buffPassGrant == phase then return false end
+    if buffPassGrant ~= nil then return true end
+    if buffHeavyBlockedThisPass then return true end
+    if mq.gettime() < buffHeavyNextAt then return true end
+    return false
+end
+
 --- Summarize this BuffCheck after spellcheck: mode=heavy|light and phase or reason.
 --- @return string mode
 --- @return string|nil detail phase name (heavy) or reason (light)

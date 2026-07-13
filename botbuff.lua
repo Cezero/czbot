@@ -490,14 +490,25 @@ local function buffHasNameList(spellIndex)
     return entry and type(entry.buffNames) == 'table' and #entry.buffNames > 0 or false
 end
 
+--- Throttled multi-target buff phases (mirrors pcphasethrottle THROTTLED.buff).
+local BUFF_RR_THROTTLED = {
+    byname = true,
+    groupbuff = true,
+    groupmember = true,
+    pc = true,
+    mypet = true,
+    pet = true,
+}
+
 local function buffBandHasPhase(spellIndex, phase)
     if phase == 'byname' then
         if buffHasNameList(spellIndex) then return true end
         return BuffClass[spellIndex] and BuffClass[spellIndex].name and true or false
     end
     if phase == 'pet' or phase == 'mypet' then
-        local entry = botconfig.getSpellEntry('buff', spellIndex)
-        if entry and spellutils.IsGroupAEBuffEntry(entry) then return false end
+        -- Prewarmed meta only — no IsGroupAEBuffEntry TLO in the phase probe hot path.
+        local meta = _buffSpellMeta[spellIndex]
+        if meta and meta.isGroupAE then return false end
     end
     return castutils.bandHasPhaseSimple(BuffClass, spellIndex, phase)
 end
@@ -726,12 +737,14 @@ function botbuff.BuffCheck(runPriority)
         return ok
     end
 
-    -- Pre-warm spell meta so BuffSkip fast-path always has sid.
-    for i = 1, count do
-        if cachedEntryValid(i) then
-            getOrBuildSpellCache(i, spellCache)
+    -- Pre-warm spell meta so BuffSkip / bandHasPhase always have sid + isGroupAE.
+    tickprof.span('prewarm', function()
+        for i = 1, count do
+            if cachedEntryValid(i) then
+                getOrBuildSpellCache(i, spellCache)
+            end
         end
-    end
+    end)
 
     --- True when every valid self/tank-band spell is inside BuffSkip (skip whole phase targets).
     local function allBandSpellsBuffSkipped(phase)
@@ -770,13 +783,56 @@ function botbuff.BuffCheck(runPriority)
         spellFirst = true,
         entryValid = cachedEntryValid,
     }
-    local function getSpellIndices(phase, _target)
-        return spellutils.getSpellIndicesForPhase(count, phase, buffBandHasPhase)
-    end
     local cursor = spellutils.getResumeCursor('doBuff')
+    -- Pass-local: one getSpellIndicesForPhase per phase; RR allow once per throttled phase.
+    local indicesByPhase = {}
+    local rrAllowByPhase = {}
+    local function getSpellIndices(phase, _target)
+        local cached = indicesByPhase[phase]
+        if cached then return cached end
+        return tickprof.span('indices', function()
+            -- Light / already-granted: deny via allow() without band scan.
+            if BUFF_RR_THROTTLED[phase] and rrAllowByPhase[phase] ~= true
+                and (rrAllowByPhase[phase] == false or pcphasethrottle.buffRrWouldDeny(phase)) then
+                if rrAllowByPhase[phase] == nil then
+                    rrAllowByPhase[phase] = pcphasethrottle.allow('buff', cursor, phase)
+                end
+                indicesByPhase[phase] = {}
+                return indicesByPhase[phase]
+            end
+            local list = spellutils.getSpellIndicesForPhase(count, phase, buffBandHasPhase)
+            -- Empty band: do not call allow (RR skips phases with no spells).
+            if not list or #list == 0 then
+                indicesByPhase[phase] = list or {}
+                return indicesByPhase[phase]
+            end
+            if BUFF_RR_THROTTLED[phase] then
+                local allowed = rrAllowByPhase[phase]
+                if allowed == nil then
+                    allowed = pcphasethrottle.allow('buff', cursor, phase)
+                    rrAllowByPhase[phase] = allowed
+                end
+                if not allowed then
+                    indicesByPhase[phase] = {}
+                    return indicesByPhase[phase]
+                end
+            end
+            indicesByPhase[phase] = list
+            return list
+        end)
+    end
     local function getTargets(phase, context)
         if phase == 'self' and skipSelfTargets then return {} end
         if phase == 'tank' and skipTankTargets then return {} end
+        if BUFF_RR_THROTTLED[phase] then
+            local allowed = rrAllowByPhase[phase]
+            if allowed == nil then
+                allowed = pcphasethrottle.allow('buff', cursor, phase)
+                rrAllowByPhase[phase] = allowed
+            end
+            if not allowed then return {} end
+            return buffGetTargetsForPhase(phase, context)
+        end
         if not pcphasethrottle.allow('buff', cursor, phase) then return {} end
         return buffGetTargetsForPhase(phase, context)
     end
