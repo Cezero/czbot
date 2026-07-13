@@ -878,6 +878,18 @@ end
 local function cmd_actordebug(args)
     local czactor = require('lib.czactor')
     local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'queue' then
+        local sub = args[3] and string.lower(args[3]) or ''
+        if sub == 'on' or sub == 'true' or sub == '1' then
+            czactor.SetQueueDebug(true)
+        elseif sub == 'off' or sub == 'false' or sub == '0' then
+            czactor.SetQueueDebug(false)
+        else
+            czactor.SetQueueDebug(not czactor.IsQueueDebug())
+        end
+        log.say('Actor queue debug logging %s', czactor.IsQueueDebug() and 'on' or 'off')
+        return
+    end
     if mode == 'on' or mode == 'true' or mode == '1' then
         czactor.SetRoleClaimLogDebug(true)
     elseif mode == 'off' or mode == 'false' or mode == '0' then
@@ -885,7 +897,8 @@ local function cmd_actordebug(args)
     else
         czactor.SetRoleClaimLogDebug(not czactor.IsRoleClaimLogDebug())
     end
-    log.say('Actor role-claim debug logging %s', czactor.IsRoleClaimLogDebug() and 'on' or 'off')
+    log.say('Actor role-claim debug logging %s (queue: /cz actordebug queue [on|off])',
+        czactor.IsRoleClaimLogDebug() and 'on' or 'off')
 end
 
 local function cmd_burn(args)

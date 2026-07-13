@@ -23,9 +23,17 @@ local PEER_RECENT_MS = 90000
 local CZACTOR_TICK_MS = 250
 local TRAFFIC_WINDOW_MS = 60000
 local INBOUND_QUEUE_WARN_DEPTH = 100
+local INBOUND_QUEUE_MAX_DEPTH = 1000
+local INBOUND_DRAIN_BUDGET = 150
+local INBOUND_COMPACT_AT_HEAD = 512
+local WHOS_BACKOFF_MIN_MS = 2000
+local WHOS_BACKOFF_MAX_MS = 30000
+local QUEUE_DEBUG_LOG_MS = 1000
 
 local _actor = nil
 local _inboundQueue = {}
+local _inboundHead = 1
+local _inboundTail = 1 -- next write index; depth = tail - head
 local _lastTickAt = 0
 local _tickStaleLoggedAt = 0
 local _lastInitAttemptAt = 0
@@ -35,7 +43,15 @@ local _trafficWindowStart = 0
 local _trafficRecv = 0
 local _trafficSendBroadcast = 0
 local _trafficSendUnicast = 0
+local _trafficDrained = 0
+local _trafficDropped = 0
+local _trafficEnqueued = 0
+local _dropIdCounts = {}
+local _enqueueIdCounts = {}
 local _queueDepthWarnLoggedAt = 0
+local _queueDropWarnLoggedAt = 0
+local _queueDebug = false
+local _queueDebugLoggedAt = 0
 local processMessage
 
 local INLINE_IMMEDIATE_IDS = {
@@ -70,6 +86,8 @@ local applyImMt
 local clearMaActorEngaged
 local _lastWhosMaAt = 0
 local _lastWhosMtAt = 0
+local _whosMaBackoffMs = WHOS_BACKOFF_MIN_MS
+local _whosMtBackoffMs = WHOS_BACKOFF_MIN_MS
 
 local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
@@ -124,24 +142,181 @@ local function inboundEntryFromActorMessage(message)
     }
 end
 
+local function inboundDepth()
+    return _inboundTail - _inboundHead
+end
+
+local function clearInboundQueue()
+    _inboundQueue = {}
+    _inboundHead = 1
+    _inboundTail = 1
+end
+
+local function compactInboundQueue()
+    local depth = inboundDepth()
+    if depth <= 0 then
+        clearInboundQueue()
+        return
+    end
+    if _inboundHead < INBOUND_COMPACT_AT_HEAD then return end
+    local newQ = {}
+    local j = 1
+    for i = _inboundHead, _inboundTail - 1 do
+        newQ[j] = _inboundQueue[i]
+        j = j + 1
+    end
+    _inboundQueue = newQ
+    _inboundHead = 1
+    _inboundTail = j
+end
+
+local function bumpIdCount(counts, id)
+    id = id or '?'
+    counts[id] = (counts[id] or 0) + 1
+end
+
+local function formatIdHistogram(counts, limit)
+    limit = limit or 5
+    local entries = {}
+    for id, n in pairs(counts) do
+        entries[#entries + 1] = { id = id, n = n }
+    end
+    table.sort(entries, function(a, b)
+        if a.n ~= b.n then return a.n > b.n end
+        return tostring(a.id) < tostring(b.id)
+    end)
+    if #entries == 0 then return '(none)' end
+    local parts = {}
+    for i = 1, math.min(limit, #entries) do
+        local e = entries[i]
+        parts[#parts + 1] = string.format('%s=%d', tostring(e.id), e.n)
+    end
+    return table.concat(parts, ',')
+end
+
+local function entryMessageId(entry)
+    return entry and entry.content and entry.content.id or nil
+end
+
+local function isFollowPriorityEntry(entry)
+    local id = entryMessageId(entry)
+    return id and FOLLOW_PRIORITY_IDS[id] == true
+end
+
+local function findNewestFollowIndex()
+    for i = _inboundTail - 1, _inboundHead, -1 do
+        if isFollowPriorityEntry(_inboundQueue[i]) then return i end
+    end
+    return nil
+end
+
+local function dequeueInbound()
+    if _inboundHead >= _inboundTail then return nil end
+    local msg = _inboundQueue[_inboundHead]
+    _inboundQueue[_inboundHead] = nil
+    _inboundHead = _inboundHead + 1
+    if _inboundHead >= _inboundTail then
+        clearInboundQueue()
+    elseif _inboundHead >= INBOUND_COMPACT_AT_HEAD then
+        compactInboundQueue()
+    end
+    return msg
+end
+
+local function enqueueInboundBack(entry)
+    _inboundQueue[_inboundTail] = entry
+    _inboundTail = _inboundTail + 1
+end
+
+local function enqueueInboundFront(entry)
+    _inboundHead = _inboundHead - 1
+    _inboundQueue[_inboundHead] = entry
+end
+
+local function recordDroppedEntry(entry)
+    _trafficDropped = _trafficDropped + 1
+    bumpIdCount(_dropIdCounts, entryMessageId(entry))
+end
+
 local function maybeWarnQueueDepth()
-    local depth = #_inboundQueue
+    local depth = inboundDepth()
     if depth < INBOUND_QUEUE_WARN_DEPTH then return end
     local now = mq.gettime()
     if (now - _queueDepthWarnLoggedAt) < TRAFFIC_WINDOW_MS then return end
     _queueDepthWarnLoggedAt = now
-    log.say('[czactor] inbound queue depth %d (threshold %d) — drain may be lagging',
-        depth, INBOUND_QUEUE_WARN_DEPTH)
+    log.say('[czactor] inbound queue depth %d (threshold %d) drained=%d dropped=%d enqueued=%d topIn=%s — drain may be lagging',
+        depth, INBOUND_QUEUE_WARN_DEPTH, _trafficDrained, _trafficDropped, _trafficEnqueued,
+        formatIdHistogram(_enqueueIdCounts))
+end
+
+local function maybeWarnQueueDrops(droppedNow)
+    if droppedNow <= 0 then return end
+    local now = mq.gettime()
+    if (now - _queueDropWarnLoggedAt) < TRAFFIC_WINDOW_MS then return end
+    _queueDropWarnLoggedAt = now
+    log.say('[czactor] inbound queue capped at %d; dropped %d this tick (window dropped=%d topDrop=%s)',
+        INBOUND_QUEUE_MAX_DEPTH, droppedNow, _trafficDropped, formatIdHistogram(_dropIdCounts))
+end
+
+local function maybeLogQueueDebug()
+    if not _queueDebug then return end
+    local now = mq.gettime()
+    if (now - _queueDebugLoggedAt) < QUEUE_DEBUG_LOG_MS then return end
+    _queueDebugLoggedAt = now
+    local windowAge = _trafficWindowStart > 0 and (now - _trafficWindowStart) or 0
+    log.say('[czactor] queue debug depth=%d head=%d tail=%d enq=%d drain=%d drop=%d windowAge=%dms topIn=%s topDrop=%s',
+        inboundDepth(), _inboundHead, _inboundTail,
+        _trafficEnqueued, _trafficDrained, _trafficDropped, windowAge,
+        formatIdHistogram(_enqueueIdCounts), formatIdHistogram(_dropIdCounts))
+end
+
+local function enforceInboundCap()
+    local droppedNow = 0
+    while inboundDepth() > INBOUND_QUEUE_MAX_DEPTH do
+        local keepIdx = findNewestFollowIndex()
+        if keepIdx and keepIdx == _inboundHead then
+            local follow = dequeueInbound()
+            local victim = dequeueInbound()
+            if victim then
+                recordDroppedEntry(victim)
+                droppedNow = droppedNow + 1
+            end
+            if follow then enqueueInboundFront(follow) end
+            if not victim then break end
+        else
+            local victim = dequeueInbound()
+            if not victim then break end
+            recordDroppedEntry(victim)
+            droppedNow = droppedNow + 1
+        end
+    end
+    maybeWarnQueueDrops(droppedNow)
 end
 
 local function enqueueInbound(entry)
-    local id = entry.content and entry.content.id
+    local id = entryMessageId(entry)
     if id and FOLLOW_PRIORITY_IDS[id] then
-        table.insert(_inboundQueue, 1, entry)
+        enqueueInboundFront(entry)
     else
-        _inboundQueue[#_inboundQueue + 1] = entry
+        enqueueInboundBack(entry)
     end
+    _trafficEnqueued = _trafficEnqueued + 1
+    bumpIdCount(_enqueueIdCounts, id)
+    enforceInboundCap()
     maybeWarnQueueDepth()
+    maybeLogQueueDebug()
+end
+
+local function drainInboundQueue()
+    local budget = INBOUND_DRAIN_BUDGET
+    while budget > 0 do
+        local msg = dequeueInbound()
+        if not msg then break end
+        budget = budget - 1
+        _trafficDrained = _trafficDrained + 1
+        safeProcessInbound(msg)
+    end
+    maybeLogQueueDebug()
 end
 
 local function destroyActorMailbox()
@@ -191,6 +366,11 @@ local function resetTrafficWindowIfNeeded(now)
         _trafficRecv = 0
         _trafficSendBroadcast = 0
         _trafficSendUnicast = 0
+        _trafficDrained = 0
+        _trafficDropped = 0
+        _trafficEnqueued = 0
+        _dropIdCounts = {}
+        _enqueueIdCounts = {}
     end
 end
 
@@ -230,7 +410,7 @@ end
 
 function czactor.shutdown()
     destroyActorMailbox()
-    _inboundQueue = {}
+    clearInboundQueue()
 end
 
 --- Register the czbot mailbox once at macro startup. Safe to call again (no-op).
@@ -276,10 +456,18 @@ function czactor.init()
         log.say('[czactor] mailbox %s registration FAILED%s — restart the macro', MAILBOX, detail)
     end
     scheduleInitialTimers(now)
+    clearInboundQueue()
     _trafficWindowStart = now
     _trafficRecv = 0
     _trafficSendBroadcast = 0
     _trafficSendUnicast = 0
+    _trafficDrained = 0
+    _trafficDropped = 0
+    _trafficEnqueued = 0
+    _dropIdCounts = {}
+    _enqueueIdCounts = {}
+    _whosMaBackoffMs = WHOS_BACKOFF_MIN_MS
+    _whosMtBackoffMs = WHOS_BACKOFF_MIN_MS
     return _actor ~= nil
 end
 
@@ -431,14 +619,24 @@ local function applyRoleClaimActions(actions)
         czactor.publishImMt(actions.publishMt.source, actions.publishMt.listIndex)
     end
     local now = mq.gettime()
-    if actions.askWhosMa and (now - _lastWhosMaAt) >= ROLE_CLAIMS_INTERVAL_MS then
+    if actions.askWhosMa and (now - _lastWhosMaAt) >= _whosMaBackoffMs then
         _lastWhosMaAt = now
         czactor.publishWhosMa()
+        _whosMaBackoffMs = math.min(WHOS_BACKOFF_MAX_MS, math.max(WHOS_BACKOFF_MIN_MS, _whosMaBackoffMs * 2))
     end
-    if actions.askWhosMt and (now - _lastWhosMtAt) >= ROLE_CLAIMS_INTERVAL_MS then
+    if actions.askWhosMt and (now - _lastWhosMtAt) >= _whosMtBackoffMs then
         _lastWhosMtAt = now
         czactor.publishWhosMt()
+        _whosMtBackoffMs = math.min(WHOS_BACKOFF_MAX_MS, math.max(WHOS_BACKOFF_MIN_MS, _whosMtBackoffMs * 2))
     end
+end
+
+local function resetWhosMaBackoff()
+    _whosMaBackoffMs = WHOS_BACKOFF_MIN_MS
+end
+
+local function resetWhosMtBackoff()
+    _whosMtBackoffMs = WHOS_BACKOFF_MIN_MS
 end
 
 function czactor.onRoleReleaseReceived()
@@ -506,6 +704,23 @@ local function acceptMtClaim(sender)
         return auto_ma_mt.isSenderInMyRaid(sender)
     end
     if auto_ma_mt.isSenderInMyGroup(sender) then return true end
+    -- Post-zone Group.Member index can lag while EQ Main Tank / mt_list top is already known.
+    local primary = auto_ma_mt.mtPrimaryTloName()
+    if primary and namesMatch(primary, sender) then return true end
+    local top = auto_ma_mt.topMtCandidateInZone()
+    if top and namesMatch(top, sender) then return true end
+    return auto_ma_mt.groupLacksActiveMt()
+end
+
+--- Accept whos_mt asks from group/raid peers; after zone, also accept when we have no
+--- usable MT override so peers can re-discover the holder even if Group.Member lags.
+local function acceptMtWhosAsk(sender)
+    if not sender or sender == '' then return false end
+    if inRaid() then
+        return auto_ma_mt.isSenderInMyRaid(sender)
+    end
+    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
+    if not auto_ma_mt.getActorMtOverrideName() then return true end
     return auto_ma_mt.groupLacksActiveMt()
 end
 
@@ -602,6 +817,7 @@ applyImMa = function(content, sender)
     }
     if inGroup then rc.MaReleased = false end
     tankrole.invalidateMa()
+    resetWhosMaBackoff()
 end
 
 applyImMt = function(content, sender)
@@ -653,6 +869,7 @@ applyImMt = function(content, sender)
         require('lib.chchain').syncCurtankFromMtName(name, 'claim')
     end
     tankrole.invalidateMt()
+    resetWhosMtBackoff()
 end
 
 local function expireMaClaimOverride()
@@ -712,6 +929,35 @@ function czactor.runRoleClaimsTick()
     applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
 end
 
+--- After zone settle: rebroadcast im_mt/im_ma when this bot still holds or should claim,
+--- so peers whose overrides expired during zone load can restore Actor*Override without
+--- waiting on a whos_* round-trip that may also be gated by group-index lag.
+function czactor.rebroadcastRoleClaimsAfterZone()
+    local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+
+    local claimMt, mtSource, mtIdx = auto_ma_mt.shouldClaimMt()
+    if claimMt then
+        czactor.publishImMt(mtSource, mtIdx or 0)
+    elseif rc.MtImHolding then
+        local top, topSource, topIdx = auto_ma_mt.topMtCandidateInZone()
+        if top and namesMatch(top, myName()) then
+            czactor.publishImMt(topSource or 'list', topIdx or 0)
+        else
+            local o = rc.ActorMtOverride
+            czactor.publishImMt(o and o.source or 'list', o and o.listIndex or 0)
+        end
+    end
+
+    local claimMa, maSource, maIdx = auto_ma_mt.shouldClaimMa()
+    if claimMa then
+        czactor.publishImMa(maSource, maIdx or 0)
+    elseif rc.MaImHolding then
+        local o = rc.ActorMaOverride
+        czactor.publishImMa(o and o.source or 'list', o and o.listIndex or 0)
+    end
+end
+
 local function respondToWhosMa()
     local rc = state.getRunconfig()
     local claim, source, listIndex = auto_ma_mt.shouldClaimMa()
@@ -745,6 +991,17 @@ local function respondToWhosMt()
         if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
         local o = rc.ActorMtOverride
         czactor.publishImMt(o and o.source or 'list', o and o.listIndex or 0)
+        return
+    end
+    -- Soft eligibility: automatic tanks whose EQ/list top is self still answer after a
+    -- brief shouldClaimMt dip (e.g. post-zone proximity/charinfo lag).
+    local tankSetting = rc.TankName
+    if tankSetting == nil or tankSetting == '' then tankSetting = rc.AssistName end
+    if tankSetting ~= 'automatic' then return end
+    local top, topSource, topIdx = auto_ma_mt.topMtCandidateInZone()
+    if top and namesMatch(top, myName()) then
+        if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
+        czactor.publishImMt(topSource or 'list', topIdx or 0)
     end
 end
 
@@ -758,7 +1015,7 @@ end
 local function applyWhosMt(content, sender)
     if sender and namesMatch(sender, myName()) then return end
     if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMtClaim(sender) then return end
+    if not acceptMtWhosAsk(sender) then return end
     respondToWhosMt()
 end
 
@@ -1302,7 +1559,7 @@ function czactor.tick()
         if (now - _tickStaleLoggedAt) > TICK_STALE_MS then
             _tickStaleLoggedAt = now
             log.say('[czactor] tick stale (%.1fs, queue=%d) — check mainloop/hooks',
-                (now - _lastTickAt) / 1000, #_inboundQueue)
+                (now - _lastTickAt) / 1000, inboundDepth())
         end
     end
     _lastTickAt = now
@@ -1310,9 +1567,10 @@ function czactor.tick()
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
 
-    while _inboundQueue[1] ~= nil do
-        local msg = table.remove(_inboundQueue, 1)
-        if msg then safeProcessInbound(msg) end
+    drainInboundQueue()
+    local common_sync = package.loaded['lib.common_sync']
+    if common_sync and common_sync.tickPending then
+        common_sync.tickPending()
     end
 
     local now = mq.gettime()
@@ -1388,18 +1646,28 @@ function czactor.printStatus()
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
     local now = mq.gettime()
+    local depth = inboundDepth()
     local lastTickAge = _lastTickAt > 0 and string.format('%.1fs ago', (now - _lastTickAt) / 1000) or 'never'
     local recent, total = countRecentCzActorPeers(rc, PEER_RECENT_MS)
     local followLabel = (rc.followname and rc.followname ~= '') and rc.followname or '(none)'
     local mailboxLabel = mailboxStatusLabel()
-    printf('  czactor: mailbox=%s lastTick=%s queue=%d peersRecent=%d/%d follow=%s catchUp=%s',
-        mailboxLabel, lastTickAge, #_inboundQueue, recent, total,
+    local windowAge = _trafficWindowStart > 0 and (now - _trafficWindowStart) or 0
+    printf('  czactor: mailbox=%s lastTick=%s queue=%d (head=%d tail=%d) peersRecent=%d/%d follow=%s catchUp=%s',
+        mailboxLabel, lastTickAge, depth, _inboundHead, _inboundTail, recent, total,
         followLabel, tostring(rc.followCatchUp == true))
-    if #_inboundQueue >= INBOUND_QUEUE_WARN_DEPTH then
-        printf('  WARNING: inbound queue depth %d (threshold %d)', #_inboundQueue, INBOUND_QUEUE_WARN_DEPTH)
+    if depth >= INBOUND_QUEUE_WARN_DEPTH then
+        printf('  WARNING: inbound queue depth %d (threshold %d, cap %d)',
+            depth, INBOUND_QUEUE_WARN_DEPTH, INBOUND_QUEUE_MAX_DEPTH)
     end
-    printf('  traffic (60s): recv=%d sendBroadcast=%d sendUnicast=%d',
-        _trafficRecv, _trafficSendBroadcast, _trafficSendUnicast)
+    printf('  traffic (window %dms): recv=%d enqueued=%d drained=%d dropped=%d sendBroadcast=%d sendUnicast=%d',
+        windowAge, _trafficRecv, _trafficEnqueued, _trafficDrained, _trafficDropped,
+        _trafficSendBroadcast, _trafficSendUnicast)
+    printf('  inbound ids: %s', formatIdHistogram(_enqueueIdCounts))
+    if _trafficDropped > 0 then
+        printf('  dropped ids: %s', formatIdHistogram(_dropIdCounts))
+    end
+    printf('  whos backoff: ma=%dms mt=%dms queueDebug=%s',
+        _whosMaBackoffMs, _whosMtBackoffMs, tostring(_queueDebug))
     if mailboxLabel == 'MISSING' then
         printf('  WARNING: czbot mailbox not registered — Actor messages (followme, camphere, attack, MA/MT) are not sent or received. Restart the macro.')
         local initAge = _lastInitAttemptAt > 0 and string.format('%.1fs ago', (now - _lastInitAttemptAt) / 1000) or 'never'
@@ -1469,6 +1737,14 @@ end
 
 function czactor.IsRoleClaimLogDebug()
     return czactor_dispatch.IsRoleClaimLogDebug()
+end
+
+function czactor.SetQueueDebug(on)
+    _queueDebug = on and true or false
+end
+
+function czactor.IsQueueDebug()
+    return _queueDebug
 end
 
 function czactor.getHookFn(name)

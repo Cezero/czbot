@@ -221,7 +221,7 @@ local function buffCustomSection(entry, idPrefix, onChanged)
             ImGui.SetTooltip('Include in twist when no mobs in camp (Bard only).')
         end
         ImGui.SameLine()
-        local inIdle = entry.inIdle ~= false
+        local inIdle = entry.inIdle == true
         local inIdleVal, inIdlePressed = ImGui.Checkbox('##' .. idPrefix .. '_inIdle', inIdle)
         if inIdlePressed then
             entry.inIdle = inIdleVal

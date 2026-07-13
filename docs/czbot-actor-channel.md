@@ -12,13 +12,15 @@ CZBot peers coordinate through a dedicated **Actor mailbox** (`czbot`) on the sa
 | Command | Purpose |
 |---------|---------|
 | `/cz actor ping` | Broadcast ping (diagnostic); peers update liveness from any czbot message, not unicast replies |
-| `/cz actor status` | Peers, MA/MT Actor overrides, OT claims, rez claims, MA engaged target, 60s traffic counters |
+| `/cz actor status` | Peers, MA/MT Actor overrides, OT claims, rez claims, MA engaged target, queue depth/head/tail, drain/drop counters, inbound id histogram, whos backoff |
+| `/cz actordebug on/off` | Role-claim send/recv/reject logging (`im_*`, `whos_*`, `release_*`) |
+| `/cz actordebug queue [on/off]` | Throttled inbound queue enqueue/drain/drop stats (not per-message spam) |
 
 The `czbot` mailbox is registered once at macro startup and removed on macro exit. If `/cz actor status` shows **`mailbox=MISSING`**, registration failed at startup — **restart the czbot macro** (or the EQ client if a prior session left a stale mailbox). Actor coordination (`followme`, `camphere`, `attack`, MA/MT, etc.) will not work until registration succeeds.
 
 **Peer liveness:** `CzActorPeers` timestamps update when **any** inbound czbot message is received (role claims, combat broadcasts, etc.). Periodic broadcast `ping` (every 60s, staggered per bot) is diagnostic only — receivers do **not** send unicast `pong` replies.
 
-**Traffic line:** `traffic (60s): recv=… sendBroadcast=… sendUnicast=…` on `/cz actor status` — rolling counters for Actor bus load diagnosis.
+**Traffic / queue:** `/cz actor status` reports a rolling traffic window (age shown in ms) with `recv`, `enqueued`, `drained`, `dropped`, and send counters, plus inbound/dropped id histograms. Inbound messages use an O(1) head/tail queue (cap 1000, drain budget per tick); follow commands still front-insert on the same queue.
 
 ## Message types
 

@@ -39,7 +39,7 @@ For full targeting and band details, see [Spell targeting and bands](spell-targe
 
 For **BRD**, configure Group AE songs with **groupbuff** (Group v1) or **pc** (Group v2 remote groups) bands — the GUI sets these automatically for Group-target spells. The legacy **self** band still works for twist membership when **inIdle** is unset.
 
-- **inIdle** (spell-level) — When `true` (default), this buff is in the **idle** twist list. When `false`, it is not twisted when no mobs are in camp. GUI shows "In idle" only for Bards.
+- **inIdle** (spell-level) — When `true`, this buff is in the **idle** twist list. When unset or `false`, it is not twisted when no mobs are in camp (unless a legacy `self`/`idle` band is present). GUI "In idle" is checked only when `inIdle` is explicitly `true`.
 - **inCombat** (spell-level) — When `true`, this buff is in the **combat** twist list. When `false` (default), it is not twisted when mobs are in camp.
 
 The buff hook does **not** schedule single casts for numeric gem buffs — MQ2Twist sustains them when they are in the active twist list for the current mode. Tank, groupbuff, groupmember, pc, mypet, and pet phases are **not** used to cast gem songs on bards (item/alt buffs still cast normally).

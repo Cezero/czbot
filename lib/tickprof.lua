@@ -30,9 +30,8 @@ function tickprof.SetDebug(on)
     _debug = on and true or false
     if _debug then
         _summaryNextTime = mq.gettime() + SUMMARY_INTERVAL_MS
-    else
-        _currentTick = nil
     end
+    -- Do not clear _currentTick here: wrapHook may still be timing a hook.
 end
 
 function tickprof.IsDebug()
@@ -122,11 +121,13 @@ function tickprof.wrapHook(name, fn, arg)
         fn(arg)
         return
     end
+    local tick = _currentTick
     local start = mq.gettime()
     fn(arg)
     local elapsed = mq.gettime() - start
-    local hooks = _currentTick.hooks
-    hooks[name] = (hooks[name] or 0) + elapsed
+    if tick and tick.hooks then
+        tick.hooks[name] = (tick.hooks[name] or 0) + elapsed
+    end
 end
 
 function tickprof.endTick(handle, paused)

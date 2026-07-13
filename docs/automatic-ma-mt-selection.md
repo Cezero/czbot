@@ -25,7 +25,7 @@ For what the MA and MT *do* once resolved (target picking, heals, offtank, pulle
 - **Cache invalidation** forces a full re-resolve: actor claim/release, stale override sweep, `ma_list` / `mt_list` edits, `/cz reloadcommon`, zone change, `/cz tank set` / `/cz assist set`, role preset Apply, or `maAnchorLeash` change.
 - **MA and MT resolve independently** via separate actor claim streams.
 - **`TankName` defaults to `"automatic"`** in new configs. Populate **`ma_list`** and **`mt_list`** in `cz_common.lua` for zone-local claim priority.
-- **Actor claims:** Eligible bots self-select using EQ primary + list priority (zone-local), publish **`im_ma`** / **`im_mt`** once when claiming (and when answering **`whos_ma`** / **`whos_mt`**), and **`release_ma`** / **`release_mt`** on death/hover or when ineligible. Peers without a usable actor override ask **`whos_*`** (debounced ~2s). Logic lives in **`lib/auto_ma_mt.lua`** and **`lib/czactor.lua`**. Manual `/cz assist set` / `/cz tank set` publish **`ma_update`** / **`mt_update`**. See [CZBot Actor channel](czbot-actor-channel.md).
+- **Actor claims:** Eligible bots self-select using EQ primary + list priority (zone-local), publish **`im_ma`** / **`im_mt`** once when claiming (and when answering **`whos_ma`** / **`whos_mt`**), and **`release_ma`** / **`release_mt`** on death/hover or when a different candidate clearly owns the role. After zone settle, holders rebroadcast **`im_*`**. Group peers lacking an MT actor override ask **`whos_mt`** even when `Group.MainTank` is known (so claims restore after zone). Raid / MA peers ask **`whos_*`** only when they lack an override **and** EQ/list cannot resolve locally (exponential backoff up to ~30s). Logic lives in **`lib/auto_ma_mt.lua`** and **`lib/czactor.lua`**. Manual `/cz assist set` / `/cz tank set` publish **`ma_update`** / **`mt_update`**. See [CZBot Actor channel](czbot-actor-channel.md).
 
 ---
 
@@ -77,7 +77,7 @@ flowchart TD
 
 **Claim eligibility (claimer only):** alive, in proximity to roster peers in this zone (MA uses `maAnchorLeash`), top priority among in-zone candidates. Split raids across zones may have separate MA/MT per zone.
 
-**Receive:** scope filter + sender same-zone match. Overrides whose holder is dead/out of zone are cleared and treated like `release_ma` / `release_mt`. Peers that still lack an override publish `whos_*` until answered.
+**Receive:** scope filter + sender same-zone match. Overrides whose holder is dead/out of zone are cleared and treated like `release_ma` / `release_mt`. After zone settle, holders rebroadcast `im_ma` / `im_mt`. Group peers that still lack an MT override publish `whos_mt` (with backoff) even when `Group.MainTank` is known, so actor claims can be restored. Raid peers ask `whos_*` only when EQ/list also cannot resolve locally.
 
 ---
 

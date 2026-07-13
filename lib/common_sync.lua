@@ -9,7 +9,11 @@ local czactor_dispatch = require('lib.czactor_dispatch')
 
 local common_sync = {}
 
-local SYNC_LOCK_MAX_ATTEMPTS = 30
+local SYNC_LOCK_TRY_NOW = 3
+local SYNC_PENDING_MAX = 8
+
+---@type table[]|nil list of { delta = table }
+local _pendingApplies = nil
 
 local function deepCopy(value)
     if type(value) ~= 'table' then return value end
@@ -142,30 +146,64 @@ function common_sync.reloadAllFromCommon()
     rolelists.loadFromCommon()
 end
 
+--- Try to apply without mq.delay. Returns true on success, false if lock busy / failed.
+local function tryApplyWithLockOnce(delta)
+    if not botconfig.tryAcquireCommonLock() then
+        return false
+    end
+    if not botconfig.reloadCommonReadOnly() then
+        botconfig.releaseCommonLock()
+        log.say('common_sync: reload failed while applying delta')
+        return true -- consumed; do not retry forever on read failure
+    end
+    local common = botconfig.getCommon()
+    if deltaCoversDisk(common, delta) then
+        botconfig.releaseCommonLock()
+        return true
+    end
+    botconfig._suppressCommonSyncBroadcast = true
+    botconfig._common = applyDeltaToCommon(common, delta)
+    botconfig.saveCommonDirect()
+    botconfig._suppressCommonSyncBroadcast = false
+    botconfig.releaseCommonLock()
+    return true
+end
+
+local function queuePendingApply(delta)
+    if not _pendingApplies then _pendingApplies = {} end
+    _pendingApplies[#_pendingApplies + 1] = { delta = delta }
+    while #_pendingApplies > SYNC_PENDING_MAX do
+        table.remove(_pendingApplies, 1)
+    end
+end
+
+--- Non-blocking apply: a few immediate lock tries, else defer to czactor.tick.
 local function applyWithLock(delta)
-    for _ = 1, SYNC_LOCK_MAX_ATTEMPTS do
-        if botconfig.tryAcquireCommonLock() then
-            if not botconfig.reloadCommonReadOnly() then
-                botconfig.releaseCommonLock()
-                log.say('common_sync: reload failed while applying delta')
-                return false
-            end
-            local common = botconfig.getCommon()
-            if deltaCoversDisk(common, delta) then
-                botconfig.releaseCommonLock()
-                return true
-            end
-            botconfig._suppressCommonSyncBroadcast = true
-            botconfig._common = applyDeltaToCommon(common, delta)
-            botconfig.saveCommonDirect()
-            botconfig._suppressCommonSyncBroadcast = false
-            botconfig.releaseCommonLock()
+    for _ = 1, SYNC_LOCK_TRY_NOW do
+        if tryApplyWithLockOnce(delta) then
             return true
         end
-        mq.delay(50 + math.random(0, 150))
     end
-    log.say('common_sync: failed to acquire lock after %d attempts', SYNC_LOCK_MAX_ATTEMPTS)
+    queuePendingApply(delta)
     return false
+end
+
+--- Retry deferred lock applies from czactor.tick (no mq.delay).
+function common_sync.tickPending()
+    if not _pendingApplies or #_pendingApplies == 0 then return end
+    local remaining = {}
+    local anyApplied = false
+    for _, item in ipairs(_pendingApplies) do
+        if tryApplyWithLockOnce(item.delta) then
+            anyApplied = true
+        else
+            remaining[#remaining + 1] = item
+        end
+    end
+    _pendingApplies = remaining
+    if anyApplied then
+        common_sync.reloadAllFromCommon()
+    end
 end
 
 local function ensureSeqFields(rc)
@@ -200,7 +238,10 @@ local function onCommonSync(content, sender)
     local delta = content.delta
     local disk = botconfig.readCommonFromDisk()
     if not deltaCoversDisk(disk, delta) then
-        applyWithLock(delta)
+        if not applyWithLock(delta) then
+            -- Deferred; reload once pending clears in tickPending.
+            return
+        end
     end
 
     common_sync.reloadAllFromCommon()

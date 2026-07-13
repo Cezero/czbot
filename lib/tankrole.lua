@@ -167,10 +167,15 @@ end
 local function summarizeMtPath()
     local actorMt = auto_ma_mt.getActorMtOverrideName()
     if actorMt then return 'actor claim: ' .. actorMt end
+    local primary = getMtPrimaryTlo()
+    if not inRaid() and primary and isCandidateAvailable(primary, false) then
+        return 'primary_retained: ' .. primary
+    end
     if inRaid() then
         local top = auto_ma_mt.topMtCandidateInZone()
         if top then return 'list_readonly: ' .. top end
     end
+    if primary then return 'primary unavailable: ' .. primary end
     return 'no MT resolved (awaiting im_mt)'
 end
 
@@ -258,6 +263,12 @@ local function resolveAutomaticTankFull()
         return meta
     end
 
+    if not raid and primaryTlo and isCandidateAvailable(primaryTlo, false) then
+        meta.name = primaryTlo
+        meta.source = 'primary_retained'
+        return meta
+    end
+
     if raid then
         local top = auto_ma_mt.topMtCandidateInZone()
         if top then
@@ -307,6 +318,12 @@ local function isCachedMtValid(cache)
     if cache.source == 'actor' then
         local o = state.getRunconfig().ActorMtOverride
         return auto_ma_mt.isActorHolderAvailable(o, false)
+    end
+    if cache.source == 'primary_retained' then
+        if cache.name ~= cache.primaryTlo then return false end
+        if getMtPrimaryTlo() ~= cache.primaryTlo then return false end
+        if auto_ma_mt.getActorMtOverrideName() then return false end
+        return isCandidateAvailable(cache.primaryTlo, false)
     end
     if cache.source == 'list_readonly' then
         if not inRaid() then return false end

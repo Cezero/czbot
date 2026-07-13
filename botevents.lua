@@ -15,6 +15,7 @@ local tankrole = require('lib.tankrole')
 local rolelists = require('lib.rolelists')
 local log = require('lib.log')
 local common_sync = require('lib.common_sync')
+local czactor = require('lib.czactor')
 
 local botevents = {}
 
@@ -67,6 +68,7 @@ local function DelayOnZone()
     rolelists.loadFromCommon()
     MountCastFailed = false
     follow.ResumeAfterZone()
+    czactor.rebroadcastRoleClaimsAfterZone()
 end
 
 -- Single entry point for zone change: used by zoneCheck hook and MQ zone events.

@@ -371,8 +371,10 @@ function auto_ma_mt.sweepStaleActorOverrides()
 end
 
 --- Evaluate whether this bot should publish im_*, release_*, or ask whos_*.
---- Holders publish im_* only when first claiming (not every tick). Peers without a
---- usable actor override ask whos_* so the holder can respond once.
+--- Holders publish im_* only when first claiming (not every tick). Sticky MT hold
+--- skips release on brief post-zone eligibility dips. Group peers without a usable
+--- ActorMtOverride ask whos_mt so the holder can restore claims after zone; raid
+--- peers ask only when EQ/list also cannot resolve locally.
 ---@param opts table|nil { trigger = 'release'|'periodic' }
 ---@return table actions { releaseMa?, publishMa?, askWhosMa?, releaseMt?, publishMt?, askWhosMt? }
 function auto_ma_mt.evaluateRoleClaims(opts)
@@ -390,18 +392,39 @@ function auto_ma_mt.evaluateRoleClaims(opts)
     elseif claimMa and not rc.MaImHolding then
         actions.publishMa = { source = maSource, listIndex = maIdx or 0 }
     elseif opts.trigger ~= 'release'
-        and isAutomaticAssist() and not claimMa and not auto_ma_mt.getActorMaOverrideName() then
-        -- On release, the next claimer publishes im_*; ask only on periodic if still missing.
+        and isAutomaticAssist() and not claimMa and not auto_ma_mt.getActorMaOverrideName()
+        and not auto_ma_mt.topMaCandidateInZone() then
+        -- Ask only when neither actor nor EQ/list can resolve MA locally.
         actions.askWhosMa = true
     end
 
-    if rc.MtImHolding and (not isAutomaticTank() or not claimMt) then
+    if rc.MtImHolding and not isAutomaticTank() then
         actions.releaseMt = true
+    elseif rc.MtImHolding and not claimMt then
+        -- Sticky hold: only release when a different in-zone candidate clearly owns MT,
+        -- or when this bot is dead/hovering. Brief post-zone eligibility dips must not drop the claim.
+        if not meAlive() then
+            actions.releaseMt = true
+        else
+            local top = auto_ma_mt.topMtCandidateInZone()
+            if top and not namesEqual(top, me) then
+                actions.releaseMt = true
+            end
+        end
     elseif claimMt and not rc.MtImHolding then
         actions.publishMt = { source = mtSource, listIndex = mtIdx or 0 }
     elseif opts.trigger ~= 'release'
         and isAutomaticTank() and not claimMt and not auto_ma_mt.getActorMtOverrideName() then
-        actions.askWhosMt = true
+        if inRaid() then
+            -- Raid: EQ/list readonly covers common case; ask only when unresolved locally.
+            if not auto_ma_mt.topMtCandidateInZone() then
+                actions.askWhosMt = true
+            end
+        else
+            -- Group: resolve is actor-driven; ask even when Group.MainTank is known so
+            -- peers can restore ActorMtOverride after zone (whos_mt → im_mt).
+            actions.askWhosMt = true
+        end
     end
 
     return actions
