@@ -140,8 +140,11 @@ local function getSpellRanges(entry)
     return mq.TLO.Spell(entry.spell).MyRange(), mq.TLO.Spell(entry.spell).AERange()
 end
 
-local function BuffEvalGroupBuff(index, entry, spell, spellid, range)
-    local _, aeRange = getSpellRanges(entry)
+local function BuffEvalGroupBuff(index, entry, spell, spellid, range, aeRange)
+    if not aeRange then
+        local _
+        _, aeRange = getSpellRanges(entry)
+    end
     if not aeRange or aeRange <= 0 then return nil, nil end
     local aeRangeSq = aeRange * aeRange
     local function needBuff(grpmember, grpid, grpname, peer)
@@ -279,6 +282,26 @@ local function BuffEvalPets(index, entry, spellid, rangeSq, bots, botcount)
     return nil, nil
 end
 
+--- Evaluate a single listed pet spawn (no full peer-pet rescan).
+local function BuffEvalPetById(index, spellid, rangeSq, petId)
+    if not BuffClass[index].pet or not petId or petId <= 0 then return nil, nil end
+    local petSpawn = mq.TLO.Spawn(petId)
+    if not petSpawn or not petSpawn.ID() or petSpawn.ID() == 0 then return nil, nil end
+    local masterName = petSpawn.Master and (petSpawn.Master.CleanName() or petSpawn.Master.Name())
+    if not masterName or masterName == '' then return nil, nil end
+    local peer = charinfo.GetInfo(masterName)
+    if not peer then return nil, nil end
+    local petdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), petSpawn.X(), petSpawn.Y())
+    local petbuff = spellutils.PeerHasPetBuff(peer, spellid)
+    local petstacks = peer:StacksPet(spellid)
+    local ownerId = mq.TLO.Spawn('pc =' .. masterName).ID()
+    if ownerId and ownerId > 0 and petstacks and IconCheck(index, ownerId) and not petbuff
+        and rangeSq and petdistSq and petdistSq <= rangeSq then
+        return petId, 'pet'
+    end
+    return nil, nil
+end
+
 local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
 
 --- Single place for buff context: tank, tankid, class-ordered bots, botcount, buffCount. Used by BuffCheck and getTargets/needsSpell.
@@ -357,71 +380,71 @@ local function buffBandHasPhase(spellIndex, phase)
     return castutils.bandHasPhaseSimple(BuffClass, spellIndex, phase)
 end
 
-local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache)
+local function getOrBuildSpellCache(spellIndex, spellCache)
     local cached = spellCache and spellCache[spellIndex]
-    local entry, spell, sid, myRange, aeRange, range, rangeSq
-    if cached then
-        entry, spell, sid, myRange, aeRange, range, rangeSq =
-            cached.entry, cached.spell, cached.sid, cached.myRange, cached.aeRange, cached.range, cached.rangeSq
-    else
-        entry = botconfig.getSpellEntry('buff', spellIndex)
-        if not entry or not BuffClass[spellIndex] then return nil, nil end
-        local spellid
-        spell, _, _, spellid = spellutils.GetSpellInfo(entry)
-        if not spell or not spellid then return nil, nil end
-        sid = (spellid == 1536) and 1538 or spellid
-        myRange, aeRange = getSpellRanges(entry)
-        range = (myRange and myRange > 0) and myRange or aeRange
-        rangeSq = range and (range * range) or nil
-        if spellCache then
-            spellCache[spellIndex] = {
-                entry = entry,
-                spell = spell,
-                sid = sid,
-                myRange = myRange,
-                aeRange = aeRange,
-                range = range,
-                rangeSq = rangeSq,
-            }
-        end
-    end
-    if not entry or not BuffClass[spellIndex] then return nil, nil end
+    if cached then return cached end
+    local entry = botconfig.getSpellEntry('buff', spellIndex)
+    if not entry or not BuffClass[spellIndex] then return nil end
+    local spell, _, _, spellid = spellutils.GetSpellInfo(entry)
+    if not spell or not spellid then return nil end
+    local sid = (spellid == 1536) and 1538 or spellid
+    local myRange, aeRange = getSpellRanges(entry)
+    local range = (myRange and myRange > 0) and myRange or aeRange
+    local rangeSq = range and (range * range) or nil
+    cached = {
+        entry = entry,
+        spell = spell,
+        sid = sid,
+        myRange = myRange,
+        aeRange = aeRange,
+        range = range,
+        rangeSq = rangeSq,
+        isGroupAE = spellutils.IsGroupAEBuffEntry(entry),
+        isGroupV2 = spellutils.IsGroupV2BuffEntry(entry),
+    }
+    if spellCache then spellCache[spellIndex] = cached end
+    return cached
+end
 
-    local tank = context.tank
-    local tankid = context.tankid
-    local tanktar = tank and charinfo.GetInfo(tank) and charinfo.GetInfo(tank).Target and charinfo.GetInfo(tank).Target.ID or nil
-    local myid = mq.TLO.Me.ID()
-    local myclass = mq.TLO.Me.Class.ShortName()
+--- phase must be the RunPhaseFirstSpellCheck phase (no groupmember→pc fallthrough).
+local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
+    local cached = getOrBuildSpellCache(spellIndex, spellCache)
+    if not cached then return nil, nil end
+    local entry, spell, sid = cached.entry, cached.spell, cached.sid
+    local myRange, aeRange, range, rangeSq = cached.myRange, cached.aeRange, cached.range, cached.rangeSq
+    local tank = hoist and hoist.tank or context.tank
+    local tankid = hoist and hoist.tankid or context.tankid
+    local tanktar = hoist and hoist.tanktar
+    local myid = hoist and hoist.myid or mq.TLO.Me.ID()
+    local myclass = hoist and hoist.myclass or mq.TLO.Me.Class.ShortName()
+    phase = phase or targethit
 
     if myclass == 'BRD' and type(entry.gem) == 'number' then
         return nil, nil
     end
 
-    if targethit == 'self' then
+    if phase == 'self' then
         return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar)
     end
-    if targethit == 'tank' then
+    if phase == 'tank' then
         local id, hit = BuffEvalTank(spellIndex, entry, spell, sid, rangeSq, tank, tankid)
         if id == targetId then return id, hit end
         return nil, nil
     end
-    if targethit == 'groupbuff' then
-        return BuffEvalGroupBuff(spellIndex, entry, spell, sid, range)
+    if phase == 'groupbuff' then
+        return BuffEvalGroupBuff(spellIndex, entry, spell, sid, range, aeRange)
     end
-    if targethit == 'mypet' then
-        if spellutils.IsGroupAEBuffEntry(entry) then return nil, nil end
+    if phase == 'mypet' then
+        if cached.isGroupAE then return nil, nil end
         local id, hit = BuffEvalMyPet(spellIndex, entry, spell, sid, rangeSq)
         if id == targetId then return id, hit end
         return nil, nil
     end
-    if targethit == 'pet' then
-        if spellutils.IsGroupAEBuffEntry(entry) then return nil, nil end
-        local id, hit = BuffEvalPets(spellIndex, entry, sid, rangeSq, context.bots,
-            context.botcount or #(context.bots or {}))
-        if id == targetId then return id, hit end
-        return nil, nil
+    if phase == 'pet' then
+        if cached.isGroupAE then return nil, nil end
+        return BuffEvalPetById(spellIndex, sid, rangeSq, targetId)
     end
-    if targethit == 'byname' then
+    if phase == 'byname' then
         local name = mq.TLO.Spawn(targetId).CleanName()
         if not name then return nil, nil end
         if charinfo.GetInfo(name) then
@@ -438,48 +461,51 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         end
         return nil, nil
     end
-    if BuffClass[spellIndex].groupmember then
+    if phase == 'groupmember' then
+        if not BuffClass[spellIndex].groupmember then return nil, nil end
         local grpname = mq.TLO.Spawn(targetId).CleanName()
         local lc = targethit
-        if (BuffClass[spellIndex].classes == 'all' or (BuffClass[spellIndex].classes and BuffClass[spellIndex].classes[lc])) then
-            local peer = charinfo.GetInfo(grpname)
-            if peer then
-                local id, hit = BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
-                if id then return id, hit end
-            elseif IconCheck(spellIndex, targetId) then
-                if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, lc, nil, nil, nil) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
-                    return targetId, lc
-                end
+        if not (BuffClass[spellIndex].classes == 'all' or (BuffClass[spellIndex].classes and BuffClass[spellIndex].classes[lc])) then
+            return nil, nil
+        end
+        local peer = charinfo.GetInfo(grpname)
+        if peer then
+            return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
+        elseif IconCheck(spellIndex, targetId) then
+            if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, lc, nil, nil, nil) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
+                return targetId, lc
             end
         end
+        return nil, nil
     end
-    if BuffClass[spellIndex].pc then
+    if phase == 'pc' then
+        if not BuffClass[spellIndex].pc then return nil, nil end
         local grpname = mq.TLO.Spawn(targetId).CleanName()
         if not grpname then return nil, nil end
         local lc = targethit
         if not (BuffClass[spellIndex].classes == 'all' or (BuffClass[spellIndex].classes and BuffClass[spellIndex].classes[lc])) then
             return nil, nil
         end
-        if spellutils.IsGroupV2BuffEntry(entry) then
+        if cached.isGroupV2 then
             local myRangeOnly = myRange and myRange > 0 and myRange or nil
             local myRangeSq = myRangeOnly and (myRangeOnly * myRangeOnly) or rangeSq
             local aeRangeSq = aeRange and aeRange > 0 and (aeRange * aeRange) or nil
             return BuffEvalGroupV2Pc(spellIndex, entry, spell, sid, targetId, grpname, aeRangeSq, myRangeSq, context)
         end
-        if spellutils.IsGroupAEBuffEntry(entry) then
+        if cached.isGroupAE then
             local peer = charinfo.GetInfo(grpname)
             if not peer then return nil, nil end
             return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
         end
         local peer = charinfo.GetInfo(grpname)
         if peer then
-            local id, hit = BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
-            if id then return id, hit end
+            return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
         elseif IconCheck(spellIndex, targetId) then
             if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, lc, nil, nil, nil) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
                 return targetId, lc
             end
         end
+        return nil, nil
     end
     return nil, nil
 end
@@ -496,40 +522,65 @@ function botbuff.BuffCheck(runPriority)
     local count = ctx.buffCount
     if count <= 0 then return false end
     local spellCache = {}
-    local function needsSpell(spellIndex, targetId, targethit, context)
-        return buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache)
+    local entryValidCache = {}
+    local tanktar = ctx.tank and charinfo.GetInfo(ctx.tank) and charinfo.GetInfo(ctx.tank).Target
+        and charinfo.GetInfo(ctx.tank).Target.ID or nil
+    local hoist = {
+        tank = ctx.tank,
+        tankid = ctx.tankid,
+        tanktar = tanktar,
+        myid = mq.TLO.Me.ID(),
+        myclass = mq.TLO.Me.Class.ShortName(),
+    }
+    local function needsSpell(spellIndex, targetId, targethit, context, phase)
+        return buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache, phase, hoist)
+    end
+    local function cachedEntryValid(i)
+        local cached = entryValidCache[i]
+        if cached ~= nil then return cached end
+        local entry = botconfig.getSpellEntry('buff', i)
+        if not entry then
+            entryValidCache[i] = false
+            return false
+        end
+        local gem = entry.gem
+        if entry.enabled == false then
+            entryValidCache[i] = false
+            return false
+        end
+        if not ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') then
+            entryValidCache[i] = false
+            return false
+        end
+        local bc = BuffClass[i]
+        local ok
+        if hoist.myclass == 'BRD' then
+            if type(gem) ~= 'number' or gem == 0 then
+                ok = (not inCombatContext) or (inCombatContext and bc and bc.inCombat == true)
+            else
+                local mode = inCombatContext and 'combat' or 'idle'
+                ok = bardtwist.BuffEntryInModeTwist(entry, mode)
+            end
+        elseif bc and bc.combatOnly == true then
+            ok = inCombatContext
+        else
+            ok = (not inCombatContext) or (inCombatContext and bc and bc.inCombat == true)
+        end
+        entryValidCache[i] = ok
+        return ok
     end
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
         spellFirst = true,
-        entryValid = function(i)
-            local entry = botconfig.getSpellEntry('buff', i)
-            if not entry then return false end
-            local gem = entry.gem
-            if entry.enabled == false then return false end
-            if not ((type(gem) == 'number' and gem ~= 0) or type(gem) == 'string') then return false end
-            local bc = BuffClass[i]
-            if mq.TLO.Me.Class.ShortName() == 'BRD' then
-                if type(gem) ~= 'number' or gem == 0 then
-                    return (not inCombatContext) or (inCombatContext and bc and bc.inCombat == true)
-                end
-                local mode = inCombatContext and 'combat' or 'idle'
-                return bardtwist.BuffEntryInModeTwist(entry, mode)
-            end
-            if bc and bc.combatOnly == true then
-                return inCombatContext
-            end
-            return (not inCombatContext) or (inCombatContext and bc and bc.inCombat == true)
-        end,
+        entryValid = cachedEntryValid,
     }
     local function getSpellIndices(phase, _target)
         return spellutils.getSpellIndicesForPhase(count, phase, buffBandHasPhase)
     end
     local cursor = spellutils.getResumeCursor('doBuff')
-    local pcAllowed = pcphasethrottle.allow('buff', cursor)
     local function getTargets(phase, context)
-        if phase == 'pc' and not pcAllowed then return {} end
+        if not pcphasethrottle.allow('buff', cursor, phase) then return {} end
         return buffGetTargetsForPhase(phase, context)
     end
     return tickprof.span('spellcheck', function()

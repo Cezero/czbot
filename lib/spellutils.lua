@@ -2295,10 +2295,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     if options.spellFirst then
         for phaseIdx = startPhaseIdx, #phaseOrder do
             local phase = phaseOrder[phaseIdx]
-            local targets = getTargetsFn(phase, context)
-            if targets and #targets > 0 then
-                local spellIndices = getSpellIndicesFn(phase, targets[1])
-                if spellIndices and #spellIndices > 0 then
+            local spellIndices = getSpellIndicesFn(phase, nil)
+            if spellIndices and #spellIndices > 0 then
+                local targets = getTargetsFn(phase, context)
+                if targets and #targets > 0 then
                     local spellPosStart = 1
                     if phaseIdx == startPhaseIdx then
                         for i, idx in ipairs(spellIndices) do
@@ -2329,30 +2329,33 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     else
         for phaseIdx = startPhaseIdx, #phaseOrder do
             local phase = phaseOrder[phaseIdx]
-            local targets = getTargetsFn(phase, context)
-            if targets and #targets > 0 then
-                local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
-                for targetIdx = targetStart, #targets do
-                    local target = targets[targetIdx]
-                    if target and target.id then
-                        local spellIndices = getSpellIndicesFn(phase, target)
-                        if spellIndices and #spellIndices > 0 then
-                            local spellStart = (phaseIdx == startPhaseIdx and targetIdx == targetStart) and startSpellIdx or
-                                1
-                            local fromSpellIndices = {}
-                            for _, si in ipairs(spellIndices) do
-                                if si >= spellStart then fromSpellIndices[#fromSpellIndices + 1] = si end
-                            end
-                            if #fromSpellIndices > 0 then
-                                local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
-                                    fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn,
-                                    phase)
-                                if not spellIndex and options.mezDebug and sub == 'debuff' and phase == 'notmatar' then
-                                    spellutils.MezLog('no spell passed gates for id=%s (indices tried: %s)', target.id,
-                                        table.concat(fromSpellIndices, ','))
+            local spellIndicesProbe = getSpellIndicesFn(phase, nil)
+            if spellIndicesProbe and #spellIndicesProbe > 0 then
+                local targets = getTargetsFn(phase, context)
+                if targets and #targets > 0 then
+                    local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
+                    for targetIdx = targetStart, #targets do
+                        local target = targets[targetIdx]
+                        if target and target.id then
+                            local spellIndices = getSpellIndicesFn(phase, target)
+                            if spellIndices and #spellIndices > 0 then
+                                local spellStart = (phaseIdx == startPhaseIdx and targetIdx == targetStart) and startSpellIdx or
+                                    1
+                                local fromSpellIndices = {}
+                                for _, si in ipairs(spellIndices) do
+                                    if si >= spellStart then fromSpellIndices[#fromSpellIndices + 1] = si end
                                 end
-                                if tryCastMatch(phase, targetIdx, spellIndex, EvalID, targethit) then
-                                    return false
+                                if #fromSpellIndices > 0 then
+                                    local spellIndex, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
+                                        fromSpellIndices, target.id, target.targethit, context, options, targetNeedsSpellFn,
+                                        phase)
+                                    if not spellIndex and options.mezDebug and sub == 'debuff' and phase == 'notmatar' then
+                                        spellutils.MezLog('no spell passed gates for id=%s (indices tried: %s)', target.id,
+                                            table.concat(fromSpellIndices, ','))
+                                    end
+                                    if tryCastMatch(phase, targetIdx, spellIndex, EvalID, targethit) then
+                                        return false
+                                    end
                                 end
                             end
                         end

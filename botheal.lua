@@ -419,6 +419,24 @@ local function healBandHasPhase(spellIndex, phase)
     return AHThreshold[spellIndex][phase] and true or false
 end
 
+--- Phases that have at least one mana-resource heal with that band (preserves HP order).
+local function healManaPhaseOrder()
+    local count = botconfig.getSpellCount('heal')
+    local seen = {}
+    for i = 1, count do
+        if healSpellResource(i) == 'mana' then
+            for _, phase in ipairs(HEAL_PHASE_ORDER_HP) do
+                if healBandHasPhase(i, phase) then seen[phase] = true end
+            end
+        end
+    end
+    local ordered = {}
+    for _, phase in ipairs(HEAL_PHASE_ORDER_HP) do
+        if seen[phase] then ordered[#ordered + 1] = phase end
+    end
+    return ordered
+end
+
 local function rejectIfAlreadyHoT(entry, id, hit)
     if not id then return nil, nil end
     if spellutils.IsHoTSpell(entry) and spellutils.TargetHasHealSpell(entry, id) then return nil, nil end
@@ -471,18 +489,29 @@ function botheal.HealCheck(runPriority)
     local function cachedTargetNeedsSpell(spellIndex, targetId, targethit, context, phase)
         local spellCtx = cachedHealContext(spellIndex)
         if not spellCtx then return nil, nil end
+        local th = AHThreshold[spellIndex]
+        local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+
         if targethit == 'self' then
             local id, hit = HPEvalSelf(spellIndex, spellCtx)
             return rejectIfAlreadyHoT(spellCtx.entry, id, hit)
         end
         if targethit == 'tank' then
+            if not th or not th.tank or targetId ~= spellCtx.tankid then return nil, nil end
             local id, hit = HPEvalTank(spellIndex, spellCtx)
             if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
             return nil, nil
         end
         if targethit == 'offtank' then
-            local id, hit = HPEvalOfftank(spellIndex, spellCtx)
-            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            if not th or not th.offtank then return nil, nil end
+            local sp = mq.TLO.Spawn(targetId)
+            if not sp or not sp.ID() or sp.ID() == 0 then return nil, nil end
+            local distSq = utils.getDistanceSquared2D(meX, meY, sp.X(), sp.Y())
+            local peer = charinfo.GetInfo(sp.CleanName())
+            local othp = peer and peer.PctHPs or sp.PctHPs()
+            if othp and hpInBand(othp, th.offtank) and distSq and spellCtx.spellrangeSq and distSq <= spellCtx.spellrangeSq then
+                return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'offtank')
+            end
             return nil, nil
         end
         if targethit == 'groupheal' then return HPEvalGrp(spellIndex, spellCtx) end
@@ -492,22 +521,38 @@ function botheal.HealCheck(runPriority)
             return nil, nil
         end
         if targethit == 'mypet' then
-            local id, hit = HPEvalMyPet(spellIndex, spellCtx)
-            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            if not th or not th.mypet then return nil, nil end
+            if targetId ~= mq.TLO.Me.Pet.ID() then return nil, nil end
+            local petdistSq = utils.getDistanceSquared2D(meX, meY, mq.TLO.Me.Pet.X(), mq.TLO.Me.Pet.Y())
+            local distOk = petdistSq and spellCtx.spellrangeSq and petdistSq <= spellCtx.spellrangeSq
+            if castutils.hpEvalSpawn(targetId, th.mypet) and distOk then
+                return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'mypet')
+            end
             return nil, nil
         end
         if targethit == 'pet' then
-            local id, hit = HPEvalPets(spellIndex, spellCtx)
-            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            if not th or not th.pet then return nil, nil end
+            local petspawn = mq.TLO.Spawn(targetId)
+            if not petspawn or not petspawn.ID() or petspawn.ID() == 0 then return nil, nil end
+            local petdistSq = utils.getDistanceSquared2D(meX, meY, petspawn.X(), petspawn.Y())
+            local distOk = spellCtx.spellrangeSq and petdistSq and petdistSq <= spellCtx.spellrangeSq
+            if castutils.hpEvalSpawn(targetId, th.pet) and distOk then
+                return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'pet')
+            end
             return nil, nil
         end
         if targethit == 'xtgt' then
-            local id, hit = HPEvalXtgt(spellIndex, spellCtx)
-            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            if not th or not th.xtgt then return nil, nil end
+            local xtspawn = mq.TLO.Spawn(targetId)
+            if not xtspawn or not xtspawn.ID() or xtspawn.ID() == 0 then return nil, nil end
+            local xtdistSq = utils.getDistanceSquared2D(meX, meY, xtspawn.X(), xtspawn.Y())
+            local distOk = spellCtx.spellrangeSq and xtdistSq and xtdistSq <= spellCtx.spellrangeSq
+            if castutils.hpEvalSpawn(targetId, th.xtgt) and distOk then
+                return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'xtgt')
+            end
             return nil, nil
         end
-        if AHThreshold[spellIndex] then
-            local th = AHThreshold[spellIndex]
+        if th then
             local classesForPhase = (phase == 'groupmember' and th.groupmember_classes) or (phase == 'pc' and th.pc_classes)
             local classOk
             if classesForPhase == nil then
@@ -521,15 +566,15 @@ function botheal.HealCheck(runPriority)
                 end
             end
             local sp = mq.TLO.Spawn(targetId)
-            if sp and sp.ID() == targetId and mq.TLO.Spawn(targetId).Type() == 'PC' then
-                local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
+            if sp and sp.ID() == targetId and sp.Type() == 'PC' then
+                local distSq = utils.getDistanceSquared2D(meX, meY, sp.X(), sp.Y())
                 if phase == 'groupmember' and th.groupmember
                     and castutils.hpEvalSpawn(targetId, th.groupmember)
                     and spellCtx.spellrangeSq and distSq and distSq <= spellCtx.spellrangeSq and classOk(targethit) then
                     return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
                 end
                 if phase == 'pc' and th.pc and context.botcount then
-                    local peer = charinfo.GetInfo(mq.TLO.Spawn(targetId).CleanName())
+                    local peer = charinfo.GetInfo(sp.CleanName())
                     local bothp = peer and peer.PctHPs or nil
                     if bothp and hpInBand(bothp, th.pc) and distSq and spellCtx.spellrangeSq and distSq <= spellCtx.spellrangeSq and classOk(targethit) then
                         return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
@@ -553,10 +598,16 @@ function botheal.HealCheck(runPriority)
     if cursor and cursor.spellIndex then
         resumePass = healSpellResource(cursor.spellIndex) == 'mana' and 'mana' or 'hp'
     end
+    local indicesCache = {}
     local function getSpellIndicesForResource(resource)
         return function(phase, _target)
-            return healFilterIndicesByResource(
+            local key = resource .. ':' .. tostring(phase)
+            local cached = indicesCache[key]
+            if cached then return cached end
+            cached = healFilterIndicesByResource(
                 spellutils.getSpellIndicesForPhase(count, phase, healBandHasPhase), resource)
+            indicesCache[key] = cached
+            return cached
         end
     end
     if resumePass ~= 'mana' then
@@ -572,10 +623,13 @@ function botheal.HealCheck(runPriority)
         end)
         if healPassStartedCast() then return false end
     end
-    tickprof.span('pass_mana', function()
-        spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
-            getSpellIndicesForResource('mana'), cachedTargetNeedsSpell, ctx, options)
-    end)
+    local manaPhases = healManaPhaseOrder()
+    if #manaPhases > 0 then
+        tickprof.span('pass_mana', function()
+            spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', manaPhases, healGetTargetsForPhase,
+                getSpellIndicesForResource('mana'), cachedTargetNeedsSpell, ctx, options)
+        end)
+    end
     return false
 end
 
