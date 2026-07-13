@@ -410,6 +410,27 @@ end
 
 local HEAL_PHASE_ORDER_CORPSE = { 'corpse' }
 local HEAL_PHASE_ORDER_HP = { 'self', 'groupheal', 'tank', 'offtank', 'groupmember', 'pc', 'mypet', 'pet', 'xtgt' }
+--- When no peer snap is in any heal band (and no groupheal/pet need), skip multi-target phases.
+local HEAL_PHASE_ORDER_HP_URGENT = { 'self', 'tank' }
+
+local function healRaidLooksHealthy(gate)
+    if not gate then return false end
+    return not gate.pc and not gate.groupmember and not gate.pet and not gate.groupheal
+end
+
+--- Prefer urgent self/tank-only pass when healthy; keep full order if resume needs a heavier phase.
+local function healHpPhaseOrder(context, resumeCursor)
+    if resumeCursor and resumeCursor.phase then
+        local p = resumeCursor.phase
+        if p ~= 'self' and p ~= 'tank' and p ~= 'corpse' then
+            return HEAL_PHASE_ORDER_HP
+        end
+    end
+    if healRaidLooksHealthy(context.healthyGate) then
+        return HEAL_PHASE_ORDER_HP_URGENT
+    end
+    return HEAL_PHASE_ORDER_HP
+end
 
 local function healSpellResource(spellIndex)
     local entry = botconfig.getSpellEntry('heal', spellIndex)
@@ -912,14 +933,19 @@ function botheal.HealCheck(runPriority)
         end
     end
     if resumePass ~= 'mana' then
-        tickprof.span('pass_corpse', function()
-            spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
-                getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
-        end)
-        if healPassStartedCast() then return false end
+        local needCorpse = healCorpsePending()
+            or (cursor and cursor.phase == 'corpse')
+        if needCorpse then
+            tickprof.span('pass_corpse', function()
+                spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
+                    getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
+            end)
+            if healPassStartedCast() then return false end
+        end
         if healShouldHoldHealPass() then return false end
+        local hpOrder = healHpPhaseOrder(ctx, cursor)
         tickprof.span('pass_hp', function()
-            spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
+            spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', hpOrder, healGetTargetsForPhase,
                 getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
         end)
         if healPassStartedCast() then return false end

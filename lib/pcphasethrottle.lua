@@ -14,11 +14,13 @@ local THROTTLED = {
     heal = { corpse = true },
 }
 
---- Buff: one of these per BuffCheck, round-robin among due phases (breaks 1s stampede).
+--- Buff: at most one of these per INTERVAL_MS wall-clock (shared token), round-robin.
 local BUFF_RR_ORDER = { 'groupbuff', 'byname', 'groupmember', 'pc', 'mypet', 'pet' }
 local buffRrNext = 1
 --- Phase granted for the current buff pass (nil = none yet).
 local buffPassGrant = nil
+--- Shared wall-clock: next time any RR heavy phase may be granted.
+local buffHeavyNextAt = 0
 
 --- nextAt[section][phase] = mq.gettime() when next allow is ok
 local nextAt = {}
@@ -55,20 +57,15 @@ function pcphasethrottle.allow(section, resumeCursor, phase)
     if section == 'buff' then
         if buffPassGrant == phase then return true end
         if buffPassGrant ~= nil then return false end
+        if now < buffHeavyNextAt then return false end
 
         local n = #BUFF_RR_ORDER
-        local chosen, chosenIdx = nil, nil
-        for offset = 0, n - 1 do
-            local i = ((buffRrNext - 1 + offset) % n) + 1
-            local p = BUFF_RR_ORDER[i]
-            if (bucket[p] or 0) <= now then
-                chosen, chosenIdx = p, i
-                break
-            end
-        end
-        if not chosen or chosen ~= phase then return false end
+        local chosenIdx = ((buffRrNext - 1) % n) + 1
+        local chosen = BUFF_RR_ORDER[chosenIdx]
+        if chosen ~= phase then return false end
+
         buffPassGrant = chosen
-        bucket[chosen] = now + INTERVAL_MS
+        buffHeavyNextAt = now + INTERVAL_MS
         buffRrNext = (chosenIdx % n) + 1
         return true
     end
