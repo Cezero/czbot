@@ -2756,6 +2756,10 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
     if sub == 'buff' then
         if not stacks and spellTargetType ~= 'Self' and not skipGroupAEInterrupt then
             log.say('Interrupt %s, buff does not stack on target: %s', spellname, targetname)
+            -- Charinfo may lag; arm skip so we do not immediately re-cast.
+            if targetname and spellid then
+                spellutils.BuffSkipObservePresent(targetname, spellid)
+            end
             spellutils.interruptActiveCast(rc)
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }
@@ -2763,6 +2767,14 @@ function spellutils.InterruptCheckBuffDebuffAlreadyPresent(rc, sub, entry, spell
         elseif buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS and not skipGroupAEInterrupt then
             -- Buff present with enough time left: interrupt. Below threshold we allow refresh cast to complete.
             log.say('Interrupt %s, buff already present', spellname)
+            -- Arm BuffSkip from Target.Buff duration so PeerHasBuff lag cannot re-queue the cast.
+            if targetname and spellid then
+                if buffdur and buffdur > 0 then
+                    spellutils.BuffSkipObserveDuration(targetname, spellid, buffdur)
+                else
+                    spellutils.BuffSkipObservePresent(targetname, spellid)
+                end
+            end
             spellutils.interruptActiveCast(rc)
             if not rc.interruptCounter[spellid] then rc.interruptCounter[spellid] = { 0, 0 } end
             rc.interruptCounter[spellid] = { rc.interruptCounter[spellid][1] + 1, mq.gettime() + 10000 }

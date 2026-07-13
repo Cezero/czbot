@@ -241,7 +241,6 @@ local function BuffEvalTank(index, entry, spell, spellid, rangeSq, tank, tankid)
         return nil, nil
     end
     if spellutils.SpawnNeedsBuff(tankid, spell, entry.spellicon) then return tankid, 'tank' end
-    if not mq.TLO.Group.Member(tank).Index() then return tankid, 'tank' end
     return nil, nil
 end
 
