@@ -386,9 +386,28 @@ local function drawNearbyPlayersSection()
         ImGui.TextColored(LIGHT_GREY, '%s', '  (no out-of-group players in zone)')
         return
     end
-    for _, p in ipairs(_nearbyPlayers) do
-        local guildStr = (p.guild and p.guild ~= '') and ('  <' .. p.guild .. '>') or ''
-        ImGui.TextColored(LIGHT_GREY, '  %5.0f  %s (%s %d)%s', p.dist or 0, p.name, p.class or '?', p.level or 0, guildStr)
+    local flags = bit32.bor(ImGuiTableFlags.RowBg, ImGuiTableFlags.BordersInnerH, ImGuiTableFlags.BordersOuter)
+    if ImGui.BeginTable('nearby_players', 5, flags, -1, 0) then
+        ImGui.TableSetupColumn('Distance', ImGuiTableColumnFlags.WidthStretch, 0.12)
+        ImGui.TableSetupColumn('Name', ImGuiTableColumnFlags.WidthStretch, 0.28)
+        ImGui.TableSetupColumn('Class', ImGuiTableColumnFlags.WidthStretch, 0.12)
+        ImGui.TableSetupColumn('Level', ImGuiTableColumnFlags.WidthStretch, 0.10)
+        ImGui.TableSetupColumn('Guild', ImGuiTableColumnFlags.WidthStretch, 0.38)
+        ImGui.TableHeadersRow()
+        for _, p in ipairs(_nearbyPlayers) do
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            ImGui.TextColored(LIGHT_GREY, '%.0f', p.dist or 0)
+            ImGui.TableNextColumn()
+            ImGui.TextColored(LIGHT_GREY, '%s', p.name or '')
+            ImGui.TableNextColumn()
+            ImGui.TextColored(LIGHT_GREY, '%s', p.class or '?')
+            ImGui.TableNextColumn()
+            ImGui.TextColored(LIGHT_GREY, '%d', p.level or 0)
+            ImGui.TableNextColumn()
+            ImGui.TextColored(LIGHT_GREY, '%s', (p.guild and p.guild ~= '') and p.guild or '')
+        end
+        ImGui.EndTable()
     end
 end
 
