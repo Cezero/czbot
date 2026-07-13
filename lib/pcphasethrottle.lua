@@ -30,7 +30,7 @@ local buffHeavySkipRemaining = 0
 local buffHeavyBlockedThisPass = false
 --- True if any throttled RR phase called allow() this pass.
 local buffRrAsked = false
---- First deny reason seen this pass when an RR phase was asked but not granted: cooldown|interval.
+--- First deny reason this pass: cooldown|interval|already_granted.
 local buffDenyReason = nil
 
 --- nextAt[section][phase] = mq.gettime() when next allow is ok
@@ -92,7 +92,10 @@ function pcphasethrottle.allow(section, resumeCursor, phase)
     if section == 'buff' then
         buffRrAsked = true
         if buffPassGrant == phase then return true end
-        if buffPassGrant ~= nil then return false end
+        if buffPassGrant ~= nil then
+            if not buffDenyReason then buffDenyReason = 'already_granted' end
+            return false
+        end
         if buffHeavyBlockedThisPass then
             if not buffDenyReason then buffDenyReason = 'cooldown' end
             return false
@@ -102,16 +105,23 @@ function pcphasethrottle.allow(section, resumeCursor, phase)
             return false
         end
 
+        -- Walk from buffRrNext; grant when `phase` appears. Earlier RR slots that never
+        -- call allow() this pass (no spell indices) are skipped so the cursor cannot stick.
         local n = #BUFF_RR_ORDER
-        local chosenIdx = ((buffRrNext - 1) % n) + 1
-        local chosen = BUFF_RR_ORDER[chosenIdx]
-        if chosen ~= phase then return false end
-
-        buffPassGrant = chosen
-        buffHeavyNextAt = now + INTERVAL_MS
-        buffHeavySkipRemaining = BUFF_HEAVY_SKIP_PASSES
-        buffRrNext = (chosenIdx % n) + 1
-        return true
+        for offset = 0, n - 1 do
+            local i = ((buffRrNext - 1 + offset) % n) + 1
+            local cand = BUFF_RR_ORDER[i]
+            if cand == phase then
+                buffPassGrant = phase
+                buffHeavyNextAt = now + INTERVAL_MS
+                buffHeavySkipRemaining = BUFF_HEAVY_SKIP_PASSES
+                buffRrNext = (i % n) + 1
+                return true
+            end
+        end
+        -- phase not in BUFF_RR_ORDER (should not happen for throttled buff phases)
+        if not buffDenyReason then buffDenyReason = 'denied' end
+        return false
     end
 
     local due = bucket[phase] or 0
