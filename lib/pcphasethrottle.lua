@@ -73,6 +73,26 @@ function pcphasethrottle.buffRrWouldDeny(phase)
     return false
 end
 
+--- True when this BuffCheck cannot grant any RR heavy phase (cooldown or interval).
+function pcphasethrottle.buffPassIsLightLocked()
+    if buffHeavyBlockedThisPass then return true end
+    if mq.gettime() < buffHeavyNextAt then return true end
+    return false
+end
+
+--- Record light-lock reason for buff.pass logs when RR phases are not visited at all.
+function pcphasethrottle.markBuffPassLightLocked()
+    if buffPassGrant then return end
+    buffRrAsked = true
+    if not buffDenyReason then
+        if buffHeavyBlockedThisPass then
+            buffDenyReason = 'cooldown'
+        else
+            buffDenyReason = 'interval'
+        end
+    end
+end
+
 --- Summarize this BuffCheck after spellcheck: mode=heavy|light and phase or reason.
 --- @return string mode
 --- @return string|nil detail phase name (heavy) or reason (light)
