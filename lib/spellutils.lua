@@ -959,13 +959,14 @@ function spellutils.GetBotListOrdered()
     local bots = charinfo.GetPeers()
     if not bots or #bots == 0 then return bots end
     local priority = _getBotListClassPriority()
+    local classByName = {}
+    for _, name in ipairs(bots) do
+        local cls = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
+        classByName[name] = cls and string.lower(cls) or ''
+    end
     table.sort(bots, function(a, b)
-        local acls = mq.TLO.Spawn('pc =' .. a).Class.ShortName()
-        local bcls = mq.TLO.Spawn('pc =' .. b).Class.ShortName()
-        acls = acls and string.lower(acls) or ''
-        bcls = bcls and string.lower(bcls) or ''
-        local ap = priority[acls] or 9999
-        local bp = priority[bcls] or 9999
+        local ap = priority[classByName[a] or ''] or 9999
+        local bp = priority[classByName[b] or ''] or 9999
         if ap ~= bp then return ap < bp end
         return (a or '') < (b or '')
     end)

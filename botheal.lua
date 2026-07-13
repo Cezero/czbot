@@ -53,17 +53,24 @@ local function hpEvalReturn(index, phaseKey, pct, id, targethit, distOk)
     return id, targethit
 end
 
-local function HPEvalContext(index)
+local function HPEvalContext(index, shared)
     local entry = botconfig.getSpellEntry('heal', index)
     if not entry then return nil end
     local gem = entry.gem
-    local tank, tankid = spellutils.GetTankInfo(false)
-    local botcount = charinfo.GetPeerCnt()
-    local bots = spellutils.GetBotListOrdered()
-    local botstr = table.concat(charinfo.GetPeers(), " ")
-    -- Whole-token match: botstr is space-joined peer names, so wrap both sides in spaces and search
-    -- plain (4th arg true). Prevents tank "Bob" from matching peer "Bobby" and mis-routing the heal.
-    local tanknbid = tank and string.find(' ' .. botstr .. ' ', ' ' .. tank .. ' ', 1, true)
+    local tank, tankid, bots, botcount, botstr, tanknbid
+    if shared then
+        tank, tankid = shared.tank, shared.tankid
+        bots, botcount = shared.bots, shared.botcount
+        tanknbid = shared.tanknbid
+    else
+        tank, tankid = spellutils.GetTankInfo(false)
+        botcount = charinfo.GetPeerCnt()
+        bots = spellutils.GetBotListOrdered()
+        botstr = table.concat(charinfo.GetPeers(), " ")
+        -- Whole-token match: botstr is space-joined peer names, so wrap both sides in spaces and search
+        -- plain (4th arg true). Prevents tank "Bob" from matching peer "Bobby" and mis-routing the heal.
+        tanknbid = tank and string.find(' ' .. botstr .. ' ', ' ' .. tank .. ' ', 1, true)
+    end
     local spell, spellrange = spellutils.GetSpellInfo(entry)
     if not spell then return nil end
     local spellEntity = spellutils.GetSpellEntity(entry)
@@ -409,9 +416,6 @@ local function healBandHasPhase(spellIndex, phase)
     if not AHThreshold[spellIndex] then return false end
     if phase == 'corpse' then return AHThreshold[spellIndex].corpse end
     if phase == 'offtank' then return AHThreshold[spellIndex].offtank and true or false end
-    if phase == 'groupmember' or phase == 'pc' then
-        return (AHThreshold[spellIndex].groupmember or AHThreshold[spellIndex].pc) and true or false
-    end
     return AHThreshold[spellIndex][phase] and true or false
 end
 
@@ -419,78 +423,6 @@ local function rejectIfAlreadyHoT(entry, id, hit)
     if not id then return nil, nil end
     if spellutils.IsHoTSpell(entry) and spellutils.TargetHasHealSpell(entry, id) then return nil, nil end
     return id, hit
-end
-
-local function healTargetNeedsSpell(spellIndex, targetId, targethit, context, phase)
-    local ctx = HPEvalContext(spellIndex)
-    if not ctx then return nil, nil end
-    if targethit == 'self' then
-        local id, hit = HPEvalSelf(spellIndex, ctx)
-        return rejectIfAlreadyHoT(ctx.entry, id, hit)
-    end
-    -- Tank: HP band only; no validtargets/class filter.
-    if targethit == 'tank' then
-        local id, hit = HPEvalTank(spellIndex, ctx)
-        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
-        return nil, nil
-    end
-    if targethit == 'offtank' then
-        local id, hit = HPEvalOfftank(spellIndex, ctx)
-        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
-        return nil, nil
-    end
-    if targethit == 'groupheal' then return HPEvalGrp(spellIndex, ctx) end
-    if targethit == 'corpse' then
-        local id, hit = HPEvalCorpse(spellIndex, ctx)
-        if id == targetId then return id, hit end
-        return nil, nil
-    end
-    if targethit == 'mypet' then
-        local id, hit = HPEvalMyPet(spellIndex, ctx)
-        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
-        return nil, nil
-    end
-    if targethit == 'pet' then
-        local id, hit = HPEvalPets(spellIndex, ctx)
-        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
-        return nil, nil
-    end
-    if targethit == 'xtgt' then
-        local id, hit = HPEvalXtgt(spellIndex, ctx)
-        if id == targetId then return rejectIfAlreadyHoT(ctx.entry, id, hit) end
-        return nil, nil
-    end
-    if AHThreshold[spellIndex] then
-        local th = AHThreshold[spellIndex]
-        -- Only groupmember and pc phases use class filtering (validtargets); tank/self/groupheal do not.
-        local classesForPhase = (phase == 'groupmember' and th.groupmember_classes) or (phase == 'pc' and th.pc_classes)
-        local classOk
-        if classesForPhase == nil then
-            classOk = function() return true end
-        else
-            classOk = function(cls)
-                if not cls then return false end
-                local c = cls:lower()
-                if classesForPhase == 'all' then return true end
-                return classesForPhase and classesForPhase[c] == true
-            end
-        end
-        local sp = mq.TLO.Spawn(targetId)
-        if sp and sp.ID() == targetId and mq.TLO.Spawn(targetId).Type() == 'PC' then
-            local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
-            if th.groupmember and castutils.hpEvalSpawn(targetId, th.groupmember) and ctx.spellrangeSq and distSq and distSq <= ctx.spellrangeSq and classOk(targethit) then
-                return rejectIfAlreadyHoT(ctx.entry, targetId, targethit)
-            end
-            if th.pc and context.botcount then
-                local peer = charinfo.GetInfo(mq.TLO.Spawn(targetId).CleanName())
-                local bothp = peer and peer.PctHPs or nil
-                if bothp and hpInBand(bothp, th.pc) and distSq and ctx.spellrangeSq and distSq <= ctx.spellrangeSq and classOk(targethit) then
-                    return rejectIfAlreadyHoT(ctx.entry, targetId, targethit)
-                end
-            end
-        end
-    end
-    return nil, nil
 end
 
 spellutils.setPrepareImmediateCastFn(function(sub, _index, evalId, targethit)
@@ -512,9 +444,105 @@ function botheal.HealCheck(runPriority)
         return healBuildContext()
     end)
     if not ctx then return false end
+
+    local contextBySpell = { [1] = ctx }
+    local entryValidCache = {}
+    local sharedBots = {
+        tank = ctx.tank,
+        tankid = ctx.tankid,
+        bots = ctx.bots,
+        botcount = ctx.botcount,
+        tanknbid = ctx.tanknbid,
+    }
+    local function cachedHealContext(spellIndex)
+        local cached = contextBySpell[spellIndex]
+        if cached ~= nil then return cached end
+        cached = HPEvalContext(spellIndex, sharedBots)
+        contextBySpell[spellIndex] = cached
+        return cached
+    end
+    local function cachedEntryValid(spellIndex)
+        local cached = entryValidCache[spellIndex]
+        if cached ~= nil then return cached end
+        cached = healEntryValid(spellIndex)
+        entryValidCache[spellIndex] = cached
+        return cached
+    end
+    local function cachedTargetNeedsSpell(spellIndex, targetId, targethit, context, phase)
+        local spellCtx = cachedHealContext(spellIndex)
+        if not spellCtx then return nil, nil end
+        if targethit == 'self' then
+            local id, hit = HPEvalSelf(spellIndex, spellCtx)
+            return rejectIfAlreadyHoT(spellCtx.entry, id, hit)
+        end
+        if targethit == 'tank' then
+            local id, hit = HPEvalTank(spellIndex, spellCtx)
+            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            return nil, nil
+        end
+        if targethit == 'offtank' then
+            local id, hit = HPEvalOfftank(spellIndex, spellCtx)
+            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            return nil, nil
+        end
+        if targethit == 'groupheal' then return HPEvalGrp(spellIndex, spellCtx) end
+        if targethit == 'corpse' then
+            local id, hit = HPEvalCorpse(spellIndex, spellCtx)
+            if id == targetId then return id, hit end
+            return nil, nil
+        end
+        if targethit == 'mypet' then
+            local id, hit = HPEvalMyPet(spellIndex, spellCtx)
+            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            return nil, nil
+        end
+        if targethit == 'pet' then
+            local id, hit = HPEvalPets(spellIndex, spellCtx)
+            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            return nil, nil
+        end
+        if targethit == 'xtgt' then
+            local id, hit = HPEvalXtgt(spellIndex, spellCtx)
+            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            return nil, nil
+        end
+        if AHThreshold[spellIndex] then
+            local th = AHThreshold[spellIndex]
+            local classesForPhase = (phase == 'groupmember' and th.groupmember_classes) or (phase == 'pc' and th.pc_classes)
+            local classOk
+            if classesForPhase == nil then
+                classOk = function() return true end
+            else
+                classOk = function(cls)
+                    if not cls then return false end
+                    local c = cls:lower()
+                    if classesForPhase == 'all' then return true end
+                    return classesForPhase and classesForPhase[c] == true
+                end
+            end
+            local sp = mq.TLO.Spawn(targetId)
+            if sp and sp.ID() == targetId and mq.TLO.Spawn(targetId).Type() == 'PC' then
+                local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
+                if phase == 'groupmember' and th.groupmember
+                    and castutils.hpEvalSpawn(targetId, th.groupmember)
+                    and spellCtx.spellrangeSq and distSq and distSq <= spellCtx.spellrangeSq and classOk(targethit) then
+                    return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
+                end
+                if phase == 'pc' and th.pc and context.botcount then
+                    local peer = charinfo.GetInfo(mq.TLO.Spawn(targetId).CleanName())
+                    local bothp = peer and peer.PctHPs or nil
+                    if bothp and hpInBand(bothp, th.pc) and distSq and spellCtx.spellrangeSq and distSq <= spellCtx.spellrangeSq and classOk(targethit) then
+                        return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
+                    end
+                end
+            end
+        end
+        return nil, nil
+    end
+
     local options = {
         runPriority = runPriority,
-        entryValid = healEntryValid,
+        entryValid = cachedEntryValid,
     }
     local cursor = spellutils.getResumeCursor('doHeal')
     if healCorpsePending() and cursor and cursor.phase and cursor.phase ~= 'corpse' then
@@ -534,19 +562,19 @@ function botheal.HealCheck(runPriority)
     if resumePass ~= 'mana' then
         tickprof.span('pass_corpse', function()
             spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
-                getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
+                getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
         end)
         if healPassStartedCast() then return false end
         if healShouldHoldHealPass() then return false end
         tickprof.span('pass_hp', function()
             spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
-                getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
+                getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
         end)
         if healPassStartedCast() then return false end
     end
     tickprof.span('pass_mana', function()
         spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
-            getSpellIndicesForResource('mana'), healTargetNeedsSpell, ctx, options)
+            getSpellIndicesForResource('mana'), cachedTargetNeedsSpell, ctx, options)
     end)
     return false
 end

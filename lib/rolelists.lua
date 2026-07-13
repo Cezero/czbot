@@ -49,6 +49,7 @@ function rolelists.loadFromCommon()
     end
     auto_ma_mt.bumpMaListGen()
     auto_ma_mt.bumpMtListGen()
+    auto_ma_mt.refreshRoleClaimEligibility()
     _chListGen = _chListGen + 1
 end
 
@@ -74,8 +75,10 @@ function rolelists.process(listType, command)
     end
     if listType == 'ma' then
         auto_ma_mt.bumpMaListGen()
+        auto_ma_mt.refreshRoleClaimEligibility()
     elseif listType == 'mt' then
         auto_ma_mt.bumpMtListGen()
+        auto_ma_mt.refreshRoleClaimEligibility()
     elseif listType == 'ch' then
         _chListGen = _chListGen + 1
     end

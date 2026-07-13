@@ -865,7 +865,7 @@ end
 local function cmd_tickdebug(args)
     local tickprof = require('lib.tickprof')
     local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'spans' then
+    if mode == 'spans' or mode == 'span' then
         local sub = args[3] and string.lower(args[3]) or ''
         if not tickprof.IsDebug() then
             tickprof.SetDebug(true)

@@ -7,6 +7,8 @@
 ---@field lastResolvedAssistName string|nil session-only tracker for MA identity changes
 ---@field MaList table cz_common ma_list mirror
 ---@field MtList table cz_common mt_list mirror
+---@field maEligible boolean|nil true when Me.Name is on MaList (claim eligibility)
+---@field mtEligible boolean|nil true when Me.Name is on MtList (claim eligibility)
 ---@field allMezzedEngageId number|nil spawn id locked while entire camp is mezzed (shortest remaining mez)
 ---@field attackCommandEngage boolean|nil when true, engageTargetId was set by /cz attack; do not overwrite in AdvCombat for DPS/OT.
 ---@field maAdoptSelectedTarget boolean|nil one-shot: MA adopts mq.TLO.Target on next selectMATarget (unpause/startup)
@@ -279,6 +281,8 @@ function M.resetRunconfig()
         CharmList = {},
         MaList = {},
         MtList = {},
+        maEligible = false,
+        mtEligible = false,
         MobList = {},
         engagetracker = {},
         campstatus = false,

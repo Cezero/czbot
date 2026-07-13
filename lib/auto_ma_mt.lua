@@ -104,6 +104,14 @@ function auto_ma_mt.indexInList(list, name)
     return nil
 end
 
+--- Refresh runconfig maEligible/mtEligible from current MaList/MtList (Me.Name membership).
+function auto_ma_mt.refreshRoleClaimEligibility()
+    local rc = state.getRunconfig()
+    local me = myName()
+    rc.maEligible = me ~= nil and me ~= '' and auto_ma_mt.indexInList(rc.MaList, me) ~= nil
+    rc.mtEligible = me ~= nil and me ~= '' and auto_ma_mt.indexInList(rc.MtList, me) ~= nil
+end
+
 function auto_ma_mt.promoteNameInList(list, name)
     if type(list) ~= 'table' or not name or name == '' then return list end
     local out = {}
@@ -276,6 +284,7 @@ end
 --- @return number|nil listIndex
 function auto_ma_mt.shouldClaimMa()
     if not isAutomaticAssist() or not meAlive() then return false end
+    if not state.getRunconfig().maEligible then return false end
     if not auto_ma_mt.canClaimMa() then return false end
     if not auto_ma_mt.hasRosterProximityInZone(true) then return false end
     local top, source, listIndex = auto_ma_mt.topMaCandidateInZone()
@@ -288,6 +297,7 @@ end
 --- @return number|nil listIndex
 function auto_ma_mt.shouldClaimMt()
     if not isAutomaticTank() or not meAlive() then return false end
+    if not state.getRunconfig().mtEligible then return false end
     if not auto_ma_mt.canClaimMt() then return false end
     if not auto_ma_mt.hasRosterProximityInZone(false) then return false end
     local top, source, listIndex = auto_ma_mt.topMtCandidateInZone()
@@ -430,6 +440,8 @@ function auto_ma_mt.handleMtOverride(name, reason)
         botconfig.mutateCommon(function(common)
             common.mt_list = botconfig.copyStringList(rc.MtList)
         end)
+        auto_ma_mt.bumpMtListGen()
+        auto_ma_mt.refreshRoleClaimEligibility()
         return { index = 1, tank = name }
     end
 

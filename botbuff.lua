@@ -45,11 +45,21 @@ local function IconCheck(index, EvalID)
     return not hasIcon
 end
 
+--- Peer needs this buff? One GetInfo; spellid + optional icon; skip Stacks if already has buff.
 local function BuffEvalBotNeedsBuff(botid, botname, spellid, rangeSq, index, targethit)
     local spawnid = mq.TLO.Spawn(botid).ID()
     local peer = charinfo.GetInfo(botname)
     if not peer then return nil, nil end
-    local botbuff = spellutils.PeerHasBuff(peer, spellid)
+    local entry = botconfig.getSpellEntry('buff', index)
+    local spellicon = entry and entry.spellicon
+    if spellutils.PeerHasBuff(peer, spellid) then
+        spellutils.BuffLog('skip %s [%s]: already has it', botname, targethit)
+        return nil, nil
+    end
+    if spellicon and spellicon ~= 0 and spellutils.PeerHasBuff(peer, spellicon) then
+        spellutils.BuffLog('skip %s [%s]: already has it', botname, targethit)
+        return nil, nil
+    end
     local botbuffstack = peer:Stacks(spellid)
     local botfreebuffslots = peer.FreeBuffSlots
     local botspawn = spawnid and mq.TLO.Spawn(spawnid)
@@ -57,10 +67,6 @@ local function BuffEvalBotNeedsBuff(botid, botname, spellid, rangeSq, index, tar
     if not (spawnid and botbuffstack and botfreebuffslots and botfreebuffslots > 0) then
         spellutils.BuffLog('skip %s [%s]: %s', botname, targethit,
             (not spawnid) and 'no spawn' or (not botbuffstack) and 'will not stack' or 'no free buff slots')
-        return nil, nil
-    end
-    if not IconCheck(index, spawnid) or botbuff then
-        spellutils.BuffLog('skip %s [%s]: already has it', botname, targethit)
         return nil, nil
     end
     if rangeSq and botdistSq and botdistSq <= rangeSq then return botid, targethit end
@@ -108,11 +114,11 @@ end
 
 local function BuffEvalTank(index, entry, spell, spellid, rangeSq, tank, tankid)
     if not tank or not entry or not BuffClass[index].tank or not tankid or tankid <= 0 then return nil, nil end
-    if not IconCheck(index, tankid) then return nil, nil end
     local peer = charinfo.GetInfo(tank)
     if peer then
         return BuffEvalBotNeedsBuff(tankid, tank, spellid, rangeSq, index, 'tank')
     end
+    if not IconCheck(index, tankid) then return nil, nil end
     local tankspawn = mq.TLO.Spawn(tankid)
     local tankdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), tankspawn.X(), tankspawn.Y())
     if not rangeSq or not tankdistSq or tankdistSq > rangeSq then return nil, nil end
@@ -351,18 +357,39 @@ local function buffBandHasPhase(spellIndex, phase)
     return castutils.bandHasPhaseSimple(BuffClass, spellIndex, phase)
 end
 
-local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
-    local entry = botconfig.getSpellEntry('buff', spellIndex)
+local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache)
+    local cached = spellCache and spellCache[spellIndex]
+    local entry, spell, sid, myRange, aeRange, range, rangeSq
+    if cached then
+        entry, spell, sid, myRange, aeRange, range, rangeSq =
+            cached.entry, cached.spell, cached.sid, cached.myRange, cached.aeRange, cached.range, cached.rangeSq
+    else
+        entry = botconfig.getSpellEntry('buff', spellIndex)
+        if not entry or not BuffClass[spellIndex] then return nil, nil end
+        local spellid
+        spell, _, _, spellid = spellutils.GetSpellInfo(entry)
+        if not spell or not spellid then return nil, nil end
+        sid = (spellid == 1536) and 1538 or spellid
+        myRange, aeRange = getSpellRanges(entry)
+        range = (myRange and myRange > 0) and myRange or aeRange
+        rangeSq = range and (range * range) or nil
+        if spellCache then
+            spellCache[spellIndex] = {
+                entry = entry,
+                spell = spell,
+                sid = sid,
+                myRange = myRange,
+                aeRange = aeRange,
+                range = range,
+                rangeSq = rangeSq,
+            }
+        end
+    end
     if not entry or not BuffClass[spellIndex] then return nil, nil end
-    local spell, _, _, spellid = spellutils.GetSpellInfo(entry)
-    if not spell or not spellid then return nil, nil end
-    local sid = (spellid == 1536) and 1538 or spellid
-    local myRange, aeRange = getSpellRanges(entry)
-    local range = (myRange and myRange > 0) and myRange or aeRange
-    local rangeSq = range and (range * range) or nil
-    local tank, tankid, tanktar = spellutils.GetTankInfo(false)
-    tanktar = tanktar or
-    (tank and charinfo.GetInfo(tank) and charinfo.GetInfo(tank).Target and charinfo.GetInfo(tank).Target.ID or nil)
+
+    local tank = context.tank
+    local tankid = context.tankid
+    local tanktar = tank and charinfo.GetInfo(tank) and charinfo.GetInfo(tank).Target and charinfo.GetInfo(tank).Target.ID or nil
     local myid = mq.TLO.Me.ID()
     local myclass = mq.TLO.Me.Class.ShortName()
 
@@ -374,7 +401,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar)
     end
     if targethit == 'tank' then
-        local id, hit = BuffEvalTank(spellIndex, entry, spell, sid, rangeSq, context.tank, context.tankid)
+        local id, hit = BuffEvalTank(spellIndex, entry, spell, sid, rangeSq, tank, tankid)
         if id == targetId then return id, hit end
         return nil, nil
     end
@@ -398,13 +425,11 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         local name = mq.TLO.Spawn(targetId).CleanName()
         if not name then return nil, nil end
         if charinfo.GetInfo(name) then
-            -- Networked character: use peer buff data (no retarget needed).
             local id, hit = BuffEvalBotNeedsBuff(targetId, name, sid, rangeSq, spellIndex, 'byname')
             if id then return id, hit end
         elseif IconCheck(spellIndex, targetId)
             and spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'byname', nil, nil, nil)
             and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
-            -- Non-network PC (e.g. guildmate): inspect via spawn; only cast when in range.
             local sp = mq.TLO.Spawn(targetId)
             local dSq = sp and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
             if not rangeSq or (dSq and dSq <= rangeSq) then
@@ -416,12 +441,12 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     if BuffClass[spellIndex].groupmember then
         local grpname = mq.TLO.Spawn(targetId).CleanName()
         local lc = targethit
-        if (BuffClass[spellIndex].classes == 'all' or (BuffClass[spellIndex].classes and BuffClass[spellIndex].classes[lc])) and IconCheck(spellIndex, targetId) then
+        if (BuffClass[spellIndex].classes == 'all' or (BuffClass[spellIndex].classes and BuffClass[spellIndex].classes[lc])) then
             local peer = charinfo.GetInfo(grpname)
             if peer then
                 local id, hit = BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
                 if id then return id, hit end
-            else
+            elseif IconCheck(spellIndex, targetId) then
                 if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, lc, nil, nil, nil) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
                     return targetId, lc
                 end
@@ -444,20 +469,15 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         if spellutils.IsGroupAEBuffEntry(entry) then
             local peer = charinfo.GetInfo(grpname)
             if not peer then return nil, nil end
-            if IconCheck(spellIndex, targetId) then
-                return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
-            end
-            return nil, nil
+            return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
         end
-        if IconCheck(spellIndex, targetId) then
-            local peer = charinfo.GetInfo(grpname)
-            if peer then
-                local id, hit = BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
-                if id then return id, hit end
-            else
-                if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, lc, nil, nil, nil) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
-                    return targetId, lc
-                end
+        local peer = charinfo.GetInfo(grpname)
+        if peer then
+            local id, hit = BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, lc)
+            if id then return id, hit end
+        elseif IconCheck(spellIndex, targetId) then
+            if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, lc, nil, nil, nil) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
+                return targetId, lc
             end
         end
     end
@@ -475,6 +495,10 @@ function botbuff.BuffCheck(runPriority)
     end)
     local count = ctx.buffCount
     if count <= 0 then return false end
+    local spellCache = {}
+    local function needsSpell(spellIndex, targetId, targethit, context)
+        return buffTargetNeedsSpell(spellIndex, targetId, targethit, context, spellCache)
+    end
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
@@ -510,7 +534,7 @@ function botbuff.BuffCheck(runPriority)
     end
     return tickprof.span('spellcheck', function()
         return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,
-            buffTargetNeedsSpell, ctx, options)
+            needsSpell, ctx, options)
     end)
 end
 

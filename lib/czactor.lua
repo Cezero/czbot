@@ -927,6 +927,10 @@ function czactor.runRoleClaimsTick()
     if now < _nextRoleClaimsAt then return end
     _nextRoleClaimsAt = now + ROLE_CLAIMS_INTERVAL_MS
     czactor.sweepExpiredRoleClaims(now)
+    local rc = state.getRunconfig()
+    if not rc.maEligible and not rc.mtEligible and not rc.MaImHolding and not rc.MtImHolding then
+        return
+    end
     applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
 end
 

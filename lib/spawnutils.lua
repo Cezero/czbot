@@ -439,9 +439,12 @@ function spawnutils.resolveFTELockedSpawnId(rc)
     return resolveFTESpawnIdFromTarget(rc)
 end
 
-function spawnutils.filterSpawnExclude(spawn, rc)
+function spawnutils.filterSpawnExclude(spawn, rc, excludeSet)
     rc = rc or state.getRunconfig()
     local spawnname = spawn.CleanName() or 'none'
+    if excludeSet then
+        return excludeSet[spawnname] ~= true
+    end
     local list = rc.ExcludeList or {}
     for _, n in ipairs(list) do
         if n == spawnname then return false end
@@ -449,20 +452,28 @@ function spawnutils.filterSpawnExclude(spawn, rc)
     return true
 end
 
+local function buildExcludeSet(rc)
+    local set = {}
+    for _, n in ipairs(rc.ExcludeList or {}) do
+        if n and n ~= '' then set[n] = true end
+    end
+    return set
+end
+
 function spawnutils.filterSpawnProtected(spawn)
     return not utils.isProtectedSpawn(spawn)
 end
 
-function spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
-    if not spawnutils.filterSpawnExclude(spawn, rc) then return false end
+function spawnutils.filterSpawnExcludeAndFTE(spawn, rc, excludeSet)
+    if not spawnutils.filterSpawnExclude(spawn, rc, excludeSet) then return false end
     local sid = spawn.ID()
     if spawnutils.isEngageTracked(sid, rc) then return false end
     if spawnutils.isCombatFTEBlocked(sid, rc) then return false end
     return true
 end
 
-function spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc)
-    if not spawnutils.filterSpawnExclude(spawn, rc) then return false end
+function spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc, excludeSet)
+    if not spawnutils.filterSpawnExclude(spawn, rc, excludeSet) then return false end
     local sid = spawn.ID()
     if spawnutils.isEngageTracked(sid, rc) then return false end
     if spawnutils.isPullUnpullable(sid, rc) then return false end
@@ -507,20 +518,30 @@ function spawnutils.isEngageAllowedSpawn(spawn, rc)
     return spawnutils.isSpawnWithinCampPin(spawn, rc)
 end
 
-local function filterSpawnForCamp(spawn, rc)
+local function filterSpawnForCamp(spawn, rc, opts)
+    opts = opts or {}
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
     local sid = spawn.ID()
     if sid and utils.isCharmSkipped(sid, rc) then return false end
-    local myconfig = botconfig.config
-    local zradius = myconfig.settings.zradius or 75
-    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
-    local acleashSq = myconfig.settings.acleashSq
+    local cx = opts.cx
+    local cy = opts.cy
+    local cz = opts.cz
+    local acleashSq = opts.acleashSq
+    local zradius = opts.zradius
+    if not cx then
+        local myconfig = botconfig.config
+        zradius = myconfig.settings.zradius or 75
+        cx, cy, cz = spawnutils.getMobListAnchor(rc)
+        acleashSq = myconfig.settings.acleashSq
+    end
     if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
     if not spawnutils.filterSpawnProtected(spawn) then return false end
-    if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc) then return false end
-    local sid = spawn.ID()
+    if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc, opts.excludeSet) then return false end
     if sid and spawnutils.isPullUnpullable(sid, rc) then return false end
-    local tfNum = myconfig.settings.TargetFilter or 0
+    local tfNum = opts.tfNum
+    if tfNum == nil then
+        tfNum = botconfig.config.settings.TargetFilter or 0
+    end
     return filterSpawnTargetFilter(spawn, tfNum)
 end
 
@@ -608,13 +629,25 @@ function spawnutils.buildCampMobList(rc)
     local myconfig = botconfig.config
     local acleashSq = myconfig.settings.acleashSq
     local zradius = myconfig.settings.zradius or 75
-    local raw = getSpawnsInArea(rc, acleashSq, zradius)
-    local out = {}
-    for _, spawn in ipairs(raw) do
-        if filterSpawnForCamp(spawn, rc) then
-            table.insert(out, spawn)
-        end
+    local tfNum = myconfig.settings.TargetFilter or 0
+    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
+    local excludeSet = buildExcludeSet(rc)
+    local campOpts = {
+        cx = cx,
+        cy = cy,
+        cz = cz,
+        acleashSq = acleashSq,
+        zradius = zradius,
+        tfNum = tfNum,
+        excludeSet = excludeSet,
+    }
+    -- Single zone scan with hoisted anchor/filter options (LOS/Aggressive last in TargetFilter).
+    local function predicate(spawn)
+        local spawnType = spawn and spawn.Type()
+        if not spawnType or spawnType == '' then return false end
+        return filterSpawnForCamp(spawn, rc, campOpts)
     end
+    local out = mq.getFilteredSpawns(predicate)
     table.sort(out, function(a, b) return a.ID() < b.ID() end)
     return out, #out
 end
