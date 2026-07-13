@@ -146,8 +146,9 @@ local function CureEval(index)
     if cureindex.groupmember then
         for i = 1, botcount do
             local botname = bots[i]
-            local botid = mq.TLO.Spawn('pc =' .. botname).ID()
-            local botclass = mq.TLO.Spawn('pc =' .. botname).Class.ShortName()
+            local peer = botname and charinfo.GetInfo(botname)
+            local botid = peer and peer.ID
+            local botclass = peer and peer.Class and peer.Class.ShortName
             if botclass then botclass = string.lower(botclass) end
             if cureindex[botclass] and botid and mq.TLO.Group.Member(botname).ID() then
                 local id, hit = CureEvalForTarget(index, botname, botid, botclass, 'groupmember', spelltartype)
@@ -173,10 +174,11 @@ local function CureEval(index)
         for i = 1, botcount do
             local botname = bots[i]
             if botname then
-                local botid = mq.TLO.Spawn('pc =' .. botname).ID()
-                local botclass = mq.TLO.Spawn('pc =' .. botname).Class.ShortName()
+                local peer = charinfo.GetInfo(botname)
+                local botid = peer and peer.ID
+                local botclass = peer and peer.Class and peer.Class.ShortName
                 if botclass then botclass = string.lower(botclass) end
-                if botclass and cureindex[botclass] then
+                if botclass and botid and cureindex[botclass] then
                     local id, hit = CureEvalForTarget(index, botname, botid, botclass, botclass, spelltartype)
                     if id then return id, hit end
                 end

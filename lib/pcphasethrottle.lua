@@ -8,7 +8,7 @@ local INTERVAL_MS = 1000
 
 --- Phases that are rate-limited per section. Others always allowed.
 local THROTTLED = {
-    buff = { pc = true, groupmember = true, pet = true, byname = true },
+    buff = { pc = true, groupmember = true, pet = true, mypet = true, byname = true },
     cure = { pc = true, priority = true },
     -- Heal: corpse/rez only. Do not throttle groupmember, pc, or pet.
     heal = { corpse = true },

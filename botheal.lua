@@ -59,7 +59,7 @@ local function HPEvalContext(index, shared)
     local entry = botconfig.getSpellEntry('heal', index)
     if not entry then return nil end
     local gem = entry.gem
-    local tank, tankid, bots, botcount, botstr, tanknbid
+    local tank, tankid, bots, botcount, tanknbid
     if shared then
         tank, tankid = shared.tank, shared.tankid
         bots, botcount = shared.bots, shared.botcount
@@ -68,10 +68,7 @@ local function HPEvalContext(index, shared)
         tank, tankid = spellutils.GetTankInfo(false)
         botcount = charinfo.GetPeerCnt()
         bots = spellutils.GetBotListOrdered()
-        botstr = table.concat(charinfo.GetPeers(), " ")
-        -- Whole-token match: botstr is space-joined peer names, so wrap both sides in spaces and search
-        -- plain (4th arg true). Prevents tank "Bob" from matching peer "Bobby" and mis-routing the heal.
-        tanknbid = tank and string.find(' ' .. botstr .. ' ', ' ' .. tank .. ' ', 1, true)
+        tanknbid = tank and charinfo.GetInfo(tank) ~= nil
     end
     local spell, spellrange = spellutils.GetSpellInfo(entry)
     if not spell then return nil end
@@ -140,10 +137,23 @@ local function isCorpseRezEligible(name)
 end
 
 -- Build list of matching corpses with class priority for rez order (healers first: clr, shm, dru, etc.).
+-- Pass-local memo: cleared at start of each HealCheck so hold/corpse paths share one scan.
+local _corpseRezMemo = { valid = false, list = nil }
+
+local function clearCorpseRezMemo()
+    _corpseRezMemo.valid = false
+    _corpseRezMemo.list = nil
+end
+
 local function _corpseRezCandidates()
+    if _corpseRezMemo.valid then return _corpseRezMemo.list end
     local myconfig = botconfig.config
     local corpsecount = mq.TLO.SpawnCount('pccorpse radius ' .. myconfig.settings.acleash)()
-    if not corpsecount or corpsecount == 0 then return {} end
+    if not corpsecount or corpsecount == 0 then
+        _corpseRezMemo.valid = true
+        _corpseRezMemo.list = {}
+        return _corpseRezMemo.list
+    end
     local corpsedist = myconfig.settings.acleash
     local candidates = {}
     for i = 1, corpsecount do
@@ -157,6 +167,8 @@ local function _corpseRezCandidates()
         end
     end
     table.sort(candidates, function(a, b) return (a.priority or 9999) < (b.priority or 9999) end)
+    _corpseRezMemo.valid = true
+    _corpseRezMemo.list = candidates
     return candidates
 end
 
@@ -272,35 +284,61 @@ end
 
 local function HPEvalTank(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].tank or not ctx.tank then return nil, nil end
-    local tankspawn = mq.TLO.Spawn(ctx.tankid)
-    local tankdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), tankspawn.X(), tankspawn.Y())
     local tankinfo = charinfo.GetInfo(ctx.tank)
-    local tanknbhp = tankinfo and tankinfo.PctHPs or nil
-    if not ctx.tanknbid and ctx.tankid and mq.TLO.Group.Member(ctx.tank).Index() then
-        if mq.TLO.Spawn(ctx.tankid).Type() == 'PC' and castutils.hpEvalSpawn(ctx.tankid, AHThreshold[index].tank) and tankdistSq and ctx.spellrangeSq and tankdistSq <= ctx.spellrangeSq then
-            return mq.TLO.Group.Member(ctx.tank).ID(), 'tank'
+    local tankid = (tankinfo and tankinfo.ID) or ctx.tankid
+    if not tankid or tankid <= 0 then return nil, nil end
+    local meX = ctx.meX or mq.TLO.Me.X()
+    local meY = ctx.meY or mq.TLO.Me.Y()
+    local pct, distSq
+    if tankinfo then
+        pct = tankinfo.PctHPs
+        local zone = tankinfo.Zone
+        if zone and zone.X ~= nil and zone.Y ~= nil then
+            distSq = utils.getDistanceSquared2D(meX, meY, zone.X, zone.Y)
         end
-    elseif ctx.tanknbid then
-        if mq.TLO.Spawn(ctx.tankid).Type() == 'PC' and tanknbhp and hpInBand(tanknbhp, AHThreshold[index].tank) and tankdistSq and ctx.spellrangeSq and tankdistSq <= ctx.spellrangeSq then
-            return mq.TLO.Spawn('pc =' .. ctx.tank).ID(), 'tank'
+    end
+    if pct == nil or distSq == nil then
+        local tankspawn = mq.TLO.Spawn(tankid)
+        if not tankspawn or not tankspawn.ID() or tankspawn.ID() == 0 then return nil, nil end
+        if pct == nil then pct = tankspawn.PctHPs() end
+        if distSq == nil then
+            distSq = utils.getDistanceSquared2D(meX, meY, tankspawn.X(), tankspawn.Y())
         end
+    end
+    if not pct or not hpInBand(pct, AHThreshold[index].tank) then return nil, nil end
+    if not (ctx.spellrangeSq and distSq and distSq <= ctx.spellrangeSq) then return nil, nil end
+    if ctx.tanknbid or mq.TLO.Group.Member(ctx.tank).Index() then
+        return tankid, 'tank'
     end
     return nil, nil
 end
 
 local function HPEvalOfftank(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].offtank then return nil, nil end
+    local meX = ctx.meX or mq.TLO.Me.X()
+    local meY = ctx.meY or mq.TLO.Me.Y()
     local czactor = require('lib.czactor')
     for _, ot in ipairs(czactor.getActiveOfftanks()) do
-        local sp = mq.TLO.Spawn('pc =' .. ot.name)
-        if sp and sp.ID() and sp.ID() > 0 then
-            local otid = sp.ID()
-            local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
-            local peer = charinfo.GetInfo(ot.name)
-            local othp = peer and peer.PctHPs or sp.PctHPs()
-            if othp and hpInBand(othp, AHThreshold[index].offtank) and distSq and ctx.spellrangeSq and distSq <= ctx.spellrangeSq then
-                return otid, 'offtank'
+        local peer = charinfo.GetInfo(ot.name)
+        local otid = peer and peer.ID
+        local othp = peer and peer.PctHPs
+        local distSq
+        if peer and peer.Zone and peer.Zone.X ~= nil then
+            distSq = utils.getDistanceSquared2D(meX, meY, peer.Zone.X, peer.Zone.Y)
+        end
+        if (not otid or otid <= 0) or othp == nil or distSq == nil then
+            local sp = mq.TLO.Spawn('pc =' .. ot.name)
+            if sp and sp.ID() and sp.ID() > 0 then
+                otid = otid or sp.ID()
+                if othp == nil then othp = sp.PctHPs() end
+                if distSq == nil then
+                    distSq = utils.getDistanceSquared2D(meX, meY, sp.X(), sp.Y())
+                end
             end
+        end
+        if otid and otid > 0 and othp and hpInBand(othp, AHThreshold[index].offtank)
+            and distSq and ctx.spellrangeSq and distSq <= ctx.spellrangeSq then
+            return otid, 'offtank'
         end
     end
     return nil, nil
@@ -320,7 +358,11 @@ end
 local function HPEvalPets(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].pet or not ctx.botcount then return nil, nil end
     for i = 1, ctx.botcount do
-        local petid = mq.TLO.Spawn('pc =' .. ctx.bots[i]).Pet.ID()
+        local peer = charinfo.GetInfo(ctx.bots[i])
+        local petid = peer and peer.PetID
+        if (not petid or petid <= 0) and ctx.bots[i] then
+            petid = mq.TLO.Spawn('pc =' .. ctx.bots[i]).Pet.ID()
+        end
         local petspawn = petid and mq.TLO.Spawn(petid)
         local petdistSq = petspawn and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), petspawn.X(), petspawn.Y())
         if petid and petid > 0 then
@@ -385,6 +427,102 @@ local function healEntryValid(spellIndex)
     return spellutils.SpellCheck('heal', spellIndex)
 end
 
+--- Pass-local HP/dist snapshot by target id (shared across spells and phases in one HealCheck).
+local function ensureHealSnap(context, targetId, nameHint)
+    if not context.healSnap then context.healSnap = {} end
+    local snap = context.healSnap[targetId]
+    if snap then return snap end
+    local meX = context.meX
+    local meY = context.meY
+    if meX == nil then
+        meX = mq.TLO.Me.X()
+        meY = mq.TLO.Me.Y()
+        context.meX, context.meY = meX, meY
+    end
+    local name = nameHint or (context.peerNameById and context.peerNameById[targetId])
+    local peer = name and charinfo.GetInfo(name) or nil
+    if not peer and not name then
+        -- Try resolve peer by id once.
+        local bots = context.bots
+        if bots then
+            local n = context.botcount or #bots
+            for i = 1, n do
+                local nme = bots[i]
+                local p = charinfo.GetInfo(nme)
+                if p and p.ID == targetId then
+                    name, peer = nme, p
+                    if not context.peerNameById then context.peerNameById = {} end
+                    context.peerNameById[targetId] = nme
+                    break
+                end
+            end
+        end
+    end
+    snap = { name = name, peer = peer, pct = nil, distSq = nil }
+    if peer then
+        snap.pct = peer.PctHPs
+        local zone = peer.Zone
+        if zone and zone.X ~= nil and zone.Y ~= nil then
+            snap.distSq = utils.getDistanceSquared2D(meX, meY, zone.X, zone.Y)
+        end
+    end
+    if snap.pct == nil or snap.distSq == nil then
+        local sp = mq.TLO.Spawn(targetId)
+        if sp and sp.ID() and sp.ID() > 0 then
+            if not snap.name then snap.name = sp.CleanName() end
+            if snap.pct == nil then snap.pct = sp.PctHPs and sp.PctHPs() end
+            if snap.distSq == nil then
+                snap.distSq = utils.getDistanceSquared2D(meX, meY, sp.X(), sp.Y())
+            end
+        end
+    end
+    context.healSnap[targetId] = snap
+    return snap
+end
+
+local function pctInAnyHealBand(pct, phase)
+    if pct == nil then return false end
+    local count = botconfig.getSpellCount('heal')
+    local bandKey = phase
+    for i = 1, count do
+        local th = AHThreshold[i]
+        local band = th and th[bandKey]
+        if band and hpInBand(pct, band) then return true end
+    end
+    return false
+end
+
+local function healPrefilterByHp(phase, targets, context)
+    if not targets or #targets == 0 then return targets end
+    if phase ~= 'groupmember' and phase ~= 'pc' and phase ~= 'tank' and phase ~= 'offtank' then
+        return targets
+    end
+    local out = {}
+    for i = 1, #targets do
+        local t = targets[i]
+        if t and t.id then
+            local snap = ensureHealSnap(context, t.id, t.name)
+            if snap.pct ~= nil and pctInAnyHealBand(snap.pct, phase) then
+                out[#out + 1] = t
+            end
+        end
+    end
+    return out
+end
+
+local function peerNeedsHealFromSnap(snap, band, rangeSq, classOk, classHint)
+    if not snap or not band then return false end
+    if not snap.pct or not hpInBand(snap.pct, band) then return false end
+    local cls = classHint
+    if (not cls or cls == '') and snap.peer and snap.peer.Class and type(snap.peer.Class.ShortName) == 'string' then
+        cls = snap.peer.Class.ShortName:lower()
+    elseif cls then
+        cls = cls:lower()
+    end
+    if classOk and not classOk(cls) then return false end
+    return rangeSq and snap.distSq and snap.distSq <= rangeSq
+end
+
 local function healIndexPeerNames(targets, context)
     if not targets or #targets == 0 then return targets end
     local map = context.peerNameById
@@ -418,38 +556,43 @@ local function peerNeedsHeal(peer, band, rangeSq, meX, meY, classOk, classHint)
 end
 
 local function healGetTargetsForPhase(phase, context)
-    if phase == 'self' then return castutils.getTargetsSelf() end
-    if phase == 'tank' then return castutils.getTargetsTank(context) end
-    if phase == 'offtank' then return castutils.getTargetsOfftank(context) end
-    if phase == 'groupheal' then return castutils.getTargetsGroupCaster('groupheal') end
-    if phase == 'groupmember' then
-        return healIndexPeerNames(castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true }), context)
-    end
-    if phase == 'pc' then
-        return healIndexPeerNames(castutils.getTargetsPc(context, { excludeTank = true }), context)
-    end
-    if phase == 'mypet' then return castutils.getTargetsMypet() end
-    if phase == 'pet' then return castutils.getTargetsPet(context) end
-    if phase == 'xtgt' and XTList then
-        local out = {}
+    local targets
+    if phase == 'self' then
+        targets = castutils.getTargetsSelf()
+    elseif phase == 'tank' then
+        targets = castutils.getTargetsTank(context)
+    elseif phase == 'offtank' then
+        targets = castutils.getTargetsOfftank(context)
+    elseif phase == 'groupheal' then
+        targets = castutils.getTargetsGroupCaster('groupheal')
+    elseif phase == 'groupmember' then
+        targets = healIndexPeerNames(castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true }), context)
+    elseif phase == 'pc' then
+        targets = healIndexPeerNames(castutils.getTargetsPc(context, { excludeTank = true }), context)
+    elseif phase == 'mypet' then
+        targets = castutils.getTargetsMypet()
+    elseif phase == 'pet' then
+        targets = castutils.getTargetsPet(context)
+    elseif phase == 'xtgt' and XTList then
+        targets = {}
         local n = mq.TLO.Me.XTargetSlots() or 0
         for i = 1, n do
             if XTList[i] and mq.TLO.Me.XTarget(i)() then
                 local xtid = mq.TLO.Me.XTarget(i).ID()
-                if xtid and xtid > 0 then out[#out + 1] = { id = xtid, targethit = 'xtgt' } end
+                if xtid and xtid > 0 then targets[#targets + 1] = { id = xtid, targethit = 'xtgt' } end
             end
         end
-        return out
-    end
-    if phase == 'corpse' then
+    elseif phase == 'corpse' then
         if not healCorpsePending() then return {} end
         local cursor = spellutils.getResumeCursor('doHeal')
         if not pcphasethrottle.allow('heal', cursor, 'corpse') then return {} end
         local rezid = CorpseRezIdForFilter()
         if rezid then return { { id = rezid, targethit = 'corpse' } } end
         return {}
+    else
+        return {}
     end
-    return {}
+    return healPrefilterByHp(phase, targets, context)
 end
 
 local function healBandHasPhase(spellIndex, phase)
@@ -498,10 +641,14 @@ end)
 function botheal.HealCheck(runPriority)
     local count = botconfig.getSpellCount('heal')
     if count <= 0 then return false end
+    clearCorpseRezMemo()
     local ctx = tickprof.span('context', function()
         return healBuildContext()
     end)
     if not ctx then return false end
+    ctx.meX = mq.TLO.Me.X()
+    ctx.meY = mq.TLO.Me.Y()
+    ctx.healSnap = {}
 
     local contextBySpell = { [1] = ctx }
     local entryValidCache = {}
@@ -514,8 +661,14 @@ function botheal.HealCheck(runPriority)
     }
     local function cachedHealContext(spellIndex)
         local cached = contextBySpell[spellIndex]
-        if cached ~= nil then return cached end
+        if cached ~= nil then
+            cached.meX, cached.meY = ctx.meX, ctx.meY
+            return cached
+        end
         cached = HPEvalContext(spellIndex, sharedBots)
+        if cached then
+            cached.meX, cached.meY = ctx.meX, ctx.meY
+        end
         contextBySpell[spellIndex] = cached
         return cached
     end
@@ -530,26 +683,26 @@ function botheal.HealCheck(runPriority)
         local spellCtx = cachedHealContext(spellIndex)
         if not spellCtx then return nil, nil end
         local th = AHThreshold[spellIndex]
-        local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
 
         if targethit == 'self' then
             local id, hit = HPEvalSelf(spellIndex, spellCtx)
             return rejectIfAlreadyHoT(spellCtx.entry, id, hit)
         end
         if targethit == 'tank' then
-            if not th or not th.tank or targetId ~= spellCtx.tankid then return nil, nil end
-            local id, hit = HPEvalTank(spellIndex, spellCtx)
-            if id == targetId then return rejectIfAlreadyHoT(spellCtx.entry, id, hit) end
+            if not th or not th.tank then return nil, nil end
+            local snap = ensureHealSnap(context, targetId, context.tank or spellCtx.tank)
+            if not peerNeedsHealFromSnap(snap, th.tank, spellCtx.spellrangeSq, nil, nil) then
+                return nil, nil
+            end
+            if spellCtx.tanknbid or (spellCtx.tank and mq.TLO.Group.Member(spellCtx.tank).Index()) then
+                return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'tank')
+            end
             return nil, nil
         end
         if targethit == 'offtank' then
             if not th or not th.offtank then return nil, nil end
-            local sp = mq.TLO.Spawn(targetId)
-            if not sp or not sp.ID() or sp.ID() == 0 then return nil, nil end
-            local distSq = utils.getDistanceSquared2D(meX, meY, sp.X(), sp.Y())
-            local peer = charinfo.GetInfo(sp.CleanName())
-            local othp = peer and peer.PctHPs or sp.PctHPs()
-            if othp and hpInBand(othp, th.offtank) and distSq and spellCtx.spellrangeSq and distSq <= spellCtx.spellrangeSq then
+            local snap = ensureHealSnap(context, targetId, nil)
+            if peerNeedsHealFromSnap(snap, th.offtank, spellCtx.spellrangeSq, nil, nil) then
                 return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'offtank')
             end
             return nil, nil
@@ -563,31 +716,27 @@ function botheal.HealCheck(runPriority)
         if targethit == 'mypet' then
             if not th or not th.mypet then return nil, nil end
             if targetId ~= mq.TLO.Me.Pet.ID() then return nil, nil end
-            local petdistSq = utils.getDistanceSquared2D(meX, meY, mq.TLO.Me.Pet.X(), mq.TLO.Me.Pet.Y())
-            local distOk = petdistSq and spellCtx.spellrangeSq and petdistSq <= spellCtx.spellrangeSq
-            if castutils.hpEvalSpawn(targetId, th.mypet) and distOk then
+            local snap = ensureHealSnap(context, targetId, nil)
+            local distOk = snap.distSq and spellCtx.spellrangeSq and snap.distSq <= spellCtx.spellrangeSq
+            if snap.pct and hpInBand(snap.pct, th.mypet) and distOk then
                 return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'mypet')
             end
             return nil, nil
         end
         if targethit == 'pet' then
             if not th or not th.pet then return nil, nil end
-            local petspawn = mq.TLO.Spawn(targetId)
-            if not petspawn or not petspawn.ID() or petspawn.ID() == 0 then return nil, nil end
-            local petdistSq = utils.getDistanceSquared2D(meX, meY, petspawn.X(), petspawn.Y())
-            local distOk = spellCtx.spellrangeSq and petdistSq and petdistSq <= spellCtx.spellrangeSq
-            if castutils.hpEvalSpawn(targetId, th.pet) and distOk then
+            local snap = ensureHealSnap(context, targetId, nil)
+            local distOk = spellCtx.spellrangeSq and snap.distSq and snap.distSq <= spellCtx.spellrangeSq
+            if snap.pct and hpInBand(snap.pct, th.pet) and distOk then
                 return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'pet')
             end
             return nil, nil
         end
         if targethit == 'xtgt' then
             if not th or not th.xtgt then return nil, nil end
-            local xtspawn = mq.TLO.Spawn(targetId)
-            if not xtspawn or not xtspawn.ID() or xtspawn.ID() == 0 then return nil, nil end
-            local xtdistSq = utils.getDistanceSquared2D(meX, meY, xtspawn.X(), xtspawn.Y())
-            local distOk = spellCtx.spellrangeSq and xtdistSq and xtdistSq <= spellCtx.spellrangeSq
-            if castutils.hpEvalSpawn(targetId, th.xtgt) and distOk then
+            local snap = ensureHealSnap(context, targetId, nil)
+            local distOk = spellCtx.spellrangeSq and snap.distSq and snap.distSq <= spellCtx.spellrangeSq
+            if snap.pct and hpInBand(snap.pct, th.xtgt) and distOk then
                 return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'xtgt')
             end
             return nil, nil
@@ -607,32 +756,24 @@ function botheal.HealCheck(runPriority)
             end
             local name = context.peerNameById and context.peerNameById[targetId]
             if phase == 'pc' and th.pc then
-                -- Peer-only: never Spawn. Skip if no networked peer.
                 if not name then return nil, nil end
-                local peer = charinfo.GetInfo(name)
-                if peerNeedsHeal(peer, th.pc, spellCtx.spellrangeSq, meX, meY, classOk, targethit) then
+                local snap = ensureHealSnap(context, targetId, name)
+                if peerNeedsHealFromSnap(snap, th.pc, spellCtx.spellrangeSq, classOk, targethit) then
                     return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
                 end
                 return nil, nil
             end
             if phase == 'groupmember' and th.groupmember then
-                if name then
-                    local peer = charinfo.GetInfo(name)
-                    if peer then
-                        if peerNeedsHeal(peer, th.groupmember, spellCtx.spellrangeSq, meX, meY, classOk, targethit) then
-                            return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
-                        end
-                        return nil, nil
-                    end
-                end
-                -- Non-bot group member: Spawn fallback for HP/dist.
-                local sp = mq.TLO.Spawn(targetId)
-                if sp and sp.ID() == targetId and sp.Type() == 'PC' then
-                    local distSq = utils.getDistanceSquared2D(meX, meY, sp.X(), sp.Y())
-                    if castutils.hpEvalSpawn(targetId, th.groupmember)
-                        and spellCtx.spellrangeSq and distSq and distSq <= spellCtx.spellrangeSq and classOk(targethit) then
+                local snap = ensureHealSnap(context, targetId, name)
+                if snap.peer or name then
+                    if peerNeedsHealFromSnap(snap, th.groupmember, spellCtx.spellrangeSq, classOk, targethit) then
                         return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
                     end
+                    if snap.peer then return nil, nil end
+                end
+                -- Non-bot group member without peer: snap may still have Spawn-filled pct/dist.
+                if peerNeedsHealFromSnap(snap, th.groupmember, spellCtx.spellrangeSq, classOk, targethit) then
+                    return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
                 end
             end
         end

@@ -150,18 +150,26 @@ local function forEachGroupMemberOfAnchor(anchorName, fn)
             for i = 1, raidMembers do
                 if mq.TLO.Raid.Member(i).Group() == anchorGroupNum then
                     local grpname = mq.TLO.Raid.Member(i)()
-                    local grpid = mq.TLO.Spawn('pc =' .. grpname).ID()
+                    local peer = grpname and charinfo.GetInfo(grpname)
+                    local grpid = peer and peer.ID
+                    if (not grpid or grpid <= 0) and grpname then
+                        grpid = mq.TLO.Spawn('pc =' .. grpname).ID()
+                    end
                     if grpname and grpid and grpid > 0 then
-                        fn(grpname, grpid, nil, charinfo.GetInfo(grpname))
+                        fn(grpname, grpid, nil, peer or charinfo.GetInfo(grpname))
                     end
                 end
             end
             return
         end
     end
-    local grpid = mq.TLO.Spawn('pc =' .. anchorName).ID()
+    local peer = charinfo.GetInfo(anchorName)
+    local grpid = peer and peer.ID
+    if not grpid or grpid <= 0 then
+        grpid = mq.TLO.Spawn('pc =' .. anchorName).ID()
+    end
     if grpid and grpid > 0 then
-        fn(anchorName, grpid, nil, charinfo.GetInfo(anchorName))
+        fn(anchorName, grpid, nil, peer or charinfo.GetInfo(anchorName))
     end
 end
 
@@ -200,14 +208,12 @@ local function addPcEntries(out, names, count, filterFn)
         local name = names[i]
         local peer = name and charinfo.GetInfo(name)
         if peer and (not filterFn or filterFn(name)) then
-            local sp = mq.TLO.Spawn('pc =' .. name)
-            local id = sp and sp.ID()
-            if id and id > 0 and sp.Type() == 'PC' then
+            local id = peer.ID
+            if id and id > 0 then
                 local class = peer.Class and peer.Class.ShortName
-                if type(class) ~= 'string' or class == '' then
-                    class = sp.Class.ShortName()
+                if type(class) == 'string' and class ~= '' then
+                    out[#out + 1] = { id = id, targethit = class:lower(), name = name }
                 end
-                if class then out[#out + 1] = { id = id, targethit = class:lower(), name = name } end
             end
         end
     end
@@ -224,9 +230,14 @@ function castutils.getTargetsOfftank(_context)
     local out = {}
     local czactor = require('lib.czactor')
     for _, ot in ipairs(czactor.getActiveOfftanks()) do
-        local sp = mq.TLO.Spawn('pc =' .. ot.name)
-        if sp and sp.ID() and sp.ID() > 0 then
-            out[#out + 1] = { id = sp.ID(), targethit = 'offtank' }
+        local peer = charinfo.GetInfo(ot.name)
+        local id = peer and peer.ID
+        if (not id or id <= 0) then
+            local sp = mq.TLO.Spawn('pc =' .. ot.name)
+            id = sp and sp.ID()
+        end
+        if id and id > 0 then
+            out[#out + 1] = { id = id, targethit = 'offtank', name = ot.name }
         end
     end
     return out
@@ -299,7 +310,12 @@ function castutils.getTargetsPet(context)
     if not context.bots then return out end
     local n = context.botcount or #context.bots
     for i = 1, n do
-        local petid = mq.TLO.Spawn('pc =' .. context.bots[i]).Pet.ID()
+        local name = context.bots[i]
+        local peer = name and charinfo.GetInfo(name)
+        local petid = peer and peer.PetID
+        if (not petid or petid <= 0) and name then
+            petid = mq.TLO.Spawn('pc =' .. name).Pet.ID()
+        end
         if petid and petid > 0 then out[#out + 1] = { id = petid, targethit = 'pet' } end
     end
     return out

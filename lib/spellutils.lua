@@ -661,6 +661,94 @@ function spellutils.PeerHasBuff(peerInfo, spellid)
     return has(peerInfo.Buff) or has(peerInfo.ShortBuff)
 end
 
+--- Remaining duration ms for spellid on peer Buff/ShortBuff, or nil if absent.
+function spellutils.PeerGetBuffDuration(peerInfo, spellid)
+    if not peerInfo or not spellid then return nil end
+    local function findDur(list)
+        if not list then return nil end
+        for _, b in ipairs(list) do
+            if b and b.Spell and (b.Spell.ID == spellid or tostring(b.Spell.ID) == tostring(spellid)) then
+                local dur = b.Duration
+                if type(dur) == 'number' and dur >= 0 then return dur end
+                return 0
+            end
+        end
+        return nil
+    end
+    local d = findDur(peerInfo.Buff)
+    if d ~= nil then return d end
+    return findDur(peerInfo.ShortBuff)
+end
+
+-- (peerName, spellId) → mq.gettime() when next presence check is due.
+-- When duration >= 60s, recheck at most every 60s; when < 60s, every tick.
+local BUFF_SKIP_LONG_MS = 60000
+local _buffSkipUntil = {} -- [peerName][spellId] = nextDueMs
+
+local function buffSkipKey(peerName, spellId)
+    if not peerName or peerName == '' or not spellId then return nil, nil end
+    return peerName, spellId
+end
+
+--- True when this peer+spell is still within a long-duration skip window (skip full eval).
+function spellutils.BuffSkipIsActive(peerName, spellId)
+    local name, sid = buffSkipKey(peerName, spellId)
+    if not name then return false end
+    local bySpell = _buffSkipUntil[name]
+    if not bySpell then return false end
+    local due = bySpell[sid]
+    return due ~= nil and mq.gettime() < due
+end
+
+function spellutils.BuffSkipClear(peerName, spellId)
+    local name, sid = buffSkipKey(peerName, spellId)
+    if not name then return end
+    local bySpell = _buffSkipUntil[name]
+    if not bySpell then return end
+    bySpell[sid] = nil
+end
+
+--- Arm skip from observed remaining duration (ms). Returns true if caller should treat as "still up" (no cast).
+function spellutils.BuffSkipObserveDuration(peerName, spellId, durationMs)
+    local name, sid = buffSkipKey(peerName, spellId)
+    if not name then return false end
+    if durationMs == nil then
+        spellutils.BuffSkipClear(name, sid)
+        return false
+    end
+    if durationMs >= BUFF_SKIP_LONG_MS then
+        local bySpell = _buffSkipUntil[name]
+        if not bySpell then
+            bySpell = {}
+            _buffSkipUntil[name] = bySpell
+        end
+        bySpell[sid] = mq.gettime() + BUFF_SKIP_LONG_MS
+        return true
+    end
+    -- Under 60s: check every tick; clear any long skip.
+    spellutils.BuffSkipClear(name, sid)
+    return durationMs >= BUFF_REFRESH_THRESHOLD_MS
+end
+
+--- Clear skip after we successfully cast a buff onto a peer (fresh Duration next observe).
+function spellutils.BuffSkipClearForCast(EvalID, spellId)
+    if not EvalID or not spellId then return end
+    local peers = charinfo.GetPeers()
+    if peers then
+        for i = 1, #peers do
+            local peer = charinfo.GetInfo(peers[i])
+            if peer and peer.ID == EvalID then
+                spellutils.BuffSkipClear(peers[i], spellId)
+                return
+            end
+        end
+    end
+    local name = mq.TLO.Spawn(EvalID).CleanName() or mq.TLO.Spawn(EvalID).Name()
+    if name and name ~= '' then
+        spellutils.BuffSkipClear(name, spellId)
+    end
+end
+
 -- Returns true if peer's pet has spellid in PetBuff.
 function spellutils.PeerHasPetBuff(peerInfo, spellid)
     if not peerInfo or not peerInfo.PetBuff then return false end
@@ -1550,10 +1638,13 @@ end
 --- Resolve a leader PC's spawn id and optional NPC target (charinfo, /assist fallback, self MobList).
 local function getLeaderPcTargetInfo(leaderName, includeTarget)
     if not leaderName or leaderName == '' then return nil, nil, nil, nil end
-    local leaderid = mq.TLO.Spawn('pc =' .. leaderName).ID()
+    local info = charinfo.GetInfo(leaderName)
+    local leaderid = info and info.ID or nil
+    if not leaderid or leaderid <= 0 then
+        leaderid = mq.TLO.Spawn('pc =' .. leaderName).ID()
+    end
     if not includeTarget then return leaderName, leaderid, nil, nil end
     local tartar, tartarhp
-    local info = charinfo.GetInfo(leaderName)
     if info and info.ID then
         tartar = info.Target and info.Target.ID or nil
         tartarhp = info.TargetHP
@@ -1584,7 +1675,11 @@ end
 --- True when the MA spawn is missing, dead, or hovering (no reliable live target).
 local function isAssistUnavailable(assistName, assistid)
     if not assistid or assistid == 0 then
-        assistid = assistName and mq.TLO.Spawn('pc =' .. assistName).ID() or nil
+        local info = assistName and charinfo.GetInfo(assistName)
+        assistid = info and info.ID or nil
+        if not assistid or assistid == 0 then
+            assistid = assistName and mq.TLO.Spawn('pc =' .. assistName).ID() or nil
+        end
     end
     if not assistid or assistid == 0 then return true end
     local spawn = mq.TLO.Spawn(assistid)
@@ -1610,7 +1705,11 @@ function spellutils.GetAssistInfo(includeTarget, assistpct)
         return nil, nil, nil, nil
     end
 
-    local assistid = mq.TLO.Spawn('pc =' .. assistName).ID()
+    local assistPeer = charinfo.GetInfo(assistName)
+    local assistid = assistPeer and assistPeer.ID or nil
+    if not assistid or assistid <= 0 then
+        assistid = mq.TLO.Spawn('pc =' .. assistName).ID()
+    end
     if not includeTarget then return assistName, assistid, nil, nil end
 
     local rc = state.getRunconfig()
@@ -1797,6 +1896,12 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     if not entry then return end
     local spell = string.lower(entry.spell or '')
     local spellid = mq.TLO.Spell(spell).ID()
+    if sub == 'buff' and EvalID and spellid then
+        spellutils.BuffSkipClearForCast(EvalID, spellid)
+        if entry.spellicon and entry.spellicon ~= 0 then
+            spellutils.BuffSkipClearForCast(EvalID, entry.spellicon)
+        end
+    end
     if not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib and SpellResisted then
         rc.CurSpell.resisted = true
         SpellResisted = false
