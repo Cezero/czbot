@@ -1,4 +1,5 @@
 -- Opt-in mainloop tick profiler: inter-tick gaps, processing time, per-hook breakdown.
+-- Optional nested spans (/cz tickdebug spans on) for sub-step timing inside hooks.
 local mq = require('mq')
 local log = require('lib.log')
 
@@ -7,14 +8,19 @@ local GAP_SLACK_MS = 50
 local LOG_THROTTLE_MS = 1000
 local HOOK_SLOW_MS = 5
 local SUMMARY_INTERVAL_MS = 10000
+local SPAN_HOOK_MS = 50
+local SPAN_SHOW_MS = 5
+local SPAN_ALERT_MS = 100
 
 local tickprof = {}
 
 local _debug = false
 local _verbose = false
+local _spansEnabled = false
 local _lastTickStart = nil
 local _lastProcMs = 0
 local _currentTick = nil
+local _currentHook = nil
 local _delayedLogNextTime = 0
 
 local _stats = {
@@ -30,6 +36,8 @@ function tickprof.SetDebug(on)
     _debug = on and true or false
     if _debug then
         _summaryNextTime = mq.gettime() + SUMMARY_INTERVAL_MS
+    else
+        _spansEnabled = false
     end
     -- Do not clear _currentTick here: wrapHook may still be timing a hook.
 end
@@ -46,7 +54,40 @@ function tickprof.IsVerbose()
     return _verbose
 end
 
-local function _formatHookBreakdown(hooks)
+function tickprof.SetSpans(on)
+    _spansEnabled = on and true or false
+end
+
+function tickprof.IsSpans()
+    return _spansEnabled
+end
+
+function tickprof.spansActive()
+    return _debug and _spansEnabled and _currentTick ~= nil
+end
+
+local function _formatSpanBreakdown(spans)
+    if not spans then return '' end
+    local minMs = _verbose and 0 or SPAN_SHOW_MS
+    local entries = {}
+    for name, ms in pairs(spans) do
+        if ms >= minMs then
+            entries[#entries + 1] = { name = name, ms = ms }
+        end
+    end
+    table.sort(entries, function(a, b)
+        if a.ms ~= b.ms then return a.ms > b.ms end
+        return a.name < b.name
+    end)
+    if #entries == 0 then return '' end
+    local parts = {}
+    for _, e in ipairs(entries) do
+        parts[#parts + 1] = string.format('%s=%d', e.name, e.ms)
+    end
+    return '{' .. table.concat(parts, ' ') .. '}'
+end
+
+local function _formatHookBreakdown(hooks, hookSpans)
     if not hooks then return '' end
     local minMs = _verbose and 0 or HOOK_SLOW_MS
     local entries = {}
@@ -62,7 +103,11 @@ local function _formatHookBreakdown(hooks)
     if #entries == 0 then return '' end
     local parts = {}
     for _, e in ipairs(entries) do
-        parts[#parts + 1] = string.format('%s=%dms', e.name, e.ms)
+        local spanStr = ''
+        if _spansEnabled and hookSpans and e.ms >= SPAN_HOOK_MS then
+            spanStr = _formatSpanBreakdown(hookSpans[e.name])
+        end
+        parts[#parts + 1] = string.format('%s=%dms%s', e.name, e.ms, spanStr)
     end
     return ' hooks: ' .. table.concat(parts, ' ')
 end
@@ -112,8 +157,44 @@ function tickprof.beginTick()
         tickStart = tickStart,
         gapMs = gapMs,
         hooks = {},
+        hookSpans = {},
     }
+    _currentHook = nil
     return _currentTick
+end
+
+--- Time a named sub-step under the current hook. Zero-cost when spans are off.
+---@param label string Span name
+---@param fn function Work to run
+---@param detail string|nil Optional alert detail (e.g. spawnId)
+---@return any ... Return values from fn
+function tickprof.span(label, fn, detail)
+    if not tickprof.spansActive() or not _currentHook then
+        return fn()
+    end
+    local tick = _currentTick
+    local hook = _currentHook
+    local start = mq.gettime()
+    local results = { fn() }
+    local elapsed = mq.gettime() - start
+    if tick and tick.hookSpans then
+        local spans = tick.hookSpans[hook]
+        if not spans then
+            spans = {}
+            tick.hookSpans[hook] = spans
+        end
+        spans[label] = (spans[label] or 0) + elapsed
+    end
+    if elapsed >= SPAN_ALERT_MS then
+        if detail and detail ~= '' then
+            log.say('[tick] span.alert hook=%s span=%s %s ms=%d',
+                tostring(hook), tostring(label), tostring(detail), elapsed)
+        else
+            log.say('[tick] span.alert hook=%s span=%s ms=%d',
+                tostring(hook), tostring(label), elapsed)
+        end
+    end
+    return unpack(results)
 end
 
 function tickprof.wrapHook(name, fn, arg)
@@ -122,9 +203,12 @@ function tickprof.wrapHook(name, fn, arg)
         return
     end
     local tick = _currentTick
+    local prevHook = _currentHook
+    _currentHook = name
     local start = mq.gettime()
     fn(arg)
     local elapsed = mq.gettime() - start
+    _currentHook = prevHook
     if tick and tick.hooks then
         tick.hooks[name] = (tick.hooks[name] or 0) + elapsed
     end
@@ -153,7 +237,7 @@ function tickprof.endTick(handle, paused)
             tostring(paused == true),
             runState,
             busyCap,
-            _formatHookBreakdown(handle.hooks))
+            _formatHookBreakdown(handle.hooks, handle.hookSpans))
     elseif delayed and now >= _delayedLogNextTime then
         _delayedLogNextTime = now + LOG_THROTTLE_MS
         log.say('[tick] delayed gap=%dms lastProc=%dms (expected ~%dms)',
@@ -169,6 +253,7 @@ function tickprof.endTick(handle, paused)
     _lastTickStart = handle.tickStart
     _lastProcMs = procMs
     _currentTick = nil
+    _currentHook = nil
 end
 
 return tickprof

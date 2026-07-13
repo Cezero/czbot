@@ -3,6 +3,7 @@
 
 local mq = require('mq')
 local state = require('lib.state')
+local tickprof = require('lib.tickprof')
 
 local targeting = {}
 
@@ -14,7 +15,9 @@ function targeting.TargetAndWait(id, timeoutMs)
     if not id or id == 0 then return false end
     mq.cmdf('/tar id %s', id)
     state.getRunconfig().statusMessage = string.format('Waiting for target (id %s)', id)
-    mq.delay(timeoutMs or 500, function() return mq.TLO.Target.ID() == id end)
+    tickprof.span('TargetAndWait', function()
+        mq.delay(timeoutMs or 500, function() return mq.TLO.Target.ID() == id end)
+    end, 'id=' .. tostring(id))
     state.getRunconfig().statusMessage = ''
     return mq.TLO.Target.ID() == id
 end
@@ -27,7 +30,9 @@ function targeting.TargetAndWaitBuffsPopulated(id, timeoutMs)
     if not id or id == 0 then return false end
     mq.cmdf('/tar id %s', id)
     local ms = timeoutMs or 1000
-    mq.delay(ms, function() return mq.TLO.Target.ID() == id and mq.TLO.Target.BuffsPopulated() end)
+    tickprof.span('TargetAndWaitBuffs', function()
+        mq.delay(ms, function() return mq.TLO.Target.ID() == id and mq.TLO.Target.BuffsPopulated() end)
+    end, 'id=' .. tostring(id))
     return mq.TLO.Target.ID() == id and mq.TLO.Target.BuffsPopulated()
 end
 

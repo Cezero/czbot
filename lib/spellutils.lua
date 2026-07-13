@@ -14,6 +14,7 @@ local casting = require('lib.casting')
 local premem = require('lib.premem')
 local botmove = require('botmove')
 local log = require('lib.log')
+local tickprof = require('lib.tickprof')
 local spellutils = {}
 local _deps = {}
 local _instantDebuffCastPending = nil
@@ -696,11 +697,14 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         local sp = mq.TLO.Spawn(spawnId)
         if sp and sp.Type and sp.Type() == 'Corpse' then return false end
     end
+    local detail = string.format('id=%s sub=%s', tostring(spawnId), tostring(sub))
     -- Caster's own buffs: Me.BuffsPopulated() is valid without targeting self; avoid /tar so MT keeps mob targeted.
     if spawnId == mq.TLO.Me.ID() then
         if mq.TLO.Me.BuffsPopulated() then return true end
         state.getRunconfig().statusMessage = string.format('Waiting for target buffs (id %s)', spawnId)
-        mq.delay(1000, function() return mq.TLO.Me.BuffsPopulated() == true end)
+        tickprof.span('EnsureBuffs.self_wait', function()
+            mq.delay(1000, function() return mq.TLO.Me.BuffsPopulated() == true end)
+        end, detail)
         local ok = mq.TLO.Me.BuffsPopulated()
         if not ok then state.getRunconfig().statusMessage = '' end
         return ok
@@ -711,7 +715,9 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
     end
     mq.cmdf('/tar id %s', spawnId)
     state.getRunconfig().statusMessage = string.format('Waiting for target buffs (id %s)', spawnId)
-    mq.delay(1000, function() return mq.TLO.Target.BuffsPopulated() == true end)
+    tickprof.span('EnsureBuffs.target_wait', function()
+        mq.delay(1000, function() return mq.TLO.Target.BuffsPopulated() == true end)
+    end, detail)
     local sp = mq.TLO.Spawn(spawnId)
     local ok = sp and sp.BuffsPopulated and sp.BuffsPopulated() and mq.TLO.Target.ID() == spawnId
     if not ok then state.getRunconfig().statusMessage = '' end

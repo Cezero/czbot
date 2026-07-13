@@ -98,6 +98,7 @@ local GROUPS = {
         { "/cz upgradedebug on|off", "Log spell-upgrade scan results (SpellGroup matches per configured spell)." },
         { "/cz aetankdebug on|off", "Log why AE-tank is idle (not MT, mezzer suppress, taunt cooldown, nothing loose)." },
         { "/cz tickdebug on|off", "Log tick gap/processing time; per-hook breakdown when proc exceeds 100ms." },
+        { "/cz tickdebug spans on|off", "Nested sub-step timing for slow hooks (doHeal/doBuff/czactor/AddSpawnCheck)." },
         { "/cz echo <text>", "Echo a message (testing)." },
     } },
     { title = "Utility", cmds = {

@@ -10,6 +10,7 @@ local castutils = require('lib.castutils')
 local buffphase = require('lib.buffphase')
 local botmove = require('botmove')
 local pcphasethrottle = require('lib.pcphasethrottle')
+local tickprof = require('lib.tickprof')
 
 local botbuff = {}
 local BuffClass = {}
@@ -469,7 +470,9 @@ function botbuff.BuffCheck(runPriority)
     if mq.TLO.Me.Class.ShortName() == 'BRD' and myconfig.settings.dobuff and not utils.isNearPrimaryBindPoint() then
         bardtwist.EnsureDefaultTwistRunning()
     end
-    local ctx = buffBuildContext()
+    local ctx = tickprof.span('context', function()
+        return buffBuildContext()
+    end)
     local count = ctx.buffCount
     if count <= 0 then return false end
     local options = {
@@ -505,8 +508,10 @@ function botbuff.BuffCheck(runPriority)
         if phase == 'pc' and not pcAllowed then return {} end
         return buffGetTargetsForPhase(phase, context)
     end
-    return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,
-        buffTargetNeedsSpell, ctx, options)
+    return tickprof.span('spellcheck', function()
+        return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,
+            buffTargetNeedsSpell, ctx, options)
+    end)
 end
 
 --- True when a PC corpse within acleash belongs to a current group member (cleric defers buff for rez focus).

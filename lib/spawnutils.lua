@@ -9,6 +9,7 @@ local utils = require('lib.utils')
 local bardtwist = require('lib.bardtwist')
 local charinfoutils = require('lib.charinfoutils')
 local log = require('lib.log')
+local tickprof = require('lib.tickprof')
 
 local spawnutils = {}
 
@@ -915,9 +916,11 @@ function spawnutils.tickCombatFTERechecks(rc)
                     rc.fteRecheckInProgress = true
                     rc.fteRecheckProbeId = spawnId
                     mq.cmdf('/squelch /tar id %s', spawnId)
-                    mq.delay(FTE_RECHECK_TARGET_DELAY_MS, function()
-                        return mq.TLO.Target.ID() == spawnId
-                    end)
+                    tickprof.span('FTE.target_wait', function()
+                        mq.delay(FTE_RECHECK_TARGET_DELAY_MS, function()
+                            return mq.TLO.Target.ID() == spawnId
+                        end)
+                    end, 'id=' .. tostring(spawnId))
                     if rc.fteRecheckProbeId == spawnId and mq.TLO.Target.ID() == spawnId and isFTEEligibleSpawnType(mq.TLO.Target.Type()) then
                         spawnutils.clearCombatFTE(rc, spawnId)
                     else
@@ -940,20 +943,36 @@ function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
     if rc.doChchain then return end
     utils.pruneCharmSkipIds(rc)
-    spawnutils.pruneFTEList(rc)
-    if not spawnutils.validateAcmTarget(rc) then return end
-    spawnutils.tickCombatFTERechecks(rc)
-    spawnutils.buildAndSetCampMobList(rc)
-    spawnutils.mergeLeaderCombatTarget(rc)
-    spawnutils.mergeKillTargetIntoMobList(rc)
-    spawnutils.mergeEngageTargetIntoMobList(rc)
-    spellstates.PruneDebuffStateNotInMobList(rc.MobList)
+    tickprof.span('pruneFTE', function()
+        spawnutils.pruneFTEList(rc)
+    end)
+    local acmOk = true
+    tickprof.span('validateAcm', function()
+        acmOk = spawnutils.validateAcmTarget(rc)
+    end)
+    if not acmOk then return end
+    tickprof.span('fteRecheck', function()
+        spawnutils.tickCombatFTERechecks(rc)
+    end)
+    tickprof.span('buildCampMobList', function()
+        spawnutils.buildAndSetCampMobList(rc)
+    end)
+    tickprof.span('merges', function()
+        spawnutils.mergeLeaderCombatTarget(rc)
+        spawnutils.mergeKillTargetIntoMobList(rc)
+        spawnutils.mergeEngageTargetIntoMobList(rc)
+    end)
+    tickprof.span('pruneDebuff', function()
+        spellstates.PruneDebuffStateNotInMobList(rc.MobList)
+    end)
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
-        if utils.isNearPrimaryBindPoint() and #(rc.MobList or {}) == 0 then
-            bardtwist.StopTwist()
-        else
-            bardtwist.EnsureDefaultTwistRunning()
-        end
+        tickprof.span('bardtwist', function()
+            if utils.isNearPrimaryBindPoint() and #(rc.MobList or {}) == 0 then
+                bardtwist.StopTwist()
+            else
+                bardtwist.EnsureDefaultTwistRunning()
+            end
+        end)
     end
 end
 

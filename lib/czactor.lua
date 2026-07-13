@@ -9,6 +9,7 @@ local log = require('lib.log')
 local czactor_dispatch = require('lib.czactor_dispatch')
 local auto_ma_mt = require('lib.auto_ma_mt')
 local tankrole = require('lib.tankrole')
+local tickprof = require('lib.tickprof')
 
 local czactor = {}
 
@@ -1567,10 +1568,14 @@ function czactor.tick()
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
 
-    drainInboundQueue()
+    tickprof.span('drainInbound', function()
+        drainInboundQueue()
+    end)
     local common_sync = package.loaded['lib.common_sync']
     if common_sync and common_sync.tickPending then
-        common_sync.tickPending()
+        tickprof.span('common_sync', function()
+            common_sync.tickPending()
+        end)
     end
 
     local now = mq.gettime()
@@ -1580,33 +1585,37 @@ function czactor.tick()
     end
 
     if now >= _nextClaimPruneAt then
-        _nextClaimPruneAt = now + 1000
-        pruneOtClaims(rc)
-        pruneRezClaims(rc)
-        if rc.OtMyClaim and rc.OtMyClaim.spawnId then
-            local sid = rc.OtMyClaim.spawnId
-            local sp = mq.TLO.Spawn(sid)
-            if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() == 'Corpse'
-                or not require('lib.spawnutils').isAliveEngageSpawn(sp) then
-                czactor.publishOtRelease(sid, 'dead')
+        tickprof.span('claimPrune', function()
+            _nextClaimPruneAt = now + 1000
+            pruneOtClaims(rc)
+            pruneRezClaims(rc)
+            if rc.OtMyClaim and rc.OtMyClaim.spawnId then
+                local sid = rc.OtMyClaim.spawnId
+                local sp = mq.TLO.Spawn(sid)
+                if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() == 'Corpse'
+                    or not require('lib.spawnutils').isAliveEngageSpawn(sp) then
+                    czactor.publishOtRelease(sid, 'dead')
+                end
             end
-        end
-        if rc.RezMyClaim and rc.RezMyClaim.corpseId then
-            local cid = rc.RezMyClaim.corpseId
-            local sp = mq.TLO.Spawn(cid)
-            if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() ~= 'Corpse' then
-                rc.RezMyClaim = nil
+            if rc.RezMyClaim and rc.RezMyClaim.corpseId then
+                local cid = rc.RezMyClaim.corpseId
+                local sp = mq.TLO.Spawn(cid)
+                if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() ~= 'Corpse' then
+                    rc.RezMyClaim = nil
+                end
             end
-        end
-        if rc.MaActorEngaged and rc.MaActorEngaged.spawnId then
-            if not isAliveEngageSpawnId(rc.MaActorEngaged.spawnId) then
-                rc.MaActorEngaged = nil
-                rc.followCatchUp = false
+            if rc.MaActorEngaged and rc.MaActorEngaged.spawnId then
+                if not isAliveEngageSpawnId(rc.MaActorEngaged.spawnId) then
+                    rc.MaActorEngaged = nil
+                    rc.followCatchUp = false
+                end
             end
-        end
+        end)
     end
 
-    czactor.runRoleClaimsTick()
+    tickprof.span('roleClaims', function()
+        czactor.runRoleClaimsTick()
+    end)
 end
 
 function czactor.sendPing()

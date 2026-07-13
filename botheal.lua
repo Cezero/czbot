@@ -10,6 +10,7 @@ local castutils = require('lib.castutils')
 local botmove = require('botmove')
 local targeting = require('lib.targeting')
 local czactor = require('lib.czactor')
+local tickprof = require('lib.tickprof')
 
 local botheal = {}
 local AHThreshold = {}
@@ -495,15 +496,21 @@ end
 spellutils.setPrepareImmediateCastFn(function(sub, _index, evalId, targethit)
     if sub ~= 'heal' or targethit ~= 'corpse' or not evalId then return end
     if mq.TLO.Me.CastTimeLeft() > 0 then return end
-    targeting.TargetAndWait(evalId, 500)
+    tickprof.span('corpse_TargetAndWait', function()
+        targeting.TargetAndWait(evalId, 500)
+    end, 'id=' .. tostring(evalId))
     mq.cmd('/corpse')
-    mq.delay(100)
+    tickprof.span('corpse_delay100', function()
+        mq.delay(100)
+    end)
 end)
 
 function botheal.HealCheck(runPriority)
     local count = botconfig.getSpellCount('heal')
     if count <= 0 then return false end
-    local ctx = healBuildContext()
+    local ctx = tickprof.span('context', function()
+        return healBuildContext()
+    end)
     if not ctx then return false end
     local options = {
         runPriority = runPriority,
@@ -525,16 +532,22 @@ function botheal.HealCheck(runPriority)
         end
     end
     if resumePass ~= 'mana' then
-        spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
-            getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
+        tickprof.span('pass_corpse', function()
+            spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
+                getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
+        end)
         if healPassStartedCast() then return false end
         if healShouldHoldHealPass() then return false end
-        spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
-            getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
+        tickprof.span('pass_hp', function()
+            spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
+                getSpellIndicesForResource('hp'), healTargetNeedsSpell, ctx, options)
+        end)
         if healPassStartedCast() then return false end
     end
-    spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
-        getSpellIndicesForResource('mana'), healTargetNeedsSpell, ctx, options)
+    tickprof.span('pass_mana', function()
+        spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_HP, healGetTargetsForPhase,
+            getSpellIndicesForResource('mana'), healTargetNeedsSpell, ctx, options)
+    end)
     return false
 end
 

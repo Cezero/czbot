@@ -865,14 +865,28 @@ end
 local function cmd_tickdebug(args)
     local tickprof = require('lib.tickprof')
     local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'on' or mode == 'true' or mode == '1' then
+    if mode == 'spans' then
+        local sub = args[3] and string.lower(args[3]) or ''
+        if not tickprof.IsDebug() then
+            tickprof.SetDebug(true)
+        end
+        if sub == 'on' or sub == 'true' or sub == '1' then
+            tickprof.SetSpans(true)
+        elseif sub == 'off' or sub == 'false' or sub == '0' then
+            tickprof.SetSpans(false)
+        else
+            tickprof.SetSpans(not tickprof.IsSpans())
+        end
+    elseif mode == 'on' or mode == 'true' or mode == '1' then
         tickprof.SetDebug(true)
     elseif mode == 'off' or mode == 'false' or mode == '0' then
         tickprof.SetDebug(false)
     else
         tickprof.SetDebug(not tickprof.IsDebug())
     end
-    log.say('Tick debug logging %s', tickprof.IsDebug() and 'on' or 'off')
+    log.say('Tick debug logging %s (spans %s)',
+        tickprof.IsDebug() and 'on' or 'off',
+        tickprof.IsSpans() and 'on' or 'off')
 end
 
 local function cmd_actordebug(args)
