@@ -44,7 +44,7 @@ local function aliveFromCharinfoPeer(peer)
     if charinfoutils.peerHasAnyState(peer, UNAVAILABLE_STATE_FLAGS) then
         return false
     end
-    local pct = peer.PctHPs()
+    local pct = peer.PctHPs
     return pct == nil or pct > 0
 end
 
