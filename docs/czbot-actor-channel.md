@@ -156,7 +156,7 @@ When `AssistName` or `TankName` is **`automatic`**, MA/MT resolution uses **`im_
 | `listIndex` | 1-based list index; `0` for primary |
 | `zone` | Claimer's zone (receivers accept only same-zone senders) |
 
-**Who-is messages (`whos_ma` / `whos_mt`):** automatic peers with no usable actor override publish these (debounced ~2s) until an `im_*` arrives. Same `scope` / `zone` envelope as claims. The current holder (or eligible claimer) responds with one `im_*` broadcast; in-scope peers adopt it.
+**Who-is messages (`whos_ma` / `whos_mt`):** automatic peers with no usable actor override publish these with exponential backoff (~2s → ~30s; reset on successful `im_*`) until an `im_*` arrives. Same `scope` / `zone` envelope as claims. The current holder (or eligible claimer) responds with one `im_*` broadcast; in-scope peers adopt it. EQ primary / lists do not suppress these asks — they only decide claim eligibility.
 
 **Release messages (`release_ma` / `release_mt`):** sent immediately on death/hover or when the holder becomes ineligible. Receivers run self-select and the next eligible bot may publish a new `im_*` on the same tick. Peers that still lack an override after that ask `whos_*` on the next periodic tick.
 

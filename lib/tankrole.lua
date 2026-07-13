@@ -1,9 +1,8 @@
 -- Resolves Main Tank (MT) vs Main Assist (MA) for the bot.
 -- MT = who gets heals, mtSticky follow rules, and onlyMT abilities (taunt; also OT engage when off-tanking). MT never picks camp mobs.
 -- MA = who selects targets from MobList (named-first, puller priority); DPS/offtank/non-sticky MT follow MA.
--- "automatic" uses Group/Raid window roles: Group.MainTank, Group.MainAssist, Group.Puller.
--- Raid has MainAssist only; MainTank and Puller always come from Group.
--- When primary is unavailable, actor im_ma/im_mt claims and ma_list/mt_list (list_readonly) provide fallback.
+-- "automatic" uses actor im_ma/im_mt claims only for gameplay resolve. EQ Group/Raid primary and
+-- ma_list/mt_list decide who may claim; peers discover the holder via whos_* → im_*.
 -- Actor overrides are invalidated when the holder is dead, out of zone, or expired.
 -- Automatic resolution is cached until invalidation or the cached candidate becomes unavailable.
 -- A throttled refresh re-resolves every 2s so higher-priority MA/MT can reclaim the role after rez.
@@ -151,32 +150,20 @@ local function summarizeMaPath()
     local actorMa = auto_ma_mt.getActorMaOverrideName()
     if actorMa then return 'actor claim: ' .. actorMa end
     local primary = getMaPrimaryTlo()
-    if primary and isCandidateAvailable(primary, false) then
-        return 'primary_retained: ' .. primary
+    if primary and not isCandidateAvailable(primary, false) then
+        return 'awaiting im_ma (primary unavailable: ' .. primary .. ')'
     end
-    local top = auto_ma_mt.topMaCandidateInZone()
-    if top then return 'list_readonly: ' .. top end
-    if inRaid() then
-        top = auto_ma_mt.topMtCandidateInZone()
-        if top then return 'list_readonly (mt_list): ' .. top end
-    end
-    if primary then return 'primary unavailable: ' .. primary end
-    return 'no MA resolved'
+    return 'awaiting im_ma'
 end
 
 local function summarizeMtPath()
     local actorMt = auto_ma_mt.getActorMtOverrideName()
     if actorMt then return 'actor claim: ' .. actorMt end
     local primary = getMtPrimaryTlo()
-    if not inRaid() and primary and isCandidateAvailable(primary, false) then
-        return 'primary_retained: ' .. primary
+    if not inRaid() and primary and not isCandidateAvailable(primary, false) then
+        return 'awaiting im_mt (primary unavailable: ' .. primary .. ')'
     end
-    if inRaid() then
-        local top = auto_ma_mt.topMtCandidateInZone()
-        if top then return 'list_readonly: ' .. top end
-    end
-    if primary then return 'primary unavailable: ' .. primary end
-    return 'no MT resolved (awaiting im_mt)'
+    return 'awaiting im_mt'
 end
 
 local function printListAudit(label, list, listRequireLeash)
@@ -212,14 +199,6 @@ local function printListAudit(label, list, listRequireLeash)
     end
 end
 
-local function resolveMaListReadonlyTop()
-    local top = auto_ma_mt.topMaCandidateInZone()
-    if not top and inRaid() then
-        top = auto_ma_mt.topMtCandidateInZone()
-    end
-    return top
-end
-
 local function resolveAutomaticAssistFull()
     local raid = inRaid()
     local primaryTlo = getMaPrimaryTlo()
@@ -229,19 +208,6 @@ local function resolveAutomaticAssistFull()
     if actorMa then
         meta.name = actorMa
         meta.source = 'actor'
-        return meta
-    end
-
-    if primaryTlo and isCandidateAvailable(primaryTlo, false) then
-        meta.name = primaryTlo
-        meta.source = 'primary_retained'
-        return meta
-    end
-
-    local top = resolveMaListReadonlyTop()
-    if top then
-        meta.name = top
-        meta.source = 'list_readonly'
         return meta
     end
 
@@ -263,21 +229,6 @@ local function resolveAutomaticTankFull()
         return meta
     end
 
-    if not raid and primaryTlo and isCandidateAvailable(primaryTlo, false) then
-        meta.name = primaryTlo
-        meta.source = 'primary_retained'
-        return meta
-    end
-
-    if raid then
-        local top = auto_ma_mt.topMtCandidateInZone()
-        if top then
-            meta.name = top
-            meta.source = 'list_readonly'
-            return meta
-        end
-    end
-
     meta.name = nil
     meta.source = nil
     return meta
@@ -294,17 +245,6 @@ local function isCachedMaValid(cache)
         local o = state.getRunconfig().ActorMaOverride
         return auto_ma_mt.isActorHolderAvailable(o, false)
     end
-    if cache.source == 'primary_retained' then
-        if cache.name ~= cache.primaryTlo then return false end
-        if getMaPrimaryTlo() ~= cache.primaryTlo then return false end
-        if auto_ma_mt.getActorMaOverrideName() then return false end
-        return isCandidateAvailable(cache.primaryTlo, false)
-    end
-    if cache.source == 'list_readonly' then
-        if auto_ma_mt.getActorMaOverrideName() then return false end
-        local top = resolveMaListReadonlyTop()
-        return top and cache.name == top
-    end
     return false
 end
 
@@ -318,18 +258,6 @@ local function isCachedMtValid(cache)
     if cache.source == 'actor' then
         local o = state.getRunconfig().ActorMtOverride
         return auto_ma_mt.isActorHolderAvailable(o, false)
-    end
-    if cache.source == 'primary_retained' then
-        if cache.name ~= cache.primaryTlo then return false end
-        if getMtPrimaryTlo() ~= cache.primaryTlo then return false end
-        if auto_ma_mt.getActorMtOverrideName() then return false end
-        return isCandidateAvailable(cache.primaryTlo, false)
-    end
-    if cache.source == 'list_readonly' then
-        if not inRaid() then return false end
-        if auto_ma_mt.getActorMtOverrideName() then return false end
-        local top = auto_ma_mt.topMtCandidateInZone()
-        return top and cache.name == top
     end
     return false
 end
