@@ -851,6 +851,13 @@ function botbuff.BuffCheck(runPriority)
         end
         return filtered
     end
+    -- Pre-mark empty RR phases so tip-strict can skip before byname asks (phase order ≠ RR order).
+    for _, phase in ipairs(pcphasethrottle.BUFF_RR_ORDER) do
+        local list = filterIndicesEntryValid(_buffIndicesByPhase[phase] or {})
+        if #list == 0 then
+            pcphasethrottle.noteBuffPhaseEmpty(phase)
+        end
+    end
     local function getSpellIndices(phase, _target)
         local cached = indicesByPhase[phase]
         if cached then return cached end

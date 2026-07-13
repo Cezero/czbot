@@ -19,6 +19,8 @@ local THROTTLED = {
 
 --- Buff: at most one of these per INTERVAL_MS wall-clock (shared token), round-robin.
 local BUFF_RR_ORDER = { 'groupbuff', 'byname', 'groupmember', 'pc', 'mypet', 'pet' }
+--- Exported for BuffCheck empty pre-mark (must match tip-strict allow walk).
+pcphasethrottle.BUFF_RR_ORDER = BUFF_RR_ORDER
 local buffRrNext = 1
 --- Phase granted for the current buff pass (nil = none yet).
 local buffPassGrant = nil

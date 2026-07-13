@@ -590,17 +590,19 @@ local function fillHealPeerMaps(context)
         return snap
     end
 
-    -- Healthy fast path: no injured peers and self not in groupheal band — skip peer HP band scans.
-    -- Pets are not in GetInjuredPeers; still band-check PetHP while building identity snaps.
+    -- Healthy fast path: no injured peers and self not in groupheal band.
+    -- Do not snapPeer all bots (urgent pass only needs self/tank; ensureHealSnap fills on demand).
+    -- Pets are not in GetInjuredPeers; probe PetHP from peers already on context.peerByName.
     if injuredEmpty and not selfNeedsGroupheal then
         for i = 1, n do
             local name = bots[i]
             if name then
-                local peer = context.peerByName[name] or charinfo.GetInfo(name)
+                local peer = context.peerByName[name]
                 if peer then
-                    local snap = snapPeer(name, peer)
-                    if snap and snap.petId and snap.petId > 0 and snap.petHp ~= nil then
-                        if pctInAnyHealBand(snap.petHp, 'pet') then gate.pet = true end
+                    local petId = peer.PetID
+                    local petHp = peer.PetHP
+                    if petId and petId > 0 and petHp ~= nil and pctInAnyHealBand(petHp, 'pet') then
+                        gate.pet = true
                     end
                 end
             end
