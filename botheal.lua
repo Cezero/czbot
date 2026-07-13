@@ -12,6 +12,8 @@ local targeting = require('lib.targeting')
 local czactor = require('lib.czactor')
 local tickprof = require('lib.tickprof')
 
+local pcphasethrottle = require('lib.pcphasethrottle')
+
 local botheal = {}
 local AHThreshold = {}
 local XTList = {}
@@ -383,13 +385,49 @@ local function healEntryValid(spellIndex)
     return spellutils.SpellCheck('heal', spellIndex)
 end
 
+local function healIndexPeerNames(targets, context)
+    if not targets or #targets == 0 then return targets end
+    local map = context.peerNameById
+    if not map then
+        map = {}
+        context.peerNameById = map
+    end
+    for i = 1, #targets do
+        local t = targets[i]
+        if t and t.id and t.name then map[t.id] = t.name end
+    end
+    return targets
+end
+
+--- Peer HP/class/distance for heal cells. One GetInfo; distance from peer Zone.X/Y.
+local function peerNeedsHeal(peer, band, rangeSq, meX, meY, classOk, classHint)
+    if not peer or not band then return false end
+    local pct = peer.PctHPs
+    if not pct or not hpInBand(pct, band) then return false end
+    local cls = classHint
+    if (not cls or cls == '') and peer.Class and type(peer.Class.ShortName) == 'string' then
+        cls = peer.Class.ShortName:lower()
+    elseif cls then
+        cls = cls:lower()
+    end
+    if classOk and not classOk(cls) then return false end
+    local zone = peer.Zone
+    if not zone or zone.X == nil or zone.Y == nil then return false end
+    local distSq = utils.getDistanceSquared2D(meX, meY, zone.X, zone.Y)
+    return rangeSq and distSq and distSq <= rangeSq
+end
+
 local function healGetTargetsForPhase(phase, context)
     if phase == 'self' then return castutils.getTargetsSelf() end
     if phase == 'tank' then return castutils.getTargetsTank(context) end
     if phase == 'offtank' then return castutils.getTargetsOfftank(context) end
     if phase == 'groupheal' then return castutils.getTargetsGroupCaster('groupheal') end
-    if phase == 'groupmember' then return castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true }) end
-    if phase == 'pc' then return castutils.getTargetsPc(context, { excludeTank = true }) end
+    if phase == 'groupmember' then
+        return healIndexPeerNames(castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true }), context)
+    end
+    if phase == 'pc' then
+        return healIndexPeerNames(castutils.getTargetsPc(context, { excludeTank = true }), context)
+    end
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then return castutils.getTargetsPet(context) end
     if phase == 'xtgt' and XTList then
@@ -405,6 +443,8 @@ local function healGetTargetsForPhase(phase, context)
     end
     if phase == 'corpse' then
         if not healCorpsePending() then return {} end
+        local cursor = spellutils.getResumeCursor('doHeal')
+        if not pcphasethrottle.allow('heal', cursor, 'corpse') then return {} end
         local rezid = CorpseRezIdForFilter()
         if rezid then return { { id = rezid, targethit = 'corpse' } } end
         return {}
@@ -565,18 +605,32 @@ function botheal.HealCheck(runPriority)
                     return classesForPhase and classesForPhase[c] == true
                 end
             end
-            local sp = mq.TLO.Spawn(targetId)
-            if sp and sp.ID() == targetId and sp.Type() == 'PC' then
-                local distSq = utils.getDistanceSquared2D(meX, meY, sp.X(), sp.Y())
-                if phase == 'groupmember' and th.groupmember
-                    and castutils.hpEvalSpawn(targetId, th.groupmember)
-                    and spellCtx.spellrangeSq and distSq and distSq <= spellCtx.spellrangeSq and classOk(targethit) then
+            local name = context.peerNameById and context.peerNameById[targetId]
+            if phase == 'pc' and th.pc then
+                -- Peer-only: never Spawn. Skip if no networked peer.
+                if not name then return nil, nil end
+                local peer = charinfo.GetInfo(name)
+                if peerNeedsHeal(peer, th.pc, spellCtx.spellrangeSq, meX, meY, classOk, targethit) then
                     return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
                 end
-                if phase == 'pc' and th.pc and context.botcount then
-                    local peer = charinfo.GetInfo(sp.CleanName())
-                    local bothp = peer and peer.PctHPs or nil
-                    if bothp and hpInBand(bothp, th.pc) and distSq and spellCtx.spellrangeSq and distSq <= spellCtx.spellrangeSq and classOk(targethit) then
+                return nil, nil
+            end
+            if phase == 'groupmember' and th.groupmember then
+                if name then
+                    local peer = charinfo.GetInfo(name)
+                    if peer then
+                        if peerNeedsHeal(peer, th.groupmember, spellCtx.spellrangeSq, meX, meY, classOk, targethit) then
+                            return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
+                        end
+                        return nil, nil
+                    end
+                end
+                -- Non-bot group member: Spawn fallback for HP/dist.
+                local sp = mq.TLO.Spawn(targetId)
+                if sp and sp.ID() == targetId and sp.Type() == 'PC' then
+                    local distSq = utils.getDistanceSquared2D(meX, meY, sp.X(), sp.Y())
+                    if castutils.hpEvalSpawn(targetId, th.groupmember)
+                        and spellCtx.spellrangeSq and distSq and distSq <= spellCtx.spellrangeSq and classOk(targethit) then
                         return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
                     end
                 end

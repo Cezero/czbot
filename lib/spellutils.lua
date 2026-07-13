@@ -953,15 +953,32 @@ function spellutils.GetClassOrderPriority(classShortName)
     return priority[string.lower(tostring(classShortName or ''))] or 9999
 end
 
+--- Tick-local memo for GetBotListOrdered (heal + buff share one sorted list per mainloop tick).
+local _botListOrderedMemo = { list = nil }
+
+function spellutils.beginTick()
+    _botListOrderedMemo.list = nil
+end
+
 --- Returns table of bot names from charinfo.GetPeers(), sorted by class order (healers first, then tanks, casters, DPS).
 --- Order is configurable via botconfig.getCommon().botListClassOrder (array of lowercase class short names).
 function spellutils.GetBotListOrdered()
+    if _botListOrderedMemo.list then return _botListOrderedMemo.list end
     local bots = charinfo.GetPeers()
-    if not bots or #bots == 0 then return bots end
+    if not bots or #bots == 0 then
+        _botListOrderedMemo.list = bots
+        return bots
+    end
     local priority = _getBotListClassPriority()
     local classByName = {}
     for _, name in ipairs(bots) do
-        local cls = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
+        local cls
+        local peer = charinfo.GetInfo(name)
+        if peer and peer.Class and type(peer.Class.ShortName) == 'string' then
+            cls = peer.Class.ShortName
+        else
+            cls = mq.TLO.Spawn('pc =' .. name).Class.ShortName()
+        end
         classByName[name] = cls and string.lower(cls) or ''
     end
     table.sort(bots, function(a, b)
@@ -970,6 +987,7 @@ function spellutils.GetBotListOrdered()
         if ap ~= bp then return ap < bp end
         return (a or '') < (b or '')
     end)
+    _botListOrderedMemo.list = bots
     return bots
 end
 
@@ -1402,16 +1420,26 @@ end
 
 -- SPA 100 = HoT Heals (MacroQuest spelleffects.h). Returns true if the spell for entry has the HoT effect.
 -- Do not store mq.TLO.Spell() proxy; use direct chains (see HasReagents comment).
+-- Cached by gem+spell so rejectIfAlreadyHoT is O(1) for non-HoT heals (avoids HasSPA TLO every cell).
+local _isHoTSpellCache = {}
+
 function spellutils.IsHoTSpell(entry)
     if not entry or not entry.spell then return false end
+    local key = tostring(entry.gem or '') .. '\0' .. tostring(entry.spell)
+    local cached = _isHoTSpellCache[key]
+    if cached ~= nil then return cached end
+    local hasHoT = false
     if entry.gem == 'item' then
-        if not mq.TLO.FindItem(entry.spell)() then return false end
-        local ok, hasHoT = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(100)() end)
-        return ok and hasHoT
+        if mq.TLO.FindItem(entry.spell)() then
+            local ok, v = pcall(function() return mq.TLO.FindItem(entry.spell).Spell.HasSPA(100)() end)
+            hasHoT = ok and v and true or false
+        end
+    elseif mq.TLO.Spell(entry.spell)() then
+        local ok, v = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(100)() end)
+        hasHoT = ok and v and true or false
     end
-    if not mq.TLO.Spell(entry.spell)() then return false end
-    local ok, hasHoT = pcall(function() return mq.TLO.Spell(entry.spell).HasSPA(100)() end)
-    return ok and hasHoT
+    _isHoTSpellCache[key] = hasHoT
+    return hasHoT
 end
 
 -- Returns true if the spell is a pet summon (Category Pet, or SPA 33 SUMMON_PET / SPA 103 CALL_PET).

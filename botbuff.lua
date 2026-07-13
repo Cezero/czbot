@@ -85,22 +85,29 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             return nil, nil
         end
         if BuffClass[index].self then
-            local buffdur = mq.TLO.Me.Buff(spell).Duration()
-            local mycasttime = mq.TLO.Spell(spell).MyCastTime()
             local buff = mq.TLO.Me.Buff(spell)() or mq.TLO.Me.Song(spell)()
-            local stacks = mq.TLO.Spell(spell).Stacks()
-            local tartype = mq.TLO.Spell(spell).TargetType()
-            local freebuffslots = mq.TLO.Me.FreeBuffSlots()
-            if (not buff) or (buffdur and buffdur < spellutils.BUFF_REFRESH_THRESHOLD_MS and mycasttime > 0 and freebuffslots > 0) then
-                if IconCheck(index, myid) then
-                    if tartype == 'Self' and stacks then return myid, 'self' end
-                    if stacks then return myid, 'self' end
-                    spellutils.BuffLog('skip self %s: will not stack', spell)
-                else
-                    spellutils.BuffLog('skip self %s: already present (icon)', spell)
+            if buff then
+                local buffdur = mq.TLO.Me.Buff(spell).Duration()
+                if buffdur and buffdur >= spellutils.BUFF_REFRESH_THRESHOLD_MS then
+                    spellutils.BuffLog('skip self %s: still up', spell)
+                    return nil, nil
                 end
+                -- Below refresh threshold: only recast if we have cast time + free slot.
+                local mycasttime = mq.TLO.Spell(spell).MyCastTime()
+                local freebuffslots = mq.TLO.Me.FreeBuffSlots()
+                if not (buffdur and buffdur < spellutils.BUFF_REFRESH_THRESHOLD_MS and mycasttime and mycasttime > 0 and freebuffslots and freebuffslots > 0) then
+                    spellutils.BuffLog('skip self %s: still up', spell)
+                    return nil, nil
+                end
+            end
+            if IconCheck(index, myid) then
+                local stacks = mq.TLO.Spell(spell).Stacks()
+                local tartype = mq.TLO.Spell(spell).TargetType()
+                if tartype == 'Self' and stacks then return myid, 'self' end
+                if stacks then return myid, 'self' end
+                spellutils.BuffLog('skip self %s: will not stack', spell)
             else
-                spellutils.BuffLog('skip self %s: still up', spell)
+                spellutils.BuffLog('skip self %s: already present (icon)', spell)
             end
         end
         return nil, nil
@@ -149,10 +156,10 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range, aeRange)
     local aeRangeSq = aeRange * aeRange
     local function needBuff(grpmember, grpid, grpname, peer)
         if peer then
-            local hasBuff = spellutils.PeerHasBuff(peer, spellid)
+            if spellutils.PeerHasBuff(peer, spellid) then return false end
             local stacks = peer:Stacks(spellid)
             local free = peer.FreeBuffSlots
-            return not hasBuff and stacks and free and free > 0
+            return stacks and free and free > 0
         end
         return spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon)
     end
@@ -188,10 +195,10 @@ local function buffGroupNeedFn(spellIndex, spell, spellid, entry)
     return function(grpmember, grpid, grpname, peer)
         if not buffMemberClassAllowed(spellIndex, grpname, grpmember, peer) then return false end
         if peer then
-            local hasBuff = spellutils.PeerHasBuff(peer, spellid)
+            if spellutils.PeerHasBuff(peer, spellid) then return false end
             local stacks = peer:Stacks(spellid)
             local free = peer.FreeBuffSlots
-            return not hasBuff and stacks and free and free > 0
+            return stacks and free and free > 0
         end
         return spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon)
     end
@@ -200,10 +207,10 @@ end
 local function peerPersonallyNeedsBuff(spellIndex, grpname, spellid, peer)
     if not peer then return false end
     if not buffMemberClassAllowed(spellIndex, grpname, nil, peer) then return false end
-    local hasBuff = spellutils.PeerHasBuff(peer, spellid)
+    if spellutils.PeerHasBuff(peer, spellid) then return false end
     local stacks = peer:Stacks(spellid)
     local free = peer.FreeBuffSlots
-    return not hasBuff and stacks and free and free > 0
+    return stacks and free and free > 0
 end
 
 --- First peer in bot order for groupKey who personally needs the buff; else first peer in that group (remote only).
@@ -247,11 +254,13 @@ end
 local function BuffEvalMyPet(index, entry, spell, spellid, rangeSq)
     if not BuffClass[index].mypet then return nil, nil end
     local mypetid = mq.TLO.Me.Pet.ID()
+    if not mypetid or mypetid <= 0 then return nil, nil end
     local petbuff = mq.TLO.Me.Pet.Buff(spell)()
+    if petbuff then return nil, nil end
     local mypetSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Pet.X(), mq.TLO.Me.Pet.Y())
     local myPeer = charinfo.GetInfo(mq.TLO.Me.Name())
     local petstacks = myPeer and myPeer:StacksPet(spellid)
-    if mypetid > 0 and petstacks and not petbuff and mypetSq and rangeSq and mypetSq <= rangeSq then
+    if petstacks and mypetSq and rangeSq and mypetSq <= rangeSq then
         return mypetid, 'mypet'
     end
     return nil, nil
@@ -268,12 +277,16 @@ local function BuffEvalPets(index, entry, spellid, rangeSq, bots, botcount)
                 if not petid or petid == 0 then
                     -- skip: no pet or proxy not valid
                 else
-                    local petdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), petSpawnProxy.X(), petSpawnProxy.Y())
                     local petbuff = spellutils.PeerHasPetBuff(peer, spellid)
-                    local spawnid = mq.TLO.Spawn('pc =' .. bots[i]).ID()
-                    local petstacks = peer:StacksPet(spellid)
-                    if spawnid and spawnid > 0 and petstacks and IconCheck(index, spawnid) and not petbuff and rangeSq and petdistSq and petdistSq <= rangeSq then
-                        return petid, 'pet'
+                    if petbuff then
+                        -- skip: already has pet buff
+                    else
+                        local petdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), petSpawnProxy.X(), petSpawnProxy.Y())
+                        local spawnid = mq.TLO.Spawn('pc =' .. bots[i]).ID()
+                        local petstacks = peer:StacksPet(spellid)
+                        if spawnid and spawnid > 0 and petstacks and IconCheck(index, spawnid) and rangeSq and petdistSq and petdistSq <= rangeSq then
+                            return petid, 'pet'
+                        end
                     end
                 end
             end
@@ -291,11 +304,11 @@ local function BuffEvalPetById(index, spellid, rangeSq, petId)
     if not masterName or masterName == '' then return nil, nil end
     local peer = charinfo.GetInfo(masterName)
     if not peer then return nil, nil end
+    if spellutils.PeerHasPetBuff(peer, spellid) then return nil, nil end
     local petdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), petSpawn.X(), petSpawn.Y())
-    local petbuff = spellutils.PeerHasPetBuff(peer, spellid)
     local petstacks = peer:StacksPet(spellid)
     local ownerId = mq.TLO.Spawn('pc =' .. masterName).ID()
-    if ownerId and ownerId > 0 and petstacks and IconCheck(index, ownerId) and not petbuff
+    if ownerId and ownerId > 0 and petstacks and IconCheck(index, ownerId)
         and rangeSq and petdistSq and petdistSq <= rangeSq then
         return petId, 'pet'
     end
@@ -333,6 +346,7 @@ local function buffGetTargetsForPhase(phase, context)
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then return castutils.getTargetsPet(context) end
     if phase == 'byname' and context.buffCount then
+        if context.bynameTargets then return context.bynameTargets end
         local out = {}
         local seen = {}
         local function addByName(name)
@@ -358,7 +372,9 @@ local function buffGetTargetsForPhase(phase, context)
                 end
             end
         end
-        return filterCorpses(out)
+        local filtered = filterCorpses(out)
+        context.bynameTargets = filtered
+        return filtered
     end
     return {}
 end

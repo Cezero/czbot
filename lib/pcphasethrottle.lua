@@ -10,12 +10,14 @@ local INTERVAL_MS = 1000
 local THROTTLED = {
     buff = { pc = true, groupmember = true, pet = true, byname = true },
     cure = { pc = true, priority = true },
+    -- Heal: corpse/rez only. Do not throttle groupmember, pc, or pet.
+    heal = { corpse = true },
 }
 
 --- nextAt[section][phase] = mq.gettime() when next allow is ok
 local nextAt = {}
 
----@param section string 'buff'|'cure'
+---@param section string 'buff'|'cure'|'heal'
 ---@param resumeCursor table|nil spellutils.getResumeCursor(hookName)
 ---@param phase string|nil phase being requested (default 'pc' for cure backward compat)
 ---@return boolean

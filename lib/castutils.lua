@@ -198,12 +198,16 @@ local function addPcEntries(out, names, count, filterFn)
     count = count or #names
     for i = 1, count do
         local name = names[i]
-        if name and charinfo.GetInfo(name) and (not filterFn or filterFn(name)) then
+        local peer = name and charinfo.GetInfo(name)
+        if peer and (not filterFn or filterFn(name)) then
             local sp = mq.TLO.Spawn('pc =' .. name)
             local id = sp and sp.ID()
             if id and id > 0 and sp.Type() == 'PC' then
-                local class = sp.Class.ShortName()
-                if class then out[#out + 1] = { id = id, targethit = class:lower() } end
+                local class = peer.Class and peer.Class.ShortName
+                if type(class) ~= 'string' or class == '' then
+                    class = sp.Class.ShortName()
+                end
+                if class then out[#out + 1] = { id = id, targethit = class:lower(), name = name } end
             end
         end
     end
@@ -262,7 +266,7 @@ function castutils.getTargetsGroupMember(context, opts)
                     elseif opts.excludeSelfAndTank and context and (grpid == context.tankid or grpid == mq.TLO.Me.ID()) then
                         -- skip tank and self (heal/buff: tank only in tank phase; groupmember = not self, not tank)
                     else
-                        out[#out + 1] = { id = grpid, targethit = grpclass:lower() }
+                        out[#out + 1] = { id = grpid, targethit = grpclass:lower(), name = grpname }
                     end
                 end
             end
