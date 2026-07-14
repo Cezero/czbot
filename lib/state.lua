@@ -101,7 +101,7 @@
 ---@field chnextClr string|nil
 ---@field chchainBatonSeq number
 ---@field ChHealers table
----@field PreCH table|nil settings saved before CH chain enable
+---@field PreCH table|nil settings saved while CH chain is active (restored on stop/disable)
 --- Abort flags: true when abort turned off domelee/dodebuff so "abort off" can restore them.
 ---@field meleeAbort boolean
 ---@field debuffAbort boolean

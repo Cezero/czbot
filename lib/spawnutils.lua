@@ -974,7 +974,7 @@ end
 
 function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
-    if rc.doChchain then return end
+    if rc.doChchain and rc.chainActive then return end
     utils.pruneCharmSkipIds(rc)
     tickprof.span('pruneFTE', function()
         spawnutils.pruneFTEList(rc)

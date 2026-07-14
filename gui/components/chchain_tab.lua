@@ -117,16 +117,14 @@ function M.draw()
     if type(rc.ChHealers) ~= 'table' then rc.ChHealers = {} end
 
     section.header('CH Chain')
-    ImGui.TextWrapped('All chain control uses czactor. Optional chat mirror is never parsed by bots.')
+    ImGui.TextWrapped('Enable = participate when the chain runs (normal heals continue until Start). All chain control uses czactor.')
 
     local enabled = rc.doChchain == true
-    local enChecked, enToggled = ImGui.Checkbox('Enabled on this cleric', enabled)
+    local enChecked, enToggled = ImGui.Checkbox('CH Chain enabled', enabled)
     if enToggled then
         if enChecked then
             chchain.enable()
-            chchain.publishControl('start')
         else
-            chchain.publishControl('stop')
             chchain.disable()
         end
     end
@@ -135,20 +133,22 @@ function M.draw()
     local active = rc.chainActive == true
     local actChecked, actToggled = ImGui.Checkbox('Chain active', active)
     if actToggled then
-        rc.chainActive = actChecked
+        chchain.setChainActive(actChecked)
         chchain.publishControl(actChecked and 'start' or 'stop')
     end
 
     if ImGui.Button('Start Chain') then
-        if not rc.doChchain then chchain.enable() end
-        rc.chainActive = true
-        chchain.publishControl('kickoff', mq.TLO.Me.CleanName() or mq.TLO.Me.Name())
-        chchain.startCast(false)
+        if rc.doChchain or chchain.enable() then
+            chchain.setChainActive(true)
+            chchain.publishControl('kickoff', mq.TLO.Me.CleanName() or mq.TLO.Me.Name())
+            chchain.startCast(false)
+        end
     end
     ImGui.SameLine()
     if ImGui.Button('Test Cast') then
-        if not rc.doChchain then chchain.enable() end
-        chchain.startCast(true)
+        if rc.doChchain or chchain.enable() then
+            chchain.startCast(true)
+        end
     end
 
     local tankLabel = rc.chchainTank ~= '' and rc.chchainTank or '(none)'

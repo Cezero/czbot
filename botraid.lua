@@ -73,7 +73,8 @@ end
 function botraid.getHookFn(name)
     if name == 'doRaid' then
         return function(hookName)
-            if state.getRunconfig().doChchain then return end
+            local rc = state.getRunconfig()
+            if rc.doChchain and rc.chainActive then return end
             if not myconfig.settings.doraid then return end
             if botraid.RaidCheck() then
                 state.setRunState(state.STATES.raid_mechanic, { priority = bothooks.getPriority('doRaid') })

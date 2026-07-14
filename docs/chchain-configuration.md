@@ -6,8 +6,8 @@ CHChain rotates **Complete Heal** casts across clerics listed in **`ch_healers`*
 
 1. **Roles** tab → populate `mt_list` (tank priority).
 2. **CH Chain** tab → populate `ch_healers`, timing, options.
-3. On each cleric in the list: enable **CH Chain** (or `/cz chchain on`).
-4. Start the chain from the first cleric: **Start Chain** or `/cz chchain start`.
+3. On each cleric in the list: turn on **CH Chain enabled** (or `/cz chchain on`). This is a doHeal-style feature flag — normal heals/buffs continue until the chain starts. Persists in char settings.
+4. Start the chain from the first cleric: **Start Chain** or `/cz chchain start`. That activates the rotation and suppresses other bot activity on enabled clerics.
 
 Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_common.lua` and auto-sync to peers via **`common_sync`** on the czactor channel. Manual **`/cz reloadcommon`** remains a fallback.
 
@@ -15,11 +15,12 @@ Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_co
 
 | Command | Action |
 |---------|--------|
-| `/cz chchain on` | Enable on this cleric (must be in `ch_healers`); publishes `chchain_control start` |
-| `/cz chchain off` | Disable and restore PreCH settings; publishes stop |
-| `/cz chchain start` | Kickoff cast + `chchain_control kickoff` |
-| `/cz chchain test` | Single test cast (auto-enables if needed) |
-| `/cz chchain delay [ms]` | Set/read baton delay (ms into cast) |
+| `/cz chchain on` | Local opt-in (`settings.doChchain`); must be in `ch_healers`. Does not start the chain or suppress heals. |
+| `/cz chchain off` | Local opt-out only (does not stop peers' chain). |
+| `/cz chchain start` | Activate chain + kickoff cast + `chchain_control kickoff` (auto-enables if needed). |
+| `/cz chchain stop` | Deactivate chain (`chainActive` off) + restore PreCH settings; publishes stop. Participation flag stays on. |
+| `/cz chchain test` | Single test cast (auto-enables if needed). |
+| `/cz chchain delay [ms]` | Set/read baton delay (ms into cast). |
 
 ## Actor messages
 
@@ -37,7 +38,7 @@ Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_co
 - Poll-based cast: baton at `broadcastDelayMs`, cancel in final `cancelWindowMs` if tank HP ≥ threshold.
 - Cast must start before baton is sent.
 - Per-cleric CH range check on `mt_list`; mana skip; fizzle recast; corpse interrupt + baton.
-- While active, normal heal/buff/debuff/melee/cure/pull are suppressed (restored on off).
+- While **chain active** (and this cleric is enabled), normal heal/buff/debuff/melee/cure/pull are suppressed; restored on **stop** (not on enable).
 
 ## MT coordination
 

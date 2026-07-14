@@ -316,7 +316,8 @@ end
 
 -- Movement only: camp return and follow. Runs in runWhenBusy pass so pure casters get camp/follow even when stuck in casting. Throttled 1s.
 local function _runDoMovementCheck()
-    if state.getRunconfig().doChchain then return end
+    local rc = state.getRunconfig()
+    if rc.doChchain and rc.chainActive then return end
     if _movementLastRun > mq.gettime() then return end
     botmove.TickCampReturn()
     botmove.FollowAndStuckCheck()

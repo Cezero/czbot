@@ -10,6 +10,7 @@
 ---@field mountcast string|nil
 ---@field dosit boolean|nil
 ---@field doforage boolean|nil
+---@field doChchain boolean|nil when true, this toon participates in CH chain when it is started
 ---@field sitmana number|nil
 ---@field sitendur number|nil
 ---@field sitaggro number|nil
@@ -129,7 +130,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe', 'confirmExit', 'antiAfk' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe', 'confirmExit', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
@@ -1318,6 +1319,7 @@ function M.Load(path)
     if (M.config.settings.mountcast == nil) then M.config.settings.mountcast = 'none' end
     if (M.config.settings.dosit == nil) then M.config.settings.dosit = true end
     if (M.config.settings.doforage == nil) then M.config.settings.doforage = false end
+    if (M.config.settings.doChchain == nil) then M.config.settings.doChchain = false end
     if (M.config.settings.sitmana == nil) then M.config.settings.sitmana = 90 end
     if (M.config.settings.sitendur == nil) then M.config.settings.sitendur = 90 end
     if (M.config.settings.sitaggro == nil) then M.config.settings.sitaggro = 60 end

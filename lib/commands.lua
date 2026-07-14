@@ -1223,13 +1223,16 @@ local function cmd_setvar(args)
             end
         end
     end
-    if state.getRunconfig().doChchain then
-        botconfig.config.settings.dodebuff = false
-        botconfig.config.settings.dobuff = false
-        botconfig.config.settings.domelee = false
-        botconfig.config.settings.doheal = false
-        botconfig.config.settings.docure = false
-        state.getRunconfig().dopull = false
+    do
+        local rc = state.getRunconfig()
+        if rc.doChchain and rc.chainActive then
+            botconfig.config.settings.dodebuff = false
+            botconfig.config.settings.dobuff = false
+            botconfig.config.settings.domelee = false
+            botconfig.config.settings.doheal = false
+            botconfig.config.settings.docure = false
+            rc.dopull = false
+        end
     end
     if not valfound then log.say('\ar%s not found', args[2]) end
 end
@@ -1364,31 +1367,41 @@ local function cmd_saytarget(args, str)
     cmd_syt({ 'syt', tostring(targetId), message }, '')
 end
 
--- CHChain: on, off, start, test, delay
+-- CHChain: on, off, start, stop, test, delay
 local function cmd_chchain(args)
     local sub = args[2] and string.lower(args[2])
     if not sub then
-        log.say('Usage: /cz chchain on|off|start|test|delay <ms>')
+        log.say('Usage: /cz chchain on|off|start|stop|test|delay <ms>')
         return
     end
     if sub == 'on' then
-        if chchain.enable() then
-            chchain.publishControl('start')
-        end
+        chchain.enable()
         return
     end
-    if sub == 'off' or sub == 'stop' then
-        chchain.publishControl('stop')
+    if sub == 'off' then
         chchain.disable()
         return
     end
+    if sub == 'stop' then
+        chchain.setChainActive(false)
+        chchain.publishControl('stop')
+        return
+    end
     if sub == 'start' then
-        chchain.publishControl('kickoff', meName())
+        local rc = state.getRunconfig()
+        if not rc.doChchain then
+            if not chchain.enable() then return end
+        end
+        chchain.setChainActive(true)
+        local healer = mq.TLO.Me.CleanName() or mq.TLO.Me.Name()
+        chchain.publishControl('kickoff', healer)
         chchain.startCast(false)
         return
     end
     if sub == 'test' then
-        if not state.getRunconfig().doChchain then chchain.enable() end
+        if not state.getRunconfig().doChchain then
+            if not chchain.enable() then return end
+        end
         chchain.startCast(true)
         return
     end
@@ -1403,7 +1416,7 @@ local function cmd_chchain(args)
         log.say('CH delay set to %d ms', v)
         return
     end
-    log.say('Usage: /cz chchain on|off|start|test|delay <ms>')
+    log.say('Usage: /cz chchain on|off|start|stop|test|delay <ms>')
 end
 
 local function meName()

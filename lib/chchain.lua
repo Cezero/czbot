@@ -260,6 +260,50 @@ local function restorePreCH()
     rc.PreCH = nil
 end
 
+local function persistDoChchain(value)
+    local s = botconfig.config.settings
+    if s.doChchain == value then return end
+    s.doChchain = value
+    botconfig.ApplyAndPersist()
+end
+
+--- Arm/disarm local participation without touching settings persist.
+local function armLocal(quiet)
+    if not chchain.isMeInHealerList() then
+        if not quiet then
+            log.say('CHChain: %s not in ch_healers', meName() or '?')
+        end
+        return false
+    end
+    if not mq.TLO.Me.Book('complete heal')() then
+        if not quiet then
+            log.say('CHChain: Complete Heal not in book')
+        end
+        return false
+    end
+    local rc = state.getRunconfig()
+    rc.doChchain = true
+    rc.chnextClr = computeNextClr(meName())
+    rc.chchainCurtank = 1
+    if rc.MtList and rc.MtList[1] then
+        rc.chchainTank = rc.MtList[1]
+    end
+    rc.chchainBatonSeq = 0
+    -- Late join while an active chain is already running.
+    if rc.chainActive then
+        suppressNormalActivity()
+    end
+    return true
+end
+
+local function disarmLocal()
+    local rc = state.getRunconfig()
+    rc.doChchain = false
+    rc.chainActive = false
+    restorePreCH()
+    state.clearRunState()
+end
+
 function chchain.isMeInHealerList()
     local me = meName()
     if not me then return false end
@@ -269,36 +313,54 @@ function chchain.isMeInHealerList()
     return false
 end
 
+--- Feature flag: this cleric participates when the chain runs. Does not suppress heals until active.
 function chchain.enable()
-    if not chchain.isMeInHealerList() then
-        log.say('CHChain: %s not in ch_healers', meName() or '?')
-        return false
-    end
-    if not mq.TLO.Me.Book('complete heal')() then
-        log.say('CHChain: Complete Heal not in book')
-        return false
-    end
-    local rc = state.getRunconfig()
-    suppressNormalActivity()
-    rc.doChchain = true
-    rc.chainActive = true
-    rc.chnextClr = computeNextClr(meName())
-    rc.chchainCurtank = 1
-    if rc.MtList and rc.MtList[1] then
-        rc.chchainTank = rc.MtList[1]
-    end
-    rc.chchainBatonSeq = 0
-    log.say('CHChain enabled (next: %s)', tostring(rc.chnextClr))
+    if not armLocal(false) then return false end
+    persistDoChchain(true)
+    log.say('CHChain enabled (next: %s)', tostring(state.getRunconfig().chnextClr))
     return true
 end
 
 function chchain.disable()
-    local rc = state.getRunconfig()
-    rc.doChchain = false
-    rc.chainActive = false
-    restorePreCH()
-    state.clearRunState()
+    disarmLocal()
+    persistDoChchain(false)
     log.say('CHChain disabled')
+end
+
+--- Start/stop the live rotation. Suppresses normal activity only for enabled clerics.
+function chchain.setChainActive(active)
+    local rc = state.getRunconfig()
+    if active then
+        rc.chainActive = true
+        if rc.doChchain then
+            suppressNormalActivity()
+        end
+    else
+        rc.chainActive = false
+        restorePreCH()
+        state.clearRunState()
+    end
+end
+
+--- Mirror persisted settings.doChchain into runconfig (no suppress unless chain already active).
+function chchain.applyFromSettings()
+    local want = botconfig.config.settings.doChchain == true
+    local rc = state.getRunconfig()
+    if want then
+        if not chchain.isMeInHealerList() then
+            if rc.doChchain or rc.PreCH then
+                rc.doChchain = false
+                restorePreCH()
+                state.clearRunState()
+            end
+            return
+        end
+        if not rc.doChchain then
+            armLocal(true)
+        end
+    elseif rc.doChchain or rc.PreCH then
+        disarmLocal()
+    end
 end
 
 local function passBaton(rc)
@@ -394,17 +456,16 @@ local function onBaton(content)
 end
 
 local function onControl(content)
-    local rc = state.getRunconfig()
     local action = content.action
     if action == 'start' then
-        rc.chainActive = true
+        chchain.setChainActive(true)
     elseif action == 'stop' then
-        rc.chainActive = false
-        state.clearRunState()
+        chchain.setChainActive(false)
     elseif action == 'kickoff' then
-        rc.chainActive = true
+        chchain.setChainActive(true)
         local healer = content.healer
         if healer and namesEqual(healer, meName()) then
+            local rc = state.getRunconfig()
             rc.chchainBatonSeq = 0
             chchain.startCast(false)
         end
@@ -419,6 +480,7 @@ function chchain.registerActorHandlers()
     czactor_dispatch.RegisterHandler('chchain_curtank', applyCurtank)
     czactor_dispatch.RegisterHandler('chchain_baton', onBaton)
     czactor_dispatch.RegisterHandler('chchain_control', onControl)
+    chchain.applyFromSettings()
 end
 
 function chchain.Tick()
@@ -491,5 +553,7 @@ end
 
 chchain.MIRROR_CHANNELS = MIRROR_CHANNELS
 chchain.DEFAULT_CH_CHAIN = DEFAULT_CH_CHAIN
+
+botconfig.RegisterConfigLoader(chchain.applyFromSettings)
 
 return chchain

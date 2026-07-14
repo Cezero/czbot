@@ -3,6 +3,7 @@
 local botconfig = require('lib.config')
 local state = require('lib.state')
 local auto_ma_mt = require('lib.auto_ma_mt')
+local chchain = require('lib.chchain')
 
 local rolelists = {}
 
@@ -51,6 +52,8 @@ function rolelists.loadFromCommon()
     auto_ma_mt.bumpMtListGen()
     auto_ma_mt.refreshRoleClaimEligibility()
     _chListGen = _chListGen + 1
+    -- Healers list may have changed; re-apply persisted CH participate flag.
+    chchain.applyFromSettings()
 end
 
 function rolelists.getMaList()
@@ -81,6 +84,7 @@ function rolelists.process(listType, command)
         auto_ma_mt.refreshRoleClaimEligibility()
     elseif listType == 'ch' then
         _chListGen = _chListGen + 1
+        chchain.applyFromSettings()
     end
 end
 
