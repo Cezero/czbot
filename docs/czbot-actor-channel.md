@@ -43,8 +43,7 @@ The `czbot` mailbox is registered once at macro startup and removed on macro exi
 | `attack` | Group/raid attack broadcast from `/cz attack` — peers engage spawn ID immediately ([Group attack](#group-attack)) |
 | `follow_me` / `follow_me_off` | Leader follow broadcast (replaces `/rc` for `/cz followme`) |
 | `camp_here` / `camp_here_off` | Leader camp broadcast (replaces `/rc` for `/cz camphere`) |
-| `chchain_baton` | CH chain baton — sole trigger for next cleric cast ([CHChain configuration](chchain-configuration.md)) |
-| `chchain_control` | CH chain start / stop / kickoff |
+| `chchain_control` | CH chain start / stop / kickoff (arms local slot clocks) |
 | `chchain_curtank` | CHChain tank index sync during active chain (failover, enable) — not sent for `im_mt` / `mt_update` |
 | `common_sync` | Propagate `cz_common.lua` changes to peers (delta snapshot after any persisted edit) |
 

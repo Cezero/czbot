@@ -98,8 +98,10 @@
 ---@field chainActive boolean
 ---@field chchainCurtank number
 ---@field chchainTank string
----@field chnextClr string|nil
----@field chchainBatonSeq number
+---@field chchainMySlot number|nil 1-based index in ChHealers
+---@field chchainStart number|nil mq.gettime() when slot clock begins (after countdown)
+---@field chchainLastCastCycle number cycle index of last fire attempt
+---@field chchainPendingCheck table|nil { tank, targetId, castStart, checked } pre-land HP cancel
 ---@field ChHealers table
 ---@field PreCH table|nil settings saved while CH chain is active (restored on stop/disable)
 --- Abort flags: true when abort turned off domelee/dodebuff so "abort off" can restore them.
@@ -349,8 +351,10 @@ function M.resetRunconfig()
         chainActive = false,
         chchainCurtank = 1,
         chchainTank = '',
-        chnextClr = nil,
-        chchainBatonSeq = 0,
+        chchainMySlot = nil,
+        chchainStart = nil,
+        chchainLastCastCycle = -1,
+        chchainPendingCheck = nil,
         ChHealers = {},
         PreCH = nil,
         meleeAbort = false,

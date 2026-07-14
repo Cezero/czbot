@@ -5,26 +5,30 @@
 
 ## Logic
 
-Runs when runState is **chchain**. Cast is started by **`chchain_baton`** on the czactor channel (or local kickoff) via **`lib.casting`** (`/cast` gem), not MQ2Cast. The tick calls `casting.tick()`, then polls the cast: baton at delay, cancel window, fizzle/corpse handling.
+Runs whenever **`doChchain` and `chainActive`** (not only while casting). Each bot schedules its own Complete Heal from a shared start clock — no baton messages. Casts use **`lib.casting`** (`/cast` gem).
 
 ```mermaid
 flowchart TB
-    Start[chchainTick] --> TickCast[casting.tick]
-    TickCast --> State{runState == chchain?}
-    State -->|No| End[return]
-    State -->|Yes| Fizzle{CAST_FIZZLE?}
-    Fizzle -->|Yes| Recast["casting.start Complete Heal"]
+    Start[chchainTick] --> Active{doChchain and chainActive?}
+    Active -->|No| CastOnly{runState == chchain?}
+    CastOnly -->|Yes| Poll[castPollTick]
+    CastOnly -->|No| End[return]
+    Active -->|Yes| Slot[slotScheduleTick]
+    Slot --> Window{in 250ms slot window and new cycle?}
+    Window -->|Yes| Cast[startCast]
+    Window -->|No| Poll2[castPollTick]
+    Cast --> Poll2
+    Poll2 --> Fizzle{CAST_FIZZLE?}
+    Fizzle -->|Yes| Recast[recast Complete Heal]
     Fizzle -->|No| Corpse{target corpse?}
-    Corpse -->|Yes| Baton[passBaton czactor]
+    Corpse -->|Yes| Clear[interrupt clear]
     Corpse -->|No| Casting{still casting?}
-    Casting -->|Yes| Delay{broadcastDelayMs elapsed?}
-    Delay -->|Yes| Baton
-    Casting -->|No| Done[clicky optional clear state]
-    Casting -->|Yes| CancelWindow{HP >= threshold in cancel window?}
-    CancelWindow -->|Yes| StopCast[casting.interrupt clear]
+    Casting -->|Yes| PreLand{preCastHpCheckMs elapsed?}
+    PreLand -->|Yes and HP high| StopCast[interrupt]
+    Casting -->|No| Done[clicky optional clear]
 ```
 
-**OnBaton:** czactor `chchain_baton` for this cleric → target first alive in-range tank from `mt_list` → `casting.start` Complete Heal → set runState with tank name and cast start time.
+**Start/kickoff:** czactor `chchain_control` → `beginSchedule` (`chainStart = now + startCountdownMs`, refresh slot). Slot 1 fires first after countdown; others at `(slot-1) * delayMs` into each cycle.
 
 ## See also
 

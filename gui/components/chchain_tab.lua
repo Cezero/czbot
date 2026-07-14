@@ -49,15 +49,20 @@ local function drawTimingSection()
     local function savePartial(partial)
         chchain.saveSettings(partial)
     end
-    local delay, delayCh = inputs.boundedInt('ch_delay', settings.broadcastDelayMs, 0, 30000, 100, '##ch_delay')
-    if delayCh then savePartial({ broadcastDelayMs = delay }) end
+    local delay, delayCh = inputs.boundedInt('ch_delay', settings.delayMs, 0, 30000, 100, '##ch_delay')
+    if delayCh then savePartial({ delayMs = delay }) end
     ImGui.SameLine()
-    ImGui.TextColored(WHITE, 'Baton delay (ms)')
+    ImGui.TextColored(WHITE, 'Slot delay (ms)')
 
-    local cancel, cancelCh = inputs.boundedInt('ch_cancel', settings.cancelWindowMs, 100, 5000, 50, '##ch_cancel')
-    if cancelCh then savePartial({ cancelWindowMs = cancel }) end
+    local countdown, cdCh = inputs.boundedInt('ch_countdown', settings.startCountdownMs, 0, 10000, 100, '##ch_countdown')
+    if cdCh then savePartial({ startCountdownMs = countdown }) end
     ImGui.SameLine()
-    ImGui.TextColored(WHITE, 'Cancel window (ms)')
+    ImGui.TextColored(WHITE, 'Start countdown (ms)')
+
+    local preLand, plCh = inputs.boundedInt('ch_preland', settings.preCastHpCheckMs, 1000, 15000, 100, '##ch_preland')
+    if plCh then savePartial({ preCastHpCheckMs = preLand }) end
+    ImGui.SameLine()
+    ImGui.TextColored(WHITE, 'Pre-land HP check (ms)')
 
     local hp, hpCh = inputs.boundedInt('ch_hp', settings.healthThreshold, 1, 100, 1, '##ch_hp')
     if hpCh then savePartial({ healthThreshold = hp }) end
@@ -117,7 +122,7 @@ function M.draw()
     if type(rc.ChHealers) ~= 'table' then rc.ChHealers = {} end
 
     section.header('CH Chain')
-    ImGui.TextWrapped('Enable = participate when the chain runs (normal heals continue until Start). All chain control uses czactor.')
+    ImGui.TextWrapped('Enable = participate when the chain runs (normal heals continue until Start). Start from any bot arms a shared slot clock; no baton messaging.')
 
     local enabled = rc.doChchain == true
     local enChecked, enToggled = ImGui.Checkbox('CH Chain enabled', enabled)
@@ -133,12 +138,22 @@ function M.draw()
     local active = rc.chainActive == true
     local actChecked, actToggled = ImGui.Checkbox('Chain active', active)
     if actToggled then
-        chchain.setChainActive(actChecked)
-        chchain.publishControl(actChecked and 'start' or 'stop')
+        if actChecked then
+            if rc.doChchain or chchain.enable() then
+                chchain.beginSchedule()
+            end
+            chchain.publishControl('start')
+        else
+            chchain.requestStop()
+        end
     end
 
     if ImGui.Button('Start Chain') then
         chchain.requestKickoff()
+    end
+    ImGui.SameLine()
+    if ImGui.Button('Stop Chain') then
+        chchain.requestStop()
     end
     ImGui.SameLine()
     if ImGui.Button('Test Cast') then
@@ -148,8 +163,11 @@ function M.draw()
     end
 
     local tankLabel = rc.chchainTank ~= '' and rc.chchainTank or '(none)'
-    ImGui.TextColored(enabled and GREEN or WHITE, 'Status: %s  |  tank: %s  |  %d healers',
-        (enabled and active) and 'ACTIVE' or 'IDLE', tankLabel, #(rc.ChHealers or {}))
+    local slotLabel = rc.chchainMySlot and tostring(rc.chchainMySlot) or '-'
+    local nextMs = (enabled and active) and chchain.timeUntilMyCH() or nil
+    local nextLabel = nextMs and (nextMs < 999999 and string.format('%.1fs', nextMs / 1000) or '-') or '-'
+    ImGui.TextColored(enabled and GREEN or WHITE, 'Status: %s  |  slot: %s  |  next CH: %s  |  tank: %s  |  %d healers',
+        (enabled and active) and 'ACTIVE' or 'IDLE', slotLabel, nextLabel, tankLabel, #(rc.ChHealers or {}))
 
     ImGui.Separator()
     name_list.draw({

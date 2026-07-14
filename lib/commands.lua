@@ -1383,8 +1383,7 @@ local function cmd_chchain(args)
         return
     end
     if sub == 'stop' then
-        chchain.setChainActive(false)
-        chchain.publishControl('stop')
+        chchain.requestStop()
         return
     end
     if sub == 'start' then
@@ -1401,12 +1400,12 @@ local function cmd_chchain(args)
     if sub == 'delay' then
         local v = tonumber(args[3])
         if not v then
-            log.say('CH delay: %d ms', chchain.getSettings().broadcastDelayMs)
+            log.say('CH slot delay: %d ms', chchain.getSettings().delayMs)
             return
         end
         if v < 100 then v = v * 1000 end
-        chchain.saveSettings({ broadcastDelayMs = math.max(0, math.min(30000, v)) })
-        log.say('CH delay set to %d ms', v)
+        chchain.saveSettings({ delayMs = math.max(0, math.min(30000, v)) })
+        log.say('CH slot delay set to %d ms', v)
         return
     end
     log.say('Usage: /cz chchain on|off|start|stop|test|delay <ms>')

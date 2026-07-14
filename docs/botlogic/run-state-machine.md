@@ -49,8 +49,8 @@ stateDiagram-v2
     engage_return_follow --> idle: botmove TickReturnToFollowAfterEngage
     idle --> unstuck: botmove UnStuck
     unstuck --> idle: tickUnstuckPhase clear
-    idle --> chchain: chchain_baton / kickoff
-    chchain --> idle: chchainTick deadline or target corpse
+    idle --> chchain: slot window while chainActive
+    chchain --> idle: cast done / pre-land cancel / target corpse
     idle --> melee: botmelee doMelee
     melee --> idle: botmelee clearRunState when no MobList
 ```
@@ -70,7 +70,7 @@ Note: `melee` is not a busy state; it does not restrict which hooks run. It carr
 | camp_return | Yes | botmove MakeCamp return | CharState (not moving or deadline) | priority, deadline |
 | engage_return_follow | Yes | botmove StartReturnToFollowAfterEngage | botmove TickReturnToFollowAfterEngage | priority, phase, deadline |
 | unstuck | Yes | botmove UnStuck (PathExists, wiggle) | tickUnstuckPhase | priority, phase, deadline, followid, stuckdistance |
-| chchain | Yes | chchain_baton / kickoff | chchainTick (cast poll, baton, cancel) | priority, tank, castStart, broadcasted |
+| chchain | Yes | slot schedule while chainActive | chchainTick (slot fire, cast poll, pre-land cancel) | priority, tank, castStart, cancelled |
 | melee | No | botmelee doMelee | botmelee when no MobList | phase, priority, deadline |
 | hook_resume | No | clearCastingStateOrResume (with spellcheckResume) | same hook re-enters and CastSpell or clearRunState at loop end | phase, targetIndex, spellIndex, hook name |
 

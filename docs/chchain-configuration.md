@@ -1,13 +1,13 @@
 ﻿# CHChain Configuration
 
-CHChain rotates **Complete Heal** casts across clerics listed in **`ch_healers`** (cz_common), healing the first alive tank from **`mt_list`**. All chain control uses the **czbot actor channel**; optional chat mirror is display-only.
+CHChain rotates **Complete Heal** casts across clerics listed in **`ch_healers`** (cz_common), healing the first alive tank from **`mt_list`**. Each participating cleric runs an **absolute slot clock** locally after a shared start — there is no per-cast baton messaging. Start/stop use the **czbot actor channel**; optional chat mirror is display-only.
 
 ## Setup
 
 1. **Roles** tab → populate `mt_list` (tank priority).
 2. **CH Chain** tab → populate `ch_healers`, timing, options.
 3. On each cleric in the list: turn on **CH Chain enabled** (or `/cz chchain on`). This is a doHeal-style feature flag — normal heals/buffs continue until the chain starts. Persists in char settings.
-4. Start the chain from **any bot** (e.g. driving toon hotkey): **Start Chain** or `/cz chchain start`. That publishes `kickoff` naming the first entry in `ch_healers`; enabled clerics activate, and that first healer begins the cast.
+4. Start the chain from **any bot** (e.g. driving toon hotkey): **Start Chain** or `/cz chchain start`. That publishes `kickoff`; enabled clerics arm a local clock (`now + startCountdownMs`). Slot 1 fires in the first window after countdown; later slots fire every `delayMs`.
 
 Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_common.lua` and auto-sync to peers via **`common_sync`** on the czactor channel. Manual **`/cz reloadcommon`** remains a fallback.
 
@@ -17,32 +17,34 @@ Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_co
 |---------|--------|
 | `/cz chchain on` | Local opt-in (`settings.doChchain`); must be in `ch_healers`. Does not start the chain or suppress heals. |
 | `/cz chchain off` | Local opt-out only (does not stop peers' chain). |
-| `/cz chchain start` | From any bot: activate chain + `chchain_control kickoff` naming first `ch_healers` entry. Kickoff cleric casts if enabled; others only activate. |
-| `/cz chchain stop` | Deactivate chain (`chainActive` off) + restore PreCH settings; publishes stop. Participation flag stays on. |
+| `/cz chchain start` | From any bot: publish `chchain_control kickoff`. Participants arm slot clocks (countdown then fire by slot). |
+| `/cz chchain stop` | Deactivate chain + interrupt local cast if slotted; publishes stop. Participation flag stays on. |
 | `/cz chchain test` | Single test cast (auto-enables if needed). |
-| `/cz chchain delay [ms]` | Set/read baton delay (ms into cast). |
+| `/cz chchain delay [ms]` | Set/read **slot delay** (`delayMs` — spacing between healer slots). |
 
 ## Actor messages
 
 | id | Purpose |
 |----|---------|
-| `chchain_baton` | Hand off to next cleric (sole cast trigger) |
-| `chchain_control` | `start`, `stop`, `kickoff` |
+| `chchain_control` | `start`, `stop`, `kickoff` — arm or clear the shared schedule |
 | `chchain_curtank` | Tank index sync during active chain (failover while casting) |
 | `common_sync` | Auto-sync `cz_common` fields (`ch_healers`, `ch_chain`, `mt_list`, etc.) |
 | `mt_update` | Manual `/cz tank set <name>` — CH-enabled bots update local curtank (no `chchain_curtank` broadcast) |
 | `im_mt` | Automatic MT claims — CH-enabled bots update local curtank on adoption (no `chchain_curtank` broadcast) |
 
-## Cast behavior
+## Timing model
 
-- Poll-based cast: baton at `broadcastDelayMs`, cancel in final `cancelWindowMs` if tank HP ≥ threshold.
-- Cast must start before baton is sent.
-- Per-cleric CH range check on `mt_list`; mana skip; fizzle recast; corpse interrupt + baton.
-- While **chain active** (and this cleric is enabled), normal heal/buff/debuff/melee/cure/pull are suppressed; restored on **stop** (not on enable).
+- On start/kickoff each enabled bot sets `chainStart = now + startCountdownMs` (default 3000).
+- Cycle length: `delayMs * #ch_healers`. Slot *N* fires when `timeIntoCycle` is in `[ (N-1)*delayMs , (N-1)*delayMs + 250 )` once per cycle.
+- No baton / `your next` handoff for timing. Optional chat mirror may still announce casts/cancels.
+- Pre-land cancel: after cast starts, once `preCastHpCheckMs` elapsed, if tank HP ≥ `healthThreshold` → interrupt.
+- While **chain active** (and this cleric is enabled), normal heal/buff/debuff/melee/cure/pull are suppressed; restored on **stop**.
+
+Legacy `broadcastDelayMs` / `cancelWindowMs` in `cz_common` are migrated: delay copies into `delayMs`; cancel window is dropped in favor of `preCastHpCheckMs`.
 
 ## MT coordination
 
-When **`mt_update`** or **`im_mt`** changes the MT, CH-enabled bots update **`chchainCurtank`** locally via `chchain.syncCurtankFromMtName`. **`chchain_curtank`** is broadcast only during active chain failover (`selectHealTank`) or when the chain is enabled. Manual `/cz tank set` also promotes the name to front of `mt_list` when reason is `manual`.
+When **`mt_update`** or **`im_mt`** changes the MT, CH-enabled bots update **`chchainCurtank`** locally via `chchain.syncCurtankFromMtName`. **`chchain_curtank`** is broadcast only during active chain failover (`selectHealTank`). Manual `/cz tank set` also promotes the name to front of `mt_list` when reason is `manual`.
 
 ## See also
 
