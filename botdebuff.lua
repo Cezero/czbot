@@ -793,17 +793,20 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
     if targethit == 'notmatar' then
-        mq.cmd('/squelch /attack off')
-        targeting.TargetAndWait(EvalID, 500)
-        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed()
-            and spellutils.SpawnMezActive(EvalID)
-            and not spellutils.SpawnHasDebuffSpell(entry.spell, EvalID) then
-            log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
-            spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
-            retargetMaTargetAfterBardMez()
-            bardtwist.RestoreCombatTwistAfterTwistOnce()
-            return true
+        targeting.TargetAndWaitBuffsPopulated(EvalID, 1000)
+        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed() then
+            local remMs = spellutils.SpawnEnthrallRemainingMs(EvalID)
+            local threshold = spellutils.GetDebuffRefreshThresholdMs()
+            local inRemesWindow = remMs > 0 and remMs <= threshold
+            if not inRemesWindow then
+                log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
+                spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
+                retargetMaTargetAfterBardMez()
+                bardtwist.RestoreCombatTwistAfterTwistOnce()
+                return true
+            end
         end
+        mq.cmd('/squelch /attack off')
         if reason and reason ~= '' then
             log.say('interrupting \ag%s\ax on \at%s\ax (%s)', spellName, targetName, reason)
         else

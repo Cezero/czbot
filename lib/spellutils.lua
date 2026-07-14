@@ -119,6 +119,22 @@ function spellutils.SpawnMezActive(spawnId, minRemMs)
     return spellutils.SpawnEnthrallRemainingMs(spawnId) > (minRemMs or getMezActiveThresholdMs())
 end
 
+--- True when spawn should be treated as already mezzed for dontStack / skip (not in remes window).
+--- Fresh mez (rem > threshold) or Mezzed with unreadable rem (0) blocks; rem in (0, threshold] allows remes.
+function spellutils.SpawnMezBlocksDontStack(spawnId)
+    if not spawnId or spawnId <= 0 then return false end
+    if spellutils.SpawnMezActive(spawnId) then return true end
+    local remMs = spellutils.SpawnEnthrallRemainingMs(spawnId)
+    local threshold = getMezActiveThresholdMs()
+    if remMs > 0 and remMs <= threshold then
+        return false
+    end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.ID() or sp.ID() ~= spawnId then return false end
+    local ok, mezzed = pcall(function() return sp.Mezzed and sp.Mezzed() end)
+    return ok and mezzed == true and remMs <= 0
+end
+
 --- True when spawn has any active attack-slow detrimental (walk buff slots; Spawn.Slowed is unreliable).
 function spellutils.SpawnSlowActive(spawnId, minRemMs)
     if not spawnId or spawnId <= 0 then return false end
@@ -157,7 +173,7 @@ function spellutils.SpawnHasStopWhenCategory(spawnId, categories)
             if tag == 'Slowed' then
                 if spellutils.SpawnSlowActive(spawnId) then return tag end
             elseif tag == 'Mezzed' then
-                if spellutils.SpawnMezActive(spawnId) then return tag end
+                if spellutils.SpawnMezBlocksDontStack(spawnId) then return tag end
             elseif botconfig.DEBUFF_DONTSTACK_ALLOWED[tag] then
                 local found = spellutils.SpawnHasDebuffCategory(spawnId, { tag })
                 if found then return found end
@@ -175,7 +191,7 @@ function spellutils.SpawnHasDebuffCategory(spawnId, categories)
     for _, tag in ipairs(categories) do
         if botconfig.DEBUFF_DONTSTACK_ALLOWED[tag] then
             if tag == 'Mezzed' then
-                if spellutils.SpawnMezActive(spawnId) then return tag end
+                if spellutils.SpawnMezBlocksDontStack(spawnId) then return tag end
             else
                 local cat = sp[tag]
                 if cat and cat.ID then
@@ -2729,8 +2745,10 @@ function spellutils.InterruptCheckDontStack(entry, target, spellname)
         local tTag = spellutils.TargetHasDebuffCategory(entry.dontStack)
         if tTag and tTag ~= 'Mezzed' then
             tag = tTag
-        elseif tTag == 'Mezzed' and spellutils.SpawnMezActive(target) then
+        elseif tTag == 'Mezzed' and spellutils.SpawnMezBlocksDontStack(target) then
             tag = tTag
+        elseif not tTag and mq.TLO.Target.Mezzed() and spellutils.SpawnMezBlocksDontStack(target) then
+            tag = 'Mezzed'
         end
     end
     if not tag then return end
