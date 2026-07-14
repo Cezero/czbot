@@ -1,10 +1,10 @@
 # Spell casting flow
 
-Heal, buff, debuff, and cure hooks share the same casting pipeline in `lib/spellutils.lua`: they use **RunPhaseFirstSpellCheck** to pick phase → targets → spell, then **CastSpell** to set target, cast, and set `runState = 'casting'`. When the cast finishes (or is interrupted), **clearCastingStateOrResume** either clears state or sets a **hook_resume** state so the same hook continues on the next tick. This page charts that flow.
+Heal, buff, debuff, and cure hooks share the same casting pipeline in `lib/spellutils.lua`: they use **RunPhaseFirstSpellCheck** to pick a cast (heal/debuff/cure: phase → targets → spell; buff: phase → spell → targets), then **CastSpell** to set target, cast, and set `runState = 'casting'`. When the cast finishes (or is interrupted), **clearCastingStateOrResume** either clears state or sets a **hook_resume** state so the same hook continues on the next tick. This page charts that flow.
 
 ## RunPhaseFirstSpellCheck
 
-The phase-first loop decides *what* to cast by iterating phases in order, then for each phase over targets and spells until it finds a valid (spellIndex, EvalID, targethit) and calls CastSpell.
+The phase-first loop decides *what* to cast by iterating phases in order. **Heal / debuff / cure:** for each phase, targets then spells (first matching spell on that target). **Buff** (`options.spellFirst`): for each phase, spells then targets (finish one buff across all needy targets before the next buff). One cast per successful match; the loop resumes (or the bot is busy until the cast finishes).
 
 ```mermaid
 flowchart TB
@@ -12,20 +12,29 @@ flowchart TB
     Reentry -->|true| Handled[return handled]
     Reentry -->|false| Cursor[getResumeCursor: restore phase/target/spell if hook_resume]
     Cursor --> Loop[For each phase in phaseOrder]
-    Loop --> Targets[getTargetsForPhase phase]
-    Targets --> TLoop[For each target]
+    Loop --> SpellFirst{spellFirst?}
+    SpellFirst -->|buff| SLoop[For each spell]
+    SLoop --> TLoopBuff[For each target]
+    TLoopBuff --> CheckBuff[checkIfTargetNeedsSpells single spell]
+    CheckBuff --> MatchBuff{needs and CastSpell?}
+    MatchBuff -->|cast started| Done[return]
+    MatchBuff -->|cast blocked| Park[park resume on spell/target]
+    MatchBuff -->|no need| NextBuff[Next target/spell/phase]
+    SpellFirst -->|heal/debuff/cure| TLoop[For each target]
     TLoop --> Spells[getSpellIndicesForPhase phase]
     Spells --> Check[checkIfTargetNeedsSpells: beforeCast, immuneCheck, PreCondCheck]
     Check --> Match{spellIndex and EvalID?}
     Match -->|Yes| Cast[CastSpell with spellcheckResume]
-    Cast --> Done[return]
+    Cast --> Done
     Match -->|No| Next[Next target/spell/phase]
     Next --> Loop
+    NextBuff --> Loop
+    Park --> Done
 ```
 
 - **handleSpellCheckReentry(sub, options):** If we are already in a cast (CurSpell phase = cast_complete_pending_resist, casting, precast_wait_move, precast), it either waits, runs InterruptCheck, or completes the cast and calls clearCastingStateOrResume; returns true so the phase loop does not run.
 - **getResumeCursor(hookName):** If runState is `{hookName}_resume`, returns the payload (phase, targetIndex, spellIndex) so the loop can resume from that phase/target/spell after a cast completed.
-- **spellcheckResume:** When starting a cast, the hook passes `{ hook = hookName, phase, targetIndex, spellIndex }`. When the cast ends, clearCastingStateOrResume sets runState to `hookName_resume` with that payload so the next time the hook runs it continues from the same place.
+- **spellcheckResume:** When starting a cast, the hook passes `{ hook = hookName, phase, targetIndex, spellIndex }`. When the cast ends, clearCastingStateOrResume sets runState to `hookName_resume` with that payload so the next time the hook runs it continues from the same place. For buff spell-first, resume `targetIndex` is advanced past the recipient; a cast failure (e.g. gem cooling) parks resume on the same spell/target so later buffs are not tried yet.
 
 Phase order and target types are per section. See [Spell targeting and bands](../spell-targeting-and-bands.md) for band semantics.
 

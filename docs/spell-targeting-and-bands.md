@@ -15,7 +15,9 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 
 ## How spell casting runs
 
-For heal, buff, debuff, and cure, the bot uses the same pattern. It evaluates **phases** in a fixed order (each section has its own phase list below). For each phase, the bot gets the list of **targets** for that phase. For **each target**, it then checks **all spells** that have that phase in their bands (in config order). The **first** spell that the target needs is cast. Typically one cast per tick; the loop resumes (or the bot is busy until the cast finishes). So spell choice is driven by phase order first, then by which spell in that phase first matches the target—not by walking spell-by-spell and picking the first target.
+For heal, debuff, and cure, the bot uses the same pattern. It evaluates **phases** in a fixed order (each section has its own phase list below). For each phase, the bot gets the list of **targets** for that phase. For **each target**, it then checks **all spells** that have that phase in their bands (in config order). The **first** spell that the target needs is cast. Typically one cast per tick; the loop resumes (or the bot is busy until the cast finishes). So spell choice is driven by phase order first, then by which spell in that phase first matches the target—not by walking spell-by-spell and picking the first target.
+
+**Buff** uses the same phases, but within each phase it is **spell-first**: for each buff spell (config order), cast it on every target that needs it before moving on to the next buff. A gem cooldown or other cast failure parks resume on that spell/target instead of falling through to a later buff.
 
 ---
 

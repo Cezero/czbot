@@ -2454,14 +2454,15 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
         startSpellIdx = 1
     end
 
-    local function tryCastMatch(phase, targetIdx, spellIndex, EvalID, targethit)
+    --- @return boolean startedCast, boolean blocked (needed but CastSpell/customCast failed)
+    local function tryCastMatch(phase, targetIdx, spellIndex, EvalID, targethit, resumeTargetIdx)
         if spellIndex and EvalID and targethit then
             local entry = botconfig.getSpellEntry(sub, spellIndex)
             if entry and spellutils.IsGroupOnlySpell(entry) and targethit ~= 'self' and not spellutils.IsSpawnInMyGroup(EvalID) then
-                return false
+                return false, false
             end
         end
-        if not (spellIndex and EvalID and targethit) then return false end
+        if not (spellIndex and EvalID and targethit) then return false, false end
         if rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub ~= sub and mq.TLO.Me.CastTimeLeft() > 0 and not spellutils.IsMemorizing() then
             mq.cmd('/stopcast')
             spellutils.clearCastingStateOrResume()
@@ -2471,12 +2472,12 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
             spellcheckResume = {
                 hook = hookName,
                 phase = phase,
-                targetIndex = targetIdx,
+                targetIndex = resumeTargetIdx or targetIdx,
                 spellIndex = spellIndex,
             }
         end
         if options.customCastFn and options.customCastFn(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
-            return true
+            return true, false
         end
         if spellutils.CastSpell(spellIndex, EvalID, targethit, sub, runPriority, spellcheckResume) then
             if _instantDebuffCastPending and options.afterCast then
@@ -2484,9 +2485,9 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                 _instantDebuffCastPending = nil
                 options.afterCast(ic.spell, ic.target, ic.targethit)
             end
-            return true
+            return true, false
         end
-        return false
+        return false, true
     end
 
     if options.spellFirst then
@@ -2514,7 +2515,22 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                 local spellIndexOut, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                     { spellIndex }, target.id, target.targethit, context, options, targetNeedsSpellFn,
                                     phase)
-                                if tryCastMatch(phase, targetIdx, spellIndexOut, EvalID, targethit) then
+                                -- Advance resume past recipient so next tick continues the buff sweep.
+                                local started, blocked = tryCastMatch(phase, targetIdx, spellIndexOut, EvalID, targethit,
+                                    targetIdx + 1)
+                                if started then
+                                    return false
+                                end
+                                -- Gem/busy/SpellCheck fail: park on this spell+target; do not fall through to next spell.
+                                if blocked then
+                                    if not options.noResume and spellIndexOut then
+                                        state.setRunState(state.RESUME_BY_HOOK[hookName], {
+                                            hook = hookName,
+                                            phase = phase,
+                                            targetIndex = targetIdx,
+                                            spellIndex = spellIndexOut,
+                                        })
+                                    end
                                     return false
                                 end
                             end

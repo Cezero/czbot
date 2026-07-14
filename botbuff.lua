@@ -862,13 +862,16 @@ function botbuff.BuffCheck(runPriority)
         if cached then return cached end
         return tickprof.span('indices', function()
             -- Light / already-granted: deny via allow() without grant work.
+            -- If allow() grants (e.g. resume on this phase during light-lock), fall through for real indices.
             if BUFF_RR_THROTTLED[phase] and rrAllowByPhase[phase] ~= true
                 and (rrAllowByPhase[phase] == false or pcphasethrottle.buffRrWouldDeny(phase)) then
                 if rrAllowByPhase[phase] == nil then
                     rrAllowByPhase[phase] = pcphasethrottle.allow('buff', cursor, phase)
                 end
-                indicesByPhase[phase] = {}
-                return indicesByPhase[phase]
+                if rrAllowByPhase[phase] ~= true then
+                    indicesByPhase[phase] = {}
+                    return indicesByPhase[phase]
+                end
             end
             local list = filterIndicesEntryValid(_buffIndicesByPhase[phase] or {})
             -- Empty after entryValid filter: tip-strict RR may skip this tip.
