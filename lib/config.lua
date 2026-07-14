@@ -247,14 +247,8 @@ local COMMON_LOAD_MAX_FAILURES = 5
 local COMMON_LOAD_RETRY_MS = 100
 local PENDING_MUTATORS_MAX = 8
 
----@type function[]|nil mutators deferred from non-yieldable (ImGui) contexts
+---@type function[]|nil mutators deferred when cz_common.lock is busy
 local _pendingMutators = nil
-
-local function isYieldableThread()
-    -- Missing API: assume main-loop yieldable (preserve delay retries). ImGui on MQ has isyieldable.
-    if coroutine.isyieldable == nil then return true end
-    return coroutine.isyieldable()
-end
 
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
@@ -332,11 +326,10 @@ end
 
 local function acquireCommonLock(maxAttempts)
     maxAttempts = maxAttempts or LOCK_MAX_ATTEMPTS
-    local canDelay = isYieldableThread()
     for _ = 1, maxAttempts do
         if tryAcquireCommonLockOnce() then return true end
-        if not canDelay then return false end
-        mq.delay(50 + math.random(0, 150))
+        -- pcall: mq.delay throws from ImGui even when coroutine.isyieldable() is true
+        if not pcall(mq.delay, 50 + math.random(0, 150)) then return false end
     end
     return false
 end
@@ -716,28 +709,18 @@ function M.saveCommonDirect()
 end
 
 --- Sole runtime write path: reload, mutate, save under lock.
---- From non-yieldable threads (ImGui): never mq.delay; on lock busy, apply in memory and defer disk persist.
+--- Never mq.delay (ImGui rejects delay even when isyieldable). On lock busy: optimistic mem apply + queue for commonLoadTick.
 function M.mutateCommon(mutator)
     if mutator == nil then return false end
-    if not isYieldableThread() then
-        local ok, why = tryMutateCommonOnce(mutator)
-        if ok then return true end
-        if why == 'reload' then return false end
-        if type(M._common) ~= 'table' then
-            M._common = {}
-        end
-        mutator(M._common)
-        queuePendingMutator(mutator)
-        return true
+    local ok, why = tryMutateCommonOnce(mutator)
+    if ok then return true end
+    if why == 'reload' then return false end
+    if type(M._common) ~= 'table' then
+        M._common = {}
     end
-    for _ = 1, LOCK_MAX_ATTEMPTS do
-        local ok, why = tryMutateCommonOnce(mutator)
-        if ok then return true end
-        if why == 'reload' then return false end
-        mq.delay(50 + math.random(0, 150))
-    end
-    log.say('Cannot save \ar%s\ax — failed to acquire lock after %d attempts', commonFilePath(), LOCK_MAX_ATTEMPTS)
-    return false
+    mutator(M._common)
+    queuePendingMutator(mutator)
+    return true
 end
 
 --- Retry pending read-only reload; pause bot after consecutive failures.
