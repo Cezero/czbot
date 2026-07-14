@@ -418,9 +418,12 @@ local function mergeZoneBlock(diskZb, memZb)
     if not memZb then return diskZb end
     local out = {}
     for k, v in pairs(diskZb) do out[k] = v end
+    -- Mem wins when present (mutators already union/replace); disk only for missing keys.
     for _, key in ipairs(ZONE_LIST_KEYS) do
-        if diskZb[key] or memZb[key] then
-            out[key] = M.unionStringList(diskZb[key], memZb[key])
+        if memZb[key] ~= nil then
+            out[key] = memZb[key]
+        elseif diskZb[key] ~= nil then
+            out[key] = diskZb[key]
         end
     end
     for _, key in ipairs(ZONE_BOOL_MAP_KEYS) do
@@ -453,9 +456,12 @@ function M.mergeCommonTables(disk, mem)
     for k, v in pairs(disk) do
         if out[k] == nil then out[k] = v end
     end
+    -- Mem wins when present (mutators already union/replace); disk only for missing keys.
     for _, key in ipairs(TOP_LIST_KEYS) do
-        if disk[key] or mem[key] then
-            out[key] = M.unionStringList(disk[key], mem[key])
+        if mem[key] ~= nil then
+            out[key] = mem[key]
+        elseif disk[key] ~= nil then
+            out[key] = disk[key]
         end
     end
     if disk.zones or mem.zones then
