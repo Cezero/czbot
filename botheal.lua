@@ -5,6 +5,7 @@ local spellutils = require('lib.spellutils')
 local state = require('lib.state')
 local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
+local charinfoutils = require('lib.charinfoutils')
 local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
 local botmove = require('botmove')
@@ -13,6 +14,8 @@ local czactor = require('lib.czactor')
 local tickprof = require('lib.tickprof')
 
 local pcphasethrottle = require('lib.pcphasethrottle')
+
+local HEAL_UNAVAILABLE_PEER_STATES = { 'DEAD', 'FEIGN', 'HOVER' }
 
 local botheal = {}
 local AHThreshold = {}
@@ -467,10 +470,25 @@ local function healEntryValid(spellIndex)
 end
 
 --- Pass-local HP/dist snapshot by target id (shared across spells and phases in one HealCheck).
+local function markHealSnapDead(snap)
+    snap.dead = true
+    snap.pct = nil
+    return snap
+end
+
 local function ensureHealSnap(context, targetId, nameHint)
     if not context.healSnap then context.healSnap = {} end
     local snap = context.healSnap[targetId]
-    if snap then return snap end
+    if snap then
+        -- fillHealPeerMaps may have cached this before death; re-check spawn Type.
+        if not snap.dead then
+            local sp = mq.TLO.Spawn(targetId)
+            if sp and sp.ID() and sp.ID() > 0 and sp.Type() == 'Corpse' then
+                return markHealSnapDead(snap)
+            end
+        end
+        return snap
+    end
     local meX = context.meX
     local meY = context.meY
     if meX == nil then
@@ -503,7 +521,12 @@ local function ensureHealSnap(context, targetId, nameHint)
             end
         end
     end
-    snap = { name = name, peer = peer, pct = nil, distSq = nil }
+    snap = { name = name, peer = peer, pct = nil, distSq = nil, dead = false }
+    local sp = mq.TLO.Spawn(targetId)
+    if sp and sp.ID() and sp.ID() > 0 and sp.Type() == 'Corpse' then
+        context.healSnap[targetId] = markHealSnapDead(snap)
+        return snap
+    end
     if peer then
         snap.pct = peer.PctHPs
         local zone = peer.Zone
@@ -512,7 +535,6 @@ local function ensureHealSnap(context, targetId, nameHint)
         end
     end
     if snap.pct == nil or snap.distSq == nil then
-        local sp = mq.TLO.Spawn(targetId)
         if sp and sp.ID() and sp.ID() > 0 then
             if not snap.name then snap.name = sp.CleanName() end
             if snap.pct == nil then snap.pct = sp.PctHPs and sp.PctHPs() end
@@ -585,7 +607,15 @@ local function fillHealPeerMaps(context)
             distSq = distSq,
             petId = peer.PetID,
             petHp = peer.PetHP,
+            dead = false,
         }
+        local sp = mq.TLO.Spawn(id)
+        if sp and sp.ID() and sp.ID() > 0 and sp.Type() == 'Corpse' then
+            markHealSnapDead(snap)
+        elseif charinfoutils.peerHasAnyState(peer, HEAL_UNAVAILABLE_PEER_STATES)
+            or (peer.PctHPs ~= nil and peer.PctHPs <= 0) then
+            markHealSnapDead(snap)
+        end
         context.healSnap[id] = snap
         return snap
     end
@@ -663,6 +693,18 @@ local function fillHealPeerMaps(context)
     context.healthyGate = gate
 end
 
+local function filterCorpses(targets)
+    if not targets or #targets == 0 then return targets end
+    local out = {}
+    for i = 1, #targets do
+        local t = targets[i]
+        if t and t.id and mq.TLO.Spawn(t.id).Type() ~= 'Corpse' then
+            out[#out + 1] = t
+        end
+    end
+    return out
+end
+
 local function healPrefilterByHp(phase, targets, context)
     if not targets or #targets == 0 then return targets end
     if phase ~= 'groupmember' and phase ~= 'pc' and phase ~= 'tank' and phase ~= 'offtank' and phase ~= 'pet' then
@@ -680,14 +722,14 @@ local function healPrefilterByHp(phase, targets, context)
                 end
                 if pct == nil then
                     local snap = ensureHealSnap(context, t.id, t.name)
-                    pct = snap.pct
+                    if not snap.dead then pct = snap.pct end
                 end
                 if pct ~= nil and pctInAnyHealBand(pct, 'pet') then
                     out[#out + 1] = t
                 end
             else
                 local snap = ensureHealSnap(context, t.id, t.name)
-                if snap.pct ~= nil and pctInAnyHealBand(snap.pct, phase) then
+                if not snap.dead and snap.pct ~= nil and pctInAnyHealBand(snap.pct, phase) then
                     out[#out + 1] = t
                 end
             end
@@ -698,6 +740,13 @@ end
 
 local function peerNeedsHealFromSnap(snap, band, rangeSq, classOk, classHint)
     if not snap or not band then return false end
+    if snap.dead then return false end
+    if snap.peer and (
+        charinfoutils.peerHasAnyState(snap.peer, HEAL_UNAVAILABLE_PEER_STATES)
+        or (snap.peer.PctHPs ~= nil and snap.peer.PctHPs <= 0)
+    ) then
+        return false
+    end
     if not snap.pct or not hpInBand(snap.pct, band) then return false end
     local cls = classHint
     if (not cls or cls == '') and snap.peer and snap.peer.Class and type(snap.peer.Class.ShortName) == 'string' then
@@ -750,19 +799,19 @@ local function healGetTargetsForPhase(phase, context)
     if phase == 'self' then
         targets = castutils.getTargetsSelf()
     elseif phase == 'tank' then
-        targets = castutils.getTargetsTank(context)
+        targets = filterCorpses(castutils.getTargetsTank(context))
     elseif phase == 'offtank' then
-        targets = castutils.getTargetsOfftank(context)
+        targets = filterCorpses(castutils.getTargetsOfftank(context))
     elseif phase == 'groupheal' then
         targets = castutils.getTargetsGroupCaster('groupheal')
     elseif phase == 'groupmember' then
-        targets = healIndexPeerNames(castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true }), context)
+        targets = healIndexPeerNames(filterCorpses(castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true })), context)
     elseif phase == 'pc' then
-        targets = healIndexPeerNames(castutils.getTargetsPc(context, { excludeTank = true }), context)
+        targets = healIndexPeerNames(filterCorpses(castutils.getTargetsPc(context, { excludeTank = true })), context)
     elseif phase == 'mypet' then
-        targets = castutils.getTargetsMypet()
+        targets = filterCorpses(castutils.getTargetsMypet())
     elseif phase == 'pet' then
-        targets = castutils.getTargetsPet(context)
+        targets = filterCorpses(castutils.getTargetsPet(context))
     elseif phase == 'xtgt' and XTList then
         targets = {}
         local n = mq.TLO.Me.XTargetSlots() or 0
@@ -772,6 +821,7 @@ local function healGetTargetsForPhase(phase, context)
                 if xtid and xtid > 0 then targets[#targets + 1] = { id = xtid, targethit = 'xtgt' } end
             end
         end
+        targets = filterCorpses(targets)
     elseif phase == 'corpse' then
         if not healCorpsePending() then return {} end
         local cursor = spellutils.getResumeCursor('doHeal')
