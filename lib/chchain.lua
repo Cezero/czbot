@@ -220,6 +220,21 @@ local function findCompleteHealGem()
     return nil
 end
 
+--- Start Complete Heal via lib.casting (/cast gem), not MQ2Cast /casting.
+---@param tankid number
+---@return boolean started
+local function startCompleteHealCast(tankid)
+    local gem = findCompleteHealGem()
+    if not gem then return false end
+    spellutils.AutoinvIfCursorBlockingCast()
+    return casting.start({
+        spellName = 'Complete Heal',
+        gemType = gem,
+        targetId = tankid,
+        maxTries = 1,
+    }) == true
+end
+
 local function useClickyIfEnabled()
     local settings = chchain.getSettings()
     if not settings.clickyEnabled or settings.clickyItem == 'None' or settings.clickyItem == '' then return end
@@ -428,16 +443,25 @@ function chchain.startCast(testOnly)
         return false
     end
 
-    spellutils.AutoinvIfCursorBlockingCast()
-    mq.cmdf('/casting "Complete Heal|gem%d"', gem)
+    if not startCompleteHealCast(tankid) then
+        log.say('CHChain: cast failed to start')
+        return false
+    end
 
     local waited = 0
-    while not mq.TLO.Me.Casting() and waited < settings.castStartTimeoutMs do
+    while waited < settings.castStartTimeoutMs do
+        casting.tick()
         mq.doevents()
+        local status = casting.status() or ''
+        if mq.TLO.Me.Casting() or status:find('C', 1, true) then
+            break
+        end
         mq.delay(EVENT_PUMP_MS)
         waited = waited + EVENT_PUMP_MS
     end
-    if not mq.TLO.Me.Casting() then
+    casting.tick()
+    local status = casting.status() or ''
+    if not mq.TLO.Me.Casting() and not status:find('C', 1, true) then
         log.say('CHChain: cast failed to start')
         return false
     end
@@ -528,6 +552,8 @@ function chchain.registerActorHandlers()
 end
 
 function chchain.Tick()
+    casting.tick()
+
     local p = state.getRunStatePayload()
     if not p or not p.tank then
         state.clearRunState()
@@ -539,12 +565,15 @@ function chchain.Tick()
     local tank = p.tank
 
     if casting.result() == 'CAST_FIZZLE' then
-        spellutils.AutoinvIfCursorBlockingCast()
         casting.clear()
-        local gem = findCompleteHealGem()
-        if gem then mq.cmdf('/casting "Complete Heal|gem%d"', gem) end
-        p.castStart = mq.gettime()
-        p.broadcasted = false
+        local tankid = mq.TLO.Spawn('pc =' .. tank).ID() or 0
+        if tankid <= 0 then
+            tankid = selectHealTank(rc)
+        end
+        if tankid and tankid > 0 and startCompleteHealCast(tankid) then
+            p.castStart = mq.gettime()
+            p.broadcasted = false
+        end
         return
     end
 
@@ -565,7 +594,7 @@ function chchain.Tick()
         if (mq.TLO.Me.CastTimeLeft() or 0) <= settings.cancelWindowMs then
             local hp = safeTankHp(tank)
             if hp >= settings.healthThreshold then
-                mq.cmd('/stopcast')
+                casting.interrupt()
                 p.cancelled = true
                 chchain.mirrorSay('Stopped CH - %s at %d%%', tank, hp)
                 state.clearRunState()

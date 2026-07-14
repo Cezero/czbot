@@ -5,14 +5,15 @@
 
 ## Logic
 
-Runs when runState is **chchain**. Cast is started by **`chchain_baton`** on the czactor channel (or local kickoff). The tick polls the cast: baton at delay, cancel window, fizzle/corpse handling.
+Runs when runState is **chchain**. Cast is started by **`chchain_baton`** on the czactor channel (or local kickoff) via **`lib.casting`** (`/cast` gem), not MQ2Cast. The tick calls `casting.tick()`, then polls the cast: baton at delay, cancel window, fizzle/corpse handling.
 
 ```mermaid
 flowchart TB
-    Start[chchainTick] --> State{runState == chchain?}
+    Start[chchainTick] --> TickCast[casting.tick]
+    TickCast --> State{runState == chchain?}
     State -->|No| End[return]
     State -->|Yes| Fizzle{CAST_FIZZLE?}
-    Fizzle -->|Yes| Recast[recast CH]
+    Fizzle -->|Yes| Recast["casting.start Complete Heal"]
     Fizzle -->|No| Corpse{target corpse?}
     Corpse -->|Yes| Baton[passBaton czactor]
     Corpse -->|No| Casting{still casting?}
@@ -20,12 +21,13 @@ flowchart TB
     Delay -->|Yes| Baton
     Casting -->|No| Done[clicky optional clear state]
     Casting -->|Yes| CancelWindow{HP >= threshold in cancel window?}
-    CancelWindow -->|Yes| StopCast[stopcast clear]
+    CancelWindow -->|Yes| StopCast[casting.interrupt clear]
 ```
 
-**OnBaton:** czactor `chchain_baton` for this cleric → target first alive in-range tank from `mt_list` → cast Complete Heal → set runState with tank name and cast start time.
+**OnBaton:** czactor `chchain_baton` for this cleric → target first alive in-range tank from `mt_list` → `casting.start` Complete Heal → set runState with tank name and cast start time.
 
 ## See also
 
 - [CHChain configuration](../chchain-configuration.md)
+- [Spell casting flow](spell-casting-flow.md)
 - [README](README.md)
