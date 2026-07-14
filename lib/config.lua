@@ -245,6 +245,16 @@ local COMMON_LOCK_FILENAME = 'cz_common.lock'
 local LOCK_MAX_ATTEMPTS = 5
 local COMMON_LOAD_MAX_FAILURES = 5
 local COMMON_LOAD_RETRY_MS = 100
+local PENDING_MUTATORS_MAX = 8
+
+---@type function[]|nil mutators deferred from non-yieldable (ImGui) contexts
+local _pendingMutators = nil
+
+local function isYieldableThread()
+    -- Missing API: assume main-loop yieldable (preserve delay retries). ImGui on MQ has isyieldable.
+    if coroutine.isyieldable == nil then return true end
+    return coroutine.isyieldable()
+end
 
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
@@ -322,8 +332,10 @@ end
 
 local function acquireCommonLock(maxAttempts)
     maxAttempts = maxAttempts or LOCK_MAX_ATTEMPTS
+    local canDelay = isYieldableThread()
     for _ = 1, maxAttempts do
         if tryAcquireCommonLockOnce() then return true end
+        if not canDelay then return false end
         mq.delay(50 + math.random(0, 150))
     end
     return false
@@ -331,6 +343,60 @@ end
 
 function M.releaseCommonLock()
     os.remove(commonLockPath())
+end
+
+local function queuePendingMutator(mutator)
+    if not _pendingMutators then _pendingMutators = {} end
+    _pendingMutators[#_pendingMutators + 1] = mutator
+    while #_pendingMutators > PENDING_MUTATORS_MAX do
+        table.remove(_pendingMutators, 1)
+    end
+end
+
+--- One locked reload+mutate+save+publish. Returns ok, reason ('busy'|'reload'|nil).
+local function tryMutateCommonOnce(mutator)
+    if not tryAcquireCommonLockOnce() then
+        return false, 'busy'
+    end
+    if not M.reloadCommonReadOnly() then
+        M.releaseCommonLock()
+        log.say('Cannot save \ar%s\ax — reload failed, will retry', commonFilePath())
+        return false, 'reload'
+    end
+    local common_sync = require('lib.common_sync')
+    local before = common_sync.deepCopy(M._common)
+    mutator(M._common)
+    M.saveCommon()
+    M.releaseCommonLock()
+    if not M._suppressCommonSyncBroadcast then
+        local delta = common_sync.computeDelta(before, M._common)
+        common_sync.publishAfterSave(delta, mq.TLO.Me.CleanName() or 'unknown')
+    end
+    return true
+end
+
+--- Drain ImGui-deferred mutators under one lock (main loop / yieldable only).
+local function drainPendingCommonMutators()
+    if not _pendingMutators or #_pendingMutators == 0 then return end
+    if not acquireCommonLock() then return end
+    if not M.reloadCommonReadOnly() then
+        M.releaseCommonLock()
+        log.say('Cannot save \ar%s\ax — reload failed while draining pending mutators', commonFilePath())
+        return
+    end
+    local common_sync = require('lib.common_sync')
+    local before = common_sync.deepCopy(M._common)
+    local queued = _pendingMutators
+    _pendingMutators = nil
+    for _, mutator in ipairs(queued) do
+        mutator(M._common)
+    end
+    M.saveCommon()
+    M.releaseCommonLock()
+    if not M._suppressCommonSyncBroadcast then
+        local delta = common_sync.computeDelta(before, M._common)
+        common_sync.publishAfterSave(delta, mq.TLO.Me.CleanName() or 'unknown')
+    end
 end
 
 local function mergeImmune(diskImmune, memImmune)
@@ -650,35 +716,34 @@ function M.saveCommonDirect()
 end
 
 --- Sole runtime write path: reload, mutate, save under lock.
+--- From non-yieldable threads (ImGui): never mq.delay; on lock busy, apply in memory and defer disk persist.
 function M.mutateCommon(mutator)
     if mutator == nil then return false end
-    for _ = 1, LOCK_MAX_ATTEMPTS do
-        if not acquireCommonLock() then
-            mq.delay(50 + math.random(0, 150))
-        else
-            if not M.reloadCommonReadOnly() then
-                M.releaseCommonLock()
-                log.say('Cannot save \ar%s\ax — reload failed, will retry', commonFilePath())
-                return false
-            end
-            local common_sync = require('lib.common_sync')
-            local before = common_sync.deepCopy(M._common)
-            mutator(M._common)
-            M.saveCommon()
-            M.releaseCommonLock()
-            if not M._suppressCommonSyncBroadcast then
-                local delta = common_sync.computeDelta(before, M._common)
-                common_sync.publishAfterSave(delta, mq.TLO.Me.CleanName() or 'unknown')
-            end
-            return true
+    if not isYieldableThread() then
+        local ok, why = tryMutateCommonOnce(mutator)
+        if ok then return true end
+        if why == 'reload' then return false end
+        if type(M._common) ~= 'table' then
+            M._common = {}
         end
+        mutator(M._common)
+        queuePendingMutator(mutator)
+        return true
+    end
+    for _ = 1, LOCK_MAX_ATTEMPTS do
+        local ok, why = tryMutateCommonOnce(mutator)
+        if ok then return true end
+        if why == 'reload' then return false end
+        mq.delay(50 + math.random(0, 150))
     end
     log.say('Cannot save \ar%s\ax — failed to acquire lock after %d attempts', commonFilePath(), LOCK_MAX_ATTEMPTS)
     return false
 end
 
 --- Retry pending read-only reload; pause bot after consecutive failures.
+--- Also drains ImGui-deferred mutateCommon writes.
 function M.commonLoadTick()
+    drainPendingCommonMutators()
     if M._commonLoadPaused then
         if _G.MasterPause == true then return end
         M._commonLoadPaused = false
