@@ -313,6 +313,14 @@ function chchain.isMeInHealerList()
     return false
 end
 
+--- First name in ch_healers (kickoff target for remote start).
+function chchain.getFirstHealer()
+    local list = state.getRunconfig().ChHealers or {}
+    local name = list[1]
+    if not name or name == '' then return nil end
+    return name
+end
+
 --- Feature flag: this cleric participates when the chain runs. Does not suppress heals until active.
 function chchain.enable()
     if not armLocal(false) then return false end
@@ -442,6 +450,39 @@ function chchain.startCast(testOnly)
     return true
 end
 
+--- Raid-wide kickoff: publish first ch_healers entry. Safe from any bot (driver hotkey).
+function chchain.requestKickoff()
+    local firstHealer = chchain.getFirstHealer()
+    if not firstHealer then
+        log.say('CHChain: ch_healers is empty')
+        return false
+    end
+
+    chchain.publishControl('kickoff', firstHealer)
+
+    local rc = state.getRunconfig()
+    local me = meName()
+    local amKickoff = me and namesEqual(firstHealer, me)
+
+    if amKickoff then
+        if not rc.doChchain then
+            if not chchain.enable() then return false end
+            rc = state.getRunconfig()
+        end
+        chchain.setChainActive(true)
+        rc.chchainBatonSeq = 0
+        chchain.startCast(false)
+        return true
+    end
+
+    if rc.doChchain then
+        chchain.setChainActive(true)
+    else
+        log.say('CHChain kickoff -> %s', firstHealer)
+    end
+    return true
+end
+
 local function onBaton(content)
     local rc = state.getRunconfig()
     if not rc.doChchain or not rc.chainActive then return end
@@ -459,15 +500,17 @@ end
 
 local function onControl(content)
     local action = content.action
+    local rc = state.getRunconfig()
     if action == 'start' then
+        if not rc.doChchain then return end
         chchain.setChainActive(true)
     elseif action == 'stop' then
         chchain.setChainActive(false)
     elseif action == 'kickoff' then
+        if not rc.doChchain then return end
         chchain.setChainActive(true)
         local healer = content.healer
         if healer and namesEqual(healer, meName()) then
-            local rc = state.getRunconfig()
             rc.chchainBatonSeq = 0
             chchain.startCast(false)
         end

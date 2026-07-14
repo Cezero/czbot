@@ -7,7 +7,7 @@ CHChain rotates **Complete Heal** casts across clerics listed in **`ch_healers`*
 1. **Roles** tab → populate `mt_list` (tank priority).
 2. **CH Chain** tab → populate `ch_healers`, timing, options.
 3. On each cleric in the list: turn on **CH Chain enabled** (or `/cz chchain on`). This is a doHeal-style feature flag — normal heals/buffs continue until the chain starts. Persists in char settings.
-4. Start the chain from the first cleric: **Start Chain** or `/cz chchain start`. That activates the rotation and suppresses other bot activity on enabled clerics.
+4. Start the chain from **any bot** (e.g. driving toon hotkey): **Start Chain** or `/cz chchain start`. That publishes `kickoff` naming the first entry in `ch_healers`; enabled clerics activate, and that first healer begins the cast.
 
 Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_common.lua` and auto-sync to peers via **`common_sync`** on the czactor channel. Manual **`/cz reloadcommon`** remains a fallback.
 
@@ -17,7 +17,7 @@ Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_co
 |---------|--------|
 | `/cz chchain on` | Local opt-in (`settings.doChchain`); must be in `ch_healers`. Does not start the chain or suppress heals. |
 | `/cz chchain off` | Local opt-out only (does not stop peers' chain). |
-| `/cz chchain start` | Activate chain + kickoff cast + `chchain_control kickoff` (auto-enables if needed). |
+| `/cz chchain start` | From any bot: activate chain + `chchain_control kickoff` naming first `ch_healers` entry. Kickoff cleric casts if enabled; others only activate. |
 | `/cz chchain stop` | Deactivate chain (`chainActive` off) + restore PreCH settings; publishes stop. Participation flag stays on. |
 | `/cz chchain test` | Single test cast (auto-enables if needed). |
 | `/cz chchain delay [ms]` | Set/read baton delay (ms into cast). |

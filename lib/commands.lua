@@ -1388,14 +1388,7 @@ local function cmd_chchain(args)
         return
     end
     if sub == 'start' then
-        local rc = state.getRunconfig()
-        if not rc.doChchain then
-            if not chchain.enable() then return end
-        end
-        chchain.setChainActive(true)
-        local healer = mq.TLO.Me.CleanName() or mq.TLO.Me.Name()
-        chchain.publishControl('kickoff', healer)
-        chchain.startCast(false)
+        chchain.requestKickoff()
         return
     end
     if sub == 'test' then

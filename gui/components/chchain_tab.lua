@@ -138,11 +138,7 @@ function M.draw()
     end
 
     if ImGui.Button('Start Chain') then
-        if rc.doChchain or chchain.enable() then
-            chchain.setChainActive(true)
-            chchain.publishControl('kickoff', mq.TLO.Me.CleanName() or mq.TLO.Me.Name())
-            chchain.startCast(false)
-        end
+        chchain.requestKickoff()
     end
     ImGui.SameLine()
     if ImGui.Button('Test Cast') then
