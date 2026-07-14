@@ -83,6 +83,11 @@ local function drawOptionsSection()
         chchain.saveSettings(partial)
     end
 
+    local dbg, dbgCh = ImGui.Checkbox('Debug logging', settings.debug == true)
+    if dbgCh then savePartial({ debug = dbg }) end
+    ImGui.SameLine()
+    ImGui.TextColored(WHITE, '(console [CHChain] lines)')
+
     local mirror, mirrorCh = ImGui.Checkbox('Chat mirror (display only)', settings.mirrorEnabled == true)
     if mirrorCh then savePartial({ mirrorEnabled = mirror }) end
 
@@ -122,7 +127,7 @@ function M.draw()
     if type(rc.ChHealers) ~= 'table' then rc.ChHealers = {} end
 
     section.header('CH Chain')
-    ImGui.TextWrapped('Enable = participate when the chain runs (normal heals continue until Start). Start from any bot arms a shared slot clock; no baton messaging.')
+    ImGui.TextWrapped('Enable = participate when the chain runs. Start from any bot arms a shared slot clock and exclusive mode (heals/melee/buffs stop). Debug logging defaults on.')
 
     local enabled = rc.doChchain == true
     local enChecked, enToggled = ImGui.Checkbox('CH Chain enabled', enabled)

@@ -539,8 +539,19 @@ local function maTargetFallbackWithoutMobList(rc)
     return nil
 end
 
+-- Adopt current client Target when it is a valid MA engage spawn (clears /cz attack latch).
+local function adoptMaClientTargetIfValid(rc)
+    local curId = mq.TLO.Target.ID()
+    if not isValidMaSelectedTarget(curId, rc) then return nil end
+    if rc.engageTargetId and curId == rc.engageTargetId then return nil end
+    rc.allMezzedEngageId = nil
+    if rc.attackCommandEngage then rc.attackCommandEngage = nil end
+    return curId
+end
+
 -- MA bot only: choose target from MobList independent of MT.
--- Sticky: keep current alive target unless a named appears while on a non-named.
+-- Sticky: keep current alive target unless a named appears while on a non-named,
+-- or the player selects a different valid NPC Target mid-fight.
 -- Returns chosen id or nil.
 local function selectMATarget()
     local rc = state.getRunconfig()
@@ -553,6 +564,8 @@ local function selectMATarget()
             return curId
         end
     end
+    local adopted = adoptMaClientTargetIfValid(rc)
+    if adopted then return adopted end
     local engageId = rc.engageTargetId
     if engageId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) and not charm.isCharmSkipped(engageId, rc) then
         local keepSticky = true
@@ -623,10 +636,19 @@ local function selectMATarget()
 end
 
 local function resolveMaBotTarget(rc)
-    if rc.maAdoptSelectedTarget or not (rc.attackCommandEngage and rc.engageTargetId) then
+    -- Always allow one-shot unpause adopt and mid-fight client Target adopt.
+    if rc.maAdoptSelectedTarget then
         return selectMATarget()
     end
-    return rc.engageTargetId
+    local adopted = adoptMaClientTargetIfValid(rc)
+    if adopted then return adopted end
+    -- /cz attack latch: hold engageTargetId; skip automatic MobList re-pick.
+    if rc.attackCommandEngage and rc.engageTargetId
+        and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(rc.engageTargetId))
+        and not charm.isCharmSkipped(rc.engageTargetId, rc) then
+        return rc.engageTargetId
+    end
+    return selectMATarget()
 end
 
 local function getMeleePhaseLabel()
@@ -937,12 +959,12 @@ function botmelee.AdvCombat()
     end
 
     local id = nil
-    if rc.attackCommandEngage and rc.engageTargetId then
+    if tankrole.AmIMainAssist() then
+        id = resolveMaBotTarget(rc)
+    elseif rc.attackCommandEngage and rc.engageTargetId then
         id = rc.engageTargetId
     elseif myconfig.settings.engageXTargetOnly == true and not rc.attackCommandEngage then
         id = selectXTargetEngageTarget(rc)
-    elseif tankrole.AmIMainAssist() then
-        id = resolveMaBotTarget(rc)
     elseif myconfig.melee.offtank and assistName and mainTankName then
         id = resolveOfftankTarget(assistName, mainTankName, assistpct)
     elseif tankrole.AmIMainTank() and assistName and not tankrole.AmIMainAssist() then
@@ -979,6 +1001,7 @@ function botmelee.AdvCombat()
         end
         if tankrole.AmIMainAssist() then
             local czactor = require('lib.czactor')
+            -- New spawn id bypasses publish de-dupe; peers get ma_engaged same tick as Target-adopt.
             czactor.publishMaEngaged(rc.engageTargetId, name)
             czactor.tickMaEngagedHeartbeat(rc.engageTargetId, name)
         end

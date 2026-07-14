@@ -102,6 +102,7 @@
 ---@field chchainStart number|nil mq.gettime() when slot clock begins (after countdown)
 ---@field chchainLastCastCycle number cycle index of last fire attempt
 ---@field chchainPendingCheck table|nil { tank, targetId, castStart, checked } pre-land HP cancel
+---@field chchainExclusive boolean|nil when true with chainActive, mainloop only runs hooks <= chchainTick
 ---@field ChHealers table
 ---@field PreCH table|nil settings saved while CH chain is active (restored on stop/disable)
 --- Abort flags: true when abort turned off domelee/dodebuff so "abort off" can restore them.
@@ -355,6 +356,7 @@ function M.resetRunconfig()
         chchainStart = nil,
         chchainLastCastCycle = -1,
         chchainPendingCheck = nil,
+        chchainExclusive = false,
         ChHealers = {},
         PreCH = nil,
         meleeAbort = false,
@@ -390,6 +392,13 @@ end
 function M.isDeadOrHover()
     local mq = require('mq')
     return mq.TLO.Me.Dead() or mq.TLO.Me.Hovering()
+end
+
+---True when CH chain exclusive mode owns the mainloop (participating + chain active).
+---@return boolean
+function M.isChchainExclusive()
+    local rc = M.getRunconfig()
+    return rc.doChchain == true and rc.chainActive == true and rc.chchainExclusive == true
 end
 
 ---True when in travel mode (follow only; other bot logic disabled unless attack-overriding).

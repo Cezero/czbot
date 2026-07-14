@@ -1758,12 +1758,30 @@ local function clearLastAssistTargetIfDead(rc)
     end
 end
 
+--- Live MA/PC Target only (charinfo / self Target). Does not prefer ma_engaged.
+--- Used by /cz attack so a mid-fight MA tab engages the new spawn, not a sticky engage ID.
+--- @param assistName string|nil defaults to resolved AssistName
+--- @return string|nil assistName, number|nil assistid, number|nil targetId, number|nil targetHp
+function spellutils.GetAssistLiveTarget(assistName)
+    assistName = assistName or tankrole.GetAssistTargetName()
+    if not assistName or assistName == '' then return nil, nil, nil, nil end
+    if assistName == mq.TLO.Me.Name() then
+        local tid = filterNpcEngageTargetId(mq.TLO.Target.ID())
+        local leaderid = mq.TLO.Me.ID()
+        if tid then
+            return assistName, leaderid, tid, mq.TLO.Spawn(tid).PctHPs()
+        end
+    end
+    return getLeaderPcTargetInfo(assistName, true)
+end
+
 -- Assist = Main Assist only (whose target DPS/OT follow).
 -- Mirrors GetTankInfo but resolves from AssistName (and does not depend on MT).
 -- Optional assistpct updates the last-target cache when MA is actively assisting.
+-- Optional assistNameOverride uses that PC instead of configured AssistName.
 -- Returns fromCache (5th value) when the target came from lastAssistTargetId (MA dead/hover).
-function spellutils.GetAssistInfo(includeTarget, assistpct)
-    local assistName = tankrole.GetAssistTargetName()
+function spellutils.GetAssistInfo(includeTarget, assistpct, assistNameOverride)
+    local assistName = assistNameOverride or tankrole.GetAssistTargetName()
     if not assistName or assistName == '' then
         state.getRunconfig().lastResolvedAssistName = nil
         return nil, nil, nil, nil

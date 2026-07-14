@@ -8,7 +8,7 @@ This document explains how to configure **Main Tank (MT)**, **Main Assist (MA)**
   The character who receives **heals** (healers prioritize this person). MT bots **never pick** camp mobs. When MA and MT are different bots, the MT follows the MA's target immediately (ignores assist-at %). **`mtSticky`** makes a separate MT bot keep its current target once engaged; it is **ignored** when the same bot is both MA and MT.
 
 - **Main Assist (MA)**  
-  The character who **selects targets** from the mob list and whose target DPS/offtank follow. The MA bot picks from MobList (named first, puller priority, sticky mid-fight with named override). **`/cz attack`** engages the MA's target **immediately** and keeps that engagement until the target dies or you run `/cz abort`, turn off domelee, or issue another `/cz attack`.
+  The character who **selects targets** from the mob list and whose target DPS/offtank follow. The MA bot picks from MobList (named first, puller priority, sticky mid-fight with named override). Selecting a different valid NPC mid-fight adopts that spawn and broadcasts a new **`ma_engaged`** so peers follow. **`/cz attack`** engages the MA's **live** Target **immediately** (not a sticky cache) and keeps that engagement until the target dies, the MA retargets, you run `/cz abort`, turn off domelee, or issue another `/cz attack`.
 
 - **Puller**  
   Set in the game (group window). When this bot is the **MA**, it prefers the **Puller's target** when choosing which mob to engage from the camp list (e.g. the mob the puller is bringing in).
@@ -91,7 +91,7 @@ flowchart TB
     Heal -->|"Always heal MT"| MT
 ```
 
-- **MA bot:** Picks mob from MobList. Sticks mid-fight except non-named → named in camp.
+- **MA bot:** Picks mob from MobList. Sticks mid-fight except non-named → named in camp, or a manual client Target change to another valid NPC.
 - **Separate MT bot:** Follows MA immediately; **`mtSticky`** locks target once engaged.
 - **DPS bot:** Syncs to MA at **assistpct**.
 - **Offtank bot:** See Offtank diagram below.

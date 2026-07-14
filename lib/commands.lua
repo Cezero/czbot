@@ -598,7 +598,7 @@ local function cmd_disengage(args)
     end
 end
 
--- Engage MA's target, or (if name given) that player's target for this engagement only.
+-- Engage MA's live Target, or (if name given) that player's live Target for this engagement only.
 local function cmd_attack(args)
     local assistName
     local overrideName -- used for messages when args[2] was a specific player name
@@ -617,7 +617,11 @@ local function cmd_attack(args)
         log.say('\ar No Main Assist set, cannot engage')
         return
     end
-    local _, assistid, KillTarget = spellutils.GetAssistInfo(true)
+    -- Prefer live client Target so a mid-fight MA tab is not overridden by sticky ma_engaged.
+    local _, assistid, KillTarget = spellutils.GetAssistLiveTarget(assistName)
+    if not KillTarget or KillTarget == 0 then
+        _, assistid, KillTarget = spellutils.GetAssistInfo(true, nil, assistName)
+    end
     if not assistid or assistid == 0 then
         log.say('\ar Could not find %s\ax', assistName)
         return

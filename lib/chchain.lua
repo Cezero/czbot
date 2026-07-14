@@ -20,6 +20,7 @@ local chchain = {}
 local CH_TARGET_WAIT_MS = 200
 local EVENT_PUMP_MS = 50
 local MANA_SKIP_BUFFER = 400
+--- Ideal slot fire window for logging; catch-up fires if timeIntoCycle >= slotTime.
 local FIRE_WINDOW_MS = 250
 
 local DEFAULT_CH_CHAIN = {
@@ -34,6 +35,7 @@ local DEFAULT_CH_CHAIN = {
     mirrorCasts = false,
     clickyEnabled = false,
     clickyItem = 'None',
+    debug = true,
 }
 
 local MIRROR_CHANNELS = { 'rsay', 'shout', 'gsay', 'ooc', 'say' }
@@ -53,7 +55,6 @@ local function migrateLegacy(settings)
     if settings.delayMs == nil and settings.broadcastDelayMs ~= nil then
         settings.delayMs = settings.broadcastDelayMs
     end
-    -- cancelWindowMs has no 1:1 mapping; preCastHpCheckMs uses the new default.
     return settings
 end
 
@@ -70,6 +71,13 @@ end
 function chchain.getSettings()
     local common = botconfig.getCommon()
     return mergeDefaults(common.ch_chain)
+end
+
+--- Console diagnostics when ch_chain.debug is true (default on).
+function chchain.debug(fmt, ...)
+    local settings = chchain.getSettings()
+    if settings.debug ~= true then return end
+    log.say('[CHChain] ' .. fmt, ...)
 end
 
 function chchain.ensureDefaultsInCommon()
@@ -90,7 +98,6 @@ function chchain.saveSettings(partial)
         for k, v in pairs(partial) do
             common.ch_chain[k] = v
         end
-        -- Drop legacy keys when writing new values.
         if partial.delayMs ~= nil then
             common.ch_chain.broadcastDelayMs = nil
         end
@@ -109,6 +116,7 @@ function chchain.mirrorSay(fmt, ...)
 end
 
 function chchain.publishControl(action, healerName)
+    chchain.debug('publishControl action=%s healer=%s', tostring(action), tostring(healerName or ''))
     czactor.publish('chchain_control', {
         action = action,
         healer = healerName,
@@ -163,10 +171,11 @@ local function applyCurtank(content, sender)
     if not idx or not name or name == '' then return end
     local prev = rc.chchainCurtank or 1
     if idx < prev then
-        printf('CHChain curtank ignored (stale) from %s: index=%s tank=%s', tostring(sender), tostring(idx), tostring(name))
+        chchain.debug('curtank ignored stale from %s index=%s tank=%s', tostring(sender), tostring(idx), tostring(name))
         return
     end
     advanceCurtank(rc, idx, name)
+    chchain.debug('curtank from %s index=%s tank=%s', tostring(sender), tostring(idx), tostring(name))
 end
 
 local function selectHealTank(rc)
@@ -194,7 +203,6 @@ local function findCompleteHealGem()
     return nil
 end
 
---- Start Complete Heal via lib.casting (/cast gem), not MQ2Cast /casting.
 ---@param tankid number
 ---@return boolean started
 local function startCompleteHealCast(tankid)
@@ -265,7 +273,6 @@ function chchain.isMeInHealerList()
     return false
 end
 
---- Assign slot from ch_healers order (1-based). Nil if not in list.
 function chchain.refreshMySlot()
     local rc = state.getRunconfig()
     rc.chchainMySlot = nil
@@ -280,7 +287,6 @@ function chchain.refreshMySlot()
     return nil
 end
 
---- First name in ch_healers (validation for remote start).
 function chchain.getFirstHealer()
     local list = state.getRunconfig().ChHealers or {}
     local name = list[1]
@@ -288,7 +294,6 @@ function chchain.getFirstHealer()
     return name
 end
 
---- ms until this bot's next slot fire; countdown leftover if before chainStart.
 function chchain.timeUntilMyCH()
     local rc = state.getRunconfig()
     local settings = chchain.getSettings()
@@ -307,7 +312,6 @@ function chchain.timeUntilMyCH()
     return untilMyCast
 end
 
---- Arm/disarm local participation without touching settings persist.
 local function armLocal(quiet)
     if not chchain.isMeInHealerList() then
         if not quiet then
@@ -330,6 +334,7 @@ local function armLocal(quiet)
     end
     if rc.chainActive then
         suppressNormalActivity()
+        rc.chchainExclusive = true
     end
     return true
 end
@@ -338,6 +343,7 @@ local function disarmLocal()
     local rc = state.getRunconfig()
     rc.doChchain = false
     rc.chainActive = false
+    rc.chchainExclusive = false
     rc.chchainStart = nil
     rc.chchainLastCastCycle = -1
     rc.chchainPendingCheck = nil
@@ -346,7 +352,6 @@ local function disarmLocal()
     state.clearRunState()
 end
 
---- Feature flag: this cleric participates when the chain runs. Does not suppress heals until active.
 function chchain.enable()
     if not armLocal(false) then return false end
     persistDoChchain(true)
@@ -360,16 +365,17 @@ function chchain.disable()
     log.say('CHChain disabled')
 end
 
---- Start/stop the live rotation. Suppresses normal activity only for enabled clerics.
 function chchain.setChainActive(active)
     local rc = state.getRunconfig()
     if active then
         rc.chainActive = true
         if rc.doChchain then
             suppressNormalActivity()
+            rc.chchainExclusive = true
         end
     else
         rc.chainActive = false
+        rc.chchainExclusive = false
         rc.chchainStart = nil
         rc.chchainLastCastCycle = -1
         rc.chchainPendingCheck = nil
@@ -378,45 +384,69 @@ function chchain.setChainActive(active)
     end
 end
 
---- Arm shared slot clock (local). Call on start/kickoff for participating bots.
+--- Arm shared slot clock; hard takeover of local bot.
 function chchain.beginSchedule()
     local rc = state.getRunconfig()
-    if not rc.doChchain then return false end
+    if not rc.doChchain then
+        chchain.debug('beginSchedule skipped (doChchain=false)')
+        return false
+    end
     local settings = chchain.getSettings()
+    local countdown = settings.startCountdownMs or DEFAULT_CH_CHAIN.startCountdownMs
+    local delayMs = settings.delayMs or DEFAULT_CH_CHAIN.delayMs
+    local healers = rc.ChHealers or {}
+
+    local wasCasting = mq.TLO.Me.Casting() and true or false
+    local prevState = state.getRunState()
+    if wasCasting or prevState ~= state.STATES.idle then
+        chchain.debug('takeover interrupt casting=%s runState=%s', tostring(wasCasting), tostring(prevState))
+        casting.interrupt()
+    end
+    state.clearRunState()
+    rc.chchainPendingCheck = nil
+
     chchain.setChainActive(true)
     chchain.refreshMySlot()
-    rc.chchainStart = mq.gettime() + (settings.startCountdownMs or DEFAULT_CH_CHAIN.startCountdownMs)
+    rc.chchainExclusive = true
+    rc.chchainStart = mq.gettime() + countdown
     rc.chchainLastCastCycle = -1
-    rc.chchainPendingCheck = nil
     rc.chchainCurtank = 1
     rc.chchainArmedAt = mq.gettime()
     if rc.MtList and rc.MtList[1] then
         rc.chchainTank = rc.MtList[1]
     end
+
+    chchain.debug(
+        'beginSchedule slot=%s chainStart=%s countdown=%dms delayMs=%d healers=%d exclusive=true',
+        tostring(rc.chchainMySlot),
+        tostring(rc.chchainStart),
+        countdown,
+        delayMs,
+        #healers
+    )
     if rc.chchainMySlot then
-        log.say('CHChain starting in %dms (slot %d)', settings.startCountdownMs or DEFAULT_CH_CHAIN.startCountdownMs, rc.chchainMySlot)
+        log.say('CHChain starting in %dms (slot %d)', countdown, rc.chchainMySlot)
     else
         log.say('CHChain starting (not in ch_healers)')
     end
     return true
 end
 
---- Local stop: interrupt if casting in chain, clear schedule.
 function chchain.endSchedule()
     local rc = state.getRunconfig()
+    chchain.debug('endSchedule slot=%s casting=%s', tostring(rc.chchainMySlot), tostring(mq.TLO.Me.Casting()))
     if rc.chchainMySlot and (mq.TLO.Me.Casting() or state.getRunState() == state.STATES.chchain) then
         casting.interrupt()
     end
     chchain.setChainActive(false)
 end
 
---- Raid-wide stop from any bot.
 function chchain.requestStop()
+    chchain.debug('requestStop doChchain=%s', tostring(state.getRunconfig().doChchain))
     chchain.endSchedule()
     chchain.publishControl('stop')
 end
 
---- Mirror persisted settings.doChchain into runconfig (no suppress unless chain already active).
 function chchain.applyFromSettings()
     local settings = botconfig.config and botconfig.config.settings
     if not settings then return end
@@ -426,6 +456,7 @@ function chchain.applyFromSettings()
         if not chchain.isMeInHealerList() then
             if rc.doChchain or rc.PreCH then
                 rc.doChchain = false
+                rc.chchainExclusive = false
                 restorePreCH()
                 state.clearRunState()
             end
@@ -461,12 +492,22 @@ end
 function chchain.startCast(testOnly)
     local rc = state.getRunconfig()
     local settings = chchain.getSettings()
-    if not rc.doChchain then return false end
-    if not testOnly and not rc.chainActive then return false end
-    if state.getRunState() == state.STATES.chchain then return false end
+    if not rc.doChchain then
+        chchain.debug('startCast skip: doChchain=false')
+        return false
+    end
+    if not testOnly and not rc.chainActive then
+        chchain.debug('startCast skip: chainActive=false')
+        return false
+    end
+    if state.getRunState() == state.STATES.chchain then
+        chchain.debug('startCast skip: already in chchain state')
+        return false
+    end
 
     local tankid, tankName = selectHealTank(rc)
     if not tankid or not tankName then
+        chchain.debug('startCast fail: no alive tank')
         log.say('CHChain: no alive tank in mt_list')
         chchain.mirrorSay('No alive tank!')
         return false
@@ -476,11 +517,13 @@ function chchain.startCast(testOnly)
         targeting.TargetAndWait(tankid, CH_TARGET_WAIT_MS)
     end
     if mq.TLO.Target.ID() ~= tankid then
+        chchain.debug('startCast fail: target %s', tostring(tankName))
         log.say('CHChain: failed to target %s', tankName)
         return false
     end
 
     if (mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < MANA_SKIP_BUFFER then
+        chchain.debug('startCast fail: mana')
         log.say('CHChain: skip (out of mana)')
         chchain.mirrorSay('skip (out of mana)')
         return false
@@ -488,12 +531,14 @@ function chchain.startCast(testOnly)
 
     local gem = findCompleteHealGem()
     if not gem then
+        chchain.debug('startCast fail: CH not memorized')
         log.say('CHChain: Complete Heal not memorized')
         chchain.mirrorSay('Complete Heal not memorized - cannot chain!')
         return false
     end
 
     if not startCompleteHealCast(tankid) then
+        chchain.debug('startCast fail: casting.start')
         log.say('CHChain: cast failed to start')
         return false
     end
@@ -512,6 +557,7 @@ function chchain.startCast(testOnly)
     casting.tick()
     local status = casting.status() or ''
     if not mq.TLO.Me.Casting() and not status:find('C', 1, true) then
+        chchain.debug('startCast fail: cast did not begin within timeout')
         log.say('CHChain: cast failed to start')
         return false
     end
@@ -521,10 +567,10 @@ function chchain.startCast(testOnly)
     end
 
     beginCastState(tankName, mq.gettime(), tankid)
+    chchain.debug('startCast ok tank=%s slot=%s gem=%s', tostring(tankName), tostring(rc.chchainMySlot), tostring(gem))
     return true
 end
 
---- Raid-wide start: local participants arm first; publish for peers (onControl debounces self-echo).
 function chchain.requestKickoff()
     if not chchain.getFirstHealer() then
         log.say('CHChain: ch_healers is empty')
@@ -532,6 +578,7 @@ function chchain.requestKickoff()
     end
 
     local rc = state.getRunconfig()
+    chchain.debug('requestKickoff doChchain=%s slot=%s first=%s', tostring(rc.doChchain), tostring(rc.chchainMySlot), tostring(chchain.getFirstHealer()))
     if rc.doChchain then
         chchain.beginSchedule()
     else
@@ -544,10 +591,14 @@ end
 local function onControl(content)
     local action = content.action
     local rc = state.getRunconfig()
+    chchain.debug('onControl action=%s doChchain=%s slot=%s', tostring(action), tostring(rc.doChchain), tostring(rc.chchainMySlot))
     if action == 'start' or action == 'kickoff' then
-        if not rc.doChchain then return end
-        -- Skip if we already armed locally in the last second (self-echo of our publish).
+        if not rc.doChchain then
+            chchain.debug('onControl ignore %s (not participating)', tostring(action))
+            return
+        end
         if rc.chchainArmedAt and (mq.gettime() - rc.chchainArmedAt) < 1000 then
+            chchain.debug('onControl debounce self-echo')
             return
         end
         chchain.beginSchedule()
@@ -557,7 +608,6 @@ local function onControl(content)
 end
 
 function chchain.registerEvents()
-    -- CH chain control is czactor-only; no chat events.
 end
 
 function chchain.registerActorHandlers()
@@ -584,6 +634,7 @@ local function preLandHpCheck()
     local tank = pending.tank
     local hp = safeTankHp(tank)
     if hp >= (settings.healthThreshold or DEFAULT_CH_CHAIN.healthThreshold) then
+        chchain.debug('preLand cancel tank=%s hp=%d elapsed=%d', tostring(tank), hp, elapsed)
         casting.interrupt()
         chchain.mirrorSay('Stopped CH - %s at %d%%', tank or '?', hp)
         local p = state.getRunStatePayload()
@@ -591,6 +642,7 @@ local function preLandHpCheck()
         rc.chchainPendingCheck = nil
         state.clearRunState()
     else
+        chchain.debug('preLand ok tank=%s hp=%d (keep casting)', tostring(tank), hp)
         rc.chchainPendingCheck = nil
     end
 end
@@ -616,14 +668,29 @@ local function slotScheduleTick()
     local cycle = math.floor(elapsed / fullCycleMs)
     local slotTime = (rc.chchainMySlot - 1) * delayMs
     local timeIntoCycle = elapsed % fullCycleMs
+    local lastCycle = rc.chchainLastCastCycle or -1
 
-    if cycle == (rc.chchainLastCastCycle or -1) then return end
+    if cycle <= lastCycle then return end
 
-    if timeIntoCycle >= slotTime and timeIntoCycle < slotTime + FIRE_WINDOW_MS then
-        -- Consume cycle even if cast fails (mana/tank) so we don't spam the fire window.
+    -- Catch-up: fire once per cycle once slotTime is reached (no upper 250ms bound).
+    if timeIntoCycle >= slotTime then
+        local lateBy = timeIntoCycle - slotTime
         rc.chchainLastCastCycle = cycle
+        if lateBy > FIRE_WINDOW_MS then
+            chchain.debug(
+                'FIRE catch-up cycle=%d slot=%d slotTime=%d timeInto=%d lateBy=%dms',
+                cycle, rc.chchainMySlot, slotTime, timeIntoCycle, lateBy
+            )
+        else
+            chchain.debug(
+                'FIRE cycle=%d slot=%d slotTime=%d timeInto=%d',
+                cycle, rc.chchainMySlot, slotTime, timeIntoCycle
+            )
+        end
         if state.getRunState() ~= state.STATES.chchain then
             chchain.startCast(false)
+        else
+            chchain.debug('FIRE skipped startCast (already casting CH)')
         end
     end
 end
@@ -643,6 +710,7 @@ local function castPollTick()
     local tank = p.tank
 
     if casting.result() == 'CAST_FIZZLE' then
+        chchain.debug('fizzle recast tank=%s', tostring(tank))
         casting.clear()
         local tankid = mq.TLO.Spawn('pc =' .. tank).ID() or 0
         if tankid <= 0 then
@@ -660,6 +728,7 @@ local function castPollTick()
     end
 
     if mq.TLO.Me.CastTimeLeft() and mq.TLO.Me.CastTimeLeft() > 0 and mq.TLO.Target.Type() == 'Corpse' then
+        chchain.debug('target corpse interrupt')
         casting.interrupt()
         chchain.mirrorSay('target died')
         rc.chchainPendingCheck = nil
@@ -672,7 +741,7 @@ local function castPollTick()
         return
     end
 
-    -- Cast finished.
+    chchain.debug('cast complete cancelled=%s tank=%s', tostring(p.cancelled), tostring(tank))
     if not p.cancelled then
         useClickyIfEnabled()
     end
@@ -683,7 +752,6 @@ end
 function chchain.Tick()
     slotScheduleTick()
     castPollTick()
-    -- preLand also runs while casting via castPollTick; run once more if pending outside runState race.
     if state.getRunconfig().chchainPendingCheck then
         preLandHpCheck()
     end
@@ -707,6 +775,7 @@ end
 
 chchain.MIRROR_CHANNELS = MIRROR_CHANNELS
 chchain.DEFAULT_CH_CHAIN = DEFAULT_CH_CHAIN
+chchain.FIRE_WINDOW_MS = FIRE_WINDOW_MS
 
 botconfig.RegisterConfigLoader(chchain.applyFromSettings)
 czactor.setMtNameChangedHook(chchain.syncCurtankFromMtName)

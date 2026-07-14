@@ -1069,6 +1069,10 @@ local function applyMaEngaged(content, sender)
         scope = content.scope,
     }
     if isNew then
+        -- Drop /cz attack latch so peers can follow MA retargets (mtSticky/OT sticky still apply in resolvers).
+        if rc.attackCommandEngage and rc.engageTargetId ~= spawnId then
+            rc.attackCommandEngage = nil
+        end
         require('botmove').onFollowEngagementStarted(rc)
     end
 end

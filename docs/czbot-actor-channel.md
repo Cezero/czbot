@@ -91,7 +91,7 @@ When MT and MA are on **different** mobs, the offtank still tanks the MA target 
 
 ## MA engage coordination
 
-When the **Main Assist** bot sets an engage target, it broadcasts **`ma_engaged`** with the NPC spawn ID. In-scope peers (same group/raid, same zone) store this as `MaActorEngaged` and use it via `GetAssistInfo()` **before** charinfo target data.
+When the **Main Assist** bot sets an engage target, it broadcasts **`ma_engaged`** with the NPC spawn ID. In-scope peers (same group/raid, same zone) store this as `MaActorEngaged` and use it via `GetAssistInfo()` **before** charinfo target data. When the MA switches to a different valid NPC (client Target adopt), it republishes **`ma_engaged`** with the new spawn ID that same tick so peers update immediately.
 
 | Field | Purpose |
 |-------|---------|
@@ -106,6 +106,7 @@ When the **Main Assist** bot sets an engage target, it broadcasts **`ma_engaged`
 
 - OT add selection, notmatar debuffing, and other MA-target-aware logic see the spawn ID immediately (no assist-at percentage wait).
 - DPS melee still waits for **`melee.assistpct`** unless overridden with **`/cz attack`**.
+- When **`ma_engaged`** arrives with a **new** `spawnId`, peers clear a local **`attackCommandEngage`** latch so they can follow the MA retarget (`mtSticky` / offtank sticky still apply in their resolvers).
 - Follow-leash behavior while MA is engaged uses an explicit **`followCatchUp`** flag on followers with active follow:
   - On **`ma_engaged`**, if the bot is beyond **`followdistance`**, **`followCatchUp`** is set: follow nav continues, combat (`doMelee`) is deferred, and spell hooks defer while closing.
   - Once within **`followdistance`**, **`followCatchUp`** clears and follow nav stays suppressed for the rest of the engagement (combat maneuvering may exceed follow distance without re-following the leader).
@@ -116,7 +117,7 @@ When the **Main Assist** bot sets an engage target, it broadcasts **`ma_engaged`
 
 ## Group attack
 
-When any peer runs **`/cz attack`**, it broadcasts **`attack`** with the resolved NPC spawn ID. In-scope peers (same group/raid, same zone) set `attackCommandEngage` and engage immediately, bypassing **`melee.assistpct`**.
+When any peer runs **`/cz attack`**, it resolves the assist’s **live** Target (not sticky `ma_engaged`) and broadcasts **`attack`** with that NPC spawn ID. In-scope peers (same group/raid, same zone) set `attackCommandEngage` and engage immediately, bypassing **`melee.assistpct`**.
 
 | Field | Purpose |
 |-------|---------|

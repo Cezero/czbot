@@ -18,11 +18,11 @@ flowchart TB
     Bind -->|No| Guards{!domelee or non-combat zone or !MobList 1?}
     Guards -->|Yes| ClearMelee[clear melee state if set, return]
     Guards -->|No| SetMelee[setRunState melee phase idle priority]
-    SetMelee --> AttackLock{attackCommandEngage?}
+    SetMelee --> MA{AmIMainAssist?}
+    MA -->|Yes| MATarget[resolveMaBotTarget: Target-adopt; sticky; named; attack latch]
+    MA -->|No| AttackLock{attackCommandEngage?}
     AttackLock -->|Yes| KeepEngage[keep engageTargetId]
-    AttackLock -->|No| MA{AmIMainAssist?}
-    MA -->|Yes| MATarget[selectMATarget: puller; sticky; named override]
-    MA -->|No| OT{offtank?}
+    AttackLock -->|No| OT{offtank?}
     OT -->|Yes| OTResolve[resolveOfftankTarget]
     OT -->|No| MT{AmIMainTank separate from MA?}
     MT -->|Yes| MTFollow[resolveMtFollowTarget: immediate MA follow; mtSticky]
@@ -40,7 +40,7 @@ flowchart TB
     MeleePhase --> End
 ```
 
-- **MA (selectMATarget):** Only effective MA bot. Named-first initial pick; puller priority; sticky engage with named mid-fight override. On **unpause** (`/czp off`) or **startup**, MA adopts the currently selected valid NPC target once (before sticky/named logic) when `maAdoptSelectedTarget` is set—honors manual takeover while paused. **`mtSticky` ignored** when same bot is MT. When **Leash to radius** is on (`doCampAcleash`), sticky/combat picks and `isEngageableMobListSpawn` require the spawn within **acleash** of the camp pin (`isSpawnWithinCampPin`). `doMelee` disengages when the player leaves that radius.
+- **MA (selectMATarget / resolveMaBotTarget):** Only effective MA bot. Named-first initial pick; puller priority; sticky engage with named mid-fight override. A mid-fight **client Target** change to a different valid NPC adopts that spawn (clears `/cz attack` latch) and republishes **`ma_engaged`** same tick. On **unpause** (`/czp off`) or **startup**, MA also adopts the currently selected valid NPC target once when `maAdoptSelectedTarget` is set. **`attackCommandEngage`** on MA holds the locked id against MobList re-pick but does not block Target-adopt. **`mtSticky` ignored** when same bot is MT. When **Leash to radius** is on (`doCampAcleash`), sticky/combat picks and `isEngageableMobListSpawn` require the spawn within **acleash** of the camp pin (`isSpawnWithinCampPin`). `doMelee` disengages when the player leaves that radius.
 - **Separate MT (resolveMtFollowTarget):** Follow MA immediately (no assistpct). **`mtSticky`:** keep `engageTargetId` once set (within camp pin when leash on); otherwise switch with MA.
 - **Offtank (resolveOfftankTarget):** If MT and MA same target, pick Nth add; else MA target. Sticks on engaged add or MA off-target until it dies (no assistpct fallback to main mob).
 - **DPS (resolveMeleeAssistTarget):** Sync to MA at **assistpct**.

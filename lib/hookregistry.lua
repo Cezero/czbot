@@ -110,10 +110,15 @@ function hookregistry.runNormalHooks()
         end
         return
     end
+
+    local bothooks = require('lib.bothooks')
+    local chchainExclusive = state.isChchainExclusive()
+    local chchainCap = chchainExclusive and bothooks.getPriority('chchainTick') or nil
+
     local skippedByBusyCap = {}
     for _, h in ipairs(list) do
-        local maxPriority = nil
-        if state.isBusy() then
+        local maxPriority = chchainCap
+        if maxPriority == nil and state.isBusy() then
             local payload = state.getRunStatePayload()
             if payload and type(payload.priority) == 'number' then
                 maxPriority = payload.priority
@@ -137,8 +142,8 @@ function hookregistry.runNormalHooks()
             elseif cs and cs.sub then
                 curSpellStr = tostring(cs.sub)
             end
-            local capNow = nil
-            if state.isBusy() then
+            local capNow = chchainCap
+            if capNow == nil and state.isBusy() then
                 local payload = state.getRunStatePayload()
                 if payload and type(payload.priority) == 'number' then
                     capNow = payload.priority
@@ -147,7 +152,8 @@ function hookregistry.runNormalHooks()
         end
     end
     -- When busy (e.g. casting), run runWhenBusy hooks so movement (camp return, follow) still runs.
-    if state.isBusy() then
+    -- Skip during CH chain exclusive mode so camp/follow cannot steal ticks from the slot clock.
+    if state.isBusy() and not chchainExclusive then
         if _sortedRunWhenBusy == nil then _rebuildSorted() end
         local busyList = _sortedRunWhenBusy or {}
         for _, h in ipairs(busyList) do

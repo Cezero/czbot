@@ -7,6 +7,8 @@
 
 Runs whenever **`doChchain` and `chainActive`** (not only while casting). Each bot schedules its own Complete Heal from a shared start clock — no baton messages. Casts use **`lib.casting`** (`/cast` gem).
 
+While **exclusive mode** is on (`chchainExclusive`), [`hookregistry.runNormalHooks`](../../lib/hookregistry.lua) only runs hooks with priority ≤ 500 and skips `runWhenBusy` (camp/follow).
+
 ```mermaid
 flowchart TB
     Start[chchainTick] --> Active{doChchain and chainActive?}
@@ -14,9 +16,9 @@ flowchart TB
     CastOnly -->|Yes| Poll[castPollTick]
     CastOnly -->|No| End[return]
     Active -->|Yes| Slot[slotScheduleTick]
-    Slot --> Window{in 250ms slot window and new cycle?}
-    Window -->|Yes| Cast[startCast]
-    Window -->|No| Poll2[castPollTick]
+    Slot --> Due{"cycle > last and timeInto >= slotTime?"}
+    Due -->|Yes| Cast[startCast catch-up ok]
+    Due -->|No| Poll2[castPollTick]
     Cast --> Poll2
     Poll2 --> Fizzle{CAST_FIZZLE?}
     Fizzle -->|Yes| Recast[recast Complete Heal]
@@ -28,7 +30,7 @@ flowchart TB
     Casting -->|No| Done[clicky optional clear]
 ```
 
-**Start/kickoff:** czactor `chchain_control` → `beginSchedule` (`chainStart = now + startCountdownMs`, refresh slot). Slot 1 fires first after countdown; others at `(slot-1) * delayMs` into each cycle.
+**Start/kickoff:** czactor `chchain_control` → `beginSchedule` (interrupt other casts, clear runState, set exclusive + `chainStart`). Slot *N* fires once per cycle when `timeIntoCycle >= (N-1)*delayMs`.
 
 ## See also
 
