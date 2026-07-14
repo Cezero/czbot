@@ -6,6 +6,7 @@ local state = require('lib.state')
 local log = require('lib.log')
 local czactor = require('lib.czactor')
 local czactor_dispatch = require('lib.czactor_dispatch')
+local rolelists = require('lib.rolelists')
 
 local common_sync = {}
 
@@ -142,7 +143,6 @@ end
 
 function common_sync.reloadAllFromCommon()
     botconfig.refreshZoneStateFromCommon()
-    local rolelists = require('lib.rolelists')
     rolelists.loadFromCommon()
 end
 

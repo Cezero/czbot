@@ -344,7 +344,9 @@ end
 
 --- Mirror persisted settings.doChchain into runconfig (no suppress unless chain already active).
 function chchain.applyFromSettings()
-    local want = botconfig.config.settings.doChchain == true
+    local settings = botconfig.config and botconfig.config.settings
+    if not settings then return end
+    local want = settings.doChchain == true
     local rc = state.getRunconfig()
     if want then
         if not chchain.isMeInHealerList() then
@@ -480,7 +482,6 @@ function chchain.registerActorHandlers()
     czactor_dispatch.RegisterHandler('chchain_curtank', applyCurtank)
     czactor_dispatch.RegisterHandler('chchain_baton', onBaton)
     czactor_dispatch.RegisterHandler('chchain_control', onControl)
-    chchain.applyFromSettings()
 end
 
 function chchain.Tick()
@@ -555,5 +556,6 @@ chchain.MIRROR_CHANNELS = MIRROR_CHANNELS
 chchain.DEFAULT_CH_CHAIN = DEFAULT_CH_CHAIN
 
 botconfig.RegisterConfigLoader(chchain.applyFromSettings)
+czactor.setMtNameChangedHook(chchain.syncCurtankFromMtName)
 
 return chchain

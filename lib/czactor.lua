@@ -13,6 +13,19 @@ local tickprof = require('lib.tickprof')
 
 local czactor = {}
 
+local mtNameChangedHook = nil
+
+--- Optional hook for CH chain curtank sync when MT name changes (avoids czactor↔chchain require cycle).
+function czactor.setMtNameChangedHook(fn)
+    mtNameChangedHook = fn
+end
+
+local function notifyMtNameChanged(name, reason)
+    if mtNameChangedHook then
+        mtNameChangedHook(name, reason)
+    end
+end
+
 local PROTOCOL_VER = 1
 local MAILBOX = 'czbot'
 local OT_CLAIM_TTL_MS = 5000
@@ -867,7 +880,7 @@ applyImMt = function(content, sender)
     local nameChanged = not prevName or not name
         or string.lower(prevName) ~= string.lower(name)
     if nameChanged then
-        require('lib.chchain').syncCurtankFromMtName(name, 'claim')
+        notifyMtNameChanged(name, 'claim')
     end
     tankrole.invalidateMt()
     resetWhosMtBackoff()
@@ -1238,7 +1251,7 @@ local function applyMtUpdate(content, sender)
         reason = content.reason,
         inGroup = sender and auto_ma_mt.isSenderInMyGroup(sender),
     }
-    require('lib.chchain').syncCurtankFromMtName(name, content.reason or 'manual')
+    notifyMtNameChanged(name, content.reason or 'manual')
     tankrole.invalidateMt()
 end
 
