@@ -941,7 +941,16 @@ function czactor.runRoleClaimsTick()
     _nextRoleClaimsAt = now + ROLE_CLAIMS_INTERVAL_MS
     czactor.sweepExpiredRoleClaims(now)
     local rc = state.getRunconfig()
-    if not rc.maEligible and not rc.mtEligible and not rc.MaImHolding and not rc.MtImHolding then
+    -- Peers not on ma/mt lists still need discovery when automatic and missing overrides.
+    local assist = rc.AssistName
+    if assist == nil or assist == '' then assist = rc.TankName end
+    local tank = rc.TankName
+    if tank == nil or tank == '' then tank = rc.AssistName end
+    local needAskMa = assist == 'automatic' and not auto_ma_mt.getActorMaOverrideName()
+    local needAskMt = tank == 'automatic' and not auto_ma_mt.getActorMtOverrideName()
+    if not rc.maEligible and not rc.mtEligible
+        and not rc.MaImHolding and not rc.MtImHolding
+        and not needAskMa and not needAskMt then
         return
     end
     applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
