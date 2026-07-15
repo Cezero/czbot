@@ -29,7 +29,7 @@ Heal spells use the phase-first pattern above, split into **two resource passes*
 
 The heal phase order is:
 
-1. **corpse** (rez) — Eligible corpses in range (charinfo, group, raid, or guild); ordered by class priority; first unclaimed corpse selected via czactor **`rez_claim`** coordination. Spell-level **inCombat** allows rez in combat when set on the spell entry.
+1. **corpse** (rez) — Eligible corpses in range (charinfo, group, raid, or guild); ordered by class priority; first unclaimed corpse selected via czactor **`rez_claim`** coordination. Safe rez runs corpse before living phases (with hold). Spell-level **inCombat** allows rez in combat; that path runs corpse **after** all living HP phases (no hold).
 2. **self** — Yourself.
 3. **groupheal** (group/AE) — Group heal; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
 4. **tank** — The resolved Main Tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
@@ -48,7 +48,7 @@ For a given target within a pass, the first heal spell (in config order) of that
 
 ### Bands
 
-Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, offtank, pc, groupmember, mypet, pet, xtgt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; corpse has no validtargets). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
+Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, offtank, pc, groupmember, mypet, pet, xtgt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; corpse has no validtargets). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry; combat rez runs after living HP heals. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
 
 ---
 

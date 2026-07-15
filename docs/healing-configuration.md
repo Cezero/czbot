@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **healing** behavior: which 
 ## Overview
 
 - **Master switch:** Healing runs only when **`settings.doheal`** is `true`. Default is `false`.
-- **Heal target:** The heal loop runs **two resource passes** when no cast is in progress. **Pass 1 (HP):** runs **corpse (rez) in a dedicated sub-pass first**. If eligible corpses remain and rez is not intentionally deferred for combat (`inCombat` false with mobs in camp), the heal hook **holds** and skips other HP phases until a rez cast starts or corpses clear—so the bot retries corpse each tick instead of falling through to self/tank heals or buffing. When no corpses need rez (or all corpse spells are combat-blocked), pass 1 continues with self → groupheal → tank → offtank → groupmember → pc → mypet → pet → xtgt using only **healResource** `'hp'` spells. **Pass 2 (Mana):** runs the same non-corpse phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
+- **Heal target:** The heal loop runs **two resource passes** when no cast is in progress. **Pass 1 (HP):** Safe rez (no mobs in camp, or only non-**inCombat** rez spells) runs **corpse in a dedicated sub-pass first**. If eligible corpses remain and rez is allowed on that path, the heal hook **holds** and skips other HP phases until a rez cast starts or corpses clear. When **Allow rez in combat** is active (`inCombat` on a corpse spell) and mobs are in camp, living HP phases run first (self → groupheal → tank → offtank → groupmember → pc → mypet → pet → xtgt) and corpse is tried only if nothing living needs an HP heal (no hold). When no corpses need rez (or all corpse spells are combat-blocked), pass 1 uses only the living HP phases with **healResource** `'hp'` spells. **Pass 2 (Mana):** runs the same non-corpse phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
 - **Where to configure:** Set **`settings.doheal`** in the `settings` section and all heal options under the **`heal`** section. See [Config file reference](#config-file-reference) below.
 
 ---
@@ -60,18 +60,24 @@ Bands define **who** can receive the spell and **at what HP %**. Each band has t
 
 **Phase order**
 
-The **phase order** is the evaluation order within each pass. The bot runs **pass 1 (HP spells)** first, then **pass 2 (mana spells)** only if pass 1 found no cast. Within pass 1, **corpse is evaluated alone first**; if eligible corpses remain (and rez is not combat-deferred for all corpse spells), other HP phases are skipped until the corpse is rezzed or gone. Otherwise pass 1 continues with the sequence below. Pass 2 uses the same sequence minus corpse (mana heals only). For each phase the bot gets the list of targets and, for **each target**, checks all heal spells of that resource type that include that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The order is:
+The **phase order** is the evaluation order within each pass. The bot runs **pass 1 (HP spells)** first, then **pass 2 (mana spells)** only if pass 1 found no cast. Within pass 1:
 
-1. **corpse** (rez) — pass 1 only (HP pass)
-2. **self**
-3. **groupheal** (group AE)
-4. **tank**
-5. **offtank** — peers with a live OT claim on the [Actor channel](czbot-actor-channel.md)
-6. **groupmember** (in-group only)
-7. **pc** (all peers)
-8. **mypet**
-9. **pet** (other pets)
-10. **xtgt** (extended targets)
+- **Safe rez** (no mobs, or corpse spells without **inCombat**): **corpse is evaluated alone first**; if eligible corpses remain and rez is allowed, other HP phases are skipped until the corpse is rezzed or gone.
+- **Combat rez** (**inCombat** corpse spell + mobs in camp): living HP phases run first; **corpse runs after** them only if no living cast started (no hold).
+
+Otherwise pass 1 continues with the living sequence below. Pass 2 uses the same sequence minus corpse (mana heals only). For each phase the bot gets the list of targets and, for **each target**, checks all heal spells of that resource type that include that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The living phase order is:
+
+1. **self**
+2. **groupheal** (group AE)
+3. **tank**
+4. **offtank** — peers with a live OT claim on the [Actor channel](czbot-actor-channel.md)
+5. **groupmember** (in-group only)
+6. **pc** (all peers)
+7. **mypet**
+8. **pet** (other pets)
+9. **xtgt** (extended targets)
+
+**corpse** (rez) is a separate sub-pass: before the list above for safe rez, or after it for combat rez (**inCombat** + mobs in camp).
 
 If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bot still follows this global phase order within the pass: it does not prefer one phase over another within the same spell. The first phase in the list above that has a valid, in-range target for that spell wins. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
 
@@ -85,7 +91,7 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 - **Selection:** For each phase within a pass, each target is checked against all heal spells of that resource type that have that phase; first spell (in config order) that the target needs is cast. Within pc/groupmember, targets are in iteration order (not lowest HP). Mana heals (`healResource = 'mana'`) are never considered until the HP pass completes without casting.
 
 **Special tokens (targetphase):**
-- **inCombat** (spell-level, not in targetphase) — When the spell has **corpse** in a band, set **inCombat** `true` on the spell entry to allow rez when there are mobs in the camp list. When `false` or unset, corpse rez is only considered when there are no mobs in camp (safe rez only). The GUI shows "Allow rez in combat" only when at least one band includes **corpse**.
+- **inCombat** (spell-level, not in targetphase) — When the spell has **corpse** in a band, set **inCombat** `true` on the spell entry to allow rez when there are mobs in the camp list. When `false` or unset, corpse rez is only considered when there are no mobs in camp (safe rez only). With **inCombat** and mobs in camp, combat rez runs **after** all living HP heal phases (no hold). The GUI shows "Allow rez in combat" only when at least one band includes **corpse**.
 - **xtgt** (extended target) — When in targetphase and **heal.xttargets** is set, the spell can target extended target (XTarget) slots; the band’s min/max apply to the XTarget’s HP.
 
 **Heal over time (HoT)**
@@ -147,6 +153,6 @@ heal = {
 
 ## Behavior summary
 
-- **Corpse rez:** Spells with **corpse** in targetphase can target eligible corpses in range (charinfo peer, group member, raid member, or guild member). Corpses are ordered by class priority (healers first, configurable via **botListClassOrder**); each rezzer picks the first unclaimed corpse and broadcasts **`rez_claim`** on the czactor channel so peers exclude it for 60 seconds. Rez is only considered when the spell’s band allows it and (for non-**inCombat**) no mobs are in the camp list if the band is not combat. When corpses are pending and rez is allowed, the heal hook holds before other HP phases until a rez cast starts or corpses disappear.
+- **Corpse rez:** Spells with **corpse** in targetphase can target eligible corpses in range (charinfo peer, group member, raid member, or guild member). Corpses are ordered by class priority (healers first, configurable via **botListClassOrder**); each rezzer picks the first unclaimed corpse and broadcasts **`rez_claim`** on the czactor channel so peers exclude it for 60 seconds. Rez is only considered when the spell’s band allows it and (for non-**inCombat**) no mobs are in the camp list if the band is not combat. Safe rez holds before other HP phases until a rez cast starts or corpses disappear. With **inCombat** and mobs in camp, combat rez runs after living HP heals (no hold).
 - **Interrupt:** **interruptlevel** is used when deciding whether to interrupt the current cast for another heal (e.g. tank drop).
 - **XT targets:** If **xttargets** lists slot numbers, spells with **xtgt** in bands can heal those extended target slots when their HP is in the spell’s band.

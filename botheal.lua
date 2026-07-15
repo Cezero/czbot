@@ -251,6 +251,21 @@ local function healShouldHoldHealPass()
     return true
 end
 
+--- Combat rez (inCombat corpse spell + mobs in camp): defer corpse until after living HP heals.
+local function healCombatRezDeferred()
+    local rc = state.getRunconfig()
+    if not (rc.MobList and rc.MobList[1] ~= nil) then return false end
+    local count = botconfig.getSpellCount('heal')
+    for idx = 1, count do
+        local entry = botconfig.getSpellEntry('heal', idx)
+        if entry and entry.enabled ~= false and entry.gem ~= 0
+            and AHThreshold[idx] and AHThreshold[idx].corpse and AHThreshold[idx].inCombat then
+            return true
+        end
+    end
+    return false
+end
+
 local function HPEvalCorpse(index, ctx)
     if not AHThreshold[index] or not AHThreshold[index].corpse then return nil, nil end
     if healCorpseSpellBlockedByCombat(index) then return nil, nil end
@@ -1029,7 +1044,9 @@ function botheal.HealCheck(runPriority)
         entryValid = cachedEntryValid,
     }
     local cursor = spellutils.getResumeCursor('doHeal')
-    if healCorpsePending() and cursor and cursor.phase and cursor.phase ~= 'corpse' then
+    local combatRezDeferred = healCombatRezDeferred()
+    if healCorpsePending() and not combatRezDeferred
+        and cursor and cursor.phase and cursor.phase ~= 'corpse' then
         state.clearRunState()
         cursor = nil
     end
@@ -1052,20 +1069,27 @@ function botheal.HealCheck(runPriority)
     if resumePass ~= 'mana' then
         local needCorpse = healCorpsePending()
             or (cursor and cursor.phase == 'corpse')
-        if needCorpse then
+        if needCorpse and not combatRezDeferred then
             tickprof.span('pass_corpse', function()
                 spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
                     getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
             end)
             if healPassStartedCast() then return false end
         end
-        if healShouldHoldHealPass() then return false end
+        if healShouldHoldHealPass() and not combatRezDeferred then return false end
         local hpOrder = healHpPhaseOrder(ctx, cursor)
         tickprof.span('pass_hp', function()
             spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', hpOrder, healGetTargetsForPhase,
                 getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
         end)
         if healPassStartedCast() then return false end
+        if needCorpse and combatRezDeferred then
+            tickprof.span('pass_corpse', function()
+                spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
+                    getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
+            end)
+            if healPassStartedCast() then return false end
+        end
     end
     local manaPhases = healManaPhaseOrder()
     if #manaPhases > 0 then
