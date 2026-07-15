@@ -1068,7 +1068,10 @@ function botmelee.getHookFn(name)
             end
             if not spawnutils.isPlayerWithinCampPin(rc) then
                 disengageCombat('outside_camp_pin')
-                if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+                -- Allow camp-return /nav to finish; stopping it here causes resume stutter outside the pin.
+                if state.getRunState() ~= state.STATES.camp_return then
+                    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+                end
                 return
             end
             if state.getRunState() == state.STATES.engage_return_follow then
