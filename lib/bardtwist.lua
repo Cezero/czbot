@@ -146,31 +146,56 @@ function bardtwist.BuffEntryInModeTwist(entry, mode)
     return false
 end
 
---- Idle twist list: buffs where inIdle is true (or legacy idle/self in bands). Config order.
-function bardtwist.BuildNoncombatTwistList()
-    if not bardtwist.IsBard() then return {} end
-    local spells = botconfig.config.buff and botconfig.config.buff.spells
-    if not spells then return {} end
+local function spellNameOf(entry)
+    local spell = entry and entry.spell
+    if type(spell) == 'string' and spell ~= '' and spell ~= '0' then return spell end
+    return nil
+end
+
+--- Append or replace ownership for gem. Later owners overwrite earlier (combat: matar debuff after buffs).
+local function upsertOwnedGem(owned, gemIndex, gem, spell)
+    if gemIndex[gem] then
+        local idx = gemIndex[gem]
+        owned[idx] = { gem = gem, spell = spell }
+        return
+    end
+    owned[#owned + 1] = { gem = gem, spell = spell }
+    gemIndex[gem] = #owned
+end
+
+local function ownedToGems(owned)
     local out = {}
-    for i = 1, #spells do
-        local entry = spells[i]
-        if bardtwist.BuffEntryInModeTwist(entry, 'idle') then
-            out[#out + 1] = entry.gem
-        end
+    for i = 1, #owned do
+        out[i] = owned[i].gem
     end
     return out
 end
 
---- Combat twist list: buffs where inCombat is true (or legacy cbt in bands), then debuffs targeting the MA (matar). Config order.
-function bardtwist.BuildCombatTwistList()
+--- Idle twist ownership: buffs where inIdle is true (or legacy idle/self in bands). Config order; gem deduped.
+local function buildNoncombatTwistOwned()
     if not bardtwist.IsBard() then return {} end
-    local out = {}
+    local spells = botconfig.config.buff and botconfig.config.buff.spells
+    if not spells then return {} end
+    local owned, gemIndex = {}, {}
+    for i = 1, #spells do
+        local entry = spells[i]
+        if bardtwist.BuffEntryInModeTwist(entry, 'idle') then
+            upsertOwnedGem(owned, gemIndex, entry.gem, spellNameOf(entry))
+        end
+    end
+    return owned
+end
+
+--- Combat twist ownership: inCombat buffs then matar debuffs. Same gem: matar debuff wins.
+local function buildCombatTwistOwned()
+    if not bardtwist.IsBard() then return {} end
+    local owned, gemIndex = {}, {}
     local buffs = botconfig.config.buff and botconfig.config.buff.spells
     if buffs then
         for i = 1, #buffs do
             local entry = buffs[i]
             if bardtwist.BuffEntryInModeTwist(entry, 'combat') then
-                out[#out + 1] = entry.gem
+                upsertOwnedGem(owned, gemIndex, entry.gem, spellNameOf(entry))
             end
         end
     end
@@ -197,17 +222,17 @@ function bardtwist.BuildCombatTwistList()
                 if debuffHasMatar(entry) then
                     if botdebuff and botdebuff.BardMatarDebuffInCombatTwist
                         and botdebuff.BardMatarDebuffInCombatTwist(i, maTargetId) then
-                        out[#out + 1] = entry.gem
+                        upsertOwnedGem(owned, gemIndex, entry.gem, spellNameOf(entry))
                     end
                 end
             end
         end
     end
-    return out
+    return owned
 end
 
---- Find first buff spell whose alias (string) contains the given token (exact match for one of the |‑separated values). Returns gem (1–12) or nil.
-local function buffGemByAlias(token)
+--- Find first enabled buff with alias token. Returns gem, spellName or nil.
+local function buffEntryByAlias(token)
     if not token or token == '' then return nil end
     local spells = botconfig.config.buff and botconfig.config.buff.spells
     if not spells then return nil end
@@ -219,7 +244,7 @@ local function buffGemByAlias(token)
                 for value in (alias):gmatch('[^|]+') do
                     local v = value:match('^%s*(.-)%s*$') or value
                     if v == token then
-                        return entry.gem
+                        return entry.gem, spellNameOf(entry)
                     end
                 end
             end
@@ -228,31 +253,49 @@ local function buffGemByAlias(token)
     return nil
 end
 
---- Travel twist: song with alias 'travel', else 'selos', else nothing. Config order; single gem.
-function bardtwist.BuildTravelTwistList()
+local function buildTravelTwistOwned()
     if not bardtwist.IsBard() then return {} end
-    local gem = buffGemByAlias('travel')
-    if gem then return { gem } end
-    gem = buffGemByAlias('selos')
-    if gem then return { gem } end
+    local gem, spell = buffEntryByAlias('travel')
+    if gem then return { { gem = gem, spell = spell } } end
+    gem, spell = buffEntryByAlias('selos')
+    if gem then return { { gem = gem, spell = spell } } end
     return {}
 end
 
---- Buffs with self and pull (numeric gem, enabled). Config order.
-function bardtwist.BuildPullTwistList()
+local function buildPullTwistOwned()
     if not bardtwist.IsBard() then return {} end
     local spells = botconfig.config.buff and botconfig.config.buff.spells
     if not spells then return {} end
-    local out = {}
+    local owned, gemIndex = {}, {}
     for i = 1, #spells do
         local entry = spells[i]
         if entry and entry.enabled ~= false and type(entry.gem) == 'number' and entry.gem >= 1 and entry.gem <= 12 then
             if buffHasPhase(entry, 'self') and buffHasPhase(entry, 'pull') then
-                out[#out + 1] = entry.gem
+                upsertOwnedGem(owned, gemIndex, entry.gem, spellNameOf(entry))
             end
         end
     end
-    return out
+    return owned
+end
+
+--- Idle twist list: buffs where inIdle is true (or legacy idle/self in bands). Config order.
+function bardtwist.BuildNoncombatTwistList()
+    return ownedToGems(buildNoncombatTwistOwned())
+end
+
+--- Combat twist list: buffs where inCombat is true (or legacy cbt in bands), then debuffs targeting the MA (matar). Config order; gem deduped (debuff wins).
+function bardtwist.BuildCombatTwistList()
+    return ownedToGems(buildCombatTwistOwned())
+end
+
+--- Travel twist: song with alias 'travel', else 'selos', else nothing. Config order; single gem.
+function bardtwist.BuildTravelTwistList()
+    return ownedToGems(buildTravelTwistOwned())
+end
+
+--- Buffs with self and pull (numeric gem, enabled). Config order.
+function bardtwist.BuildPullTwistList()
+    return ownedToGems(buildPullTwistOwned())
 end
 
 function bardtwist.GetCurrentTwistMode()
@@ -263,17 +306,22 @@ function bardtwist.GetCurrentTwistMode()
     return 'idle'
 end
 
+--- Owned twist entries for mode: array of { gem, spell }. Used for status labels and mode-aware mem.
+function bardtwist.GetTwistOwnedForMode(mode)
+    if mode == 'travel' then
+        return buildTravelTwistOwned()
+    elseif mode == 'pull' then
+        return buildPullTwistOwned()
+    elseif mode == 'combat' then
+        return buildCombatTwistOwned()
+    else
+        return buildNoncombatTwistOwned()
+    end
+end
+
 --- Build list for mode and return as array of gem numbers (for comparison /twist command).
 function bardtwist.GetTwistListForMode(mode)
-    if mode == 'travel' then
-        return bardtwist.BuildTravelTwistList()
-    elseif mode == 'pull' then
-        return bardtwist.BuildPullTwistList()
-    elseif mode == 'combat' then
-        return bardtwist.BuildCombatTwistList()
-    else
-        return bardtwist.BuildNoncombatTwistList()
-    end
+    return ownedToGems(bardtwist.GetTwistOwnedForMode(mode))
 end
 
 --- Build list for mode and return as string for comparison with Twist.List().
@@ -281,6 +329,70 @@ function bardtwist.GetTwistListStringForMode(mode)
     local list = bardtwist.GetTwistListForMode(mode)
     if not list or #list == 0 then return '' end
     return table.concat(list, ' ')
+end
+
+local TWIST_MEM_WAIT_MS = 10000
+
+--- True when safe to /memspell for twist ownership (not casting, not twist-once wait).
+local function safeToMemForTwist()
+    local rc = state.getRunconfig()
+    if rc.bardTwistOnceWait then return false end
+    if mq.TLO.Me.Casting() then return false end
+    if (mq.TLO.Me.CastTimeLeft() or 0) > 0 then return false end
+    if mq.TLO.Me.Dead() then return false end
+    local p = rc.bardTwistMemPending
+    if p and mq.gettime() < (p.untilMs or 0) then
+        local inGem = mq.TLO.Me.Gem(p.gem)() or ''
+        if p.spell and string.lower(inGem) == string.lower(p.spell) then
+            rc.bardTwistMemPending = nil
+        else
+            return false
+        end
+    elseif p then
+        rc.bardTwistMemPending = nil
+    end
+    return true
+end
+
+--- Ensure each owned gem has the intended spell memmed. Returns false if still waiting / mem in progress.
+local function ensureOwnedGemsMemmed(owned)
+    if not owned or #owned == 0 then return true end
+    local rc = state.getRunconfig()
+    local p = rc.bardTwistMemPending
+    if p and p.gem and p.spell then
+        local inGem = mq.TLO.Me.Gem(p.gem)() or ''
+        if string.lower(inGem) == string.lower(p.spell) then
+            rc.bardTwistMemPending = nil
+        elseif mq.gettime() < (p.untilMs or 0) then
+            return false
+        else
+            rc.bardTwistMemPending = nil
+        end
+    end
+    if not safeToMemForTwist() then return false end
+    for i = 1, #owned do
+        local o = owned[i]
+        if o.spell and o.gem then
+            local inGem = mq.TLO.Me.Gem(o.gem)() or ''
+            if string.lower(inGem) ~= string.lower(o.spell) then
+                if mq.TLO.Me.Book(o.spell)() then
+                    if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
+                        mq.cmd('/twist stop')
+                    end
+                    rc.bardTwistMemPending = {
+                        gem = o.gem,
+                        spell = o.spell,
+                        untilMs = mq.gettime() + TWIST_MEM_WAIT_MS,
+                    }
+                    mq.cmdf('/memspell %s "%s"', tostring(o.gem), o.spell)
+                    bardtwist.BardDbgNow('twist mem gem %d -> %s (had: %s)', o.gem, o.spell,
+                        (inGem ~= '' and inGem or 'empty'))
+                    return false
+                end
+            end
+        end
+    end
+    return true
 end
 
 --- True when gem (1–12) is in the twist list for the current mode (idle/combat/travel/pull).
@@ -336,7 +448,8 @@ end
 function bardtwist.EnsureTwistForMode(mode)
     if not bardtwist.SongsEnabled() then return 'skip:songs-off' end
     local rc = state.getRunconfig()
-    local desiredGems = bardtwist.GetTwistListForMode(mode)
+    local owned = bardtwist.GetTwistOwnedForMode(mode)
+    local desiredGems = ownedToGems(owned)
     local currentListRaw = mq.TLO.Twist() and mq.TLO.Twist.List()
     local currentGems = parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
     if not desiredGems or #desiredGems == 0 then
@@ -360,6 +473,7 @@ function bardtwist.EnsureTwistForMode(mode)
         end
     end
     if rc.bardTwistOnceWait then return 'skip:wait' end
+    if not ensureOwnedGemsMemmed(owned) then return 'skip:mem' end
     return applyTwistList(desiredGems)
 end
 
@@ -420,9 +534,11 @@ function bardtwist.ResumeTwist()
     if not bardtwist.SongsEnabled() then return end
     local mode = bardtwist.GetCurrentTwistMode()
     if not mode then return end
-    local desiredGems = bardtwist.GetTwistListForMode(mode)
+    local owned = bardtwist.GetTwistOwnedForMode(mode)
+    local desiredGems = ownedToGems(owned)
     if not desiredGems or #desiredGems == 0 then return end
     if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then return end
+    if not ensureOwnedGemsMemmed(owned) then return end
     applyTwistList(desiredGems)
 end
 

@@ -160,6 +160,8 @@ end
 -- Build list of matching corpses with class priority for rez order (healers first: clr, shm, dru, etc.).
 -- Pass-local memo: cleared at start of each HealCheck so hold/corpse paths share one scan.
 local _corpseRezMemo = { valid = false, list = nil }
+-- Last corpse this bot prepared a rez for; skipped on next pick unless it is the only available option.
+local _lastRezCorpseId = nil
 
 local function clearCorpseRezMemo()
     _corpseRezMemo.valid = false
@@ -196,13 +198,24 @@ end
 local function CorpseRezIdForFilter()
     local candidates = _corpseRezCandidates()
     if #candidates == 0 then return nil end
+    local available = {}
     for _, c in ipairs(candidates) do
         if not czactor.isCorpseRezClaimedByOther(c.rezid) then
-            czactor.syncRezClaim(c.rezid)
-            return c.rezid
+            available[#available + 1] = c.rezid
         end
     end
-    return nil
+    if #available == 0 then return nil end
+    local pick = available[1]
+    if _lastRezCorpseId then
+        for _, rezid in ipairs(available) do
+            if rezid ~= _lastRezCorpseId then
+                pick = rezid
+                break
+            end
+        end
+    end
+    czactor.syncRezClaim(pick)
+    return pick
 end
 
 local function healHasCorpseSpellConfigured()
@@ -887,6 +900,7 @@ spellutils.setPrepareImmediateCastFn(function(sub, _index, evalId, targethit)
     tickprof.span('corpse_TargetAndWait', function()
         targeting.TargetAndWait(evalId, 500)
     end, 'id=' .. tostring(evalId))
+    _lastRezCorpseId = evalId
     mq.cmd('/corpse')
     tickprof.span('corpse_delay100', function()
         mq.delay(100)

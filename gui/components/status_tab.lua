@@ -278,9 +278,9 @@ function M.drawControls()
     end
 end
 
--- Read-only Bard twist panel: shows the live per-mode twist lists (gem:song, in order) so what the bot
--- will twist is visible without reverse-engineering the Buff/Debuff flags. Order = Buff/Debuff entry
--- order; see lib/bardtwist.lua. Bard-only; collapsed by default.
+-- Read-only Bard twist panel: shows per-mode twist lists (gem:config song, in order). Labels use the
+-- owning config spell; [mem:X] appears when Me.Gem differs. Order = Buff/Debuff entry order with gem
+-- dedupe; see lib/bardtwist.lua. Bard-only; collapsed by default.
 local TWIST_MODES = {
     { mode = 'idle',   label = 'Idle' },
     { mode = 'combat', label = 'Combat' },
@@ -288,25 +288,36 @@ local TWIST_MODES = {
     { mode = 'pull',   label = 'Pull' },
 }
 
-local function twistGemLabel(gem)
-    if gem >= 1 and gem <= 12 then
-        local name = mq.TLO.Me.Gem(gem)()
-        return string.format('%d:%s', gem, (name and name ~= '') and name or 'empty')
+--- Label from config-owned spell for the mode; append [mem:X] when Me.Gem differs.
+local function twistOwnedLabel(entry)
+    local gem = entry and entry.gem
+    if type(gem) ~= 'number' then return '?' end
+    if gem < 1 or gem > 12 then
+        return string.format('%d:clicky', gem) -- 21-29 = MQ2Twist clicky slots
     end
-    return string.format('%d:clicky', gem) -- 21-29 = MQ2Twist clicky slots
+    local intended = (entry.spell and entry.spell ~= '') and entry.spell or nil
+    local memmed = mq.TLO.Me.Gem(gem)()
+    memmed = (memmed and memmed ~= '') and memmed or 'empty'
+    if intended then
+        if string.lower(memmed) ~= string.lower(intended) then
+            return string.format('%d:%s [mem:%s]', gem, intended, memmed)
+        end
+        return string.format('%d:%s', gem, intended)
+    end
+    return string.format('%d:%s', gem, memmed)
 end
 
-local function twistListText(gems)
-    if not gems or #gems == 0 then return '(none)' end
+local function twistOwnedListText(owned)
+    if not owned or #owned == 0 then return '(none)' end
     local parts = {}
-    for _, g in ipairs(gems) do parts[#parts + 1] = twistGemLabel(g) end
+    for i = 1, #owned do parts[#parts + 1] = twistOwnedLabel(owned[i]) end
     return table.concat(parts, '  ')
 end
 
-local function safeTwistList(mode)
-    -- GetTwistListForMode('combat') may reach into debuff eval; isolate
+local function safeTwistOwned(mode)
+    -- GetTwistOwnedForMode('combat') may reach into debuff eval; isolate
     -- any failure so one mode can't break the panel.
-    local ok, list = pcall(bardtwist.GetTwistListForMode, mode)
+    local ok, list = pcall(bardtwist.GetTwistOwnedForMode, mode)
     if ok and type(list) == 'table' then return list end
     return nil
 end
@@ -331,7 +342,7 @@ local function drawBardTwistSection()
             local isCur = (m.mode == curMode)
             ImGui.TextColored(isCur and YELLOW or LIGHT_GREY, '%s', (isCur and '> ' or '  ') .. m.label .. ':')
             ImGui.SameLine(0, 4)
-            ImGui.TextColored(isCur and WHITE or LIGHT_GREY, '%s', twistListText(safeTwistList(m.mode)))
+            ImGui.TextColored(isCur and WHITE or LIGHT_GREY, '%s', twistOwnedListText(safeTwistOwned(m.mode)))
         end
         local liveOk, liveRaw = pcall(function() return mq.TLO.Twist() and mq.TLO.Twist.List() end)
         if liveOk and liveRaw and tostring(liveRaw) ~= '' then
