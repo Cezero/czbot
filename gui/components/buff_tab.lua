@@ -5,6 +5,7 @@ local ImGui = require('ImGui')
 local botconfig = require('lib.config')
 local spellutils = require('lib.spellutils')
 local buffphase = require('lib.buffphase')
+local bardtwist = require('lib.bardtwist')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
 local name_list = require('gui.widgets.name_list')
@@ -115,6 +116,9 @@ local VALIDTARGETS_OPTIONS_PC_GROUP = {
 
 local function runConfigLoaders()
     botconfig.ApplyAndPersist()
+    if bardtwist.IsBard() then
+        bardtwist.EnsureDefaultTwistRunning()
+    end
 end
 
 local function buffCustomSection(entry, idPrefix, onChanged)

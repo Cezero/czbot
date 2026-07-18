@@ -354,7 +354,22 @@ local function safeToMemForTwist()
     return true
 end
 
+--- First owned gem that needs remem (wrong spell in gem, spell in book). Nil if all match.
+local function firstOwnedGemNeedingMem(owned)
+    for i = 1, #owned do
+        local o = owned[i]
+        if o.spell and o.gem then
+            local inGem = mq.TLO.Me.Gem(o.gem)() or ''
+            if string.lower(inGem) ~= string.lower(o.spell) and mq.TLO.Me.Book(o.spell)() then
+                return o, inGem
+            end
+        end
+    end
+    return nil
+end
+
 --- Ensure each owned gem has the intended spell memmed. Returns false if still waiting / mem in progress.
+--- When gems already match, returns true even while Casting so applyTwistList can update the queue.
 local function ensureOwnedGemsMemmed(owned)
     if not owned or #owned == 0 then return true end
     local rc = state.getRunconfig()
@@ -369,30 +384,21 @@ local function ensureOwnedGemsMemmed(owned)
             rc.bardTwistMemPending = nil
         end
     end
-    if not safeToMemForTwist() then return false end
-    for i = 1, #owned do
-        local o = owned[i]
-        if o.spell and o.gem then
-            local inGem = mq.TLO.Me.Gem(o.gem)() or ''
-            if string.lower(inGem) ~= string.lower(o.spell) then
-                if mq.TLO.Me.Book(o.spell)() then
-                    if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
-                        mq.cmd('/twist stop')
-                    end
-                    rc.bardTwistMemPending = {
-                        gem = o.gem,
-                        spell = o.spell,
-                        untilMs = mq.gettime() + TWIST_MEM_WAIT_MS,
-                    }
-                    mq.cmdf('/memspell %s "%s"', tostring(o.gem), o.spell)
-                    bardtwist.BardDbgNow('twist mem gem %d -> %s (had: %s)', o.gem, o.spell,
-                        (inGem ~= '' and inGem or 'empty'))
-                    return false
-                end
-            end
-        end
+    local needMem, hadGem = firstOwnedGemNeedingMem(owned)
+    if not needMem then return true end
+    if mq.TLO.Twist() and mq.TLO.Twist.Twisting() then
+        mq.cmd('/twist stop')
     end
-    return true
+    if not safeToMemForTwist() then return false end
+    rc.bardTwistMemPending = {
+        gem = needMem.gem,
+        spell = needMem.spell,
+        untilMs = mq.gettime() + TWIST_MEM_WAIT_MS,
+    }
+    mq.cmdf('/memspell %s "%s"', tostring(needMem.gem), needMem.spell)
+    bardtwist.BardDbgNow('twist mem gem %d -> %s (had: %s)', needMem.gem, needMem.spell,
+        (hadGem ~= '' and hadGem or 'empty'))
+    return false
 end
 
 --- True when gem (1–12) is in the twist list for the current mode (idle/combat/travel/pull).

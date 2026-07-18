@@ -1147,10 +1147,16 @@ local function cmd_cast(args)
                             loadfn()
                             botconfig.config.settings[settingkey] = true
                         end
+                        if cfgkey == 'buff' or cfgkey == 'debuff' then
+                            refreshBardTwistMode()
+                        end
                     end
                     if args[3] == 'off' then
                         entry.enabled = false
                         log.say('Disabling \ag%s\ax', entry.spell)
+                        if cfgkey == 'buff' or cfgkey == 'debuff' then
+                            refreshBardTwistMode()
+                        end
                     end
                 end
             end
