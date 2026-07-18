@@ -942,15 +942,21 @@ function czactor.runRoleClaimsTick()
     czactor.sweepExpiredRoleClaims(now)
     local rc = state.getRunconfig()
     -- Peers not on ma/mt lists still need discovery when automatic and missing overrides.
+    -- EQ primary holders (not on lists) must also evaluate so they can claim / release.
     local assist = rc.AssistName
     if assist == nil or assist == '' then assist = rc.TankName end
     local tank = rc.TankName
     if tank == nil or tank == '' then tank = rc.AssistName end
     local needAskMa = assist == 'automatic' and not auto_ma_mt.getActorMaOverrideName()
     local needAskMt = tank == 'automatic' and not auto_ma_mt.getActorMtOverrideName()
+    local me = myName()
+    local topMa = auto_ma_mt.topMaCandidateInZone()
+    local topMt = auto_ma_mt.topMtCandidateInZone()
+    local amTopPrimary = (topMa and namesMatch(topMa, me)) or (topMt and namesMatch(topMt, me))
     if not rc.maEligible and not rc.mtEligible
         and not rc.MaImHolding and not rc.MtImHolding
-        and not needAskMa and not needAskMt then
+        and not needAskMa and not needAskMt
+        and not amTopPrimary then
         return
     end
     applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
@@ -959,6 +965,7 @@ end
 --- After zone settle: rebroadcast im_mt/im_ma when this bot still holds or should claim,
 --- so peers whose overrides expired during zone load can restore Actor*Override without
 --- waiting on a whos_* round-trip that may also be gated by group-index lag.
+--- Do not rebroadcast stale group-only claims that are no longer top under raid sources.
 function czactor.rebroadcastRoleClaimsAfterZone()
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
@@ -971,8 +978,8 @@ function czactor.rebroadcastRoleClaimsAfterZone()
         if top and namesMatch(top, myName()) then
             czactor.publishImMt(topSource or 'list', topIdx or 0)
         else
-            local o = rc.ActorMtOverride
-            czactor.publishImMt(o and o.source or 'list', o and o.listIndex or 0)
+            -- No longer top (e.g. entered raid without mt_list entry): release instead of rebroadcast.
+            czactor.publishReleaseMt()
         end
     end
 
@@ -980,8 +987,12 @@ function czactor.rebroadcastRoleClaimsAfterZone()
     if claimMa then
         czactor.publishImMa(maSource, maIdx or 0)
     elseif rc.MaImHolding then
-        local o = rc.ActorMaOverride
-        czactor.publishImMa(o and o.source or 'list', o and o.listIndex or 0)
+        local top, topSource, topIdx = auto_ma_mt.topMaCandidateInZone()
+        if top and namesMatch(top, myName()) then
+            czactor.publishImMa(topSource or 'list', topIdx or 0)
+        else
+            czactor.publishReleaseMa()
+        end
     end
 end
 
@@ -996,11 +1007,14 @@ local function respondToWhosMa()
         czactor.publishImMa(source, listIndex)
         return
     end
-    if rc.MaImHolding then
-        if (now - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
-        local o = rc.ActorMaOverride
-        czactor.publishImMa(o and o.source or 'list', o and o.listIndex or 0)
-    end
+    -- Soft / held answer only while still top under current group/raid sources.
+    local assistSetting = rc.AssistName
+    if assistSetting == nil or assistSetting == '' then assistSetting = rc.TankName end
+    if assistSetting ~= 'automatic' then return end
+    local top, topSource, topIdx = auto_ma_mt.topMaCandidateInZone()
+    if not top or not namesMatch(top, myName()) then return end
+    if (now - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
+    czactor.publishImMa(topSource or 'list', topIdx or 0)
 end
 
 local function respondToWhosMt()
@@ -1014,22 +1028,15 @@ local function respondToWhosMt()
         czactor.publishImMt(source, listIndex)
         return
     end
-    if rc.MtImHolding then
-        if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
-        local o = rc.ActorMtOverride
-        czactor.publishImMt(o and o.source or 'list', o and o.listIndex or 0)
-        return
-    end
-    -- Soft eligibility: automatic tanks whose EQ/list top is self still answer after a
-    -- brief shouldClaimMt dip (e.g. post-zone proximity/charinfo lag).
+    -- Soft / held answer only while still top under current group/raid sources
+    -- (raid: mt_list only — Group.MainTank holders without list entry do not answer).
     local tankSetting = rc.TankName
     if tankSetting == nil or tankSetting == '' then tankSetting = rc.AssistName end
     if tankSetting ~= 'automatic' then return end
     local top, topSource, topIdx = auto_ma_mt.topMtCandidateInZone()
-    if top and namesMatch(top, myName()) then
-        if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
-        czactor.publishImMt(topSource or 'list', topIdx or 0)
-    end
+    if not top or not namesMatch(top, myName()) then return end
+    if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
+    czactor.publishImMt(topSource or 'list', topIdx or 0)
 end
 
 local function applyWhosMa(content, sender)

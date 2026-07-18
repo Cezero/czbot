@@ -87,13 +87,13 @@ flowchart TD
 
 In a **raid**, the EQ UI has no raid-wide Main Tank or Puller; those always come from the **group** window for puller/MT assignment in other contexts. For **automatic MT claim eligibility**, CZBot **ignores** `Group.MainTank` entirely when `Raid.Members > 0` and uses **`mt_list` only**. See [Raid mode](raid-mode.md).
 
-For **automatic MA claim eligibility** in a raid, CZBot uses **`Raid.MainAssist`** first, then **`ma_list`**.
+For **automatic MA claim eligibility** in a raid, CZBot uses **`Raid.MainAssist`** first, then **`ma_list`**. **Group-window** Main Assist / Main Tank assignments are ignored for automatic role resolution while in a raid — a bot that claimed from group primary must **`release_*`** if it is no longer selected by raid sources (raid MA / `ma_list`, or `mt_list` for MT).
 
 ---
 
 ## Claim eligibility (EQ primary + lists)
 
-EQ primary and `ma_list` / `mt_list` decide **who may publish `im_*`**, not who peers treat as Assist/Tank for gameplay.
+EQ primary and `ma_list` / `mt_list` decide **who may publish `im_*`**, not who peers treat as Assist/Tank for gameplay. A bot may claim when it is the zone-local top candidate from that path — **list membership is not required** when the EQ primary (group or raid MA) is self.
 
 ### Primary (EQ-assigned role)
 
@@ -102,6 +102,7 @@ When the game reports a Main Assist or Main Tank name:
 1. Name must be non-empty.
 2. Candidate must be **alive** and in the **same zone** as this bot.
 3. **No distance check** — a primary who is alive in-zone but far away can still claim.
+4. Primary holders **do not need** to be on `ma_list` / `mt_list` to claim (typical for a group MA/MT who must not appear on raid tank lists).
 
 If the primary is dead, feigned, hovering, or in another zone, claim eligibility walks the list. Until someone publishes `im_*` and peers store the override, resolved MA/MT is **nil** — but **`GetAssistInfo()`** can still use **`lastAssistTargetId`** for combat continuity on the last assisted mob.
 
@@ -114,7 +115,7 @@ When no primary is available (or in raid for MT):
 3. **`ma_list` only (group):** candidate must be within **`maAnchorLeash`** of this bot. In **raid**, `ma_list` uses alive/in-zone only (same as **`mt_list`**).
 4. **`mt_list`:** no leash — healers gate on spell range separately.
 
-**Common gotcha:** Peers do **not** fall back to EQ primary for Assist/Tank when actor claims are missing — they ask `whos_*` until answered.
+**Common gotcha:** Peers do **not** fall back to EQ primary for Assist/Tank when actor claims are missing — they ask `whos_*` until answered. The primary (or list top) answers with `im_*`.
 
 ---
 

@@ -104,7 +104,9 @@ function auto_ma_mt.indexInList(list, name)
     return nil
 end
 
---- Refresh runconfig maEligible/mtEligible from current MaList/MtList (Me.Name membership).
+--- Refresh runconfig maEligible/mtEligible from MaList/MtList membership only.
+--- List flags are for raid list eligibility and tick early-out; EQ primary holders claim
+--- via shouldClaim* / top*CandidateInZone without needing these flags.
 function auto_ma_mt.refreshRoleClaimEligibility()
     local rc = state.getRunconfig()
     local me = myName()
@@ -284,9 +286,10 @@ end
 --- @return number|nil listIndex
 function auto_ma_mt.shouldClaimMa()
     if not isAutomaticAssist() or not meAlive() then return false end
-    if not state.getRunconfig().maEligible then return false end
     if not auto_ma_mt.canClaimMa() then return false end
     if not auto_ma_mt.hasRosterProximityInZone(true) then return false end
+    -- Top candidate already encodes group primary → ma_list / raid MA → ma_list.
+    -- Do not require maEligible (list membership); EQ primary holders may claim without lists.
     local top, source, listIndex = auto_ma_mt.topMaCandidateInZone()
     if not top or not namesEqual(top, myName()) then return false end
     return true, source, listIndex
@@ -297,9 +300,9 @@ end
 --- @return number|nil listIndex
 function auto_ma_mt.shouldClaimMt()
     if not isAutomaticTank() or not meAlive() then return false end
-    if not state.getRunconfig().mtEligible then return false end
     if not auto_ma_mt.canClaimMt() then return false end
     if not auto_ma_mt.hasRosterProximityInZone(false) then return false end
+    -- Top candidate: group MainTank → mt_list; in raid, mt_list only (Group.MainTank ignored).
     local top, source, listIndex = auto_ma_mt.topMtCandidateInZone()
     if not top or not namesEqual(top, myName()) then return false end
     return true, source, listIndex
@@ -382,9 +385,10 @@ end
 
 --- Evaluate whether this bot should publish im_*, release_*, or ask whos_*.
 --- Holders publish im_* only when first claiming (not every tick). Sticky MT hold
---- skips release on brief post-zone eligibility dips. Peers without a usable actor
---- override ask whos_* (with czactor backoff) so the holder can answer; EQ/list are
---- claim eligibility only, not a reason to skip discovery.
+--- skips release on brief post-zone eligibility dips (group only). In raid, group-only
+--- MT holders not on mt_list must release even when no replacement exists. Peers without
+--- a usable actor override ask whos_* (with czactor backoff); EQ/list are claim
+--- eligibility only, not a reason to skip discovery.
 ---@param opts table|nil { trigger = 'release'|'periodic' }
 ---@return table actions { releaseMa?, publishMa?, askWhosMa?, releaseMt?, publishMt?, askWhosMt? }
 function auto_ma_mt.evaluateRoleClaims(opts)
@@ -397,6 +401,8 @@ function auto_ma_mt.evaluateRoleClaims(opts)
     local claimMa, maSource, maIdx = auto_ma_mt.shouldClaimMa()
     local claimMt, mtSource, mtIdx = auto_ma_mt.shouldClaimMt()
 
+    -- Strict MA release: no sticky hold so group-primary claims drop on raid transition
+    -- when Raid.MainAssist / ma_list no longer select this bot.
     if rc.MaImHolding and (not isAutomaticAssist() or not claimMa) then
         actions.releaseMa = true
     elseif claimMa and not rc.MaImHolding then
@@ -409,11 +415,14 @@ function auto_ma_mt.evaluateRoleClaims(opts)
     if rc.MtImHolding and not isAutomaticTank() then
         actions.releaseMt = true
     elseif rc.MtImHolding and not claimMt then
-        -- Sticky hold: only release when a different in-zone candidate clearly owns MT,
-        -- or when this bot is dead/hovering. Brief post-zone eligibility dips must not drop the claim.
         if not meAlive() then
             actions.releaseMt = true
+        elseif inRaid() and not rc.mtEligible then
+            -- Raid MT is mt_list only; do not sticky-hold a pre-raid Group.MainTank claim.
+            actions.releaseMt = true
         else
+            -- Sticky hold (group / list-eligible): only release when a different in-zone
+            -- candidate clearly owns MT. Brief post-zone dips must not drop the claim.
             local top = auto_ma_mt.topMtCandidateInZone()
             if top and not namesEqual(top, me) then
                 actions.releaseMt = true
