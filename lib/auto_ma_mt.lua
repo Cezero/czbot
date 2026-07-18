@@ -387,8 +387,9 @@ end
 --- Holders publish im_* only when first claiming (not every tick). Sticky MT hold
 --- skips release on brief post-zone eligibility dips (group only). In raid, group-only
 --- MT holders not on mt_list must release even when no replacement exists. Peers without
---- a usable actor override ask whos_* (with czactor backoff); EQ/list are claim
---- eligibility only, not a reason to skip discovery.
+--- a stored Actor*Override ask whos_* (with czactor backoff). Asks do not re-arm from
+--- charinfo unavailability of an existing override — sweep clears the slot first.
+--- EQ/list are claim eligibility only, not a reason to skip discovery.
 ---@param opts table|nil { trigger = 'release'|'periodic' }
 ---@return table actions { releaseMa?, publishMa?, askWhosMa?, releaseMt?, publishMt?, askWhosMt? }
 function auto_ma_mt.evaluateRoleClaims(opts)
@@ -408,7 +409,10 @@ function auto_ma_mt.evaluateRoleClaims(opts)
     elseif claimMa and not rc.MaImHolding then
         actions.publishMa = { source = maSource, listIndex = maIdx or 0 }
     elseif opts.trigger ~= 'release'
-        and isAutomaticAssist() and not claimMa and not auto_ma_mt.getActorMaOverrideName() then
+        and isAutomaticAssist() and not claimMa and not rc.ActorMaOverride then
+        -- Ask only when no stored claim. Do not use getActorMaOverrideName() here:
+        -- that also requires charinfo availability, which flaps under load and resets
+        -- whos backoff on every ephemeral im_ma → perpetual 2s ask storm.
         actions.askWhosMa = true
     end
 
@@ -431,7 +435,7 @@ function auto_ma_mt.evaluateRoleClaims(opts)
     elseif claimMt and not rc.MtImHolding then
         actions.publishMt = { source = mtSource, listIndex = mtIdx or 0 }
     elseif opts.trigger ~= 'release'
-        and isAutomaticTank() and not claimMt and not auto_ma_mt.getActorMtOverrideName() then
+        and isAutomaticTank() and not claimMt and not rc.ActorMtOverride then
         actions.askWhosMt = true
     end
 

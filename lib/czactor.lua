@@ -75,6 +75,9 @@ local FOLLOW_PRIORITY_IDS = {
     follow_me = true,
     follow_me_off = true,
 }
+-- At most one whos_ma and one whos_mt may sit in the inbound queue.
+local _pendingWhosMa = false
+local _pendingWhosMt = false
 local _nextPingAt = 0
 local _nextOtHeartbeatAt = 0
 local _nextClaimPruneAt = 0
@@ -164,6 +167,8 @@ local function clearInboundQueue()
     _inboundQueue = {}
     _inboundHead = 1
     _inboundTail = 1
+    _pendingWhosMa = false
+    _pendingWhosMt = false
 end
 
 local function compactInboundQueue()
@@ -229,6 +234,9 @@ local function dequeueInbound()
     local msg = _inboundQueue[_inboundHead]
     _inboundQueue[_inboundHead] = nil
     _inboundHead = _inboundHead + 1
+    local id = entryMessageId(msg)
+    if id == 'whos_ma' then _pendingWhosMa = false end
+    if id == 'whos_mt' then _pendingWhosMt = false end
     if _inboundHead >= _inboundTail then
         clearInboundQueue()
     elseif _inboundHead >= INBOUND_COMPACT_AT_HEAD then
@@ -250,6 +258,48 @@ end
 local function recordDroppedEntry(entry)
     _trafficDropped = _trafficDropped + 1
     bumpIdCount(_dropIdCounts, entryMessageId(entry))
+end
+
+--- Collapse duplicate whos_* already in the queue (one of each id). Safe to call each drain.
+local function coalesceWhosInQueue()
+    local depth = inboundDepth()
+    if depth <= 1 then return end
+    local seenMa, seenMt = false, false
+    local newQ = {}
+    local j = 1
+    local dropped = 0
+    for i = _inboundHead, _inboundTail - 1 do
+        local entry = _inboundQueue[i]
+        local id = entryMessageId(entry)
+        if id == 'whos_ma' then
+            if seenMa then
+                recordDroppedEntry(entry)
+                dropped = dropped + 1
+            else
+                seenMa = true
+                newQ[j] = entry
+                j = j + 1
+            end
+        elseif id == 'whos_mt' then
+            if seenMt then
+                recordDroppedEntry(entry)
+                dropped = dropped + 1
+            else
+                seenMt = true
+                newQ[j] = entry
+                j = j + 1
+            end
+        else
+            newQ[j] = entry
+            j = j + 1
+        end
+    end
+    if dropped == 0 then return end
+    _inboundQueue = newQ
+    _inboundHead = 1
+    _inboundTail = j
+    _pendingWhosMa = seenMa
+    _pendingWhosMt = seenMt
 end
 
 local function maybeWarnQueueDepth()
@@ -309,11 +359,25 @@ end
 
 local function enqueueInbound(entry)
     local id = entryMessageId(entry)
+    if id == 'whos_ma' and _pendingWhosMa then
+        recordDroppedEntry(entry)
+        maybeWarnQueueDepth()
+        maybeLogQueueDebug()
+        return
+    end
+    if id == 'whos_mt' and _pendingWhosMt then
+        recordDroppedEntry(entry)
+        maybeWarnQueueDepth()
+        maybeLogQueueDebug()
+        return
+    end
     if id and FOLLOW_PRIORITY_IDS[id] then
         enqueueInboundFront(entry)
     else
         enqueueInboundBack(entry)
     end
+    if id == 'whos_ma' then _pendingWhosMa = true end
+    if id == 'whos_mt' then _pendingWhosMt = true end
     _trafficEnqueued = _trafficEnqueued + 1
     bumpIdCount(_enqueueIdCounts, id)
     enforceInboundCap()
@@ -322,6 +386,7 @@ local function enqueueInbound(entry)
 end
 
 local function drainInboundQueue()
+    coalesceWhosInQueue()
     local budget = INBOUND_DRAIN_BUDGET
     while budget > 0 do
         local msg = dequeueInbound()
@@ -734,8 +799,19 @@ local function acceptMtWhosAsk(sender)
         return auto_ma_mt.isSenderInMyRaid(sender)
     end
     if auto_ma_mt.isSenderInMyGroup(sender) then return true end
-    if not auto_ma_mt.getActorMtOverrideName() then return true end
+    if not state.getRunconfig().ActorMtOverride then return true end
     return auto_ma_mt.groupLacksActiveMt()
+end
+
+--- Accept whos_ma asks (parallel to acceptMtWhosAsk).
+local function acceptMaWhosAsk(sender)
+    if not sender or sender == '' then return false end
+    if inRaid() then
+        return auto_ma_mt.isSenderInMyRaid(sender)
+    end
+    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
+    if not state.getRunconfig().ActorMaOverride then return true end
+    return auto_ma_mt.groupLacksActiveMa()
 end
 
 local function acceptMaRelease(sender, rc)
@@ -831,7 +907,11 @@ applyImMa = function(content, sender)
     }
     if inGroup then rc.MaReleased = false end
     tankrole.invalidateMa()
-    resetWhosMaBackoff()
+    -- Only reset ask backoff when the claim is actually usable for resolve. Accepting
+    -- im_ma then failing isCandidateAvailable must not snap backoff back to 2s.
+    if auto_ma_mt.getActorMaOverrideName() then
+        resetWhosMaBackoff()
+    end
 end
 
 applyImMt = function(content, sender)
@@ -883,7 +963,9 @@ applyImMt = function(content, sender)
         notifyMtNameChanged(name, 'claim')
     end
     tankrole.invalidateMt()
-    resetWhosMtBackoff()
+    if auto_ma_mt.getActorMtOverrideName() then
+        resetWhosMtBackoff()
+    end
 end
 
 local function expireMaClaimOverride()
@@ -947,8 +1029,8 @@ function czactor.runRoleClaimsTick()
     if assist == nil or assist == '' then assist = rc.TankName end
     local tank = rc.TankName
     if tank == nil or tank == '' then tank = rc.AssistName end
-    local needAskMa = assist == 'automatic' and not auto_ma_mt.getActorMaOverrideName()
-    local needAskMt = tank == 'automatic' and not auto_ma_mt.getActorMtOverrideName()
+    local needAskMa = assist == 'automatic' and not rc.ActorMaOverride
+    local needAskMt = tank == 'automatic' and not rc.ActorMtOverride
     local me = myName()
     local topMa = auto_ma_mt.topMaCandidateInZone()
     local topMt = auto_ma_mt.topMtCandidateInZone()
@@ -997,56 +1079,65 @@ function czactor.rebroadcastRoleClaimsAfterZone()
 end
 
 local function respondToWhosMa()
+    local now = mq.gettime()
+    -- Always throttle replies: one im_ma per ROLE_CLAIMS_INTERVAL covers all pending askers.
+    if (now - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
     local rc = state.getRunconfig()
     local claim, source, listIndex = auto_ma_mt.shouldClaimMa()
-    local now = mq.gettime()
     if claim then
-        if rc.MaImHolding and (now - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then
-            return
-        end
         czactor.publishImMa(source, listIndex)
         return
     end
-    -- Soft / held answer only while still top under current group/raid sources.
+    -- Holder must still answer whos even if shouldClaimMa dipped (proximity/charinfo flap).
+    if rc.MaImHolding then
+        local top, topSource, topIdx = auto_ma_mt.topMaCandidateInZone()
+        if top and namesMatch(top, myName()) then
+            czactor.publishImMa(topSource or 'list', topIdx or 0)
+        end
+        return
+    end
     local assistSetting = rc.AssistName
     if assistSetting == nil or assistSetting == '' then assistSetting = rc.TankName end
     if assistSetting ~= 'automatic' then return end
     local top, topSource, topIdx = auto_ma_mt.topMaCandidateInZone()
     if not top or not namesMatch(top, myName()) then return end
-    if (now - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
     czactor.publishImMa(topSource or 'list', topIdx or 0)
 end
 
 local function respondToWhosMt()
+    local now = mq.gettime()
+    if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
     local rc = state.getRunconfig()
     local claim, source, listIndex = auto_ma_mt.shouldClaimMt()
-    local now = mq.gettime()
     if claim then
-        if rc.MtImHolding and (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then
-            return
-        end
         czactor.publishImMt(source, listIndex)
         return
     end
-    -- Soft / held answer only while still top under current group/raid sources
-    -- (raid: mt_list only — Group.MainTank holders without list entry do not answer).
+    if rc.MtImHolding then
+        local top, topSource, topIdx = auto_ma_mt.topMtCandidateInZone()
+        if top and namesMatch(top, myName()) then
+            czactor.publishImMt(topSource or 'list', topIdx or 0)
+        end
+        return
+    end
     local tankSetting = rc.TankName
     if tankSetting == nil or tankSetting == '' then tankSetting = rc.AssistName end
     if tankSetting ~= 'automatic' then return end
     local top, topSource, topIdx = auto_ma_mt.topMtCandidateInZone()
     if not top or not namesMatch(top, myName()) then return end
-    if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
     czactor.publishImMt(topSource or 'list', topIdx or 0)
 end
 
 local function applyWhosMa(content, sender)
+    if (mq.gettime() - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
     if sender and namesMatch(sender, myName()) then return end
     if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMaClaim(sender) then return end
+    if not acceptMaWhosAsk(sender) then return end
     respondToWhosMa()
 end
 
 local function applyWhosMt(content, sender)
+    if (mq.gettime() - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
     if sender and namesMatch(sender, myName()) then return end
     if content.zone and not zonesMatch(content.zone, myZone()) then return end
     if not acceptMtWhosAsk(sender) then return end
