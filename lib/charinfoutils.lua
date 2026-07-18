@@ -1,5 +1,6 @@
 -- Helpers for MQCharInfo peer data (CharinfoPeer usertype from plugin.charinfo).
 -- State[] is a 1-based string array (e.g. {'ATTACK', 'STAND', 'GROUP'}).
+-- Self is never read from charinfo — use Me TLOs via getLeaderContext / leaderContextForSelf.
 
 local mq = require('mq')
 local utils = require('lib.utils')
@@ -152,24 +153,34 @@ local function leaderContextFromCharinfoPeer(name, peer)
 end
 
 local function leaderContextForSelf(name)
-    local ok, charinfo = pcall(require, 'plugin.charinfo')
-    if ok and charinfo then
-        local peer = charinfo.GetInfo(name)
-        if peer then
-            local ctx = baseContextFromCharinfo(name, peer)
-            ctx.sameZone = true
-            ctx.distance = 0
-            ctx.peerZone = mq.TLO.Zone.ShortName()
-            return ctx
+    -- MQCharinfo is peer-only. Never call GetInfo for Me — use live Me TLOs only.
+    local alive = not mq.TLO.Me.Dead() and not mq.TLO.Me.Hovering()
+        and (mq.TLO.Me.PctHPs() or 0) > 0
+    local targetId = mq.TLO.Target.ID()
+    if targetId and targetId <= 0 then targetId = nil end
+    local inAttack = false
+    local psFn = mq.TLO.Me.PlayerState
+    if psFn then
+        local ps = psFn()
+        if ps then
+            inAttack = bit32.band(ps, bit32.bor(PLAYERSTATE_AGGRESSIVE, PLAYERSTATE_FORCED_AGGRESSIVE)) ~= 0
         end
     end
-    local spawnCtx = leaderContextFromSpawn(name)
-    if spawnCtx then
-        spawnCtx.distance = 0
-        spawnCtx.peerZone = mq.TLO.Zone.ShortName()
-        return spawnCtx
-    end
-    return nil
+    if not inAttack and mq.TLO.Me.Combat() == true then inAttack = true end
+    return {
+        source = 'me',
+        name = name or mq.TLO.Me.Name(),
+        x = mq.TLO.Me.X(),
+        y = mq.TLO.Me.Y(),
+        z = mq.TLO.Me.Z(),
+        distance = 0,
+        targetId = targetId,
+        inAttack = inAttack,
+        alive = alive,
+        sameZone = true,
+        peerZone = mq.TLO.Zone.ShortName(),
+        peer = nil,
+    }
 end
 
 --- 2D distance to leader context (follow leash semantics); prefers ctx coords over ctx.distance.
@@ -202,14 +213,14 @@ function charinfoutils.leaderDistance3D(ctx)
     return ctx.distance
 end
 
---- Normalized leader context from charinfo (bot peer) or Spawn TLO (non-bot PC).
+--- Normalized leader context: Me TLOs for self, MQCharinfo for peers, else Spawn TLO.
 ---@param name string|nil
 ---@return table|nil
 function charinfoutils.getLeaderContext(name)
     if not name or name == '' then return nil end
 
     local meName = mq.TLO.Me.Name()
-    if meName and name == meName then
+    if meName and string.lower(name) == string.lower(meName) then
         return leaderContextForSelf(name)
     end
 

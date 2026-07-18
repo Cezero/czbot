@@ -70,6 +70,12 @@ end
 
 function auto_ma_mt.isCandidateAvailable(name, requireLeash)
     if not name or name == '' then return false end
+    -- Self: trust live Me TLOs, never MQCharinfo peer snapshots (those flap under load
+    -- and made the MA bot's own Assist Name oscillate between '-' and self).
+    if namesEqual(name, myName()) then
+        if not meAlive() then return false end
+        return true
+    end
     local ctx = charinfoutils.getLeaderContext(name)
     if not ctx or not ctx.alive or not ctx.sameZone then return false end
     if requireLeash then
@@ -215,6 +221,8 @@ end
 
 --- At least one other roster member in this zone, or solo in zone (advance party).
 --- When requireMaLeash, nearest in-zone peer must be within maAnchorLeash.
+--- Unknown distance (nil charinfo Distance) does not fail closed — that caused
+--- perpetual release/reclaim flaps under load.
 function auto_ma_mt.hasRosterProximityInZone(requireMaLeash)
     local me = myName()
     local inZoneOthers = 0
@@ -223,17 +231,19 @@ function auto_ma_mt.hasRosterProximityInZone(requireMaLeash)
         if not namesEqual(name, me) and memberAliveInMyZone(name) then
             inZoneOthers = inZoneOthers + 1
             local ctx = charinfoutils.getLeaderContext(name)
-            if ctx and ctx.distance then
-                if not closestDist or ctx.distance < closestDist then
-                    closestDist = ctx.distance
+            local dist = ctx and charinfoutils.leaderDistance2D(ctx) or (ctx and ctx.distance)
+            if dist then
+                if not closestDist or dist < closestDist then
+                    closestDist = dist
                 end
             end
         end
     end
     if inZoneOthers == 0 then return true end
     if requireMaLeash then
+        if closestDist == nil then return true end
         local leash = getAnchorLeash()
-        return closestDist ~= nil and closestDist <= leash
+        return closestDist <= leash
     end
     return true
 end
@@ -287,7 +297,8 @@ end
 function auto_ma_mt.shouldClaimMa()
     if not isAutomaticAssist() or not meAlive() then return false end
     if not auto_ma_mt.canClaimMa() then return false end
-    if not auto_ma_mt.hasRosterProximityInZone(true) then return false end
+    -- Match ma_list rules: leash only outside raid (raid uses in-zone list only).
+    if not auto_ma_mt.hasRosterProximityInZone(not inRaid()) then return false end
     -- Top candidate already encodes group primary → ma_list / raid MA → ma_list.
     -- Do not require maEligible (list membership); EQ primary holders may claim without lists.
     local top, source, listIndex = auto_ma_mt.topMaCandidateInZone()
@@ -384,8 +395,8 @@ function auto_ma_mt.sweepStaleActorOverrides()
 end
 
 --- Evaluate whether this bot should publish im_*, release_*, or ask whos_*.
---- Holders publish im_* only when first claiming (not every tick). Sticky MT hold
---- skips release on brief post-zone eligibility dips (group only). In raid, group-only
+--- Holders publish im_* only when first claiming (not every tick). Sticky MA/MT hold
+--- skips release on brief eligibility dips while still top under current sources. In raid, group-only
 --- MT holders not on mt_list must release even when no replacement exists. Peers without
 --- a stored Actor*Override ask whos_* (with czactor backoff). Asks do not re-arm from
 --- charinfo unavailability of an existing override — sweep clears the slot first.
@@ -402,10 +413,19 @@ function auto_ma_mt.evaluateRoleClaims(opts)
     local claimMa, maSource, maIdx = auto_ma_mt.shouldClaimMa()
     local claimMt, mtSource, mtIdx = auto_ma_mt.shouldClaimMt()
 
-    -- Strict MA release: no sticky hold so group-primary claims drop on raid transition
-    -- when Raid.MainAssist / ma_list no longer select this bot.
-    if rc.MaImHolding and (not isAutomaticAssist() or not claimMa) then
+    -- MA release: drop when not automatic / dead / another in-zone candidate clearly owns MA.
+    -- Sticky while still top so proximity/charinfo flaps do not release/reclaim every 2s.
+    if rc.MaImHolding and not isAutomaticAssist() then
         actions.releaseMa = true
+    elseif rc.MaImHolding and not claimMa then
+        if not meAlive() then
+            actions.releaseMa = true
+        else
+            local top = auto_ma_mt.topMaCandidateInZone()
+            if not top or not namesEqual(top, me) then
+                actions.releaseMa = true
+            end
+        end
     elseif claimMa and not rc.MaImHolding then
         actions.publishMa = { source = maSource, listIndex = maIdx or 0 }
     elseif opts.trigger ~= 'release'

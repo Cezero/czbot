@@ -530,12 +530,6 @@ end
 local function maTargetFallbackWithoutMobList(rc)
     local curId = mq.TLO.Target.ID()
     if isValidMaSelectedTarget(curId, rc) then return curId end
-    if not tankrole.AmIMainAssist() then return nil end
-    local info = charinfo.GetInfo(mq.TLO.Me.Name())
-    if info and info.Target and info.Target.ID then
-        local tid = info.Target.ID
-        if isValidMaSelectedTarget(tid, rc) then return tid end
-    end
     return nil
 end
 
