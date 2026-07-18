@@ -15,6 +15,15 @@ local botmove = {}
 local CorpseID = nil
 local carryCorpseID = nil
 local lastFollowResolveFailTime = 0
+local _followDebug = false
+
+function botmove.SetFollowDebug(on)
+    _followDebug = on and true or false
+end
+
+function botmove.IsFollowDebug()
+    return _followDebug
+end
 
 -- ---------------------------------------------------------------------------
 -- Follow / stuck helpers
@@ -137,6 +146,60 @@ local function shouldSuppressFollowNav(rc)
     return hasActiveFollow(rc)
         and isFollowEngagementActive(rc)
         and not rc.followCatchUp
+end
+
+local function fmtNum(n, digits)
+    if n == nil then return '-' end
+    return string.format('%.' .. (digits or 1) .. 'f', n)
+end
+
+--- One-line follow diagnostics (~1 Hz via FollowAndStuckCheck). Session-only.
+local function maybeLogFollowDebug(rc, ctx, action)
+    if not _followDebug then return end
+    if not hasActiveFollow(rc) then return end
+
+    local useCharinfo = followUsesCharinfoNav(ctx)
+    local path = useCharinfo and 'charinfo' or 'spawn'
+    local d2 = nil
+    if useCharinfo then
+        d2 = charinfoutils.leaderDistance2D(ctx)
+    elseif rc.followid and rc.followid > 0 then
+        d2 = mq.TLO.Spawn(rc.followid).Distance()
+    end
+
+    local sx, sy, sz, spawnDist = nil, nil, nil, nil
+    if rc.followid and rc.followid > 0 then
+        local sp = mq.TLO.Spawn(rc.followid)
+        if sp and sp.ID() and sp.ID() > 0 then
+            sx, sy, sz = sp.X(), sp.Y(), sp.Z()
+            spawnDist = sp.Distance()
+        end
+    end
+
+    local suppress = shouldSuppressFollowNav(rc)
+    local maEngage = require('lib.czactor').isMaEngagementActive()
+    local navActive = mq.TLO.Navigation.Active() and true or false
+    local followdist = myconfig.settings.followdistance
+
+    log.say(
+        '[follow] leader=%s id=%s path=%s action=%s d2=%s leash=%s shouldCall=%s suppress=%s catchUp=%s maEngage=%s nav=%s ctx=(%s,%s,%s) spawn=(%s,%s,%s) spawnDist=%s src=%s sameZone=%s',
+        tostring(rc.followname or ''),
+        tostring(rc.followid or 0),
+        path,
+        action,
+        fmtNum(d2),
+        tostring(followdist or '-'),
+        tostring(action == 'nav_locxyz' or action == 'nav_id'),
+        tostring(suppress),
+        tostring(rc.followCatchUp and true or false),
+        tostring(maEngage),
+        tostring(navActive),
+        fmtNum(ctx and ctx.x), fmtNum(ctx and ctx.y), fmtNum(ctx and ctx.z),
+        fmtNum(sx), fmtNum(sy), fmtNum(sz),
+        fmtNum(spawnDist),
+        tostring(ctx and ctx.source or '-'),
+        tostring(ctx and ctx.sameZone)
+    )
 end
 
 local function tickFollowCatchUp(rc)
@@ -847,16 +910,22 @@ function botmove.FollowAndStuckCheck()
     clearUnstuckIfFollowInactive(rc)
     local ctx = getFollowLeaderContext(rc)
     local canFollow = followUsesCharinfoNav(ctx) or (rc.followid and rc.followid > 0)
-    if not canFollow then return end
+    if not canFollow then
+        maybeLogFollowDebug(rc, ctx, 'nocan')
+        return
+    end
     if rc.followid and rc.followid > 0 then
         local followid = mq.TLO.Spawn(rc.followid).ID() or 0
         if followid > 0 and followid ~= rc.followid then
             rc.followid = followid
         end
     end
+    local action = 'skip'
     if shouldCallFollow(rc) then
+        action = followUsesCharinfoNav(ctx) and 'nav_locxyz' or 'nav_id'
         botmove.FollowCall()
     end
+    maybeLogFollowDebug(rc, ctx, action)
     updateStuckTimerWithinLeash(rc)
 end
 

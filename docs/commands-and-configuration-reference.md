@@ -145,6 +145,7 @@ These toggle verbose printf tracing for specific subsystems (session-only; not s
 | ------- | ------- |
 | **mezdebug** | Mez target pick/skip reasons. |
 | **buffdebug** | Buff cast/skip reasons. |
+| **followdebug** | Follow leash/nav decisions (~1/s): charinfo vs spawn path, d2, suppress, nav action. Enable on one bot only. |
 | **prememdebug** | Pre-mem gem load/skip reasons. |
 | **upgradedebug** | Spell-upgrade SpellGroup scan details. |
 | **aetankdebug** | AE-tank idle reasons (not MT, mezzer suppress, cooldown, no loose adds). |

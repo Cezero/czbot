@@ -866,6 +866,18 @@ local function cmd_barddebug(args)
     log.say('Bard debug logging %s', bardtwist.IsBardDebug() and 'on' or 'off')
 end
 
+local function cmd_followdebug(args)
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botmove.SetFollowDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botmove.SetFollowDebug(false)
+    else
+        botmove.SetFollowDebug(not botmove.IsFollowDebug())
+    end
+    log.say('Follow debug logging %s', botmove.IsFollowDebug() and 'on' or 'off')
+end
+
 local function cmd_tickdebug(args)
     local tickprof = require('lib.tickprof')
     local mode = args[2] and string.lower(args[2]) or ''
@@ -1600,6 +1612,7 @@ local handlers = {
     mezdebug = cmd_mezdebug,
     buffdebug = cmd_buffdebug,
     barddebug = cmd_barddebug,
+    followdebug = cmd_followdebug,
     tickdebug = cmd_tickdebug,
     actordebug = cmd_actordebug,
     charmpetsetup = cmd_charmpetsetup,

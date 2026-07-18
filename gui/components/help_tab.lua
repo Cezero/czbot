@@ -94,6 +94,7 @@ local GROUPS = {
     { title = "Diagnostics", cmds = {
         { "/cz mezdebug on|off", "Log why mez targets are picked or skipped." },
         { "/cz buffdebug on|off", "Log why a buff is or isn't cast on a target." },
+        { "/cz followdebug on|off", "Log follow leash/nav decisions (~1/s). Enable on one stuck bot." },
         { "/cz prememdebug on|off", "Log which gems the pre-mem pass loads (and what it skips)." },
         { "/cz upgradedebug on|off", "Log spell-upgrade scan results (SpellGroup matches per configured spell)." },
         { "/cz aetankdebug on|off", "Log why AE-tank is idle (not MT, mezzer suppress, taunt cooldown, nothing loose)." },
