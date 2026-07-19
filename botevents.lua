@@ -46,6 +46,7 @@ function botevents.ResetCombatSession(reason)
     rc.charmSkipIds = {}
     rc.MobList = {}
     spellstates.CleanMobList()
+    spellutils.BuffSkipClearAll()
     if APTarget then APTarget = nil end
     if rawget(_G, 'KillTarget') then _G.KillTarget = nil end
     require('botmelee').clearMobprobEngageGrace()
@@ -123,7 +124,9 @@ end
 function botevents.Event_ResetMelee()
 end
 
-function botevents.Event_WornOff()
+--- "#*#Your #1# spell has worn off of #2#." → clear buff observation for that target/spell.
+function botevents.Event_WornOff(_line, spellName, targetName)
+    spellutils.BuffSkipClearWornOff(spellName, targetName)
 end
 
 function botevents.Event_Camping()

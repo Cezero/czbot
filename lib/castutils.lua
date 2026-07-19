@@ -89,11 +89,11 @@ function castutils.evalGroupAECount(entry, targethit, index, bandTable, phaseKey
                     if mq.TLO.Spawn(grpid).Type() ~= 'PC' or not grpdistSq or grpdistSq > aeRangeSq then
                         -- skip
                     else
-                        local peer = charinfo.GetInfo(grpname)
+                        local peer = (opts.peerByName and opts.peerByName[grpname]) or charinfo.GetInfo(grpname)
                         if needMemberFn(grpmember, grpid, grpname, peer) then needCount = needCount + 1 end
                     end
                 else
-                    local peer = charinfo.GetInfo(grpname)
+                    local peer = (opts.peerByName and opts.peerByName[grpname]) or charinfo.GetInfo(grpname)
                     if needMemberFn(grpmember, grpid, grpname, peer) then needCount = needCount + 1 end
                 end
             end
@@ -123,7 +123,11 @@ function castutils.getPeerGroupKey(peerName)
     return 'solo_' .. peerName
 end
 
-local function forEachGroupMemberOfAnchor(anchorName, fn)
+local function forEachGroupMemberOfAnchor(anchorName, fn, peerByName)
+    local function peerOf(name)
+        if not name then return nil end
+        return (peerByName and peerByName[name]) or charinfo.GetInfo(name)
+    end
     if mq.TLO.Group.Member(anchorName).Index() then
         for i = 0, mq.TLO.Group.Members() do
             local grpmember = mq.TLO.Group.Member(i)
@@ -131,7 +135,7 @@ local function forEachGroupMemberOfAnchor(anchorName, fn)
                 local grpname = grpmember.Name()
                 local grpid = grpmember.ID()
                 if grpid and grpid > 0 and grpname then
-                    fn(grpname, grpid, grpmember, charinfo.GetInfo(grpname))
+                    fn(grpname, grpid, grpmember, peerOf(grpname))
                 end
             end
         end
@@ -150,26 +154,26 @@ local function forEachGroupMemberOfAnchor(anchorName, fn)
             for i = 1, raidMembers do
                 if mq.TLO.Raid.Member(i).Group() == anchorGroupNum then
                     local grpname = mq.TLO.Raid.Member(i)()
-                    local peer = grpname and charinfo.GetInfo(grpname)
+                    local peer = peerOf(grpname)
                     local grpid = peer and peer.ID
                     if (not grpid or grpid <= 0) and grpname then
                         grpid = mq.TLO.Spawn('pc =' .. grpname).ID()
                     end
                     if grpname and grpid and grpid > 0 then
-                        fn(grpname, grpid, nil, peer or charinfo.GetInfo(grpname))
+                        fn(grpname, grpid, nil, peer)
                     end
                 end
             end
             return
         end
     end
-    local peer = charinfo.GetInfo(anchorName)
+    local peer = peerOf(anchorName)
     local grpid = peer and peer.ID
     if not grpid or grpid <= 0 then
         grpid = mq.TLO.Spawn('pc =' .. anchorName).ID()
     end
     if grpid and grpid > 0 then
-        fn(anchorName, grpid, nil, peer or charinfo.GetInfo(anchorName))
+        fn(anchorName, grpid, nil, peer)
     end
 end
 
@@ -194,7 +198,7 @@ function castutils.evalGroupV2OnPeer(entry, anchorId, anchorName, needMemberFn, 
         if not grpdistSq or grpdistSq > aeRangeSq then return end
         local memberRef = grpmember or grpspawn
         if needMemberFn(memberRef, grpid, grpname, peer) then needCount = needCount + 1 end
-    end)
+    end, opts.peerByName)
     if needCount >= (entry.tarcnt or 1) then return anchorId end
     return nil
 end

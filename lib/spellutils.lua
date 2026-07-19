@@ -44,6 +44,7 @@ local CASTING_LIB_SUCCESS_RESULTS = {
     CAST_FIZZLE = true,
 }
 --- When buff remaining time on target is below this (ms), do not interrupt with "buff already present" (allow refresh cast to complete). Should match botbuff's refresh window (e.g. 24s for self).
+--- Observation cache arms nextCheckAt for min(remaining - this, 30s) so charinfo is not re-read every tick.
 local BUFF_REFRESH_THRESHOLD_MS = 24000
 --- When a debuff returns CAST_TAKEHOLD (blocked by another spell), skip that debuff on this spawn for this many ms.
 local BLOCKED_SKIP_MS = 300000
@@ -719,44 +720,65 @@ function spellutils.PeerGetPetBuffDuration(peerInfo, spellid)
     return nil
 end
 
--- (peerName, spellId) → mq.gettime() when next presence check is due.
-local BUFF_SKIP_LONG_MS = 60000
-local _buffSkipUntil = {} -- [peerName][spellId] = nextDueMs
+-- Buff observation cache: (peerName, spellId) → { present, durationMs, observedAt, nextCheckAt }.
+-- Cap between charinfo re-reads at ~30s; refresh window remains BUFF_REFRESH_THRESHOLD_MS (24s).
+local BUFF_SKIP_LONG_MS = 30000
+local BUFF_SKIP_PRESENT_MS = 30000
+local BUFF_OBS_JITTER_MS = 500
+local _buffObs = {} -- [peerName][spellId] = observation
+-- Tick-local ID maps filled by GetBotListOrderedWithPeers (O(1) clear-for-cast).
+local _peerIdToName = {}
+local _petIdToOwner = {}
 
 local function buffSkipKey(peerName, spellId)
     if not peerName or peerName == '' or not spellId then return nil, nil end
     return peerName, spellId
 end
 
-local function buffSkipArm(name, sid, untilMs)
-    local bySpell = _buffSkipUntil[name]
+local function buffNameJitterMs(name, spellId)
+    name = name or ''
+    local h = 0
+    for i = 1, #name do
+        h = (h * 31 + string.byte(name, i)) % (BUFF_OBS_JITTER_MS + 1)
+    end
+    h = (h + (tonumber(spellId) or 0)) % (BUFF_OBS_JITTER_MS + 1)
+    return h
+end
+
+local function buffObsArm(name, sid, obs)
+    local bySpell = _buffObs[name]
     if not bySpell then
         bySpell = {}
-        _buffSkipUntil[name] = bySpell
+        _buffObs[name] = bySpell
     end
-    bySpell[sid] = untilMs
+    bySpell[sid] = obs
 end
 
 --- True when this peer+spell is still within a long-duration skip window (skip full eval).
 function spellutils.BuffSkipIsActive(peerName, spellId)
     local name, sid = buffSkipKey(peerName, spellId)
     if not name then return false end
-    local bySpell = _buffSkipUntil[name]
+    local bySpell = _buffObs[name]
     if not bySpell then return false end
-    local due = bySpell[sid]
-    return due ~= nil and mq.gettime() < due
+    local obs = bySpell[sid]
+    return obs ~= nil and obs.nextCheckAt ~= nil and mq.gettime() < obs.nextCheckAt
 end
 
 function spellutils.BuffSkipClear(peerName, spellId)
     local name, sid = buffSkipKey(peerName, spellId)
-    if not name then return end
-    local bySpell = _buffSkipUntil[name]
+    if not name or not sid then return end
+    local bySpell = _buffObs[name]
     if not bySpell then return end
     bySpell[sid] = nil
 end
 
+--- Drop all buff observations (zone/death/config reload).
+function spellutils.BuffSkipClearAll()
+    _buffObs = {}
+end
+
 --- Arm skip from observed remaining duration (ms). Returns true if caller should treat as "still up" (no cast).
---- When dur >= refresh threshold, arms for min(dur - refresh, 60s) so mid-band (24–60s) is covered.
+--- When dur >= refresh threshold, arms for min(dur - refresh, 30s) + small name jitter.
 function spellutils.BuffSkipObserveDuration(peerName, spellId, durationMs)
     local name, sid = buffSkipKey(peerName, spellId)
     if not name then return false end
@@ -769,42 +791,189 @@ function spellutils.BuffSkipObserveDuration(peerName, spellId, durationMs)
     end
     local skipFor = durationMs - BUFF_REFRESH_THRESHOLD_MS
     if skipFor > BUFF_SKIP_LONG_MS then skipFor = BUFF_SKIP_LONG_MS end
+    local now = mq.gettime()
+    -- Near refresh: schedule a short deadline instead of re-reading every tick.
     if skipFor < 500 then
-        -- Very near refresh: check every tick.
-        spellutils.BuffSkipClear(name, sid)
-        return true
+        skipFor = math.max(skipFor, 100)
     end
-    buffSkipArm(name, sid, mq.gettime() + skipFor)
+    local nextCheckAt = now + skipFor + buffNameJitterMs(name, sid)
+    buffObsArm(name, sid, {
+        present = true,
+        durationMs = durationMs,
+        observedAt = now,
+        nextCheckAt = nextCheckAt,
+    })
     return true
 end
 
---- Buff is present but Duration missing/nil: arm a full 60s skip (do not clear).
+--- Buff is present but Duration missing/nil: arm a bounded present-skip (do not clear).
 function spellutils.BuffSkipObservePresent(peerName, spellId)
     local name, sid = buffSkipKey(peerName, spellId)
     if not name then return false end
-    buffSkipArm(name, sid, mq.gettime() + BUFF_SKIP_LONG_MS)
+    local now = mq.gettime()
+    buffObsArm(name, sid, {
+        present = true,
+        durationMs = nil,
+        observedAt = now,
+        nextCheckAt = now + BUFF_SKIP_PRESENT_MS + buffNameJitterMs(name, sid),
+    })
     return true
 end
 
---- Clear skip after we successfully cast a buff onto a peer (fresh Duration next observe).
+--- Clear observations for a worn-off spell on a target name (from MQ worn-off event).
+function spellutils.BuffSkipClearWornOff(spellName, targetName)
+    if not spellName or spellName == '' or not targetName or targetName == '' then return end
+    local spellid = mq.TLO.Spell(spellName).ID()
+    if not spellid or spellid == 0 then return end
+    local clean = targetName:gsub("'s corpse", "")
+    clean = clean:match('^%s*(.-)%s*$') or clean
+    if clean == '' then return end
+    local meName = mq.TLO.Me.Name()
+    if meName and string.lower(clean) == string.lower(meName) then
+        spellutils.BuffSkipClear(meName, spellid)
+        spellutils.BuffSkipClear('__self__', spellid)
+        return
+    end
+    -- "Foo's pet" / pet name: clear owner#pet when we can resolve owner.
+    local ownerFromPet = clean:match("^(.-)'s pet$")
+    if ownerFromPet and ownerFromPet ~= '' then
+        spellutils.BuffSkipClear(ownerFromPet .. '#pet', spellid)
+        return
+    end
+    spellutils.BuffSkipClear(clean, spellid)
+    spellutils.BuffSkipClear(clean .. '#pet', spellid)
+end
+
+--- Clear skip after we successfully cast a buff onto a peer/pet (fresh Duration next observe).
 function spellutils.BuffSkipClearForCast(EvalID, spellId)
     if not EvalID or not spellId then return end
-    local peers = charinfo.GetPeers()
-    if peers then
-        for i = 1, #peers do
-            local peer = charinfo.GetInfo(peers[i])
-            if peer and peer.ID == EvalID then
-                spellutils.BuffSkipClear(peers[i], spellId)
-                spellutils.BuffSkipClear(peers[i] .. '#pet', spellId)
+    local meId = mq.TLO.Me.ID()
+    if EvalID == meId then
+        local meName = mq.TLO.Me.Name() or '__self__'
+        spellutils.BuffSkipClear(meName, spellId)
+        spellutils.BuffSkipClear('__self__', spellId)
+        spellutils.BuffSkipClear(meName .. '#pet', spellId)
+        return
+    end
+    local owner = _petIdToOwner[EvalID]
+    if owner then
+        spellutils.BuffSkipClear(owner .. '#pet', spellId)
+        return
+    end
+    local name = _peerIdToName[EvalID]
+    if not name then
+        local spawn = mq.TLO.Spawn(EvalID)
+        if spawn and spawn.Master then
+            local masterName = spawn.Master.CleanName() or spawn.Master.Name()
+            if masterName and masterName ~= '' then
+                spellutils.BuffSkipClear(masterName .. '#pet', spellId)
                 return
             end
         end
+        name = spawn and (spawn.CleanName() or spawn.Name()) or nil
     end
-    local name = mq.TLO.Spawn(EvalID).CleanName() or mq.TLO.Spawn(EvalID).Name()
     if name and name ~= '' then
         spellutils.BuffSkipClear(name, spellId)
         spellutils.BuffSkipClear(name .. '#pet', spellId)
     end
+end
+
+--- Live re-check before committing a buff cast. Returns true if cast should abort (still above refresh window).
+function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
+    if not index or not EvalID then return false end
+    local entry = botconfig.getSpellEntry('buff', index)
+    if not entry or not entry.spell then return false end
+    local spellid = mq.TLO.Spell(entry.spell).ID()
+    if not spellid or spellid == 0 then return false end
+    local meId = mq.TLO.Me.ID()
+    local selfKey = mq.TLO.Me.Name() or '__self__'
+
+    local function abortFromDuration(peerKey, dur)
+        if dur == nil then return false end
+        if dur >= BUFF_REFRESH_THRESHOLD_MS then
+            spellutils.BuffSkipObserveDuration(peerKey, spellid, dur)
+            if entry.spellicon and entry.spellicon ~= 0 then
+                spellutils.BuffSkipObserveDuration(peerKey, entry.spellicon, dur)
+            end
+            return true
+        end
+        spellutils.BuffSkipClear(peerKey, spellid)
+        return false
+    end
+
+    if EvalID == meId or targethit == 'self' then
+        local present = mq.TLO.Me.Buff(entry.spell)() or mq.TLO.Me.Song(entry.spell)()
+        if not present then
+            spellutils.BuffSkipClear(selfKey, spellid)
+            return false
+        end
+        local dur = mq.TLO.Me.Buff(entry.spell).Duration()
+        if dur == nil and mq.TLO.Me.Song(entry.spell).Duration then
+            dur = mq.TLO.Me.Song(entry.spell).Duration()
+        end
+        if dur ~= nil then return abortFromDuration(selfKey, dur) end
+        spellutils.BuffSkipObservePresent(selfKey, spellid)
+        return true
+    end
+
+    if targethit == 'mypet' or (mq.TLO.Me.Pet.ID() and EvalID == mq.TLO.Me.Pet.ID()) then
+        local petKey = selfKey .. '#pet'
+        if mq.TLO.Me.Pet.Buff(entry.spell)() then
+            spellutils.BuffSkipObservePresent(petKey, spellid)
+            return true
+        end
+        spellutils.BuffSkipClear(petKey, spellid)
+        return false
+    end
+
+    local owner = _petIdToOwner[EvalID]
+    if owner or targethit == 'pet' then
+        local ownerName = owner
+        if not ownerName then
+            local spawn = mq.TLO.Spawn(EvalID)
+            ownerName = spawn and spawn.Master and (spawn.Master.CleanName() or spawn.Master.Name()) or nil
+        end
+        if not ownerName then return false end
+        local peer = charinfo.GetInfo(ownerName)
+        if not peer then return false end
+        local petKey = ownerName .. '#pet'
+        local dur = spellutils.PeerGetPetBuffDuration(peer, spellid)
+        if dur ~= nil then return abortFromDuration(petKey, dur) end
+        if spellutils.PeerHasPetBuff(peer, spellid) then
+            spellutils.BuffSkipObservePresent(petKey, spellid)
+            return true
+        end
+        spellutils.BuffSkipClear(petKey, spellid)
+        return false
+    end
+
+    local peerName = _peerIdToName[EvalID]
+    if not peerName then
+        local spawn = mq.TLO.Spawn(EvalID)
+        peerName = spawn and (spawn.CleanName() or spawn.Name()) or nil
+    end
+    if not peerName or peerName == '' then return false end
+    local peer = charinfo.GetInfo(peerName)
+    if not peer then
+        -- Non-peer: use Target buffs when already populated (precast targeted them).
+        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
+            local buffid = mq.TLO.Target.Buff(entry.spell).ID()
+            local buffdur = mq.TLO.Target.Buff(entry.spell).Duration() or 0
+            if buffid and buffid == spellid and buffdur >= BUFF_REFRESH_THRESHOLD_MS then
+                spellutils.BuffSkipObserveDuration(peerName, spellid, buffdur)
+                return true
+            end
+        end
+        return false
+    end
+    local dur = spellutils.PeerGetBuffDuration(peer, spellid)
+    if dur ~= nil then return abortFromDuration(peerName, dur) end
+    if spellutils.PeerHasBuff(peer, spellid) then
+        spellutils.BuffSkipObservePresent(peerName, spellid)
+        return true
+    end
+    spellutils.BuffSkipClear(peerName, spellid)
+    return false
 end
 
 -- Returns true if peer's pet has spellid in PetBuff.
@@ -1104,25 +1273,38 @@ function spellutils.GetClassOrderPriority(classShortName)
 end
 
 --- Tick-local memo for GetBotListOrdered (heal + buff share one sorted list + peer map per mainloop tick).
-local _botListOrderedMemo = { list = nil, peerByName = nil }
+local _botListOrderedMemo = { list = nil, peerByName = nil, peerById = nil, petIdToOwner = nil }
 
 function spellutils.beginTick()
     _botListOrderedMemo.list = nil
     _botListOrderedMemo.peerByName = nil
+    _botListOrderedMemo.peerById = nil
+    _botListOrderedMemo.petIdToOwner = nil
+    _peerIdToName = {}
+    _petIdToOwner = {}
 end
 
 --- Returns sorted bot names and a name→peer map (one GetInfo per peer for the tick).
+--- Also fills tick-local ID→name maps for O(1) BuffSkipClearForCast.
 --- @return string[]|nil bots
 --- @return table|nil peerByName
 function spellutils.GetBotListOrderedWithPeers()
     if _botListOrderedMemo.list then
+        _peerIdToName = _botListOrderedMemo.peerById or _peerIdToName
+        _petIdToOwner = _botListOrderedMemo.petIdToOwner or _petIdToOwner
         return _botListOrderedMemo.list, _botListOrderedMemo.peerByName
     end
     local bots = charinfo.GetPeers()
     local peerByName = {}
+    local peerById = {}
+    local petIdToOwner = {}
     if not bots or #bots == 0 then
         _botListOrderedMemo.list = bots
         _botListOrderedMemo.peerByName = peerByName
+        _botListOrderedMemo.peerById = peerById
+        _botListOrderedMemo.petIdToOwner = petIdToOwner
+        _peerIdToName = peerById
+        _petIdToOwner = petIdToOwner
         return bots, peerByName
     end
     local priority = _getBotListClassPriority()
@@ -1132,6 +1314,12 @@ function spellutils.GetBotListOrderedWithPeers()
         local peer = charinfo.GetInfo(name)
         if peer then
             peerByName[name] = peer
+            if peer.ID and peer.ID > 0 then
+                peerById[peer.ID] = name
+            end
+            if peer.PetID and peer.PetID > 0 then
+                petIdToOwner[peer.PetID] = name
+            end
             if peer.Class and type(peer.Class.ShortName) == 'string' then
                 cls = peer.Class.ShortName
             end
@@ -1149,6 +1337,10 @@ function spellutils.GetBotListOrderedWithPeers()
     end)
     _botListOrderedMemo.list = bots
     _botListOrderedMemo.peerByName = peerByName
+    _botListOrderedMemo.peerById = peerById
+    _botListOrderedMemo.petIdToOwner = petIdToOwner
+    _peerIdToName = peerById
+    _petIdToOwner = petIdToOwner
     return bots, peerByName
 end
 
@@ -3172,6 +3364,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     end
     if sub == 'debuff' and not opts.fromInterrupt and spellutils.RequireTargetThenDontStackDebuff(entry, EvalID) then
         mezBlocked('dontStack on target')
+        spellutils.clearCastingStateOrResume()
+        return false
+    end
+    -- Buff: re-validate need after precast/mem wait (another caster may have refreshed).
+    if sub == 'buff' and not opts.skipBuffRevalidate and spellutils.buffNeedRevalidateAbort(index, EvalID, targethit) then
+        log.say('Abort %s, buff already present on %s (pre-cast recheck)', spellname, targetname)
         spellutils.clearCastingStateOrResume()
         return false
     end
