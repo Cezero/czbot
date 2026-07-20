@@ -1347,12 +1347,30 @@ local function cmd_syt(args, str)
         log.say('usage: /cz syt <spawnId> <message>')
         return
     end
+    -- Bind coroutine delays while mainloop keeps ticking; pause so buffs/etc. cannot steal target.
+    local wasPaused = _G.MasterPause == true
+    local rc = state.getRunconfig()
+    local function restore()
+        rc.statusMessage = ''
+        if not wasPaused then
+            _G.MasterPause = false
+        end
+    end
+    _G.MasterPause = true
     if not targeting.TargetAndWait(id, 500) then
         log.say('failed to target spawn id %s', id)
+        restore()
         return
     end
+    rc.statusMessage = string.format('saytarget wait (id %s)', id)
     mq.delay(math.random(10, 50) * 500)
+    if not targeting.TargetAndWait(id, 500) then
+        log.say('failed to retarget spawn id %s before say', id)
+        restore()
+        return
+    end
     mq.cmdf('/say %s', message)
+    restore()
 end
 
 local function cmd_saytarget(args, str)

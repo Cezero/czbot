@@ -135,7 +135,7 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **raid**          | `save` / `load` `<name>`                      | Save or load a raid configuration by name. See [Raid mode](raid-mode.md) for save/load behavior and raid formation. |
 | **clickdoor**     | —                                             | Run `/doortarget`, wait 500 ms, then `/click left door`.                                                            |
 | **saytarget**     | `[group\|raid] <message>`                     | Leader: target an NPC, broadcast to group/raid bots, and say locally. Default scope: raid if in raid, else group. Example: `/cz saytarget travel to butcherblock`. |
-| **syt**           | `<spawnId> <message>`                         | Worker: target spawn by ID, wait for target to switch, then wait a random 1–5 s (100 ms steps) before `/say` (staggers group translocator requests). Used internally via `/rc`; legacy `/rc group /cz saytarget <spawnId> <message>` still works on remote bots. |
+| **syt**           | `<spawnId> <message>`                         | Worker: pause botlogic, target spawn by ID, wait a random 5–25 s (500 ms steps), retarget the spawn, then `/say` (staggers group translocator requests). Used internally via `/rc`; legacy `/rc group /cz saytarget <spawnId> <message>` still works on remote bots. |
 
 ### Debug logging
 

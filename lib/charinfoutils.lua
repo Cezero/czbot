@@ -138,7 +138,7 @@ local function leaderContextFromCharinfoPeer(name, peer)
         ctx.sameZone = true
         return ctx
     end
-    if ctx.distance ~= nil then
+    if zoneMatch == true and ctx.distance ~= nil then
         ctx.sameZone = true
         return ctx
     end

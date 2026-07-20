@@ -1,6 +1,7 @@
 local mq = require('mq')
 local botconfig = require('lib.config')
 local spellbands = require('lib.spellbands')
+local spellentry = require('lib.spellentry')
 local state = require('lib.state')
 local utils = require('lib.utils')
 local charinfo = require('plugin.charinfo')
@@ -70,7 +71,7 @@ end
 -- opts.includeMemberZero: when true, loop from 0 (Group.Member(0) is self); otherwise 1 to Members().
 function castutils.evalGroupAECount(entry, targethit, index, bandTable, phaseKey, needMemberFn, opts)
     if not bandTable[index] or not bandTable[index][phaseKey] then return nil, nil end
-    local tartype = mq.TLO.Spell(entry.spell).TargetType()
+    local tartype = spellentry.GetSpellTargetType(entry)
     if tartype ~= 'Group v1' and tartype ~= 'Group v2' then return nil, nil end
     opts = opts or {}
     local aeRangeSq = opts.aeRangeSq
@@ -180,7 +181,7 @@ end
 -- Group v2 AE on a peer anchor: count anchor's group members in AE range; return anchorId when count >= tarcnt.
 function castutils.evalGroupV2OnPeer(entry, anchorId, anchorName, needMemberFn, opts)
     if not entry or not entry.spell then return nil end
-    local tartype = mq.TLO.Spell(entry.spell).TargetType()
+    local tartype = spellentry.GetSpellTargetType(entry)
     if tartype ~= 'Group v2' then return nil end
     opts = opts or {}
     local aeRangeSq = opts.aeRangeSq

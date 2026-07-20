@@ -8,6 +8,7 @@ local tankrole = require('lib.tankrole')
 local charinfo = require("plugin.charinfo")
 local bardtwist = require('lib.bardtwist')
 local castutils = require('lib.castutils')
+local spellentry = require('lib.spellentry')
 local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
@@ -1590,51 +1591,9 @@ function spellutils.IsGroupV1OrV2HealEntry(entry)
 end
 
 -- MQ TargetType() for a spell entry (handles item gems, spell ID, and gem slot).
-local function targetTypeFromSpellRef(ref)
-    if not ref or not ref.TargetType then return nil end
-    local ok, tt = pcall(function() return ref.TargetType() end)
-    if not ok or type(tt) ~= 'string' then return nil end
-    tt = tt:match('^%s*(.-)%s*$')
-    if tt == '' or tt == 'Unknown' then return nil end
-    return tt
-end
-
+-- Implemented in lib.spellentry so castutils can use it without a spellutils cycle.
 function spellutils.GetSpellTargetType(entry)
-    if not entry then return nil end
-
-    local tt = targetTypeFromSpellRef(spellutils.GetSpellEntity(entry))
-    if tt then return tt end
-
-    local _, _, tartype = spellutils.GetSpellInfo(entry)
-    if type(tartype) == 'string' and tartype ~= '' and tartype ~= 'Unknown' then return tartype end
-
-    local resolved = spellutils.GetResolvedSpellName(entry)
-    if resolved then
-        tt = targetTypeFromSpellRef(mq.TLO.Spell(resolved))
-        if tt then return tt end
-    end
-
-    local sid = spellutils.GetSpellId(entry)
-    if sid and sid > 0 then
-        tt = targetTypeFromSpellRef(mq.TLO.Spell(sid))
-        if tt then return tt end
-    end
-
-    if entry.spell then
-        local n = tonumber(entry.spell)
-        if n and n > 0 then
-            tt = targetTypeFromSpellRef(mq.TLO.Spell(n))
-            if tt then return tt end
-        end
-    end
-
-    local gemNum = type(entry.gem) == 'number' and entry.gem or tonumber(entry.gem)
-    if gemNum and gemNum >= 1 and gemNum <= 12 then
-        tt = targetTypeFromSpellRef(mq.TLO.Me.Gem(gemNum))
-        if tt then return tt end
-    end
-
-    return nil
+    return spellentry.GetSpellTargetType(entry)
 end
 
 function spellutils.IsGroupV1BuffEntry(entry)
