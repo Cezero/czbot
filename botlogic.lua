@@ -203,8 +203,6 @@ local function charState_DeadOrHover()
         follow.StopFollow('death')
         botmove.ClearCamp('death')
         rc.wasDeadOrHover = true
-        if tankrole.AmIMainAssist() then czactor.publishReleaseMa() end
-        if tankrole.AmIMainTank() then czactor.publishReleaseMt() end
     end
 
     state.setRunState(state.STATES.dead, nil)

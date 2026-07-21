@@ -1,5 +1,5 @@
--- Shared automatic MA/MT list utilities: zone-local claims, list walks, promotion.
--- Used by lib/tankrole.lua, lib/czactor.lua, lib/chchain.lua, and lib/rolelists.lua.
+-- Shared automatic MA/MT list utilities: zone-local resolution, list walks, promotion.
+-- Used by lib/tankrole.lua, lib/chchain.lua, and lib/rolelists.lua.
 -- ma_list/mt_list generation counters invalidate tankrole automatic-resolution caches.
 
 local mq = require('mq')
@@ -42,26 +42,8 @@ local function myName()
     return mq.TLO.Me.Name()
 end
 
-local function myZone()
-    return mq.TLO.Zone.ShortName() or ''
-end
-
 local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
-end
-
-local function isAutomaticAssist()
-    local rc = state.getRunconfig()
-    local name = rc.AssistName
-    if name == nil or name == '' then name = rc.TankName end
-    return name == 'automatic'
-end
-
-local function isAutomaticTank()
-    local rc = state.getRunconfig()
-    local name = rc.TankName
-    if name == nil or name == '' then name = rc.AssistName end
-    return name == 'automatic'
 end
 
 local function meAlive()
@@ -110,9 +92,6 @@ function auto_ma_mt.indexInList(list, name)
     return nil
 end
 
---- Refresh runconfig maEligible/mtEligible from MaList/MtList membership only.
---- List flags are for raid list eligibility and tick early-out; EQ primary holders claim
---- via shouldClaim* / top*CandidateInZone without needing these flags.
 function auto_ma_mt.refreshRoleClaimEligibility()
     local rc = state.getRunconfig()
     local me = myName()
@@ -193,61 +172,6 @@ function auto_ma_mt.isSenderInMyRaid(sender)
     return false
 end
 
-local function rosterMemberNames()
-    local names = {}
-    local me = myName()
-    if inRaid() then
-        local raidMembers = mq.TLO.Raid.Members() or 0
-        for i = 1, raidMembers do
-            local n = mq.TLO.Raid.Member(i).Name()
-            if n and n ~= '' then names[#names + 1] = n end
-        end
-        return names
-    end
-    if me and me ~= '' then names[#names + 1] = me end
-    local groupMembers = mq.TLO.Group.Members() or 0
-    for i = 1, groupMembers do
-        local n = mq.TLO.Group.Member(i).Name()
-        if n and n ~= '' and not namesEqual(n, me) then names[#names + 1] = n end
-    end
-    return names
-end
-
-local function memberAliveInMyZone(name)
-    if namesEqual(name, myName()) then return meAlive() end
-    local ctx = charinfoutils.getLeaderContext(name)
-    return ctx and ctx.alive and ctx.sameZone
-end
-
---- At least one other roster member in this zone, or solo in zone (advance party).
---- When requireMaLeash, nearest in-zone peer must be within maAnchorLeash.
---- Unknown distance (nil charinfo Distance) does not fail closed — that caused
---- perpetual release/reclaim flaps under load.
-function auto_ma_mt.hasRosterProximityInZone(requireMaLeash)
-    local me = myName()
-    local inZoneOthers = 0
-    local closestDist = nil
-    for _, name in ipairs(rosterMemberNames()) do
-        if not namesEqual(name, me) and memberAliveInMyZone(name) then
-            inZoneOthers = inZoneOthers + 1
-            local ctx = charinfoutils.getLeaderContext(name)
-            local dist = ctx and charinfoutils.leaderDistance2D(ctx) or (ctx and ctx.distance)
-            if dist then
-                if not closestDist or dist < closestDist then
-                    closestDist = dist
-                end
-            end
-        end
-    end
-    if inZoneOthers == 0 then return true end
-    if requireMaLeash then
-        if closestDist == nil then return true end
-        local leash = getAnchorLeash()
-        return closestDist <= leash
-    end
-    return true
-end
-
 --- Zone-local MA winner: primary then ma_list. Returns name, source ('primary'|'list'), listIndex.
 function auto_ma_mt.topMaCandidateInZone()
     local primary = auto_ma_mt.maPrimaryTloName()
@@ -283,71 +207,7 @@ function auto_ma_mt.topMtCandidateInZone()
     return nil
 end
 
-function auto_ma_mt.canClaimMa()
-    return true
-end
-
-function auto_ma_mt.canClaimMt()
-    return true
-end
-
---- @return boolean claim
---- @return string|nil source 'primary'|'list'
---- @return number|nil listIndex
-function auto_ma_mt.shouldClaimMa()
-    if not isAutomaticAssist() or not meAlive() then return false end
-    if not auto_ma_mt.canClaimMa() then return false end
-    -- Match ma_list rules: leash only outside raid (raid uses in-zone list only).
-    if not auto_ma_mt.hasRosterProximityInZone(not inRaid()) then return false end
-    -- Top candidate already encodes group primary → ma_list / raid MA → ma_list.
-    -- Do not require maEligible (list membership); EQ primary holders may claim without lists.
-    local top, source, listIndex = auto_ma_mt.topMaCandidateInZone()
-    if not top or not namesEqual(top, myName()) then return false end
-    return true, source, listIndex
-end
-
---- @return boolean claim
---- @return string|nil source 'primary'|'list'
---- @return number|nil listIndex
-function auto_ma_mt.shouldClaimMt()
-    if not isAutomaticTank() or not meAlive() then return false end
-    if not auto_ma_mt.canClaimMt() then return false end
-    if not auto_ma_mt.hasRosterProximityInZone(false) then return false end
-    -- Top candidate: group MainTank → mt_list; in raid, mt_list only (Group.MainTank ignored).
-    local top, source, listIndex = auto_ma_mt.topMtCandidateInZone()
-    if not top or not namesEqual(top, myName()) then return false end
-    return true, source, listIndex
-end
-
-function auto_ma_mt.groupLacksActiveMa()
-    if inRaid() then return false end
-    local rc = state.getRunconfig()
-    local primary = auto_ma_mt.maPrimaryTloName()
-    if (not primary or primary == '') and not rc.ActorMaOverride then
-        return true
-    end
-    if rc.MaReleased then return true end
-    local o = rc.ActorMaOverride
-    if o and o.name and auto_ma_mt.isSenderInMyGroup(o.name) then return false end
-    if primary and primary ~= '' and not rc.MaReleased then return false end
-    return true
-end
-
-function auto_ma_mt.groupLacksActiveMt()
-    if inRaid() then return false end
-    local rc = state.getRunconfig()
-    local primary = auto_ma_mt.mtPrimaryTloName()
-    if (not primary or primary == '') and not rc.ActorMtOverride then
-        return true
-    end
-    if rc.MtReleased then return true end
-    local o = rc.ActorMtOverride
-    if o and o.name and auto_ma_mt.isSenderInMyGroup(o.name) then return false end
-    if primary and primary ~= '' and not rc.MtReleased then return false end
-    return true
-end
-
---- True when an actor override entry refers to a live, in-zone holder.
+--- True when a manual override entry refers to a live, in-zone holder.
 ---@param override table|nil
 ---@param requireMaLeash boolean|nil when true, ma_list leash applies to the holder name
 function auto_ma_mt.isActorHolderAvailable(override, requireMaLeash)
@@ -356,110 +216,35 @@ function auto_ma_mt.isActorHolderAvailable(override, requireMaLeash)
     return auto_ma_mt.isCandidateAvailable(override.name, requireMaLeash == true)
 end
 
---- Return stored actor override name when the holder is still available.
-function auto_ma_mt.getActorMaOverrideName()
+function auto_ma_mt.getManualMaOverrideName()
     local o = state.getRunconfig().ActorMaOverride
+    if not o or o.reason ~= 'manual' then return nil end
     if not auto_ma_mt.isActorHolderAvailable(o, false) then return nil end
     return o.name
 end
 
-function auto_ma_mt.getActorMtOverrideName()
+function auto_ma_mt.getManualMtOverrideName()
     local o = state.getRunconfig().ActorMtOverride
+    if not o or o.reason ~= 'manual' then return nil end
     if not auto_ma_mt.isActorHolderAvailable(o, false) then return nil end
     return o.name
 end
 
-function auto_ma_mt.getActorMaOverrideNameIfAvailable()
-    return auto_ma_mt.getActorMaOverrideName()
-end
-
-function auto_ma_mt.getActorMtOverrideNameIfAvailable()
-    return auto_ma_mt.getActorMtOverrideName()
-end
-
---- Clear actor overrides whose holder is no longer available (missed release_ma/release_mt).
----@return boolean clearedMa
----@return boolean clearedMt
-function auto_ma_mt.sweepStaleActorOverrides()
+--- Clear manual ma_update/mt_update overrides when the holder is unavailable or expired.
+function auto_ma_mt.sweepStaleManualRoleOverrides()
     local rc = state.getRunconfig()
-    local clearedMa, clearedMt = false, false
-    if rc.ActorMaOverride and not auto_ma_mt.isActorHolderAvailable(rc.ActorMaOverride, false) then
+    if rc.ActorMaOverride and rc.ActorMaOverride.reason ~= 'manual' then
         rc.ActorMaOverride = nil
-        clearedMa = true
+    elseif rc.ActorMaOverride and rc.ActorMaOverride.reason == 'manual'
+        and not auto_ma_mt.isActorHolderAvailable(rc.ActorMaOverride, false) then
+        rc.ActorMaOverride = nil
     end
-    if rc.ActorMtOverride and not auto_ma_mt.isActorHolderAvailable(rc.ActorMtOverride, false) then
+    if rc.ActorMtOverride and rc.ActorMtOverride.reason ~= 'manual' then
         rc.ActorMtOverride = nil
-        clearedMt = true
+    elseif rc.ActorMtOverride and rc.ActorMtOverride.reason == 'manual'
+        and not auto_ma_mt.isActorHolderAvailable(rc.ActorMtOverride, false) then
+        rc.ActorMtOverride = nil
     end
-    return clearedMa, clearedMt
-end
-
---- Evaluate whether this bot should publish im_*, release_*, or ask whos_*.
---- Holders publish im_* only when first claiming (not every tick). Sticky MA/MT hold
---- skips release on brief eligibility dips while still top under current sources. In raid, group-only
---- MT holders not on mt_list must release even when no replacement exists. Peers without
---- a stored Actor*Override ask whos_* (with czactor backoff). Asks do not re-arm from
---- charinfo unavailability of an existing override — sweep clears the slot first.
---- EQ/list are claim eligibility only, not a reason to skip discovery.
----@param opts table|nil { trigger = 'release'|'periodic' }
----@return table actions { releaseMa?, publishMa?, askWhosMa?, releaseMt?, publishMt?, askWhosMt? }
-function auto_ma_mt.evaluateRoleClaims(opts)
-    opts = opts or {}
-    local rc = state.getRunconfig()
-    local me = myName()
-    if not me or me == '' then return {} end
-
-    local actions = {}
-    local claimMa, maSource, maIdx = auto_ma_mt.shouldClaimMa()
-    local claimMt, mtSource, mtIdx = auto_ma_mt.shouldClaimMt()
-
-    -- MA release: drop when not automatic / dead / another in-zone candidate clearly owns MA.
-    -- Sticky while still top so proximity/charinfo flaps do not release/reclaim every 2s.
-    if rc.MaImHolding and not isAutomaticAssist() then
-        actions.releaseMa = true
-    elseif rc.MaImHolding and not claimMa then
-        if not meAlive() then
-            actions.releaseMa = true
-        else
-            local top = auto_ma_mt.topMaCandidateInZone()
-            if not top or not namesEqual(top, me) then
-                actions.releaseMa = true
-            end
-        end
-    elseif claimMa and not rc.MaImHolding then
-        actions.publishMa = { source = maSource, listIndex = maIdx or 0 }
-    elseif opts.trigger ~= 'release'
-        and isAutomaticAssist() and not claimMa and not rc.ActorMaOverride then
-        -- Ask only when no stored claim. Do not use getActorMaOverrideName() here:
-        -- that also requires charinfo availability, which flaps under load and resets
-        -- whos backoff on every ephemeral im_ma → perpetual 2s ask storm.
-        actions.askWhosMa = true
-    end
-
-    if rc.MtImHolding and not isAutomaticTank() then
-        actions.releaseMt = true
-    elseif rc.MtImHolding and not claimMt then
-        if not meAlive() then
-            actions.releaseMt = true
-        elseif inRaid() and not rc.mtEligible then
-            -- Raid MT is mt_list only; do not sticky-hold a pre-raid Group.MainTank claim.
-            actions.releaseMt = true
-        else
-            -- Sticky hold (group / list-eligible): only release when a different in-zone
-            -- candidate clearly owns MT. Brief post-zone dips must not drop the claim.
-            local top = auto_ma_mt.topMtCandidateInZone()
-            if top and not namesEqual(top, me) then
-                actions.releaseMt = true
-            end
-        end
-    elseif claimMt and not rc.MtImHolding then
-        actions.publishMt = { source = mtSource, listIndex = mtIdx or 0 }
-    elseif opts.trigger ~= 'release'
-        and isAutomaticTank() and not claimMt and not rc.ActorMtOverride then
-        actions.askWhosMt = true
-    end
-
-    return actions
 end
 
 function auto_ma_mt.handleMtOverride(name, reason)

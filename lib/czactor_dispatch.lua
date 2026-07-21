@@ -8,12 +8,8 @@ local M = {}
 local SKIP_KEYS = { id = true, ver = true, ts = true, zone = true }
 
 local ROLE_CLAIM_DEBUG_IDS = {
-    im_ma = true,
-    im_mt = true,
-    whos_ma = true,
-    whos_mt = true,
-    release_ma = true,
-    release_mt = true,
+    ma_update = true,
+    mt_update = true,
 }
 
 local _roleClaimLogDebug = false
@@ -66,13 +62,12 @@ function M.logRecv(id, sender, content)
     printf('czactor recv %s from %s: %s', tostring(id), tostring(sender), M.formatFields(content))
 end
 
---- Gated recv log for core role-claim protocol (im_*, release_*).
+--- Gated recv log for ma_update / mt_update when actordebug is on.
 function M.logRecvIfRoleClaimDebug(id, sender, content)
     if not _roleClaimLogDebug or not ROLE_CLAIM_DEBUG_IDS[id] then return end
     M.logRecv(id, sender, content)
 end
 
---- Gated reject log when applyImMa / applyImMt decline a claim.
 function M.logRoleClaimReject(messageId, reason, sender, detail)
     if not _roleClaimLogDebug then return end
     local msg = string.format('czactor %s rejected: %s (sender=%s)',

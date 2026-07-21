@@ -34,7 +34,7 @@ local GROUPS = {
         { "/cz role <tank|ma|dps|healer>", "Apply a role preset: behavior flags + tank/assist designation." },
         { "/cz offtank", "Toggle off-tank mode for this character." },
         { "/cz actor ping|status", "Czbot Actor channel: ping (diagnostic), status (queue depth/drain/drop + traffic)." },
-        { "/cz actordebug on|off", "Log role-claim send/recv/reject (im_*/whos_*/release_*)." },
+        { "/cz actordebug on|off", "Log ma_update/mt_update send/recv when actordebug is on." },
         { "/cz actordebug queue [on|off]", "Throttled inbound queue enqueue/drain/drop stats (not per-message)." },
         { "/cz attack", "Manually engage your current target (overrides XTarget-only)." },
         { "/cz cast <alias>", "Cast a configured spell/ability by its alias." },

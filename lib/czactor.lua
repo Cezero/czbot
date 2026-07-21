@@ -40,8 +40,6 @@ local INBOUND_QUEUE_WARN_DEPTH = 100
 local INBOUND_QUEUE_MAX_DEPTH = 1000
 local INBOUND_DRAIN_BUDGET = 150
 local INBOUND_COMPACT_AT_HEAD = 512
-local WHOS_BACKOFF_MIN_MS = 2000
-local WHOS_BACKOFF_MAX_MS = 30000
 local QUEUE_DEBUG_LOG_MS = 1000
 
 local _actor = nil
@@ -75,21 +73,12 @@ local FOLLOW_PRIORITY_IDS = {
     follow_me = true,
     follow_me_off = true,
 }
--- At most one whos_ma and one whos_mt may sit in the inbound queue.
-local _pendingWhosMa = false
-local _pendingWhosMt = false
 local _nextPingAt = 0
 local _nextOtHeartbeatAt = 0
 local _nextClaimPruneAt = 0
-local _nextRoleClaimsAt = 0
-local _maPublishSeq = 0
-local _mtPublishSeq = 0
 local _lastMaEngagedSpawnId = nil
 local _maEngagedHeartbeatNext = 0
 local MA_ENGAGED_HEARTBEAT_MS = 2000
-local _lastImMaPublishAt = 0
-local _lastImMtPublishAt = 0
-
 local MA_DISENGAGE_TRANSIENT_REASONS = {
     no_engage_target = true,
     engage_not_allowed = true,
@@ -97,14 +86,7 @@ local MA_DISENGAGE_TRANSIENT_REASONS = {
     outside_camp_pin = true,
     moblist_empty = true,
 }
-local ROLE_CLAIMS_INTERVAL_MS = 2000
-local applyImMa
-local applyImMt
 local clearMaActorEngaged
-local _lastWhosMaAt = 0
-local _lastWhosMtAt = 0
-local _whosMaBackoffMs = WHOS_BACKOFF_MIN_MS
-local _whosMtBackoffMs = WHOS_BACKOFF_MIN_MS
 
 local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
@@ -167,8 +149,6 @@ local function clearInboundQueue()
     _inboundQueue = {}
     _inboundHead = 1
     _inboundTail = 1
-    _pendingWhosMa = false
-    _pendingWhosMt = false
 end
 
 local function compactInboundQueue()
@@ -234,9 +214,6 @@ local function dequeueInbound()
     local msg = _inboundQueue[_inboundHead]
     _inboundQueue[_inboundHead] = nil
     _inboundHead = _inboundHead + 1
-    local id = entryMessageId(msg)
-    if id == 'whos_ma' then _pendingWhosMa = false end
-    if id == 'whos_mt' then _pendingWhosMt = false end
     if _inboundHead >= _inboundTail then
         clearInboundQueue()
     elseif _inboundHead >= INBOUND_COMPACT_AT_HEAD then
@@ -258,48 +235,6 @@ end
 local function recordDroppedEntry(entry)
     _trafficDropped = _trafficDropped + 1
     bumpIdCount(_dropIdCounts, entryMessageId(entry))
-end
-
---- Collapse duplicate whos_* already in the queue (one of each id). Safe to call each drain.
-local function coalesceWhosInQueue()
-    local depth = inboundDepth()
-    if depth <= 1 then return end
-    local seenMa, seenMt = false, false
-    local newQ = {}
-    local j = 1
-    local dropped = 0
-    for i = _inboundHead, _inboundTail - 1 do
-        local entry = _inboundQueue[i]
-        local id = entryMessageId(entry)
-        if id == 'whos_ma' then
-            if seenMa then
-                recordDroppedEntry(entry)
-                dropped = dropped + 1
-            else
-                seenMa = true
-                newQ[j] = entry
-                j = j + 1
-            end
-        elseif id == 'whos_mt' then
-            if seenMt then
-                recordDroppedEntry(entry)
-                dropped = dropped + 1
-            else
-                seenMt = true
-                newQ[j] = entry
-                j = j + 1
-            end
-        else
-            newQ[j] = entry
-            j = j + 1
-        end
-    end
-    if dropped == 0 then return end
-    _inboundQueue = newQ
-    _inboundHead = 1
-    _inboundTail = j
-    _pendingWhosMa = seenMa
-    _pendingWhosMt = seenMt
 end
 
 local function maybeWarnQueueDepth()
@@ -359,25 +294,11 @@ end
 
 local function enqueueInbound(entry)
     local id = entryMessageId(entry)
-    if id == 'whos_ma' and _pendingWhosMa then
-        recordDroppedEntry(entry)
-        maybeWarnQueueDepth()
-        maybeLogQueueDebug()
-        return
-    end
-    if id == 'whos_mt' and _pendingWhosMt then
-        recordDroppedEntry(entry)
-        maybeWarnQueueDepth()
-        maybeLogQueueDebug()
-        return
-    end
     if id and FOLLOW_PRIORITY_IDS[id] then
         enqueueInboundFront(entry)
     else
         enqueueInboundBack(entry)
     end
-    if id == 'whos_ma' then _pendingWhosMa = true end
-    if id == 'whos_mt' then _pendingWhosMt = true end
     _trafficEnqueued = _trafficEnqueued + 1
     bumpIdCount(_enqueueIdCounts, id)
     enforceInboundCap()
@@ -386,7 +307,6 @@ local function enqueueInbound(entry)
 end
 
 local function drainInboundQueue()
-    coalesceWhosInQueue()
     local budget = INBOUND_DRAIN_BUDGET
     while budget > 0 do
         local msg = dequeueInbound()
@@ -422,10 +342,6 @@ local function ensureRunconfigFields(rc)
     rc.OtClaims = rc.OtClaims or {}
     rc.RezClaims = rc.RezClaims or {}
     rc.CzActorPeers = rc.CzActorPeers or {}
-    if rc.MaReleased == nil then rc.MaReleased = false end
-    if rc.MtReleased == nil then rc.MtReleased = false end
-    if rc.MaImHolding == nil then rc.MaImHolding = false end
-    if rc.MtImHolding == nil then rc.MtImHolding = false end
 end
 
 local function nameJitterMs(name, intervalMs)
@@ -481,7 +397,6 @@ end
 local function scheduleInitialTimers(now)
     local me = myName() or ''
     _nextPingAt = now + nameJitterMs(me, PING_INTERVAL_MS)
-    _nextRoleClaimsAt = now + nameJitterMs(me, ROLE_CLAIMS_INTERVAL_MS)
     _nextClaimPruneAt = now + nameJitterMs(me, 1000)
     _nextOtHeartbeatAt = now + nameJitterMs(me, OT_HEARTBEAT_MS)
     _maEngagedHeartbeatNext = now + nameJitterMs(me, MA_ENGAGED_HEARTBEAT_MS)
@@ -545,8 +460,6 @@ function czactor.init()
     _trafficEnqueued = 0
     _dropIdCounts = {}
     _enqueueIdCounts = {}
-    _whosMaBackoffMs = WHOS_BACKOFF_MIN_MS
-    _whosMtBackoffMs = WHOS_BACKOFF_MIN_MS
     return _actor ~= nil
 end
 
@@ -603,133 +516,6 @@ function czactor.publishMtUpdate(name, reason)
     }))
 end
 
-function czactor.publishImMa(source, listIndex)
-    _maPublishSeq = _maPublishSeq + 1
-    _lastImMaPublishAt = mq.gettime()
-    local rc = state.getRunconfig()
-    rc.MaImHolding = true
-    local fields = {
-        name = myName(),
-        seq = _maPublishSeq,
-        scope = roleBroadcastScope(),
-        source = source or 'list',
-        listIndex = listIndex or 0,
-    }
-    local content = envelope('im_ma', fields)
-    applyImMa(content, myName())
-    czactor_dispatch.logSend('im_ma', fields)
-    czactor.broadcast(content)
-end
-
-function czactor.publishImMt(source, listIndex)
-    _mtPublishSeq = _mtPublishSeq + 1
-    _lastImMtPublishAt = mq.gettime()
-    local rc = state.getRunconfig()
-    rc.MtImHolding = true
-    local fields = {
-        name = myName(),
-        seq = _mtPublishSeq,
-        scope = roleBroadcastScope(),
-        source = source or 'list',
-        listIndex = listIndex or 0,
-    }
-    local content = envelope('im_mt', fields)
-    applyImMt(content, myName())
-    czactor_dispatch.logSend('im_mt', fields)
-    czactor.broadcast(content)
-end
-
-function czactor.publishReleaseMa()
-    local rc = state.getRunconfig()
-    rc.MaImHolding = false
-    local cur = rc.ActorMaOverride
-    local me = myName()
-    if cur and cur.name and me and string.lower(cur.name) == string.lower(me) then
-        rc.ActorMaOverride = nil
-    end
-    if auto_ma_mt.isSenderInMyGroup(me) then
-        rc.MaReleased = true
-    end
-    tankrole.invalidateMa()
-    czactor.publish('release_ma', {
-        name = me,
-        scope = roleBroadcastScope(),
-    })
-end
-
-function czactor.publishReleaseMt()
-    local rc = state.getRunconfig()
-    rc.MtImHolding = false
-    local cur = rc.ActorMtOverride
-    local me = myName()
-    if cur and cur.name and me and string.lower(cur.name) == string.lower(me) then
-        rc.ActorMtOverride = nil
-    end
-    if auto_ma_mt.isSenderInMyGroup(me) then
-        rc.MtReleased = true
-    end
-    tankrole.invalidateMt()
-    czactor.publish('release_mt', {
-        name = me,
-        scope = roleBroadcastScope(),
-    })
-end
-
-function czactor.publishWhosMa()
-    local fields = { scope = roleBroadcastScope() }
-    czactor_dispatch.logSend('whos_ma', fields)
-    czactor.broadcast(envelope('whos_ma', fields))
-end
-
-function czactor.publishWhosMt()
-    local fields = { scope = roleBroadcastScope() }
-    czactor_dispatch.logSend('whos_mt', fields)
-    czactor.broadcast(envelope('whos_mt', fields))
-end
-
-local function applyRoleClaimActions(actions)
-    if not actions then return end
-    if actions.releaseMa then czactor.publishReleaseMa() end
-    if actions.releaseMt then czactor.publishReleaseMt() end
-    if actions.publishMa then
-        czactor.publishImMa(actions.publishMa.source, actions.publishMa.listIndex)
-    end
-    if actions.publishMt then
-        czactor.publishImMt(actions.publishMt.source, actions.publishMt.listIndex)
-    end
-    local now = mq.gettime()
-    if actions.askWhosMa and (now - _lastWhosMaAt) >= _whosMaBackoffMs then
-        _lastWhosMaAt = now
-        czactor.publishWhosMa()
-        _whosMaBackoffMs = math.min(WHOS_BACKOFF_MAX_MS, math.max(WHOS_BACKOFF_MIN_MS, _whosMaBackoffMs * 2))
-    end
-    if actions.askWhosMt and (now - _lastWhosMtAt) >= _whosMtBackoffMs then
-        _lastWhosMtAt = now
-        czactor.publishWhosMt()
-        _whosMtBackoffMs = math.min(WHOS_BACKOFF_MAX_MS, math.max(WHOS_BACKOFF_MIN_MS, _whosMtBackoffMs * 2))
-    end
-end
-
-local function resetWhosMaBackoff()
-    _whosMaBackoffMs = WHOS_BACKOFF_MIN_MS
-end
-
-local function resetWhosMtBackoff()
-    _whosMtBackoffMs = WHOS_BACKOFF_MIN_MS
-end
-
-function czactor.onRoleReleaseReceived()
-    applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'release' }))
-end
-
-function czactor.getMaOverrideNameIfAvailable()
-    return auto_ma_mt.getActorMaOverrideNameIfAvailable()
-end
-
-function czactor.getMtOverrideNameIfAvailable()
-    return auto_ma_mt.getActorMtOverrideNameIfAvailable()
-end
-
 function czactor.matchesBroadcastScope(scope, leaderName)
     if not leaderName or leaderName == '' then return false end
     scope = scope or 'group'
@@ -768,380 +554,16 @@ function czactor.broadcastCampHereOff(scope)
     czactor.broadcast(envelope('camp_here_off', { scope = scope or 'group', leader = myName() }))
 end
 
-local function acceptMaClaim(sender)
+--- Accept ma_engaged / ma_disengage from raid/group peers or the locally resolved MA.
+local function acceptMaEngagementFrom(sender)
     if not sender or sender == '' then return false end
     if inRaid() then
         return auto_ma_mt.isSenderInMyRaid(sender)
     end
     if auto_ma_mt.isSenderInMyGroup(sender) then return true end
-    return auto_ma_mt.groupLacksActiveMa()
-end
-
-local function acceptMtClaim(sender)
-    if not sender or sender == '' then return false end
-    if inRaid() then
-        return auto_ma_mt.isSenderInMyRaid(sender)
-    end
-    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
-    -- Post-zone Group.Member index can lag while EQ Main Tank / mt_list top is already known.
-    local primary = auto_ma_mt.mtPrimaryTloName()
-    if primary and namesMatch(primary, sender) then return true end
-    local top = auto_ma_mt.topMtCandidateInZone()
-    if top and namesMatch(top, sender) then return true end
-    return auto_ma_mt.groupLacksActiveMt()
-end
-
---- Accept whos_mt asks from group/raid peers; after zone, also accept when we have no
---- usable MT override so peers can re-discover the holder even if Group.Member lags.
-local function acceptMtWhosAsk(sender)
-    if not sender or sender == '' then return false end
-    if inRaid() then
-        return auto_ma_mt.isSenderInMyRaid(sender)
-    end
-    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
-    if not state.getRunconfig().ActorMtOverride then return true end
-    return auto_ma_mt.groupLacksActiveMt()
-end
-
---- Accept whos_ma asks (parallel to acceptMtWhosAsk).
-local function acceptMaWhosAsk(sender)
-    if not sender or sender == '' then return false end
-    if inRaid() then
-        return auto_ma_mt.isSenderInMyRaid(sender)
-    end
-    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
-    if not state.getRunconfig().ActorMaOverride then return true end
-    return auto_ma_mt.groupLacksActiveMa()
-end
-
-local function acceptMaRelease(sender, rc)
-    if not sender or sender == '' then return false end
-    if inRaid() then
-        return auto_ma_mt.isSenderInMyRaid(sender)
-    end
-    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
-    local o = rc.ActorMaOverride
-    return o and o.name and string.lower(o.name) == string.lower(sender)
-end
-
-local function acceptMtRelease(sender, rc)
-    if not sender or sender == '' then return false end
-    if inRaid() then
-        return auto_ma_mt.isSenderInMyRaid(sender)
-    end
-    if auto_ma_mt.isSenderInMyGroup(sender) then return true end
-    local o = rc.ActorMtOverride
-    return o and o.name and string.lower(o.name) == string.lower(sender)
-end
-
-local function shouldAcceptImClaim(content, sender, cur)
-    if cur and cur.name and not auto_ma_mt.isActorHolderAvailable(cur, false) then
-        cur = nil
-    end
-    if not cur or not cur.name then return true end
-    local newInGroup = auto_ma_mt.isSenderInMyGroup(sender)
-    local curInGroup = cur.inGroup
-    if curInGroup == nil and cur.publisher then
-        curInGroup = auto_ma_mt.isSenderInMyGroup(cur.publisher)
-    end
-    if newInGroup and not curInGroup then return true end
-    if not newInGroup and curInGroup then return false end
-
-    local newIdx = tonumber(content.listIndex) or 999
-    local curIdx = tonumber(cur.listIndex) or (cur.source == 'primary' and 0 or 999)
-    local newSource = content.source or 'list'
-    local curSource = cur.source or 'list'
-
-    if newSource == 'primary' and curSource ~= 'primary' then return true end
-    if newSource ~= 'primary' and curSource == 'primary' then return false end
-
-    if newIdx < curIdx then return true end
-    if newIdx > curIdx then return false end
-
-    local newSeq = tonumber(content.seq) or 0
-    local curSeq = tonumber(cur.seq) or 0
-    if sender == cur.publisher then return newSeq >= curSeq end
-    return newSeq > curSeq
-end
-
-applyImMa = function(content, sender)
-    local rc = state.getRunconfig()
-    local name = content.name or sender
-    if not name or name == '' then
-        czactor_dispatch.logRoleClaimReject('im_ma', 'empty name', sender)
-        return
-    end
-    if content.zone and not zonesMatch(content.zone, myZone()) then
-        czactor_dispatch.logRoleClaimReject('im_ma', 'zone mismatch', sender,
-            string.format('msgZone=%s myZone=%s', tostring(content.zone), tostring(myZone())))
-        return
-    end
-    if not acceptMaClaim(sender) then
-        czactor_dispatch.logRoleClaimReject('im_ma', 'acceptMaClaim', sender)
-        return
-    end
-    local cur = rc.ActorMaOverride
-    if cur and cur.reason == 'manual' then
-        czactor_dispatch.logRoleClaimReject('im_ma', 'manual override active', sender,
-            string.format('cur=%s', tostring(cur.name)))
-        return
-    end
-    if not shouldAcceptImClaim(content, sender, cur) then
-        czactor_dispatch.logRoleClaimReject('im_ma', 'shouldAcceptImClaim', sender,
-            string.format('cur=%s seq=%s', tostring(cur and cur.name), tostring(cur and cur.seq)))
-        return
-    end
-
-    local inGroup = auto_ma_mt.isSenderInMyGroup(sender)
-    rc.ActorMaOverride = {
-        name = name,
-        seq = content.seq or 0,
-        ts = content.ts,
-        zone = content.zone,
-        publisher = sender,
-        reason = 'claim',
-        scope = content.scope,
-        source = content.source,
-        listIndex = content.listIndex,
-        inGroup = inGroup,
-    }
-    if inGroup then rc.MaReleased = false end
-    tankrole.invalidateMa()
-    -- Only reset ask backoff when the claim is actually usable for resolve. Accepting
-    -- im_ma then failing isCandidateAvailable must not snap backoff back to 2s.
-    if auto_ma_mt.getActorMaOverrideName() then
-        resetWhosMaBackoff()
-    end
-end
-
-applyImMt = function(content, sender)
-    local rc = state.getRunconfig()
-    local name = content.name or sender
-    if not name or name == '' then
-        czactor_dispatch.logRoleClaimReject('im_mt', 'empty name', sender)
-        return
-    end
-    if content.zone and not zonesMatch(content.zone, myZone()) then
-        czactor_dispatch.logRoleClaimReject('im_mt', 'zone mismatch', sender,
-            string.format('msgZone=%s myZone=%s', tostring(content.zone), tostring(myZone())))
-        return
-    end
-    if not acceptMtClaim(sender) then
-        czactor_dispatch.logRoleClaimReject('im_mt', 'acceptMtClaim', sender)
-        return
-    end
-    local cur = rc.ActorMtOverride
-    if cur and cur.reason == 'manual' then
-        czactor_dispatch.logRoleClaimReject('im_mt', 'manual override active', sender,
-            string.format('cur=%s', tostring(cur.name)))
-        return
-    end
-    if not shouldAcceptImClaim(content, sender, cur) then
-        czactor_dispatch.logRoleClaimReject('im_mt', 'shouldAcceptImClaim', sender,
-            string.format('cur=%s seq=%s', tostring(cur and cur.name), tostring(cur and cur.seq)))
-        return
-    end
-
-    local inGroup = auto_ma_mt.isSenderInMyGroup(sender)
-    rc.ActorMtOverride = {
-        name = name,
-        seq = content.seq or 0,
-        ts = content.ts,
-        zone = content.zone,
-        publisher = sender,
-        reason = 'claim',
-        scope = content.scope,
-        source = content.source,
-        listIndex = content.listIndex,
-        inGroup = inGroup,
-    }
-    if inGroup then rc.MtReleased = false end
-    local prevName = cur and cur.name
-    local nameChanged = not prevName or not name
-        or string.lower(prevName) ~= string.lower(name)
-    if nameChanged then
-        notifyMtNameChanged(name, 'claim')
-    end
-    tankrole.invalidateMt()
-    if auto_ma_mt.getActorMtOverrideName() then
-        resetWhosMtBackoff()
-    end
-end
-
-local function expireMaClaimOverride()
-    local rc = state.getRunconfig()
-    local o = rc.ActorMaOverride
-    if not o then return false end
-    clearMaActorEngaged(rc, o.name)
-    rc.ActorMaOverride = nil
-    if o.inGroup then rc.MaReleased = true end
-    tankrole.invalidateMa()
-    return true
-end
-
-local function expireMtClaimOverride()
-    local rc = state.getRunconfig()
-    local o = rc.ActorMtOverride
-    if not o then return false end
-    rc.ActorMtOverride = nil
-    if o.inGroup then rc.MtReleased = true end
-    tankrole.invalidateMt()
-    return true
-end
-
---- Expire unavailable im_ma/im_mt overrides; re-run claim selection when any cleared.
----@param now number|nil mq.gettime() for tests; defaults to current time
----@return boolean anyExpired
-function czactor.sweepExpiredRoleClaims(now)
-    now = now or mq.gettime()
-    local rc = state.getRunconfig()
-    ensureRunconfigFields(rc)
-    local anyExpired = false
-
-    if rc.ActorMaOverride then
-        if not auto_ma_mt.isActorHolderAvailable(rc.ActorMaOverride, false) then
-            expireMaClaimOverride()
-            anyExpired = true
-        end
-    end
-    if rc.ActorMtOverride then
-        if not auto_ma_mt.isActorHolderAvailable(rc.ActorMtOverride, false) then
-            expireMtClaimOverride()
-            anyExpired = true
-        end
-    end
-
-    if anyExpired then
-        czactor.onRoleReleaseReceived()
-    end
-    return anyExpired
-end
-
-function czactor.runRoleClaimsTick()
-    local now = mq.gettime()
-    if now < _nextRoleClaimsAt then return end
-    _nextRoleClaimsAt = now + ROLE_CLAIMS_INTERVAL_MS
-    czactor.sweepExpiredRoleClaims(now)
-    local rc = state.getRunconfig()
-    -- Peers not on ma/mt lists still need discovery when automatic and missing overrides.
-    -- EQ primary holders (not on lists) must also evaluate so they can claim / release.
-    local assist = rc.AssistName
-    if assist == nil or assist == '' then assist = rc.TankName end
-    local tank = rc.TankName
-    if tank == nil or tank == '' then tank = rc.AssistName end
-    local needAskMa = assist == 'automatic' and not rc.ActorMaOverride
-    local needAskMt = tank == 'automatic' and not rc.ActorMtOverride
-    local me = myName()
-    local topMa = auto_ma_mt.topMaCandidateInZone()
-    local topMt = auto_ma_mt.topMtCandidateInZone()
-    local amTopPrimary = (topMa and namesMatch(topMa, me)) or (topMt and namesMatch(topMt, me))
-    if not rc.maEligible and not rc.mtEligible
-        and not rc.MaImHolding and not rc.MtImHolding
-        and not needAskMa and not needAskMt
-        and not amTopPrimary then
-        return
-    end
-    applyRoleClaimActions(auto_ma_mt.evaluateRoleClaims({ trigger = 'periodic' }))
-end
-
---- After zone settle: rebroadcast im_mt/im_ma when this bot still holds or should claim,
---- so peers whose overrides expired during zone load can restore Actor*Override without
---- waiting on a whos_* round-trip that may also be gated by group-index lag.
---- Do not rebroadcast stale group-only claims that are no longer top under raid sources.
-function czactor.rebroadcastRoleClaimsAfterZone()
-    local rc = state.getRunconfig()
-    ensureRunconfigFields(rc)
-
-    local claimMt, mtSource, mtIdx = auto_ma_mt.shouldClaimMt()
-    if claimMt then
-        czactor.publishImMt(mtSource, mtIdx or 0)
-    elseif rc.MtImHolding then
-        local top, topSource, topIdx = auto_ma_mt.topMtCandidateInZone()
-        if top and namesMatch(top, myName()) then
-            czactor.publishImMt(topSource or 'list', topIdx or 0)
-        else
-            -- No longer top (e.g. entered raid without mt_list entry): release instead of rebroadcast.
-            czactor.publishReleaseMt()
-        end
-    end
-
-    local claimMa, maSource, maIdx = auto_ma_mt.shouldClaimMa()
-    if claimMa then
-        czactor.publishImMa(maSource, maIdx or 0)
-    elseif rc.MaImHolding then
-        local top, topSource, topIdx = auto_ma_mt.topMaCandidateInZone()
-        if top and namesMatch(top, myName()) then
-            czactor.publishImMa(topSource or 'list', topIdx or 0)
-        else
-            czactor.publishReleaseMa()
-        end
-    end
-end
-
-local function respondToWhosMa()
-    local now = mq.gettime()
-    -- Always throttle replies: one im_ma per ROLE_CLAIMS_INTERVAL covers all pending askers.
-    if (now - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
-    local rc = state.getRunconfig()
-    local claim, source, listIndex = auto_ma_mt.shouldClaimMa()
-    if claim then
-        czactor.publishImMa(source, listIndex)
-        return
-    end
-    -- Holder must still answer whos even if shouldClaimMa dipped (proximity/charinfo flap).
-    if rc.MaImHolding then
-        local top, topSource, topIdx = auto_ma_mt.topMaCandidateInZone()
-        if top and namesMatch(top, myName()) then
-            czactor.publishImMa(topSource or 'list', topIdx or 0)
-        end
-        return
-    end
-    local assistSetting = rc.AssistName
-    if assistSetting == nil or assistSetting == '' then assistSetting = rc.TankName end
-    if assistSetting ~= 'automatic' then return end
-    local top, topSource, topIdx = auto_ma_mt.topMaCandidateInZone()
-    if not top or not namesMatch(top, myName()) then return end
-    czactor.publishImMa(topSource or 'list', topIdx or 0)
-end
-
-local function respondToWhosMt()
-    local now = mq.gettime()
-    if (now - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
-    local rc = state.getRunconfig()
-    local claim, source, listIndex = auto_ma_mt.shouldClaimMt()
-    if claim then
-        czactor.publishImMt(source, listIndex)
-        return
-    end
-    if rc.MtImHolding then
-        local top, topSource, topIdx = auto_ma_mt.topMtCandidateInZone()
-        if top and namesMatch(top, myName()) then
-            czactor.publishImMt(topSource or 'list', topIdx or 0)
-        end
-        return
-    end
-    local tankSetting = rc.TankName
-    if tankSetting == nil or tankSetting == '' then tankSetting = rc.AssistName end
-    if tankSetting ~= 'automatic' then return end
-    local top, topSource, topIdx = auto_ma_mt.topMtCandidateInZone()
-    if not top or not namesMatch(top, myName()) then return end
-    czactor.publishImMt(topSource or 'list', topIdx or 0)
-end
-
-local function applyWhosMa(content, sender)
-    if (mq.gettime() - _lastImMaPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
-    if sender and namesMatch(sender, myName()) then return end
-    if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMaWhosAsk(sender) then return end
-    respondToWhosMa()
-end
-
-local function applyWhosMt(content, sender)
-    if (mq.gettime() - _lastImMtPublishAt) < ROLE_CLAIMS_INTERVAL_MS then return end
-    if sender and namesMatch(sender, myName()) then return end
-    if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMtWhosAsk(sender) then return end
-    respondToWhosMt()
+    local assist = tankrole.GetAssistTargetName()
+    if assist and namesMatch(assist, sender) then return true end
+    return false
 end
 
 clearMaActorEngaged = function(rc, maName)
@@ -1162,7 +584,7 @@ end
 local function applyMaEngaged(content, sender)
     if not sender or sender == myName() then return end
     if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMaClaim(sender) then return end
+    if not acceptMaEngagementFrom(sender) then return end
     local spawnId = content.spawnId
     if not spawnId or spawnId <= 0 then return end
     local rc = state.getRunconfig()
@@ -1187,7 +609,7 @@ end
 local function applyMaDisengage(content, sender)
     if not sender or sender == myName() then return end
     if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMaClaim(sender) then return end
+    if not acceptMaEngagementFrom(sender) then return end
     local reason = content.reason
     if MA_DISENGAGE_TRANSIENT_REASONS[reason] then
         local rc = state.getRunconfig()
@@ -1290,37 +712,6 @@ function czactor.isMaEngagementActive()
     return czactor.getMaEngagedSpawnId(maName) ~= nil
 end
 
-local function applyReleaseMa(content, sender)
-    local rc = state.getRunconfig()
-    if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMaRelease(sender, rc) then return end
-    local name = content.name or sender
-    local cur = rc.ActorMaOverride
-    if cur and cur.name and name and string.lower(cur.name) ~= string.lower(name) then return end
-    clearMaActorEngaged(rc, name)
-    rc.ActorMaOverride = nil
-    if auto_ma_mt.isSenderInMyGroup(sender) then
-        rc.MaReleased = true
-    end
-    tankrole.invalidateMa()
-    czactor.onRoleReleaseReceived()
-end
-
-local function applyReleaseMt(content, sender)
-    local rc = state.getRunconfig()
-    if content.zone and not zonesMatch(content.zone, myZone()) then return end
-    if not acceptMtRelease(sender, rc) then return end
-    local name = content.name or sender
-    local cur = rc.ActorMtOverride
-    if cur and cur.name and name and string.lower(cur.name) ~= string.lower(name) then return end
-    rc.ActorMtOverride = nil
-    if auto_ma_mt.isSenderInMyGroup(sender) then
-        rc.MtReleased = true
-    end
-    tankrole.invalidateMt()
-    czactor.onRoleReleaseReceived()
-end
-
 local function applyMaUpdate(content, sender)
     local rc = state.getRunconfig()
     local name = content.name
@@ -1337,7 +728,7 @@ local function applyMaUpdate(content, sender)
         expiresAt = content.expiresAt or content['until'],
         zone = content.zone,
         publisher = sender,
-        reason = content.reason,
+        reason = content.reason or 'manual',
         inGroup = sender and auto_ma_mt.isSenderInMyGroup(sender),
     }
     tankrole.invalidateMa()
@@ -1359,7 +750,7 @@ local function applyMtUpdate(content, sender)
         expiresAt = content.expiresAt or content['until'],
         zone = content.zone,
         publisher = sender,
-        reason = content.reason,
+        reason = content.reason or 'manual',
         inGroup = sender and auto_ma_mt.isSenderInMyGroup(sender),
     }
     notifyMtNameChanged(name, content.reason or 'manual')
@@ -1606,36 +997,6 @@ processMessage = function(inbound)
 
     if id == 'ma_update' then applyMaUpdate(content, sender) return end
     if id == 'mt_update' then applyMtUpdate(content, sender) return end
-    if id == 'im_ma' then
-        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
-        applyImMa(content, sender)
-        return
-    end
-    if id == 'im_mt' then
-        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
-        applyImMt(content, sender)
-        return
-    end
-    if id == 'release_ma' then
-        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
-        applyReleaseMa(content, sender)
-        return
-    end
-    if id == 'release_mt' then
-        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
-        applyReleaseMt(content, sender)
-        return
-    end
-    if id == 'whos_ma' then
-        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
-        applyWhosMa(content, sender)
-        return
-    end
-    if id == 'whos_mt' then
-        czactor_dispatch.logRecvIfRoleClaimDebug(id, sender, content)
-        applyWhosMt(content, sender)
-        return
-    end
 
     if id == 'ma_engaged' then applyMaEngaged(content, sender) return end
     if id == 'ma_disengage' then applyMaDisengage(content, sender) return end
@@ -1738,12 +1099,9 @@ function czactor.tick()
                     rc.followCatchUp = false
                 end
             end
+            auto_ma_mt.sweepStaleManualRoleOverrides()
         end)
     end
-
-    tickprof.span('roleClaims', function()
-        czactor.runRoleClaimsTick()
-    end)
 end
 
 function czactor.sendPing()
@@ -1751,7 +1109,8 @@ function czactor.sendPing()
 end
 
 function czactor.onMaResumed()
-    czactor.onRoleReleaseReceived()
+    tankrole.invalidateMa()
+    tankrole.invalidateMt()
 end
 
 function czactor.printPeerStatus()
@@ -1803,8 +1162,7 @@ function czactor.printStatus()
     if _trafficDropped > 0 then
         printf('  dropped ids: %s', formatIdHistogram(_dropIdCounts))
     end
-    printf('  whos backoff: ma=%dms mt=%dms queueDebug=%s',
-        _whosMaBackoffMs, _whosMtBackoffMs, tostring(_queueDebug))
+    printf('  queueDebug=%s', tostring(_queueDebug))
     if mailboxLabel == 'MISSING' then
         printf('  WARNING: czbot mailbox not registered — Actor messages (followme, camphere, attack, MA/MT) are not sent or received. Restart the macro.')
         local initAge = _lastInitAttemptAt > 0 and string.format('%.1fs ago', (now - _lastInitAttemptAt) / 1000) or 'never'
@@ -1819,25 +1177,18 @@ function czactor.printStatus()
     czactor.printPeerStatus()
     local maO = rc.ActorMaOverride
     local mtO = rc.ActorMtOverride
-    printf('  MA override: %s', maO and maO.name or '(none)')
+    printf('  MA manual override: %s', maO and maO.name or '(none)')
     if maO then
-        local claimAge = maO.ts and string.format('%.1fs ago', (now - maO.ts) / 1000) or 'unknown'
-        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s claimed=%s',
-            tostring(maO.seq), tostring(maO.source), tostring(maO.listIndex),
-            tostring(maO.zone), tostring(maO.publisher), tostring(maO.inGroup),
-            tostring(maO.reason), claimAge)
+        local age = maO.ts and string.format('%.1fs ago', (now - maO.ts) / 1000) or 'unknown'
+        printf('    seq=%s publisher=%s reason=%s updated=%s',
+            tostring(maO.seq), tostring(maO.publisher), tostring(maO.reason), age)
     end
-    printf('  MT override: %s', mtO and mtO.name or '(none)')
+    printf('  MT manual override: %s', mtO and mtO.name or '(none)')
     if mtO then
-        local claimAge = mtO.ts and string.format('%.1fs ago', (now - mtO.ts) / 1000) or 'unknown'
-        printf('    seq=%s source=%s listIndex=%s zone=%s publisher=%s inGroup=%s reason=%s claimed=%s',
-            tostring(mtO.seq), tostring(mtO.source), tostring(mtO.listIndex),
-            tostring(mtO.zone), tostring(mtO.publisher), tostring(mtO.inGroup),
-            tostring(mtO.reason), claimAge)
+        local age = mtO.ts and string.format('%.1fs ago', (now - mtO.ts) / 1000) or 'unknown'
+        printf('    seq=%s publisher=%s reason=%s updated=%s',
+            tostring(mtO.seq), tostring(mtO.publisher), tostring(mtO.reason), age)
     end
-    printf('  MaReleased=%s MtReleased=%s MaImHolding=%s MtImHolding=%s',
-        tostring(rc.MaReleased), tostring(rc.MtReleased),
-        tostring(rc.MaImHolding), tostring(rc.MtImHolding))
     local maEng = rc.MaActorEngaged
     if maEng and maEng.spawnId then
         printf('  MA engaged: %s -> spawn %s (%.1fs ago)', tostring(maEng.maName),

@@ -30,7 +30,7 @@ Changes to `ch_healers`, `ch_chain` settings, and shared lists persist to `cz_co
 | `chchain_curtank` | Tank index sync during active chain (failover while casting) |
 | `common_sync` | Auto-sync `cz_common` fields (`ch_healers`, `ch_chain`, `mt_list`, etc.) |
 | `mt_update` | Manual `/cz tank set <name>` — CH-enabled bots update local curtank (no `chchain_curtank` broadcast) |
-| `im_mt` | Automatic MT claims — CH-enabled bots update local curtank on adoption (no `chchain_curtank` broadcast) |
+| *(none)* | Automatic MT resolution updates local curtank via `tankrole` refresh (no `chchain_curtank` broadcast) |
 
 ## Timing model
 
@@ -45,7 +45,7 @@ Legacy `broadcastDelayMs` / `cancelWindowMs` in `cz_common` are migrated: delay 
 
 ## MT coordination
 
-When **`mt_update`** or **`im_mt`** changes the MT, CH-enabled bots update **`chchainCurtank`** locally via `chchain.syncCurtankFromMtName`. **`chchain_curtank`** is broadcast only during active chain failover (`selectHealTank`). Manual `/cz tank set` also promotes the name to front of `mt_list` when reason is `manual`.
+When **`mt_update`** or automatic MT resolution changes the MT, CH-enabled bots update **`chchainCurtank`** locally via `chchain.syncCurtankFromMtName`. **`chchain_curtank`** is broadcast only during active chain failover (`selectHealTank`). Manual `/cz tank set` also promotes the name to front of `mt_list` when reason is `manual`.
 
 ## See also
 
