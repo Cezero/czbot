@@ -92,6 +92,12 @@ local function inRaid()
     return mq.TLO.Raid.Members() and mq.TLO.Raid.Members() > 0
 end
 
+--- True when not in a raid and not in a group (no other group members).
+local function isUngrouped()
+    if inRaid() then return false end
+    return (mq.TLO.Group.Members() or 0) == 0
+end
+
 local function tloName(tlo)
     if not tlo or not tlo.Name then return nil end
     local name = tlo.Name()
@@ -421,6 +427,7 @@ local function resolveAutomaticTankName()
 end
 
 --- Return the Main Assist's character name (who DPS/offtank follow). Reads AssistName from runconfig; if nil/empty, uses TankName for backward compat.
+--- When ungrouped (no group/raid) and Assist/Tank are unset (or automatic resolves to nil), defaults to self.
 ---@return string|nil
 function tankrole.GetAssistTargetName()
     local rc = state.getRunconfig()
@@ -428,9 +435,14 @@ function tankrole.GetAssistTargetName()
     if name == nil or name == '' then
         name = rc.TankName
     end
-    if name == nil or name == '' then return nil end
+    if name == nil or name == '' then
+        if isUngrouped() then return mq.TLO.Me.Name() end
+        return nil
+    end
     if name == 'automatic' then
-        return resolveAutomaticAssistName()
+        local resolved = resolveAutomaticAssistName()
+        if (not resolved or resolved == '') and isUngrouped() then return mq.TLO.Me.Name() end
+        return resolved
     end
     if _tickMemo.assistResolved then
         return _tickMemo.assistName
@@ -441,13 +453,19 @@ function tankrole.GetAssistTargetName()
 end
 
 --- Return the Main Tank's character name (who gets heals). Reads TankName from runconfig.
+--- When ungrouped (no group/raid) and Tank/Assist are unset (or automatic resolves to nil), defaults to self.
 ---@return string|nil
 function tankrole.GetMainTankName()
     local rc = state.getRunconfig()
     local name = getEffectiveTankSetting(rc)
-    if name == nil or name == '' then return nil end
+    if name == nil or name == '' then
+        if isUngrouped() then return mq.TLO.Me.Name() end
+        return nil
+    end
     if name == 'automatic' then
-        return resolveAutomaticTankName()
+        local resolved = resolveAutomaticTankName()
+        if (not resolved or resolved == '') and isUngrouped() then return mq.TLO.Me.Name() end
+        return resolved
     end
     if _tickMemo.tankResolved then
         return _tickMemo.tankName

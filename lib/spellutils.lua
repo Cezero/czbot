@@ -2013,6 +2013,15 @@ function spellutils.GetAssistInfo(includeTarget, assistpct, assistNameOverride)
         end
     end
 
+    -- Self-assist (solo / MA is me): fall back to engageTargetId when Target/MobList lag.
+    if (not assistar or assistar == 0) and assistName == mq.TLO.Me.Name() then
+        local engageId = rc.engageTargetId
+        if engageId and engageId > 0 and utils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+            assistar = engageId
+            assistarhp = mq.TLO.Spawn(engageId).PctHPs()
+        end
+    end
+
     if assistar == 0 then assistar = nil end
     return assistName, assistid, assistar, assistarhp, fromCache
 end

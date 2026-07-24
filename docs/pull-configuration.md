@@ -162,7 +162,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 **Roam hunt group setup:** Hunter character = MT + `dopull` + `domelee` + `pull.roam`. Group members = `/cz follow` + `domelee` + normal **acleash** (assist bubble follows each character).
 
-**Solo roam:** With no Assist/Tank set, the roam puller still engages from MobList (same picker as MA). You do not need to set Assist/Tank to yourself for solo roam hunt.
+**Solo roam:** When not in a group or raid, unset Assist and Tank resolve to self, so the roam puller engages from MobList and matar abilities (Kick, discs, etc.) use your engage target. You do not need to set Assist/Tank to yourself for solo roam hunt.
 
 **Roam buff timing:** When **dobuff** is on, one buff check cycle runs after the mob bubble clears and before the bot picks the next nav target. Buff checks are skipped while status shows **Roaming to...** (active roam nav).
 
