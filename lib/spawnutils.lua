@@ -332,7 +332,8 @@ function spawnutils.recordFTE(rc, spawnId, opts)
         entry = { id = spawnId, strikes = 0 }
         rc.FTEList[spawnId] = entry
     end
-    if opts.pull and spawnutils.isRoamPullMode(rc) then
+    -- Roam: always long pull lockout; never arm the 2s in-acleash combat recheck loop.
+    if spawnutils.isRoamPullMode(rc) then
         entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
         entry.combatBlockedUntil = nil
         entry.nextCombatRecheckAt = nil
@@ -366,6 +367,10 @@ function spawnutils.markPullUnpullable(rc, spawnId)
         rc.FTEList[spawnId] = entry
     end
     entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
+    if spawnutils.isRoamPullMode(rc) then
+        entry.combatBlockedUntil = nil
+        entry.nextCombatRecheckAt = nil
+    end
 end
 
 function spawnutils.clearCombatFTE(rc, spawnId)
@@ -910,6 +915,8 @@ local function shouldSkipFTERecheck(rc)
     if state.getRunState() == state.STATES.pulling then return true end
     if state.getRunState() == state.STATES.casting then return true end
     if rc.fteRecheckInProgress then return true end
+    -- Roam uses pull.fteLockoutSec only; never probe/re-target FTE mobs in acleash.
+    if spawnutils.isRoamPullMode(rc) then return true end
     local pull = botconfig.config.pull
     if pull and pull.hunter and rc.pullState then
         if rc.pullState == 'navigating' or rc.pullState == 'aggroing' or rc.pullState == 'returning' then
