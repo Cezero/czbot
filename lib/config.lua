@@ -29,7 +29,7 @@
 ---@field maAnchorLeash number|nil max MA distance for anchor/inject; defaults to acleash
 ---@field spelldb string|nil
 ---@field confirmExit boolean|nil when true, GUI Exit button shows a confirmation dialog (default on)
----@field antiAfk boolean|nil when true, random sit/stand or micro-nudge after ~3–4 min true idle (default on)
+---@field antiAfk boolean|nil when true, open/close a random bag (or inventory) after ~3–4 min true idle (default on)
 
 ---@class ConfigPullSpell
 ---@field gem number|string|nil 1-12, 'item', 'alt', 'disc', 'ability', 'script', 'melee', or 'ranged'
@@ -1349,7 +1349,7 @@ function M.Load(path)
     if M.config.settings.autoScribe == nil then M.config.settings.autoScribe = true end
     -- GUI Exit button: show confirmation dialog before terminating (default on).
     if M.config.settings.confirmExit == nil then M.config.settings.confirmExit = true end
-    -- Anti-AFK: random sit/stand or micro-nudge after ~3–4 min continuous true idle (default on).
+    -- Anti-AFK: open/close a random bag (or inventory) after ~3–4 min continuous true idle (default on).
     if M.config.settings.antiAfk == nil then M.config.settings.antiAfk = true end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end

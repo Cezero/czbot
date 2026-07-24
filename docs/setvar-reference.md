@@ -40,7 +40,7 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.tankAllMobs** | boolean | `false` | AE-tank: MT taunt-cycles loose XTarget adds. See [Tanking configuration](tanking-configuration.md#ae-tank). |
 | **settings.aeTankIgnoreMezzer** | boolean | `false` | Allow AE-tank with Enchanter/Bard in group. |
 | **settings.premem** | boolean | `true` | Pre-memorize uniquely assigned gems during downtime. See [Spell maintenance](spell-maintenance.md). |
-| **settings.antiAfk** | boolean | `true` | Anti-AFK: random sit/stand or micro-nudge after ~3–4 min true idle. |
+| **settings.antiAfk** | boolean | `true` | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. |
 | **settings.autoScribe** | boolean | `true` | Scribe new scrolls after level-up when safe. |
 | **settings.upgradeCheck** | boolean | `true` | Background spell-upgrade detection. See [Spell maintenance](spell-maintenance.md). |
 | **settings.charmPetAutoSetup** | boolean | `true` | Auto-configure charm pets after charm lands. |

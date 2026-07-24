@@ -7,7 +7,7 @@
 
 Runs once per second (throttled by _miscLastRun). Runs **DragCheck**, **premem**, **spellupgrade**, and **scribe** ticks. Follow/stuck check and camp leash check are handled by **doMovementCheck** (runWhenBusy); see [Movement and misc state](movement-and-misc.md).
 
-Anti-AFK (random sit/stand or micro-nudge after 3–4 min continuous idle) lives in [`lib/antiafk.lua`](../../lib/antiafk.lua) and runs every main-loop tick via `antiafk.tick()` — including when `MasterPause` is on — when **`settings.antiAfk`** is on (default). Toggle via Status tab flag, **`/cz antiafk`**, or setvar.
+Anti-AFK (open/close a random bag or inventory after 3–4 min continuous idle) lives in [`lib/antiafk.lua`](../../lib/antiafk.lua) and runs every main-loop tick via `antiafk.tick()` — including when `MasterPause` is on — when **`settings.antiAfk`** is on (default). Toggle via Status tab flag, **`/cz antiafk`**, or setvar.
 
 ```mermaid
 flowchart TB

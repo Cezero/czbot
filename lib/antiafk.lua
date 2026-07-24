@@ -1,5 +1,6 @@
--- Anti-AFK: random sit/stand or micro-nudge after 3–4 min of continuous true idle.
+-- Anti-AFK: open then close a random top-level pack (or inventory) after 3–4 min of continuous true idle.
 -- Runs every main-loop tick (including when MasterPause); activity pushes the idle deadline forward.
+-- Close is scheduled on a future tick (1–5 s) — no mq.delay/pause.
 local mq = require('mq')
 local state = require('lib.state')
 local spellutils = require('lib.spellutils')
@@ -11,17 +12,13 @@ local M = {}
 local POSITION_EPS = 0.5
 local IDLE_MIN_MS = 180000
 local IDLE_MAX_MS = 240000
-local NUDGE_HOLD_MS = 25
-
--- Brief out-and-back pairs using strafe keys (not turn).
-local NUDGE_PAIRS = {
-    { 'forward', 'back' },
-    { 'back', 'forward' },
-    { 'strafe_left', 'strafe_right' },
-    { 'strafe_right', 'strafe_left' },
-}
+local CLOSE_MIN_MS = 1000
+local CLOSE_MAX_MS = 5000
+local NUM_PACKS = 10
 
 local _idleUntil = 0
+local _closeUntil = 0
+local _closeTarget = nil -- { kind = 'pack', index = N } | { kind = 'inventory' }
 local _prev = {
     x = nil,
     y = nil,
@@ -34,6 +31,10 @@ local _prev = {
 
 local function randomIdleMs()
     return math.random(IDLE_MIN_MS, IDLE_MAX_MS)
+end
+
+local function randomCloseMs()
+    return math.random(CLOSE_MIN_MS, CLOSE_MAX_MS)
 end
 
 local function posDelta(x1, y1, z1, x2, y2, z2)
@@ -89,26 +90,43 @@ local function updatePrev(snap)
     _prev.mobCount = snap.mobCount
 end
 
-local function runNudgeSequence(outDir, returnDir)
-    mq.cmdf('/squelch /keypress %s hold', outDir)
-    log.say('anti-AFK: nudge out hold %s (return %s)', outDir, returnDir)
-
-    mq.delay(NUDGE_HOLD_MS)
-    mq.cmdf('/squelch /keypress %s', outDir)
-    mq.cmdf('/squelch /keypress %s hold', returnDir)
-    log.say('anti-AFK: nudge return hold %s', returnDir)
-
-    mq.delay(NUDGE_HOLD_MS)
-    mq.cmdf('/squelch /keypress %s', returnDir)
-    log.say('anti-AFK: nudge complete (%s then %s)', outDir, returnDir)
+local function listTopLevelPacks()
+    local packs = {}
+    for i = 1, NUM_PACKS do
+        local pack = 'pack' .. i
+        local container = tonumber(mq.TLO.InvSlot(pack).Item.Container())
+        if container and container > 0 then
+            packs[#packs + 1] = i
+        end
+    end
+    return packs
 end
 
-local function startNudge()
-    local pair = NUDGE_PAIRS[math.random(1, #NUDGE_PAIRS)]
-    local outDir, returnDir = pair[1], pair[2]
-    if mq.TLO.Navigation.Active() then mq.cmd('/squelch /nav stop log=off') end
-    if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
-    runNudgeSequence(outDir, returnDir)
+local function scheduleClose(target)
+    _closeTarget = target
+    _closeUntil = mq.gettime() + randomCloseMs()
+end
+
+local function applyPendingClose(now)
+    if not _closeTarget or _closeUntil == 0 then return end
+    if now < _closeUntil then return end
+
+    local target = _closeTarget
+    _closeTarget = nil
+    _closeUntil = 0
+
+    if target.kind == 'pack' then
+        local idx = target.index
+        if mq.TLO.Window('Pack' .. idx).Open() then
+            mq.cmdf('/itemnotify pack%d rightmouseup', idx)
+            log.say('anti-AFK: close pack%d', idx)
+        end
+    elseif target.kind == 'inventory' then
+        if mq.TLO.Window('InventoryWindow').Open() then
+            mq.cmd('/windowstate InventoryWindow close')
+            log.say('anti-AFK: close inventory')
+        end
+    end
 end
 
 local function fireAction()
@@ -116,24 +134,32 @@ local function fireAction()
         log.say('anti-AFK: skipped (combat/busy)')
         return false
     end
-    if mq.TLO.Me.Sitting() then
-        mq.cmd('/stand')
-        log.say('anti-AFK: stand')
-        return true
-    end
-    if math.random(1, 2) == 1 then
-        mq.cmd('/squelch /sit on')
-        log.say('anti-AFK: sit')
+
+    local packs = listTopLevelPacks()
+    if #packs > 0 then
+        local idx = packs[math.random(1, #packs)]
+        if not mq.TLO.Window('Pack' .. idx).Open() then
+            mq.cmdf('/itemnotify pack%d rightmouseup', idx)
+        end
+        log.say('anti-AFK: open pack%d', idx)
+        scheduleClose({ kind = 'pack', index = idx })
     else
-        startNudge()
+        if not mq.TLO.Window('InventoryWindow').Open() then
+            mq.cmd('/windowstate InventoryWindow open')
+        end
+        log.say('anti-AFK: open inventory')
+        scheduleClose({ kind = 'inventory' })
     end
     return true
 end
 
 function M.tick()
-    if botconfig.config.settings.antiAfk == false then return end
-
     local now = mq.gettime()
+
+    -- Finish a scheduled close even if anti-AFK was toggled off mid-wait.
+    applyPendingClose(now)
+
+    if botconfig.config.settings.antiAfk == false then return end
 
     local snap = takeSnapshot()
     local active = isActive(snap)
