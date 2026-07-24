@@ -955,6 +955,9 @@ function botmelee.AdvCombat()
     local id = nil
     if tankrole.AmIMainAssist() then
         id = resolveMaBotTarget(rc)
+    elseif spawnutils.isRoamPullMode(rc) and (not assistName or assistName == '') then
+        -- Solo roam: no Assist/MA to follow; pick from MobList like MA so melee takes over after roam nav.
+        id = resolveMaBotTarget(rc)
     elseif rc.attackCommandEngage and rc.engageTargetId then
         id = rc.engageTargetId
     elseif myconfig.settings.engageXTargetOnly == true and not rc.attackCommandEngage then

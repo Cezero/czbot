@@ -162,6 +162,8 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 **Roam hunt group setup:** Hunter character = MT + `dopull` + `domelee` + `pull.roam`. Group members = `/cz follow` + `domelee` + normal **acleash** (assist bubble follows each character).
 
+**Solo roam:** With no Assist/Tank set, the roam puller still engages from MobList (same picker as MA). You do not need to set Assist/Tank to yourself for solo roam hunt.
+
 **Roam buff timing:** When **dobuff** is on, one buff check cycle runs after the mob bubble clears and before the bot picks the next nav target. Buff checks are skipped while status shows **Roaming to...** (active roam nav).
 
 **FTE (roam):** Encounter-locked mobs are marked unpullable for **fteLockoutSec** (default 120 seconds). The short 2s combat FTE block does **not** apply — the mob is excluded from **# Mobs** and melee engage for the full lockout. Roam nav stops and the bot picks another pull target on the next tick.

@@ -766,7 +766,8 @@ local function tickRoamNav(rc)
         rc.statusMessage = string.format('Roaming to %s (%s)', spawn.CleanName() or spawn.Name(), targetId)
     end
     if not mq.TLO.Navigation.Active() then
-        mq.cmdf('/nav id %s dist=7 log=off los=on', targetId)
+        -- No los=on: roam has no tag phase; LoS-stop causes mid-path restart stutter.
+        mq.cmdf('/nav id %s dist=7 log=off', targetId)
     end
 end
 
