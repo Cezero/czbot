@@ -22,6 +22,8 @@ local PULL_RETURN_EXTRA_WAIT_MS = 5000
 local RETURNING_AFTER_ABORT_TIMEOUT_MS = 30000
 local PULL_SPAWN_FTE_WAIT_MS = 5000
 local PULL_RANGED_AGRO_WAIT_MS = 1500
+local NO_MESH_WARN_MS = 30000
+local _noMeshWarnLast = 0
 
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullCandidateIds, pullCandidateIndex, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
 -- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullSpawnWaitSince, pullRadiusHadTarget, pullHealerManaWait, pullDebuffWait, pullRangedStoredItem, pullRangedAttempted;
@@ -480,8 +482,15 @@ local function canStartPull(rc)
     if MasterPause then return false end
     if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then return false end
     if not mq.TLO.Navigation.MeshLoaded() then
-        log.say('I have DoPull set TRUE but have \arno MQ2Nav Mesh loaded\ax, please generate a NavMesh before using DoPull, \arsetting DoPull to FALSE\ax')
-        state.getRunconfig().dopull = false
+        -- Do not flip dopull off: MeshLoaded can flicker; roam calls this every empty-bubble tick.
+        local now = mq.gettime()
+        if now - _noMeshWarnLast >= NO_MESH_WARN_MS then
+            _noMeshWarnLast = now
+            log.say('DoPull waiting: \arno MQ2Nav mesh loaded\ax (generate/load a NavMesh)')
+        end
+        if not pullWaitBlocksStatus(rc) then
+            rc.statusMessage = 'Waiting for NavMesh'
+        end
         return false
     end
     if groupBlocksPull(rc) then return false end

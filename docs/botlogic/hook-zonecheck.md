@@ -12,7 +12,7 @@ flowchart LR
     B -->|No| D[return]
 ```
 
-If the current zone short name differs from `state.getRunconfig().zonename`, the hook calls **botevents.OnZoneChange()**, which runs DelayOnZone (reset camp, dopull, engageTargetId, mobfilter, spellstates, etc.) and updates zonename. See [Events](events.md#onzonechange-and-delayonzone).
+If the current zone short name is non-empty and differs from `state.getRunconfig().zonename`, the hook calls **botevents.OnZoneChange()**. Empty/nil `Zone.ShortName()` is ignored (TLO flicker). See [Events](events.md#onzonechange-and-delayonzone).
 
 ## See also
 

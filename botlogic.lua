@@ -334,7 +334,9 @@ end
 -- Register built-in hook implementations. registerAllFromConfig() (called from StartUp) wires them from bothooks.
 local function _registerBuiltinHooks()
     hookregistry.registerHookFn('zoneCheck', function(hookName)
-        if state.getRunconfig().zonename ~= mq.TLO.Zone.ShortName() then
+        local rc = state.getRunconfig()
+        local newZone = mq.TLO.Zone.ShortName()
+        if newZone and newZone ~= '' and rc.zonename ~= newZone then
             botevents.OnZoneChange()
         end
     end)

@@ -71,14 +71,29 @@ local function DelayOnZone()
 end
 
 -- Single entry point for zone change: used by zoneCheck hook and MQ zone events.
+-- Chat can match "You have entered" / LOADING without a real zone change; only reset when
+-- Zone.ShortName() actually differs from the stored zonename.
 function botevents.OnZoneChange()
     if _zoneChangePending then return end
+    local rc = state.getRunconfig()
+    local newZone = mq.TLO.Zone.ShortName()
+    if newZone and newZone ~= '' and rc.zonename == newZone then
+        return
+    end
     _zoneChangePending = true
+    local prevZone = rc.zonename
     print('Zone detected') -- not debug, keep
-    state.getRunconfig().statusMessage = 'Zone change, waiting...'
+    rc.statusMessage = 'Zone change, waiting...'
     mq.delay(1000)
+    newZone = mq.TLO.Zone.ShortName()
+    if not newZone or newZone == '' or rc.zonename == newZone then
+        rc.statusMessage = ''
+        _zoneChangePending = false
+        return
+    end
+    log.say('Zone change %s -> %s', tostring(prevZone or '?'), newZone)
     DelayOnZone()
-    state.getRunconfig().statusMessage = ''
+    rc.statusMessage = ''
     _zoneChangePending = false
 end
 
