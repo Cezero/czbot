@@ -91,8 +91,10 @@ local function validateAbility(name)
     name = name:match('^%s*(.-)%s*$')
     local ab = mq.TLO.Me and mq.TLO.Me.Ability and mq.TLO.Me.Ability(name)
     if not ab then return false, 'Ability not found' end
-    local ok, slot = pcall(function() return ab() end)
-    if ok and tonumber(slot) and tonumber(slot) > 0 then return true end
+    local ok, v = pcall(function() return ab() end)
+    if ok and v ~= nil and (type(v) == 'number' and v > 0 or v == true) then
+        return true
+    end
     return false, 'Ability not found'
 end
 
