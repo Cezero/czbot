@@ -28,7 +28,6 @@ settings = {
   charmPetAutoSetup = true,
   tankAllMobs = false ,
   aeTankIgnoreMezzer = false ,
-  premem = true,
   campAcleash = true,
   upgradeCheck = true,
   autoScribe = true,

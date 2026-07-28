@@ -1,20 +1,6 @@
 # Spell maintenance
 
-CZBot can keep your **gem bar**, **spellbook**, and **config spell names** in sync during downtime so combat does not stall on mid-fight memorization or stale spell ranks.
-
----
-
-## Pre-memorize (premem)
-
-**Setting:** **`settings.premem`** (default `true`). Combat tab checkbox or **`/cz premem on|off`**.
-
-During downtime (out of combat, no mobs in camp, not casting or moving), the bot scans configured heal/buff/debuff/cure spells and the pull spell. For each **gem assigned to exactly one** spell, if the wrong spell is memorized it issues **`/memspell`** — **one gem per misc tick**, with a short wait after each memorize.
-
-Gems shared by multiple configured spells (multiplexed buffs, etc.) are left alone so on-demand swapping still works.
-
-**Debug:** **`/cz prememdebug on`**
-
-After **`/cz applyupgrade`**, premem is nudged to re-check on the next safe tick so upgraded spell names load into their gems.
+CZBot can keep your **spellbook** and **config spell names** in sync during downtime, and memorizes spells **on demand** when a cast needs the correct gem loaded.
 
 ---
 
@@ -50,4 +36,4 @@ Spells with **SpellGroup 0** (missing data on some servers) are skipped to avoid
 
 - [Commands and configuration reference](commands-and-configuration-reference.md) — full command list
 - [Debuffing configuration](debuffing-configuration.md#burn-window) — burn window for timed burn spells
-- [setvar reference](setvar-reference.md) — **`settings.premem`**, **`settings.autoScribe`**, **`settings.upgradeCheck`**
+- [setvar reference](setvar-reference.md) — **`settings.autoScribe`**, **`settings.upgradeCheck`**

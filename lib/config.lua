@@ -130,7 +130,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'premem', 'campAcleash', 'upgradeCheck', 'autoScribe', 'confirmExit', 'antiAfk' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'campAcleash', 'upgradeCheck', 'autoScribe', 'confirmExit', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
@@ -1338,8 +1338,6 @@ function M.Load(path)
     if M.config.settings.tankAllMobs == nil then M.config.settings.tankAllMobs = false end
     -- AE-tank override: keep AE-tanking even when an Enchanter/Bard is in the group (e.g. a non-mezzing bard).
     if M.config.settings.aeTankIgnoreMezzer == nil then M.config.settings.aeTankIgnoreMezzer = false end
-    -- Pre-memorize the configured gembar during downtime so combat-critical spells are loaded before needed.
-    if M.config.settings.premem == nil then M.config.settings.premem = true end
     -- Leash-to-radius: when on, melee returns to camp instead of chasing an engaged mob past the radius.
     -- Persisted seed for the session-only rc.doCampAcleash (default on).
     if M.config.settings.campAcleash == nil then M.config.settings.campAcleash = true end

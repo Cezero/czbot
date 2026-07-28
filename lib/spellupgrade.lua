@@ -112,8 +112,6 @@ function spellupgrade.apply(n)
     entry._resolved_alias = nil
     botconfig.ApplyAndPersist()
     log.say('Upgraded %s spell %d: %s -> %s', u.section, u.index, u.old, u.new)
-    local okP, premem = pcall(require, 'lib.premem')
-    if okP and premem and premem.requestCheck then premem.requestCheck() end
     -- Re-scan so the list reflects the change (and catches any chained upgrades).
     spellupgrade.scan()
     return true

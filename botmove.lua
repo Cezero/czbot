@@ -9,7 +9,6 @@ local charinfo = require('plugin.charinfo')
 local charinfoutils = require('lib.charinfoutils')
 local spawnutils = require('lib.spawnutils')
 local log = require('lib.log')
-local standlog = require('lib.standlog')
 local myconfig = botconfig.config
 
 local botmove = {}
@@ -816,8 +815,9 @@ function botmove.FollowCall()
     if not rc.stucktimer then rc.stucktimer = 0 end
     if rc.stucktimer <= mq.gettime() then botmove.UnStuck() end
     if not isValidFollowTarget(rc, ctx) then return false end
-    if mq.TLO.Me.Sitting() and not standlog.isMemorizing() then
-        standlog.cmdStand('FollowCall', { followid = rc.followid, followname = rc.followname })
+    if mq.TLO.Me.Sitting() then
+        local spellutils = require('lib.spellutils')
+        if not spellutils.IsMemorizing() then mq.cmd('/stand') end
     end
     issueFollowNav(rc, ctx)
     return true
@@ -907,8 +907,6 @@ function botmove.FollowAndStuckCheck()
     local rc = state.getRunconfig()
     tickFollowCatchUp(rc)
     if not hasActiveFollow(rc) then return end
-    -- Nav/stand while memorizing aborts /memspell.
-    if standlog.isMemorizing() then return end
     if (rc.followid and rc.followid > 0) or (rc.followname and rc.followname ~= '') then
         refreshFollowId()
     end
@@ -961,8 +959,6 @@ function botmove.MakeCampLeashCheck()
     local rc = state.getRunconfig()
     if not hasCampSet(rc) then return end
     if isCampDragWorkflowActive() then return end
-    -- Memorizing has no cast bar; Casting.ID() is nil — still must not start camp return (nav stands and aborts mem).
-    if standlog.isMemorizing() then return end
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     if state.getRunState() == state.STATES.pulling then return end
     if state.getRunState() == state.STATES.camp_return then return end

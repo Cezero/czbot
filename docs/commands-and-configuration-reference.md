@@ -99,7 +99,6 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **aetank**       | `on` / `off` or toggle  | **AE-tank** (opt-in, default off): as MT, taunt-cycle loose XTarget adds near camp. Suppressed when an Enchanter or mezzing Bard is in group unless **`/cz aetankmezzer on`**. |
 | **aetankmezzer** | `on` / `off` or toggle  | Allow AE-tank even with Enchanter/Bard in group.                                                                  |
 | **burn**         | `[seconds]` / `off`     | Open or close a burn window. Debuffs with a **burn** band phase cast only while the window is active. Status tab **Burn** button does the same. Default window length if seconds omitted. |
-| **premem**       | `on` / `off` or toggle  | Pre-memorize uniquely assigned gems during downtime. See [Spell maintenance](spell-maintenance.md).               |
 | **antiafk**      | `on` / `off` or toggle  | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. Status tab flag or **`settings.antiAfk`**. |
 | **autoscribe**   | `on` / `off` or toggle  | After a level-up, scribe new scrolls from bags when out of combat (one scroll per misc tick).                     |
 | **scribe**       | —                       | Scribe all usable scrolls in bags now (blocking; downtime only).                                                  |
@@ -146,7 +145,6 @@ These toggle verbose printf tracing for specific subsystems (session-only; not s
 | **mezdebug** | Mez target pick/skip reasons. |
 | **buffdebug** | Buff cast/skip reasons. |
 | **followdebug** | Follow leash/nav decisions (~1/s): charinfo vs spawn path, d2, suppress, nav action. Enable on one bot only. |
-| **prememdebug** | Pre-mem gem load/skip reasons. |
 | **upgradedebug** | Spell-upgrade SpellGroup scan details. |
 | **aetankdebug** | AE-tank idle reasons (not MT, mezzer suppress, cooldown, no loose adds). |
 
@@ -230,7 +228,6 @@ return StoredConfig
 | **engageXTargetOnly** | `false`    | Reactive engage: when `true`, only engage/debuff mobs on your XTarget Auto-Hater list. Opt-in; use with a separate puller. **`/cz attack`** bypasses until target dies. |
 | **tankAllMobs**  | `false`       | AE-tank: MT taunt-cycles loose XTarget adds. Opt-in. See [Tanking configuration](tanking-configuration.md#ae-tank). |
 | **aeTankIgnoreMezzer** | `false` | When `true`, AE-tank runs even if an Enchanter or Bard is in group. |
-| **premem**       | `true`        | Pre-memorize uniquely assigned spell gems during downtime. See [Spell maintenance](spell-maintenance.md). |
 | **antiAfk**      | `true`        | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. Status tab flag or **`/cz antiafk`**. |
 | **autoScribe**   | `true`        | Scribe new scrolls after level-up when safe (incremental). |
 | **upgradeCheck** | `true`        | Background scan for higher spell ranks in book; announces on Status tab / **`/cz upgrades`**. |

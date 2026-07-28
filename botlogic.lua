@@ -7,7 +7,6 @@ local state = require('lib.state')
 local botmove = require('botmove')
 local hookregistry = require('lib.hookregistry')
 local spellutils = require('lib.spellutils')
-local standlog = require('lib.standlog')
 local botevents = require('botevents')
 local utils = require('lib.utils')
 local tankrole = require('lib.tankrole')
@@ -18,7 +17,6 @@ local botpull = require('botpull')local botmelee = require('botmelee')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
 local charm = require('lib.charm')
-local premem = require('lib.premem')
 local spellupgrade = require('lib.spellupgrade')
 local scribe = require('lib.scribe')
 local tickprof = require('lib.tickprof')
@@ -129,16 +127,7 @@ local function charState_Always()
     -- mustStand (follow beyond distance, outside camp, low HP) intentionally interrupts memorization so we move first.
     -- Hysteresis stand only when not casting/memorizing.
     if mq.TLO.Me.Sitting() and (mustStand or (aboveSitHysteresis and state.getRunState() ~= state.STATES.casting and not spellutils.IsMemorizing())) then
-        local standReason = mustStand and 'charState:mustStand' or 'charState:sitHysteresis'
-        standlog.cmdStand(standReason, {
-            mustStand = mustStand,
-            beyondFollow = beyondFollow,
-            campstatus = rc.campstatus,
-            atCamp = botmove.AtCamp(),
-            aboveSitHysteresis = aboveSitHysteresis,
-            pctMana = mq.TLO.Me.PctMana(),
-            dosit = botconfig.config.settings.dosit,
-        })
+        mq.cmd('/stand')
     end
     -- if not sitting and want to sit, sit
     if not mq.TLO.Me.Sitting() and wantToSit then
@@ -340,7 +329,6 @@ end
 local function _runDoMiscTimer()
     if _miscLastRun > mq.gettime() then return end
     _miscDrag()
-    premem.tick() -- pre-load configured gems during downtime so combat spells don't memorize on the fly
     spellupgrade.tick() -- detect when a better in-book version of a configured spell is available
     scribe.tick() -- auto-scribe new spell scrolls after a level-up (when out of combat)
     _miscLastRun = mq.gettime() + 1000

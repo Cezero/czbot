@@ -12,8 +12,6 @@ local spellentry = require('lib.spellentry')
 local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
-local premem = require('lib.premem')
-local standlog = require('lib.standlog')
 local botmove = require('botmove')
 local log = require('lib.log')
 local tickprof = require('lib.tickprof')
@@ -2370,9 +2368,8 @@ function spellutils.clearCastingStateOrResume()
     castinterrupt.tickPending()
 end
 
---- True when memorizing a spell into a gem (cast engine or premem background load).
+--- True when memorizing a spell into a gem (cast engine).
 function spellutils.IsMemorizing()
-    if premem.isPending() then return true end
     return casting.isMemorizing()
 end
 
@@ -2455,9 +2452,6 @@ function spellutils.handleSpellCheckReentry(sub, options)
         if idleLike and not complete then
             log.say('cast lib finished without success (\ar%s\ax) sub=\at%s\ax spellidx=\at%s\ax', castResult,
                 tostring(rc.CurSpell.sub), tostring(rc.CurSpell.spell))
-            standlog.logStand('handleReentry:idleLikeClear', {
-                castResult = castResult, status = status, sub = rc.CurSpell.sub,
-            })
             spellutils.clearCastingStateOrResume()
             return false
         end
@@ -3391,17 +3385,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if useCastingLib and spellutils.castNeedsGemMemorize(entry) then
             standToCast = false
         end
-        if standToCast then
-            standlog.cmdStand('CastSpell:standToCast', {
-                sub = sub, spell = spellname, gem = gem,
-                needGemMem = spellutils.castNeedsGemMemorize(entry),
-            })
-        elseif mq.TLO.Me.Sitting() then
-            standlog.logStand('CastSpell:skippedStand', {
-                sub = sub, spell = spellname, gem = gem,
-                needGemMem = spellutils.castNeedsGemMemorize(entry),
-            })
-        end
+        if standToCast then mq.cmd('/stand') end
     end
     if useCastingLib then
         local castSpellId = spellutils.GetSpellId(entry)
