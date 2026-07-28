@@ -1099,6 +1099,8 @@ function botmelee.getHookFn(name)
             local rc = state.getRunconfig()
             if rc.followCatchUp then return end
             if rc.bardTwistOnceWait and mq.TLO.Me.Class.ShortName() == 'BRD' then return end
+            -- Pulling intentionally operates outside camp pin; disengage here fights botpull stick/nav.
+            if state.getRunState() == state.STATES.pulling then return end
             if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
                 disengageCombat('beyond_follow_distance')
                 return
@@ -1115,7 +1117,6 @@ function botmelee.getHookFn(name)
                 botmove.TickReturnToFollowAfterEngage()
                 return
             end
-            if state.getRunState() == state.STATES.pulling then return end
             if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 if state.getRunState() == state.STATES.melee then state.clearRunState() end
                 local rc = state.getRunconfig()

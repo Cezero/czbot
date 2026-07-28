@@ -1279,7 +1279,6 @@ local function tickAggroing(rc, spawn)
             return
         end
         mq.cmd('/multiline ; /squelch /nav stop log=off ; /attack on')
-        if not mq.TLO.Stick.Active() then mq.cmdf('/stick 5 uw moveback id %s', tostring(spawn.ID())) end
         return
     end
 
