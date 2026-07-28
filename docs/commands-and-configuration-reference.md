@@ -100,10 +100,6 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **aetankmezzer** | `on` / `off` or toggle  | Allow AE-tank even with Enchanter/Bard in group.                                                                  |
 | **burn**         | `[seconds]` / `off`     | Open or close a burn window. Debuffs with a **burn** band phase cast only while the window is active. Status tab **Burn** button does the same. Default window length if seconds omitted. |
 | **antiafk**      | `on` / `off` or toggle  | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. Status tab flag or **`settings.antiAfk`**. |
-| **autoscribe**   | `on` / `off` or toggle  | After a level-up, scribe new scrolls from bags when out of combat (one scroll per misc tick).                     |
-| **scribe**       | —                       | Scribe all usable scrolls in bags now (blocking; downtime only).                                                  |
-| **upgrades**     | —                       | List configured spells with a higher rank in your spellbook.                                                      |
-| **applyupgrade** | `<n>` or `all`          | Apply one pending upgrade by list number, or **`all`**. See [Spell maintenance](spell-maintenance.md).            |
 | **charmpetsetup** | `on` / `off` or toggle | Auto-setup charm pets (taunt off, assist on) after charm lands.                                                   |
 
 ### Spells and config
@@ -145,7 +141,6 @@ These toggle verbose printf tracing for specific subsystems (session-only; not s
 | **mezdebug** | Mez target pick/skip reasons. |
 | **buffdebug** | Buff cast/skip reasons. |
 | **followdebug** | Follow leash/nav decisions (~1/s): charinfo vs spawn path, d2, suppress, nav action. Enable on one bot only. |
-| **upgradedebug** | Spell-upgrade SpellGroup scan details. |
 | **aetankdebug** | AE-tank idle reasons (not MT, mezzer suppress, cooldown, no loose adds). |
 
 ### Master pause
@@ -229,8 +224,6 @@ return StoredConfig
 | **tankAllMobs**  | `false`       | AE-tank: MT taunt-cycles loose XTarget adds. Opt-in. See [Tanking configuration](tanking-configuration.md#ae-tank). |
 | **aeTankIgnoreMezzer** | `false` | When `true`, AE-tank runs even if an Enchanter or Bard is in group. |
 | **antiAfk**      | `true`        | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. Status tab flag or **`/cz antiafk`**. |
-| **autoScribe**   | `true`        | Scribe new scrolls after level-up when safe (incremental). |
-| **upgradeCheck** | `true`        | Background scan for higher spell ranks in book; announces on Status tab / **`/cz upgrades`**. |
 | **charmPetAutoSetup** | `true`   | After charm lands, configure pet (taunt off, assist). |
 | **campAcleash**  | (varies)      | When on, chase mobs beyond camp **acleash** radius. Toggle via Combat tab or **`/cz togglecampacleash`**. |
 | **maCampAnchor** | `true`        | Anchor mob bubble on resolved MA within **maAnchorLeash**. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |

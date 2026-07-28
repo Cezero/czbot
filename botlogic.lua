@@ -17,8 +17,6 @@ local botpull = require('botpull')local botmelee = require('botmelee')
 local follow = require('lib.follow')
 local spawnutils = require('lib.spawnutils')
 local charm = require('lib.charm')
-local spellupgrade = require('lib.spellupgrade')
-local scribe = require('lib.scribe')
 local tickprof = require('lib.tickprof')
 local log = require('lib.log')
 local antiafk = require('lib.antiafk')
@@ -329,8 +327,6 @@ end
 local function _runDoMiscTimer()
     if _miscLastRun > mq.gettime() then return end
     _miscDrag()
-    spellupgrade.tick() -- detect when a better in-book version of a configured spell is available
-    scribe.tick() -- auto-scribe new spell scrolls after a level-up (when out of combat)
     _miscLastRun = mq.gettime() + 1000
 end
 

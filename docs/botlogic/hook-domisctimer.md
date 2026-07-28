@@ -5,7 +5,7 @@
 
 ## Logic
 
-Runs once per second (throttled by _miscLastRun). Runs **DragCheck**, **spellupgrade**, and **scribe** ticks. Follow/stuck check and camp leash check are handled by **doMovementCheck** (runWhenBusy); see [Movement and misc state](movement-and-misc.md).
+Runs once per second (throttled by _miscLastRun). Runs **DragCheck**. Follow/stuck check and camp leash check are handled by **doMovementCheck** (runWhenBusy); see [Movement and misc state](movement-and-misc.md).
 
 Anti-AFK (open/close a random bag or inventory after 3–4 min continuous idle) lives in [`lib/antiafk.lua`](../../lib/antiafk.lua) and runs every main-loop tick via `antiafk.tick()` — including when `MasterPause` is on — when **`settings.antiAfk`** is on (default). Toggle via Status tab flag, **`/cz antiafk`**, or setvar.
 
@@ -14,9 +14,7 @@ flowchart TB
     Start[doMiscTimer] --> Throttle{_miscLastRun > now?}
     Throttle -->|Yes| End[return]
     Throttle -->|No| Drag{dodrag? DragCheck}
-    Drag --> Upgrade[spellupgrade.tick]
-    Upgrade --> Scribe[scribe.tick]
-    Scribe --> SetLast[_miscLastRun = now + 1000]
+    Drag --> SetLast[_miscLastRun = now + 1000]
     SetLast --> End
 ```
 

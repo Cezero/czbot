@@ -130,7 +130,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script', 'roles' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'campAcleash', 'upgradeCheck', 'autoScribe', 'confirmExit', 'antiAfk' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'campAcleash', 'confirmExit', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
@@ -1341,10 +1341,6 @@ function M.Load(path)
     -- Leash-to-radius: when on, melee returns to camp instead of chasing an engaged mob past the radius.
     -- Persisted seed for the session-only rc.doCampAcleash (default on).
     if M.config.settings.campAcleash == nil then M.config.settings.campAcleash = true end
-    -- Background spell-upgrade detection (Spell.SpellGroup); surfaces better in-book versions (default on).
-    if M.config.settings.upgradeCheck == nil then M.config.settings.upgradeCheck = true end
-    -- Auto-scribe new spell scrolls from bags after a level-up, once out of combat (default on).
-    if M.config.settings.autoScribe == nil then M.config.settings.autoScribe = true end
     -- GUI Exit button: show confirmation dialog before terminating (default on).
     if M.config.settings.confirmExit == nil then M.config.settings.confirmExit = true end
     -- Anti-AFK: open/close a random bag (or inventory) after ~3–4 min continuous true idle (default on).

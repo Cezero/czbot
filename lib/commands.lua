@@ -968,64 +968,6 @@ local function cmd_antiafk(args)
     log.say('Anti-AFK %s', (botconfig.config.settings.antiAfk ~= false) and 'on' or 'off')
 end
 
-local function cmd_scribe(args)
-    require('lib.scribe').Run()
-end
-
-local function cmd_autoscribe(args)
-    local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'on' or mode == 'true' or mode == '1' then
-        botconfig.config.settings.autoScribe = true
-    elseif mode == 'off' or mode == 'false' or mode == '0' then
-        botconfig.config.settings.autoScribe = false
-    else
-        botconfig.config.settings.autoScribe = not (botconfig.config.settings.autoScribe ~= false)
-    end
-    botconfig.ApplyAndPersist()
-    log.say('Auto-scribe on level-up %s', (botconfig.config.settings.autoScribe ~= false) and 'on' or 'off')
-end
-
-local function cmd_upgrades(args)
-    local su = require('lib.spellupgrade')
-    su.scan()
-    local pending = su.getPending()
-    if #pending == 0 then
-        log.say('No spell upgrades available.')
-        return
-    end
-    log.say('%d spell upgrade(s) available:', #pending)
-    for i, u in ipairs(pending) do
-        printf('  [%d] %s: %s (L%d) -> %s (L%d)', i, u.section, u.old, u.oldLevel, u.new, u.newLevel)
-    end
-    printf('  Apply with /cz applyupgrade <n|all>')
-end
-
-local function cmd_applyupgrade(args)
-    local su = require('lib.spellupgrade')
-    local which = args[2] and string.lower(args[2]) or ''
-    if which == '' then
-        log.say('Usage: /cz applyupgrade <n|all>  (see /cz upgrades)')
-        return
-    end
-    if which == 'all' then
-        log.say('Applied %d upgrade(s).', su.applyAll())
-    else
-        local n = tonumber(which)
-        if not n or not su.apply(n) then
-            log.say('No upgrade #%s (see /cz upgrades).', tostring(args[2]))
-        end
-    end
-end
-
-local function cmd_upgradedebug(args)
-    local su = require('lib.spellupgrade')
-    local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'on' or mode == 'true' or mode == '1' then su.SetDebug(true)
-    elseif mode == 'off' or mode == 'false' or mode == '0' then su.SetDebug(false)
-    else su.SetDebug(not su.IsDebug()) end
-    log.say('Upgrade debug logging %s', su.IsDebug() and 'on' or 'off')
-end
-
 local function cmd_aetankmezzer(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
@@ -1612,11 +1554,6 @@ local handlers = {
     aetankmezzer = cmd_aetankmezzer,
     aetankdebug = cmd_aetankdebug,
     antiafk = cmd_antiafk,
-    scribe = cmd_scribe,
-    autoscribe = cmd_autoscribe,
-    upgrades = cmd_upgrades,
-    applyupgrade = cmd_applyupgrade,
-    upgradedebug = cmd_upgradedebug,
     burn = cmd_burn,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,

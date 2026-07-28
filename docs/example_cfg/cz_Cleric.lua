@@ -29,8 +29,6 @@ settings = {
   tankAllMobs = false ,
   aeTankIgnoreMezzer = false ,
   campAcleash = true,
-  upgradeCheck = true,
-  autoScribe = true,
   confirmExit = false ,
   antiAfk = true,
 },

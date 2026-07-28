@@ -79,7 +79,7 @@ Hooks are defined in `lib/bothooks.lua`. Execution order:
 | 1100 | doBuff | Buff phase-first spell check | [hook-dobuff](hook-dobuff.md) |
 | 1200 | doCure | Cure phase-first spell check | [hook-docure](hook-docure.md) |
 | 1350 | doMovementCheck | Camp return and follow (runs in runWhenBusy pass when busy) | [hook-domovementcheck](hook-domovementcheck.md) |
-| 1400 | doMiscTimer | Throttled 1s: drag, spellupgrade, scribe | [hook-domisctimer](hook-domisctimer.md) |
+| 1400 | doMiscTimer | Throttled 1s: drag | [hook-domisctimer](hook-domisctimer.md) |
 
 ---
 

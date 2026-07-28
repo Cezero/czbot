@@ -18,7 +18,6 @@ local combos = require('gui.widgets.combos')
 local labeled_grid = require('gui.widgets.labeled_grid')
 local modals = require('gui.widgets.modals')
 local field_label = require('gui.widgets.field_label')
-local spellupgrade = require('lib.spellupgrade')
 
 local M = {}
 
@@ -419,56 +418,6 @@ local function drawNearbyPlayersSection()
             ImGui.TextColored(LIGHT_GREY, '%s', (p.guild and p.guild ~= '') and p.guild or '')
         end
         ImGui.EndTable()
-    end
-end
-
--- Spell upgrades: prompt to swap a configured spell for a better in-book version (Option C), and a button
--- to scribe upgrade scrolls from bags (Option A). The header turns yellow + shows a count when upgrades
--- are pending. Reads the cached list (populated by the background scan) -- no per-frame book scan.
-local function drawSpellUpgradesSection()
-    local pending = spellupgrade.getPending()
-    local n = #pending
-    local label = (n > 0) and string.format('Spell upgrades available (%d)###spellupg', n)
-        or 'Spell upgrades###spellupg'
-    if n > 0 then ImGui.PushStyleColor(ImGuiCol.Text, YELLOW) end
-    local open = ImGui.CollapsingHeader(label)
-    if n > 0 then ImGui.PopStyleColor(1) end
-    if not open then return end
-
-    -- Scribe routes through /cz scribe so the blocking routine runs in the main loop, not the render pass.
-    if ImGui.SmallButton('Scribe scrolls##upg_scribe') then mq.cmd('/cz scribe') end
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Scribe usable spell scrolls from your bags (out of combat), then re-check for upgrades.')
-    end
-    ImGui.SameLine()
-    if ImGui.SmallButton('Re-scan##upg_rescan') then pcall(spellupgrade.scan) end
-    if n > 0 then
-        ImGui.SameLine()
-        if ImGui.SmallButton('Apply all##upg_applyall') then pcall(spellupgrade.applyAll) end
-    end
-
-    local asChecked = (botconfig.config.settings.autoScribe ~= false)
-    local asVal, asPressed = ImGui.Checkbox('Auto-scribe on level-up##upg_autoscribe', asChecked)
-    if asPressed then
-        botconfig.config.settings.autoScribe = asVal
-        botconfig.ApplyAndPersist()
-    end
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('When you ding, scribe newly-usable spell scrolls from your bags automatically (once out of combat).')
-    end
-
-    if n == 0 then
-        ImGui.TextColored(LIGHT_GREY, '%s', '  (none detected -- Re-scan after leveling or scribing)')
-        return
-    end
-    for i, u in ipairs(pending) do
-        if ImGui.SmallButton(string.format('Apply##upg_%d', i)) then
-            pcall(spellupgrade.apply, i)
-            break -- list is rebuilt by apply(); stop iterating the stale list this frame
-        end
-        ImGui.SameLine()
-        ImGui.TextColored(LIGHT_GREY, '%s: %s (L%d) -> %s (L%d)',
-            u.section, u.old, u.oldLevel or 0, u.new, u.newLevel or 0)
     end
 end
 
@@ -952,9 +901,6 @@ function M.draw()
 
     -- Out-of-group players nearby + distance (read-only).
     drawNearbyPlayersSection()
-
-    -- Spell-upgrade prompt + scribe button.
-    drawSpellUpgradesSection()
 
     -- Recent activity (newest first): the real actions the bot has taken, so the rapid subsystem-check
     -- ("X Check") idle cycle in the header doesn't hide what actually happened.
