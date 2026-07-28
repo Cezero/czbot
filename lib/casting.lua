@@ -1,4 +1,5 @@
 local mq = require('mq')
+local standlog = require('lib.standlog')
 
 local casting = {}
 
@@ -101,6 +102,7 @@ local function ensureMemorizedIfNeeded(req)
     local inGem = mq.TLO.Me.Gem(slot)() or ''
     if string.lower(inGem) == string.lower(spellName) then
         if not spellReadyByName(spellName) then
+            standlog.logMemWait(slot, spellName)
             _active.phase = 'memorizing'
             _active.status = 'M'
             _active.deadline = mq.gettime() + CAST_MEMO_TIMEOUT_MS
@@ -113,6 +115,7 @@ local function ensureMemorizedIfNeeded(req)
         _active.status = ''
         return false
     end
+    standlog.logMemStart(slot, spellName, inGem)
     mq.cmdf('/memspell %s "%s"', tostring(slot), spellName)
     _active.phase = 'memorizing'
     _active.status = 'M'
@@ -176,7 +179,7 @@ function casting.tick()
         local inGem = mq.TLO.Me.Gem(req.gemType)() or ''
         if req.spellName and string.lower(inGem) == string.lower(req.spellName) and spellReadyByName(req.spellName) then
             if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() then
-                mq.cmd('/stand')
+                standlog.cmdStand('casting:memComplete', { spell = req.spellName, gem = req.gemType })
             end
             beginCast(req)
             return

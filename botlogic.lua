@@ -7,6 +7,7 @@ local state = require('lib.state')
 local botmove = require('botmove')
 local hookregistry = require('lib.hookregistry')
 local spellutils = require('lib.spellutils')
+local standlog = require('lib.standlog')
 local botevents = require('botevents')
 local utils = require('lib.utils')
 local tankrole = require('lib.tankrole')
@@ -73,6 +74,9 @@ local function charState_Always()
             local effectivelyIdle = state.getMobCount() == 0 and not mq.TLO.Me.Casting() and castTimeLeft == 0
             local deadlineStuck = state.runStateDeadlinePassed() and castTimeLeft == 0
             if deadlineStuck or (effectivelyIdle and not (rc.CurSpell and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) and castTimeLeft == 0)) then
+                log.say('[cast-clear] charState stuck/idle sub=%s phase=%s deadlineStuck=%s effectivelyIdle=%s',
+                    tostring(rc.CurSpell and rc.CurSpell.sub), tostring(rc.CurSpell and rc.CurSpell.phase),
+                    tostring(deadlineStuck), tostring(effectivelyIdle))
                 spellutils.clearCastingStateOrResume()
             end
         end
@@ -121,9 +125,20 @@ local function charState_Always()
         aboveSitHysteresis = (mq.TLO.Me.MaxMana() == 0 or mq.TLO.Me.PctMana() > sitmana + SIT_HYSTERESIS_PCT) and
         (mq.TLO.Me.PctEndurance() > sitendur + SIT_HYSTERESIS_PCT)
     end
-    -- if sitting and must stand or (above hysteresis and not casting), stand. Do not stand for mana while casting/memorizing.
+    -- if sitting and must stand or (above hysteresis and not casting), stand.
+    -- mustStand (follow beyond distance, outside camp, low HP) intentionally interrupts memorization so we move first.
+    -- Hysteresis stand only when not casting/memorizing.
     if mq.TLO.Me.Sitting() and (mustStand or (aboveSitHysteresis and state.getRunState() ~= state.STATES.casting and not spellutils.IsMemorizing())) then
-        mq.cmd('/stand')
+        local standReason = mustStand and 'charState:mustStand' or 'charState:sitHysteresis'
+        standlog.cmdStand(standReason, {
+            mustStand = mustStand,
+            beyondFollow = beyondFollow,
+            campstatus = rc.campstatus,
+            atCamp = botmove.AtCamp(),
+            aboveSitHysteresis = aboveSitHysteresis,
+            pctMana = mq.TLO.Me.PctMana(),
+            dosit = botconfig.config.settings.dosit,
+        })
     end
     -- if not sitting and want to sit, sit
     if not mq.TLO.Me.Sitting() and wantToSit then

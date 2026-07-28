@@ -1,4 +1,5 @@
 ﻿local mq = require('mq')
+local standlog = require('lib.standlog')
 local botconfig = require('lib.config')
 local combat = require('lib.combat')
 local state = require('lib.state')
@@ -718,7 +719,9 @@ local disengageCombat = botmelee.disengageCombat
 -- Idempotent: only re-issues /stick when the active stick target or command differs.
 local function applyEngageStick(engageTargetId)
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
-    if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
+    if mq.TLO.Me.Sitting() then
+        standlog.cmdStand('melee:applyEngageStick', { engageTargetId = engageTargetId })
+    end
     if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
     local stickCmd = getEngageStickCmd()
     local needRestick = false
@@ -753,7 +756,9 @@ local function navToEngageTargetIfBlocked(engageTargetId, context)
     if mq.TLO.Navigation.PathExists('id ' .. engageTargetId)() then
         if mq.TLO.Stick.Active() then mq.cmd('/squelch /stick off') end
         _lastEngageStickCmd = nil
-        if mq.TLO.Me.Sitting() then mq.cmd('/stand on') end
+        if mq.TLO.Me.Sitting() then
+            standlog.cmdStand('melee:navToEngageLoS', { engageTargetId = engageTargetId })
+        end
         if not mq.TLO.Navigation.Active() then
             mq.cmdf('/squelch /nav id %s log=off', engageTargetId)
         end

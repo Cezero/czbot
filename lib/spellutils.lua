@@ -13,6 +13,7 @@ local bothooks = require('lib.bothooks')
 local utils = require('lib.utils')
 local casting = require('lib.casting')
 local premem = require('lib.premem')
+local standlog = require('lib.standlog')
 local botmove = require('botmove')
 local log = require('lib.log')
 local tickprof = require('lib.tickprof')
@@ -2287,6 +2288,8 @@ end
 
 --- Clear resume/casting spell state when the owning hook is inactive or debuff camp is empty.
 function spellutils.clearOrphanedSpellStateIfNeeded()
+    -- Clearing mid-memorize drops IsMemorizing and lets charState /stand abort the gem load.
+    if spellutils.IsMemorizing() then return end
     local rc = state.getRunconfig()
     local rs = state.getRunState()
 
@@ -2347,6 +2350,10 @@ end
 function spellutils.clearCastingStateOrResume()
     local rc = state.getRunconfig()
     local hadSub = rc.CurSpell and rc.CurSpell.sub
+    if spellutils.IsMemorizing() then
+        log.say('\ar[cast-clear:INTERRUPTS-MEM]\ax sub=%s phase=%s runState=%s',
+            tostring(hadSub), tostring(rc.CurSpell and rc.CurSpell.phase), tostring(state.getRunState()))
+    end
     if mq.TLO.Me.Class.ShortName() == 'BRD' and hadSub and (hadSub == 'buff' or hadSub == 'debuff' or hadSub == 'cure') then
         bardtwist.ResumeTwist()
     end
@@ -2448,6 +2455,9 @@ function spellutils.handleSpellCheckReentry(sub, options)
         if idleLike and not complete then
             log.say('cast lib finished without success (\ar%s\ax) sub=\at%s\ax spellidx=\at%s\ax', castResult,
                 tostring(rc.CurSpell.sub), tostring(rc.CurSpell.spell))
+            standlog.logStand('handleReentry:idleLikeClear', {
+                castResult = castResult, status = status, sub = rc.CurSpell.sub,
+            })
             spellutils.clearCastingStateOrResume()
             return false
         end
@@ -3381,7 +3391,17 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if useCastingLib and spellutils.castNeedsGemMemorize(entry) then
             standToCast = false
         end
-        if standToCast then mq.cmd('/stand') end
+        if standToCast then
+            standlog.cmdStand('CastSpell:standToCast', {
+                sub = sub, spell = spellname, gem = gem,
+                needGemMem = spellutils.castNeedsGemMemorize(entry),
+            })
+        elseif mq.TLO.Me.Sitting() then
+            standlog.logStand('CastSpell:skippedStand', {
+                sub = sub, spell = spellname, gem = gem,
+                needGemMem = spellutils.castNeedsGemMemorize(entry),
+            })
+        end
     end
     if useCastingLib then
         local castSpellId = spellutils.GetSpellId(entry)
