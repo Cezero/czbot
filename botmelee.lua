@@ -498,6 +498,42 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
     return nil
 end
 
+--- BRD fallback when resolveMeleeAssistTarget returns nil but camp still has mobs.
+local function resolveBardCampEngageTarget(rc, assistName, assistpct)
+    if assistName and assistName ~= '' then
+        local id = resolveMeleeAssistTarget(assistName, assistpct)
+        if id then return id end
+        local czactor = require('lib.czactor')
+        local actorId = czactor.getMaEngagedSpawnId(assistName)
+        if actorId and actorId > 0 and not charm.isCharmSkipped(actorId, rc) then
+            local sp = mq.TLO.Spawn(actorId)
+            if spawnutils.isNpcEngageTarget(sp) then return actorId end
+        end
+    end
+    local keepId = rc.engageTargetId
+    if keepId and keepId > 0 and not charm.isCharmSkipped(keepId, rc) then
+        local sp = mq.TLO.Spawn(keepId)
+        if spawnutils.isAliveEngageSpawn(sp) and spawnutils.isNpcEngageTarget(sp)
+            and botmelee.matarTargetPassesAssistEngageGate(keepId, rc) then
+            return keepId
+        end
+    end
+    for _, v in ipairs(rc.MobList or {}) do
+        local sid = v.ID and v.ID()
+        if sid and not charm.isCharmSkipped(sid, rc) and spawnutils.isNpcEngageTarget(v)
+            and botmelee.matarTargetPassesAssistEngageGate(sid, rc) then
+            return sid
+        end
+    end
+    for _, v in ipairs(rc.MobList or {}) do
+        local sid = v.ID and v.ID()
+        if sid and not charm.isCharmSkipped(sid, rc) and spawnutils.isNpcEngageTarget(v) then
+            return sid
+        end
+    end
+    return nil
+end
+
 -- Closest engageable named in mobList, or nil.
 local function findClosestEngageableNamed(mobList)
     local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
@@ -1004,13 +1040,17 @@ function botmelee.AdvCombat()
         end
         engageTarget()
     elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] then
-        -- Camp/follow-hunt combat active but assist not valid yet (e.g. above assistpct): keep song/debuff
-        -- context without resetting attack/stick every tick.
-        local keepId = rc.engageTargetId
-        if keepId and botmelee.matarTargetPassesAssistEngageGate(keepId, rc) then
+        local resolved = resolveBardCampEngageTarget(rc, assistName, assistpct)
+        if resolved then
+            rc.engageTargetId = resolved
             engageTarget()
         else
-            rc.engageTargetId = nil
+            local keepId = rc.engageTargetId
+            if keepId and botmelee.matarTargetPassesAssistEngageGate(keepId, rc) then
+                engageTarget()
+            elseif keepId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(keepId)) then
+                rc.engageTargetId = nil
+            end
         end
     else
         disengageCombat('no_engage_target')

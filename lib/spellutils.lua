@@ -120,6 +120,34 @@ function spellutils.SpawnMezActive(spawnId, minRemMs)
     return spellutils.SpawnEnthrallRemainingMs(spawnId) > (minRemMs or getMezActiveThresholdMs())
 end
 
+--- True when notmatar mez should refresh (remes window or tracked mez expiring).
+function spellutils.SpawnNeedsMezRemes(entry, ctx, spawnId, phase)
+    if not spellutils.IsMezSpell(entry) or phase ~= 'notmatar' or not spawnId or spawnId <= 0 then
+        return false
+    end
+    if entry.recastActive then return false end
+    local debuffRefreshThresholdMs = getMezActiveThresholdMs()
+    local durationSec = tonumber(ctx and ctx.spelldur) or 0
+    if durationSec <= 0 then
+        durationSec = spellutils.GetSpellDurationSec(entry)
+    end
+    local spellid = ctx and ctx.spellid
+    if durationSec > 0 and spellid then
+        local trackedActive = spellstates.HasDebuffLongerThan(spawnId, spellid, debuffRefreshThresholdMs)
+        local onTargetActive = spellutils.SpawnHasDebuffSpellId(spellid, spawnId, debuffRefreshThresholdMs)
+        if trackedActive or onTargetActive then
+            if not spellutils.SpawnMezActive(spawnId) then
+                return true
+            end
+        end
+    end
+    local remMs = spellutils.SpawnEnthrallRemainingMs(spawnId)
+    if remMs > 0 and remMs <= debuffRefreshThresholdMs then
+        return true
+    end
+    return false
+end
+
 --- True when spawn should be treated as already mezzed for dontStack / skip (not in remes window).
 --- Fresh mez (rem > threshold) or Mezzed with unreadable rem (0) blocks; rem in (0, threshold] allows remes.
 function spellutils.SpawnMezBlocksDontStack(spawnId)
@@ -333,6 +361,11 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         if stopTag and stopTag ~= recastOwnCat then
             return mezSkip('stopWhen ' .. stopTag)
         end
+    end
+    if isMez and phase == 'notmatar' and spawnId
+        and spellutils.SpawnNeedsMezRemes(entry, ctx, spawnId, phase) then
+        spellutils.MezLog('needs remes on %s (id %s)', (spawn.CleanName and spawn.CleanName()) or '?', spawnId)
+        return true
     end
     if entry.dontStack and spawnId then
         local dontTag = spellutils.SpawnHasDebuffCategory(spawnId, entry.dontStack)

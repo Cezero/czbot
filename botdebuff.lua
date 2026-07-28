@@ -635,6 +635,71 @@ local function updateBardTwistOnceDebuffState(entry, evalId)
     end
 end
 
+local MEZ_TWIST_ONCE_MAX_FAILS = 2
+local MEZ_TWIST_FAIL_SKIP_MS = 30000
+local BARD_TWIST_ONCE_ABSOLUTE_MAX_MS = 8000
+
+local function getMezTwistFailCounts(rc)
+    if not rc.mezTwistFailCounts then rc.mezTwistFailCounts = {} end
+    return rc.mezTwistFailCounts
+end
+
+local function clearMezTwistFailCount(rc, spawnId)
+    if not spawnId or not rc.mezTwistFailCounts then return end
+    rc.mezTwistFailCounts[spawnId] = nil
+end
+
+local function incrementMezTwistFailCount(rc, spawnId)
+    if not spawnId or spawnId <= 0 then return 0 end
+    local counts = getMezTwistFailCounts(rc)
+    counts[spawnId] = (counts[spawnId] or 0) + 1
+    return counts[spawnId]
+end
+
+local function applyMezTwistFailSkip(entry, spawnId)
+    if not entry or not spawnId or not entry.spell then return end
+    spellstates.DebuffListUpdate(spawnId, entry.spell, mq.gettime() + MEZ_TWIST_FAIL_SKIP_MS)
+end
+
+--- True when twist-once mez actually landed (not a missed note / aborted song).
+local function mezTwistOnceLanded(rc, evalId, entry)
+    if rc.MissedNote then return false end
+    if not evalId or evalId <= 0 then return false end
+    if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(evalId)) then return false end
+    if entry and entry.spell and spellutils.SpawnHasDebuffSpell(entry.spell, evalId) then
+        return true
+    end
+    local remMs = spellutils.SpawnEnthrallRemainingMs(evalId)
+    if remMs > spellutils.GetDebuffRefreshThresholdMs() then return true end
+    if remMs > 0 then return true end
+    local sp = mq.TLO.Spawn(evalId)
+    if sp and sp.ID() == evalId then
+        local ok, mezzed = pcall(function() return sp.Mezzed and sp.Mezzed() end)
+        if ok and mezzed == true then return true end
+    end
+    if mq.TLO.Target.ID() == evalId and mq.TLO.Target.Mezzed() then return true end
+    return false
+end
+
+local function handleNotmatarMezTwistOnceOutcome(rc, w, attemptedCast)
+    if w.targethit ~= 'notmatar' or not w.entry or not spellutils.IsMezSpell(w.entry) then return end
+    local evalId = w.EvalID
+    if mezTwistOnceLanded(rc, evalId, w.entry) then
+        updateBardTwistOnceDebuffState(w.entry, evalId)
+        clearMezTwistFailCount(rc, evalId)
+        spellutils.MezLog('twist-once mez landed on id %s', tostring(evalId))
+    elseif attemptedCast then
+        local fails = incrementMezTwistFailCount(rc, evalId)
+        spellutils.MezLog('twist-once mez missed on id %s (fail %d/%d)', tostring(evalId), fails, MEZ_TWIST_ONCE_MAX_FAILS)
+        if fails >= MEZ_TWIST_ONCE_MAX_FAILS then
+            applyMezTwistFailSkip(w.entry, evalId)
+            log.say('[Mez] giving up on \at%s\ax (id %s) after %d failed twist-once attempts',
+                (mq.TLO.Spawn(evalId) and mq.TLO.Spawn(evalId).CleanName()) or '?', evalId, fails)
+        end
+    end
+    rc.MissedNote = false
+end
+
 --- True when a BRD twist-once wait should abort (target died, left camp, or fight ended).
 local function bardTwistOnceShouldAbort(w, rc)
     if state.getRunState() == state.STATES.camp_return then return true end
@@ -667,13 +732,15 @@ end
 
 local function finishBardTwistOnceWait(rc, w, opts)
     opts = opts or {}
-    local recordDebuff = opts.recordDebuff == true
+    local attemptedCast = opts.attemptedCast == true
     if opts.stopTwist then
         bardtwist.StopTwist()
     end
     rc.bardTwistOnceWait = nil
     state.clearRunState()
-    if recordDebuff and w.singingStarted and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
+    if w.targethit == 'notmatar' and w.entry and spellutils.IsMezSpell(w.entry) then
+        handleNotmatarMezTwistOnceOutcome(rc, w, attemptedCast)
+    elseif opts.recordDebuff and w.singingStarted and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
         updateBardTwistOnceDebuffState(w.entry, w.EvalID)
     end
     if w.targethit == 'notmatar' then
@@ -696,9 +763,6 @@ local function finishBardTwistOnceWait(rc, w, opts)
     end
     if w.targethit == 'notmatar' then
         retargetMaTargetAfterBardMez()
-        if myconfig.settings.domelee and state.getMobCount() > 0 then
-            botmelee.AdvCombat()
-        end
     end
     -- Only camp-empty ends the fight; mez-target death must not ResetCombatState mid-pull.
     local fightEnded = state.getMobCount() <= 0
@@ -712,8 +776,8 @@ local function finishBardTwistOnceWait(rc, w, opts)
     local desiredGems = mode and bardtwist.GetTwistListForMode(mode) or {}
     local desiredStr = (#desiredGems > 0) and table.concat(desiredGems, ' ') or '(none)'
     bardtwist.BardDbgNow(
-        'twist-once done: evalId=%s fightEnded=%s mobs=%d runState=%s mode=%s current=[%s] desired=[%s]',
-        tostring(w.EvalID), tostring(fightEnded), state.getMobCount(),
+        'twist-once done: evalId=%s fightEnded=%s mobs=%d engageId=%s runState=%s mode=%s current=[%s] desired=[%s]',
+        tostring(w.EvalID), tostring(fightEnded), state.getMobCount(), tostring(rc.engageTargetId),
         state.getRunStateName(), tostring(mode), currentGems, desiredStr)
     bardtwist.RestoreCombatTwistAfterTwistOnce()
 end
@@ -740,28 +804,9 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
     if bardTwistOnceShouldAbort(w, rc) then
         local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
         if stillSinging then w.singingStarted = true end
-        -- notmatar left MobList after mez lands (e.g. TargetFilter Aggressive): still record if mezzed.
-        local recordDebuff = false
-        if w.targethit == 'notmatar' and w.singingStarted
-            and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
-            local remMs = spellutils.SpawnEnthrallRemainingMs(w.EvalID)
-            local mezzed = false
-            if mq.TLO.Target.ID() == w.EvalID then
-                mezzed = mq.TLO.Target.Mezzed() == true
-            else
-                local ok, m = pcall(function()
-                    local sp = mq.TLO.Spawn(w.EvalID)
-                    return sp and sp.Mezzed and sp.Mezzed()
-                end)
-                mezzed = ok and m == true
-            end
-            if remMs > 0 or mezzed then
-                recordDebuff = true
-            end
-        end
         finishBardTwistOnceWait(rc, w, {
             stopTwist = bardtwist.IsTwistOnceActive() or stillSinging,
-            recordDebuff = recordDebuff,
+            attemptedCast = w.singingStarted == true,
         })
         return true
     end
@@ -773,6 +818,13 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
     end
 
     local now = mq.gettime()
+    if w.startedAt and now > w.startedAt + BARD_TWIST_ONCE_ABSOLUTE_MAX_MS then
+        finishBardTwistOnceWait(rc, w, {
+            stopTwist = bardtwist.IsTwistOnceActive(),
+            attemptedCast = w.singingStarted == true,
+        })
+        return true
+    end
     if bardtwist.IsTwistOnceActive() then
         w.singingStarted = true
         local pastDeadline = w.deadline and now >= w.deadline
@@ -787,8 +839,11 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
         return true
     end
 
-    local record = w.singingStarted and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID))
-    finishBardTwistOnceWait(rc, w, { recordDebuff = record })
+    local attemptedCast = w.singingStarted == true
+    finishBardTwistOnceWait(rc, w, {
+        attemptedCast = attemptedCast,
+        recordDebuff = attemptedCast and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)),
+    })
     return true
 end
 
@@ -860,6 +915,7 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
         singingStarted = false,
         castTimeMs = castTimeMs,
         deadline = mq.gettime() + castTimeMs + 100,
+        startedAt = mq.gettime(),
     }
     if not state.canStartBusyState(state.STATES.casting) then
         rc.bardTwistOnceWait = nil

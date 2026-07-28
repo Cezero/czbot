@@ -57,6 +57,7 @@
 ---@field IgnoreMobBuff boolean
 ---@field YellTimer number
 ---@field MissedNote boolean
+---@field mezTwistFailCounts table|nil spawnId -> failed twist-once mez attempt count
 ---@field terminate boolean
 ---@field runState number
 ---@field runStateDeadline number|nil
@@ -314,6 +315,7 @@ function M.resetRunconfig()
         IgnoreMobBuff = false,
         YellTimer = 0,
         MissedNote = false,
+        mezTwistFailCounts = {},
         terminate = false,
         runState = M.STATES.idle,
         runStateDeadline = nil,
