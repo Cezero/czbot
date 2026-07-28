@@ -2366,8 +2366,6 @@ end
 --- True when memorizing a spell into a gem (cast engine or premem background load).
 function spellutils.IsMemorizing()
     if premem.isPending() then return true end
-    local rc = state.getRunconfig()
-    if not rc.CurSpell or (not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib) then return false end
     return casting.isMemorizing()
 end
 
@@ -3100,6 +3098,24 @@ local function spellMemmedInConfiguredGemSlot(entry)
     return string.lower(inSlot) == string.lower(spellName)
 end
 
+local function spellReadyByName(spellName)
+    if not spellName or spellName == '' then return true end
+    local sr = mq.TLO.Me.SpellReady(string.lower(spellName))
+    if not sr then return false end
+    local ok, ready = pcall(function() return sr() end)
+    return ok and ready
+end
+
+--- True when CastSpell must load or wait on the configured gem before casting (mirrors casting.ensureMemorizedIfNeeded).
+function spellutils.castNeedsGemMemorize(entry)
+    if not entry or type(entry.gem) ~= 'number' then return false end
+    if entry.gem < 1 or entry.gem > 12 then return false end
+    local spellName = entry.spell
+    if not spellName or spellName == '' then return false end
+    if not spellMemmedInConfiguredGemSlot(entry) then return true end
+    return not spellReadyByName(spellName)
+end
+
 --- If true, CastSpell should return false before CurSpell: MQ2Cast would only wait on reuse (Lua would mirror that busy window).
 --- Only when the spell is already in the target gem; if the slot is empty or another spell, MQ2Cast may need to memorize — do not defer.
 function spellutils.ShouldDeferMQ2CastForGemCooldown(entry)
@@ -3362,7 +3378,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     -- Stand to cast only when not about to memorize: standing interrupts MQ2Cast memorization.
     if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and (not rc.CurSpell or rc.CurSpell.phase ~= 'casting') then
         local standToCast = true
-        if useCastingLib and type(gem) == 'number' and not mq.TLO.Me.SpellReady(spell)() then
+        if useCastingLib and spellutils.castNeedsGemMemorize(entry) then
             standToCast = false
         end
         if standToCast then mq.cmd('/stand') end
@@ -3370,29 +3386,28 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     if useCastingLib then
         local castSpellId = spellutils.GetSpellId(entry)
         local castRequest = spellutils.BuildCastRequest(entry, EvalID, sub)
-        local needDelay = (type(gem) == 'number' and not mq.TLO.Me.SpellReady(spell)())
+        local needGemMem = spellutils.castNeedsGemMemorize(entry)
         rc.CurSpell.viaMQ2Cast = true
         rc.CurSpell.viaCastingLib = true
         rc.CurSpell.spellid = castSpellId
         spellutils.AutoinvIfCursorBlockingCast()
+        local castStatePayload = {
+            deadline = mq.gettime() + CASTING_STUCK_MS,
+            priority = runPriority,
+            spellcheckResume = rc.CurSpell.spellcheckResume,
+        }
+        if needGemMem then
+            rc.CurSpell.phase = 'casting'
+            state.setRunState(state.STATES.casting, castStatePayload)
+        end
         if rc.CurSpell.phase == 'casting' and casting.isMemorizing() then
-            state.setRunState(state.STATES.casting,
-                {
-                    deadline = mq.gettime() + CASTING_STUCK_MS,
-                    priority = runPriority,
-                    spellcheckResume = rc.CurSpell.spellcheckResume
-                })
+            state.setRunState(state.STATES.casting, castStatePayload)
             return true
         end
         if not casting.start(castRequest) then
             if casting.isMemorizing() then
                 rc.CurSpell.phase = 'casting'
-                state.setRunState(state.STATES.casting,
-                    {
-                        deadline = mq.gettime() + CASTING_STUCK_MS,
-                        priority = runPriority,
-                        spellcheckResume = rc.CurSpell.spellcheckResume
-                    })
+                state.setRunState(state.STATES.casting, castStatePayload)
                 return true
             end
             mezBlocked('casting.start failed')
@@ -3403,16 +3418,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if mezCastDbg then
             spellutils.MezLog('CastSpell started idx=%s id=%s gem=%s', index, tostring(EvalID), tostring(gem))
         end
-        rc.CurSpell.phase = 'casting'
+        if not needGemMem then
+            rc.CurSpell.phase = 'casting'
+            state.setRunState(state.STATES.casting, castStatePayload)
+        end
         dbgCastPhase('casting', sub, index, runPriority)
-        state.setRunState(state.STATES.casting,
-            {
-                deadline = mq.gettime() + CASTING_STUCK_MS,
-                priority = runPriority,
-                spellcheckResume = rc.CurSpell
-                    .spellcheckResume
-            })
-        if needDelay then mq.delay(CASTING_MEMORIZE_DELAY_MS) end
+        if needGemMem then mq.delay(CASTING_MEMORIZE_DELAY_MS) end
         return true
     end
     spellutils.ExecuteNativeCast(gem, spell, sub, index)

@@ -815,7 +815,10 @@ function botmove.FollowCall()
     if not rc.stucktimer then rc.stucktimer = 0 end
     if rc.stucktimer <= mq.gettime() then botmove.UnStuck() end
     if not isValidFollowTarget(rc, ctx) then return false end
-    if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
+    if mq.TLO.Me.Sitting() then
+        local spellutils = require('lib.spellutils')
+        if not spellutils.IsMemorizing() then mq.cmd('/stand') end
+    end
     issueFollowNav(rc, ctx)
     return true
 end
