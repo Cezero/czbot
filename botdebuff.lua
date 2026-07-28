@@ -604,26 +604,9 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     return true
 end
 
---- Re-target the MA's NPC target (not the MA player) and sync engageTargetId.
-local function retargetMaTargetAfterBardMez()
-    local rc = state.getRunconfig()
-    local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
-    local assistName = tankrole.GetAssistTargetName()
-    local _, _, maTargetId = spellutils.GetAssistInfo(true, assistpct)
-    if maTargetId and maTargetId ~= 0 and matarTargetPassesAssistEngageGate(maTargetId, rc) then
-        targeting.TargetAndWait(maTargetId, 500)
-        rc.engageTargetId = maTargetId
-        botmelee.armMobprobEngageGrace(maTargetId)
-        return maTargetId
-    end
-    local fallbackId = botmelee.resolveBardCampEngageTarget(rc, assistName, assistpct)
-    if fallbackId then
-        targeting.TargetAndWait(fallbackId, 500)
-        rc.engageTargetId = fallbackId
-        botmelee.armMobprobEngageGrace(fallbackId)
-        return fallbackId
-    end
-    return nil
+--- Re-target MA/camp after bard notmatar mez and restore stick/attack (botmelee owns the path).
+local function retargetMaTargetAfterBardMez(excludeId)
+    return botmelee.retargetAndEngageAfterBardMez(excludeId)
 end
 
 local function updateBardTwistOnceDebuffState(entry, evalId)
@@ -786,7 +769,7 @@ local function finishBardTwistOnceWait(rc, w, opts)
         rc.lastAssistTargetId = nil
     end
     if w.targethit == 'notmatar' then
-        retargetMaTargetAfterBardMez()
+        retargetMaTargetAfterBardMez(w.EvalID)
     end
     -- Only camp-empty ends the fight; mez-target death must not ResetCombatState mid-pull.
     local fightEnded = state.getMobCount() <= 0
@@ -899,7 +882,7 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
         local function skipAlreadyMezzed()
             log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
             spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
-            retargetMaTargetAfterBardMez()
+            retargetMaTargetAfterBardMez(EvalID)
             bardtwist.RestoreCombatTwistAfterTwistOnce()
             return true
         end

@@ -499,19 +499,23 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
 end
 
 --- BRD fallback when resolveMeleeAssistTarget returns nil but camp still has mobs.
-local function resolveBardCampEngageTarget(rc, assistName, assistpct)
+--- excludeId: optional spawn to skip (e.g. mez add) in keepId / MobList selection.
+local function resolveBardCampEngageTarget(rc, assistName, assistpct, excludeId)
+    local function skipId(sid)
+        return excludeId and sid == excludeId
+    end
     if assistName and assistName ~= '' then
         local id = resolveMeleeAssistTarget(assistName, assistpct)
-        if id then return id end
+        if id and not skipId(id) then return id end
         local czactor = require('lib.czactor')
         local actorId = czactor.getMaEngagedSpawnId(assistName)
-        if actorId and actorId > 0 and not charm.isCharmSkipped(actorId, rc) then
+        if actorId and actorId > 0 and not skipId(actorId) and not charm.isCharmSkipped(actorId, rc) then
             local sp = mq.TLO.Spawn(actorId)
             if spawnutils.isNpcEngageTarget(sp) then return actorId end
         end
     end
     local keepId = rc.engageTargetId
-    if keepId and keepId > 0 and not charm.isCharmSkipped(keepId, rc) then
+    if keepId and keepId > 0 and not skipId(keepId) and not charm.isCharmSkipped(keepId, rc) then
         local sp = mq.TLO.Spawn(keepId)
         if spawnutils.isAliveEngageSpawn(sp) and spawnutils.isNpcEngageTarget(sp)
             and botmelee.matarTargetPassesAssistEngageGate(keepId, rc) then
@@ -520,14 +524,14 @@ local function resolveBardCampEngageTarget(rc, assistName, assistpct)
     end
     for _, v in ipairs(rc.MobList or {}) do
         local sid = v.ID and v.ID()
-        if sid and not charm.isCharmSkipped(sid, rc) and spawnutils.isNpcEngageTarget(v)
+        if sid and not skipId(sid) and not charm.isCharmSkipped(sid, rc) and spawnutils.isNpcEngageTarget(v)
             and botmelee.matarTargetPassesAssistEngageGate(sid, rc) then
             return sid
         end
     end
     for _, v in ipairs(rc.MobList or {}) do
         local sid = v.ID and v.ID()
-        if sid and not charm.isCharmSkipped(sid, rc) and spawnutils.isNpcEngageTarget(v) then
+        if sid and not skipId(sid) and not charm.isCharmSkipped(sid, rc) and spawnutils.isNpcEngageTarget(v) then
             return sid
         end
     end
@@ -872,6 +876,32 @@ local function engageTarget()
             state.setRunState(state.STATES.melee, { phase = 'moving_closer', deadline = mq.gettime() + 5000, priority = bothooks.getPriority('doMelee') })
         end
     end
+end
+
+--- Resolve MA/camp engage target after bard notmatar mez, then stick/attack via engageTarget.
+--- excludeId: mez spawn to skip in MobList fallback (nil = no exclude).
+function botmelee.retargetAndEngageAfterBardMez(excludeId)
+    local rc = state.getRunconfig()
+    local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
+    local assistName = tankrole.GetAssistTargetName()
+    local resolved = nil
+    local _, _, maTargetId = spellutils.GetAssistInfo(true, assistpct)
+    if maTargetId and maTargetId ~= 0 and maTargetId ~= excludeId
+        and botmelee.matarTargetPassesAssistEngageGate(maTargetId, rc) then
+        resolved = maTargetId
+    else
+        resolved = resolveBardCampEngageTarget(rc, assistName, assistpct, excludeId)
+    end
+    if not resolved then
+        spellutils.MezLog('post-mez engage: no resolve (excludeId=%s)', tostring(excludeId))
+        return nil
+    end
+    targeting.TargetAndWait(resolved, 500)
+    rc.engageTargetId = resolved
+    botmelee.armMobprobEngageGrace(resolved)
+    engageTarget()
+    spellutils.MezLog('post-mez engage: id %s', tostring(resolved))
+    return resolved
 end
 
 -- Reactive engage selection (settings.engageXTargetOnly): pick the engage target ONLY from mobs on our
