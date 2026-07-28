@@ -700,8 +700,8 @@ local function finishBardTwistOnceWait(rc, w, opts)
             botmelee.AdvCombat()
         end
     end
+    -- Only camp-empty ends the fight; mez-target death must not ResetCombatState mid-pull.
     local fightEnded = state.getMobCount() <= 0
-        or (w.EvalID and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)))
     if fightEnded then
         combat.ResetCombatState()
     end
@@ -739,8 +739,29 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
 
     if bardTwistOnceShouldAbort(w, rc) then
         local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
+        if stillSinging then w.singingStarted = true end
+        -- notmatar left MobList after mez lands (e.g. TargetFilter Aggressive): still record if mezzed.
+        local recordDebuff = false
+        if w.targethit == 'notmatar' and w.singingStarted
+            and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
+            local remMs = spellutils.SpawnEnthrallRemainingMs(w.EvalID)
+            local mezzed = false
+            if mq.TLO.Target.ID() == w.EvalID then
+                mezzed = mq.TLO.Target.Mezzed() == true
+            else
+                local ok, m = pcall(function()
+                    local sp = mq.TLO.Spawn(w.EvalID)
+                    return sp and sp.Mezzed and sp.Mezzed()
+                end)
+                mezzed = ok and m == true
+            end
+            if remMs > 0 or mezzed then
+                recordDebuff = true
+            end
+        end
         finishBardTwistOnceWait(rc, w, {
             stopTwist = bardtwist.IsTwistOnceActive() or stillSinging,
+            recordDebuff = recordDebuff,
         })
         return true
     end
@@ -793,17 +814,24 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
     if targethit == 'notmatar' then
+        local function skipAlreadyMezzed()
+            log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
+            spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
+            retargetMaTargetAfterBardMez()
+            bardtwist.RestoreCombatTwistAfterTwistOnce()
+            return true
+        end
+        -- Spawn-side already blocks remes: skip without retargeting (avoids steal/idle loop).
+        if spellutils.SpawnMezBlocksDontStack(EvalID) then
+            return skipAlreadyMezzed()
+        end
         targeting.TargetAndWaitBuffsPopulated(EvalID, 1000)
         if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed() then
             local remMs = spellutils.SpawnEnthrallRemainingMs(EvalID)
             local threshold = spellutils.GetDebuffRefreshThresholdMs()
             local inRemesWindow = remMs > 0 and remMs <= threshold
             if not inRemesWindow then
-                log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
-                spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
-                retargetMaTargetAfterBardMez()
-                bardtwist.RestoreCombatTwistAfterTwistOnce()
-                return true
+                return skipAlreadyMezzed()
             end
         end
         mq.cmd('/squelch /attack off')

@@ -219,9 +219,23 @@ function spellutils.RecordDontStackDebuffFromSpawn(spawnId, ourSpell, categoryTa
     if not spawnId or not ourSpell or not categoryTag then return end
     if categoryTag == 'Mezzed' then
         local remMs = spellutils.SpawnEnthrallRemainingMs(spawnId)
-        if remMs > getMezActiveThresholdMs() then
-            spellstates.DebuffListUpdate(spawnId, ourSpell, mq.gettime() + remMs)
+        local threshold = getMezActiveThresholdMs()
+        -- Remes window: do not record so SpawnNeedsDebuff can refresh.
+        if remMs > 0 and remMs <= threshold then
+            return
         end
+        if remMs > threshold then
+            spellstates.DebuffListUpdate(spawnId, ourSpell, mq.gettime() + remMs)
+            return
+        end
+        -- remMs <= 0 (Mezzed flag but Enthrall duration unread): fall back to our spell duration
+        -- so eval stops re-selecting this add every tick.
+        local durationSec = 0
+        if mq.TLO.Spell(ourSpell)() and mq.TLO.Spell(ourSpell).MyDuration then
+            durationSec = tonumber(mq.TLO.Spell(ourSpell).MyDuration.TotalSeconds()) or 0
+        end
+        if durationSec <= 0 then durationSec = 12 end
+        spellstates.DebuffListUpdate(spawnId, ourSpell, mq.gettime() + durationSec * 1000)
         return
     end
     local sp = mq.TLO.Spawn(spawnId)
