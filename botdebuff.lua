@@ -608,12 +608,20 @@ end
 local function retargetMaTargetAfterBardMez()
     local rc = state.getRunconfig()
     local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
+    local assistName = tankrole.GetAssistTargetName()
     local _, _, maTargetId = spellutils.GetAssistInfo(true, assistpct)
     if maTargetId and maTargetId ~= 0 and matarTargetPassesAssistEngageGate(maTargetId, rc) then
         targeting.TargetAndWait(maTargetId, 500)
         rc.engageTargetId = maTargetId
         botmelee.armMobprobEngageGrace(maTargetId)
         return maTargetId
+    end
+    local fallbackId = botmelee.resolveBardCampEngageTarget(rc, assistName, assistpct)
+    if fallbackId then
+        targeting.TargetAndWait(fallbackId, 500)
+        rc.engageTargetId = fallbackId
+        botmelee.armMobprobEngageGrace(fallbackId)
+        return fallbackId
     end
     return nil
 end
@@ -649,16 +657,29 @@ local function clearMezTwistFailCount(rc, spawnId)
     rc.mezTwistFailCounts[spawnId] = nil
 end
 
+local function clearMezTwistFailSkip(rc, spawnId)
+    if not spawnId or not rc.mezTwistFailSkipUntil then return end
+    rc.mezTwistFailSkipUntil[spawnId] = nil
+end
+
+local function clearMezTwistFailState(rc, spawnId)
+    clearMezTwistFailCount(rc, spawnId)
+    clearMezTwistFailSkip(rc, spawnId)
+end
+
 local function incrementMezTwistFailCount(rc, spawnId)
     if not spawnId or spawnId <= 0 then return 0 end
     local counts = getMezTwistFailCounts(rc)
-    counts[spawnId] = (counts[spawnId] or 0) + 1
+    local current = counts[spawnId] or 0
+    if current >= MEZ_TWIST_ONCE_MAX_FAILS then return current end
+    counts[spawnId] = current + 1
     return counts[spawnId]
 end
 
-local function applyMezTwistFailSkip(entry, spawnId)
-    if not entry or not spawnId or not entry.spell then return end
-    spellstates.DebuffListUpdate(spawnId, entry.spell, mq.gettime() + MEZ_TWIST_FAIL_SKIP_MS)
+local function applyMezTwistFailSkip(rc, spawnId)
+    if not spawnId or spawnId <= 0 then return end
+    if not rc.mezTwistFailSkipUntil then rc.mezTwistFailSkipUntil = {} end
+    rc.mezTwistFailSkipUntil[spawnId] = mq.gettime() + MEZ_TWIST_FAIL_SKIP_MS
 end
 
 --- True when twist-once mez actually landed (not a missed note / aborted song).
@@ -686,13 +707,13 @@ local function handleNotmatarMezTwistOnceOutcome(rc, w, attemptedCast)
     local evalId = w.EvalID
     if mezTwistOnceLanded(rc, evalId, w.entry) then
         updateBardTwistOnceDebuffState(w.entry, evalId)
-        clearMezTwistFailCount(rc, evalId)
+        clearMezTwistFailState(rc, evalId)
         spellutils.MezLog('twist-once mez landed on id %s', tostring(evalId))
     elseif attemptedCast then
         local fails = incrementMezTwistFailCount(rc, evalId)
         spellutils.MezLog('twist-once mez missed on id %s (fail %d/%d)', tostring(evalId), fails, MEZ_TWIST_ONCE_MAX_FAILS)
-        if fails >= MEZ_TWIST_ONCE_MAX_FAILS then
-            applyMezTwistFailSkip(w.entry, evalId)
+        if fails >= MEZ_TWIST_ONCE_MAX_FAILS and not spellutils.IsMezTwistFailSkipped(evalId, rc) then
+            applyMezTwistFailSkip(rc, evalId)
             log.say('[Mez] giving up on \at%s\ax (id %s) after %d failed twist-once attempts',
                 (mq.TLO.Spawn(evalId) and mq.TLO.Spawn(evalId).CleanName()) or '?', evalId, fails)
         end
@@ -748,6 +769,9 @@ local function finishBardTwistOnceWait(rc, w, opts)
             rc.engageTargetId = nil
             if rc.lastAssistTargetId == w.EvalID then
                 rc.lastAssistTargetId = nil
+            end
+            if w.EvalID and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
+                clearMezTwistFailState(rc, w.EvalID)
             end
         end
     elseif w.targethit == 'matar' and w.EvalID and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)) then
@@ -869,6 +893,9 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
     if targethit == 'notmatar' then
+        if spellutils.IsMezTwistFailSkipped(EvalID, rc) then
+            return true
+        end
         local function skipAlreadyMezzed()
             log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
             spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')

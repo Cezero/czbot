@@ -120,6 +120,19 @@ function spellutils.SpawnMezActive(spawnId, minRemMs)
     return spellutils.SpawnEnthrallRemainingMs(spawnId) > (minRemMs or getMezActiveThresholdMs())
 end
 
+--- True when twist-once mez gave up on this spawn and skip window has not expired.
+function spellutils.IsMezTwistFailSkipped(spawnId, rc)
+    if not spawnId or spawnId <= 0 then return false end
+    rc = rc or state.getRunconfig()
+    local skipUntil = rc.mezTwistFailSkipUntil and rc.mezTwistFailSkipUntil[spawnId]
+    if not skipUntil then return false end
+    if mq.gettime() >= skipUntil then
+        rc.mezTwistFailSkipUntil[spawnId] = nil
+        return false
+    end
+    return true
+end
+
 --- True when notmatar mez should refresh (remes window or tracked mez expiring).
 function spellutils.SpawnNeedsMezRemes(entry, ctx, spawnId, phase)
     if not spellutils.IsMezSpell(entry) or phase ~= 'notmatar' or not spawnId or spawnId <= 0 then
@@ -137,7 +150,10 @@ function spellutils.SpawnNeedsMezRemes(entry, ctx, spawnId, phase)
         local onTargetActive = spellutils.SpawnHasDebuffSpellId(spellid, spawnId, debuffRefreshThresholdMs)
         if trackedActive or onTargetActive then
             if not spellutils.SpawnMezActive(spawnId) then
-                return true
+                if spellutils.SpawnMezBlocksDontStack(spawnId)
+                    or (entry.spell and spellutils.SpawnHasDebuffSpell(entry.spell, spawnId)) then
+                    return true
+                end
             end
         end
     end
@@ -314,6 +330,10 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         if utils.isCharmSkipped(spawnId, state.getRunconfig()) then
             return mezSkip('charm skip')
         end
+    end
+
+    if phase == 'notmatar' and isMez and spawnId and spellutils.IsMezTwistFailSkipped(spawnId) then
+        return mezSkip('twist-once fail skip')
     end
 
     if phase == 'notmatar' and isMez and ctx.mtTargetId and spawnId == ctx.mtTargetId then

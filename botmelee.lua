@@ -1159,4 +1159,6 @@ function botmelee.getHookFn(name)
     return nil
 end
 
+botmelee.resolveBardCampEngageTarget = resolveBardCampEngageTarget
+
 return botmelee

@@ -58,6 +58,7 @@
 ---@field YellTimer number
 ---@field MissedNote boolean
 ---@field mezTwistFailCounts table|nil spawnId -> failed twist-once mez attempt count
+---@field mezTwistFailSkipUntil table|nil spawnId -> mq.gettime() expiry for twist-once mez give-up skip
 ---@field terminate boolean
 ---@field runState number
 ---@field runStateDeadline number|nil
@@ -316,6 +317,7 @@ function M.resetRunconfig()
         YellTimer = 0,
         MissedNote = false,
         mezTwistFailCounts = {},
+        mezTwistFailSkipUntil = {},
         terminate = false,
         runState = M.STATES.idle,
         runStateDeadline = nil,
