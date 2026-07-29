@@ -28,7 +28,8 @@ local _noMeshWarnLast = 0
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullCandidateIds, pullCandidateIndex, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
 -- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullHealerManaWait, pullDebuffWait, pullRangedStoredItem, pullRangedAttempted;
 -- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
--- pullSeenSpawnIds (spawnId -> firstSeenMs) persists across pulls: only newly seen IDs wait PULL_SPAWN_FTE_WAIT_MS (new-spawn FTE lock).
+-- pullSeenSpawnIds (spawnId -> firstSeenMs) persists across pulls: wait for new-spawn FTE lock before
+-- pulling that ID; never skip a nearer young spawn in favor of a farther aged one.
 botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat' }
 
 local ROAM_NO_TARGET_STATUS_MS = 5000
@@ -606,8 +607,9 @@ function botpull.ensurePullCampState(rc)
     ensureCampAndAnchor(rc or state.getRunconfig())
 end
 
--- Sync pullSeenSpawnIds with current pull list; return spawns aged past FTE wait (or empty + block if only young).
--- Returns: agedList, shouldBlock (true when targets exist but none are aged enough yet).
+-- Sync pullSeenSpawnIds; return aged spawns (>FTE wait) for selection, or block.
+-- If the nearest pull candidate is still young, wait — do not skip to a farther aged mob.
+-- Returns: agedList, shouldBlock
 local function syncAndFilterAgedPullMobs(rc, apmoblist)
     local seen = rawget(rc, 'pullSeenSpawnIds')
     if not seen then
@@ -617,6 +619,8 @@ local function syncAndFilterAgedPullMobs(rc, apmoblist)
     local now = mq.gettime()
     local present = {}
     local aged = {}
+    local nearestPathLen = nil
+    local nearestAged = false
     if apmoblist then
         for _, spawn in ipairs(apmoblist) do
             local id = spawn.ID()
@@ -625,8 +629,15 @@ local function syncAndFilterAgedPullMobs(rc, apmoblist)
                 if not seen[id] then
                     seen[id] = now
                 end
-                if (now - seen[id]) >= PULL_SPAWN_FTE_WAIT_MS then
+                local isAged = (now - seen[id]) >= PULL_SPAWN_FTE_WAIT_MS
+                if isAged then
                     aged[#aged + 1] = spawn
+                end
+                local pl = mq.TLO.Navigation.PathLength('id ' .. id)()
+                if not pl or pl <= 0 then pl = math.huge end
+                if not nearestPathLen or pl < nearestPathLen then
+                    nearestPathLen = pl
+                    nearestAged = isAged
                 end
             end
         end
@@ -640,7 +651,8 @@ local function syncAndFilterAgedPullMobs(rc, apmoblist)
     if not hasTarget then
         return aged, true
     end
-    if #aged == 0 then
+    -- Wait while a closer (or equal-nearest) spawn is still inside the FTE window.
+    if not nearestAged then
         if not pullWaitBlocksStatus(rc) then
             rc.statusMessage = 'Waiting before pull...'
         end
@@ -827,7 +839,7 @@ function botpull.StartPull()
     if spawnWait then
         local pullCount = apmoblist and #apmoblist or 0
         if pullCount > 0 then
-            bardtwist.BardDbgNow('pull blocked: reason=spawn-wait pullList=%d aged=0', pullCount)
+            bardtwist.BardDbgNow('pull blocked: reason=spawn-wait pullList=%d nearest-young', pullCount)
         end
         return
     end
@@ -985,8 +997,10 @@ end
 local function rebuildPullCandidatesFromArea(rc, reason)
     local excludeId = rc.pullAPTargetID
     local apmoblist = spawnutils.buildPullMobList(rc)
+    local agedList, spawnWait = syncAndFilterAgedPullMobs(rc, apmoblist)
+    if spawnWait or not agedList[1] then return false end
     local maxCandidates = tonumber(myconfig.pull.backupCandidates) or 3
-    local targets = selectPullTargets(apmoblist, rc, maxCandidates)
+    local targets = selectPullTargets(agedList, rc, maxCandidates)
     local filtered = {}
     for _, s in ipairs(targets) do
         local sid = s.ID()
