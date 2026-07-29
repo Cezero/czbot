@@ -74,8 +74,7 @@
 ---@field pullDeadline number|nil
 ---@field pullAggroingStartTime number|nil mq.gettime() when entered aggroing state (for timeout)
 ---@field pullAtCampSince number|nil mq.gettime() when we reached camp in returning_after_abort (for wait before next pull)
----@field pullSpawnWaitSince number|nil mq.gettime() when a new spawn appeared in pull.radius (FTE wait)
----@field pullRadiusHadTarget boolean|nil true once a pull target was seen in radius this idle cycle
+---@field pullSeenSpawnIds table|nil spawnId -> firstSeenMs for pull.radius; persists across pulls (new-spawn FTE wait)
 ---@field pullAbortReturnDeadline number|nil mq.gettime() failsafe deadline for returning_after_abort
 ---@field pullCandidateIds number[]|nil spawn IDs queued for current pull outing (backup targets)
 ---@field pullCandidateIndex number|nil 1-based index into pullCandidateIds for active target

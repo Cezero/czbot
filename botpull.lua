@@ -26,8 +26,9 @@ local NO_MESH_WARN_MS = 30000
 local _noMeshWarnLast = 0
 
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullCandidateIds, pullCandidateIndex, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
--- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullSpawnWaitSince, pullRadiusHadTarget, pullHealerManaWait, pullDebuffWait, pullRangedStoredItem, pullRangedAttempted;
+-- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullHealerManaWait, pullDebuffWait, pullRangedStoredItem, pullRangedAttempted;
 -- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
+-- pullSeenSpawnIds (spawnId -> firstSeenMs) persists across pulls: only newly seen IDs wait PULL_SPAWN_FTE_WAIT_MS (new-spawn FTE lock).
 botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat' }
 
 local ROAM_NO_TARGET_STATUS_MS = 5000
@@ -240,9 +241,6 @@ local function clearPullState(reason)
     rc.pullXTargetIdsAtStart = nil
     rc.pullAggroingStartTime = nil
     rc.pullAtCampSince = nil
-    rc.pullRadiusHadTarget = nil
-    rc.pullSpawnWaitSince = nil
-    rawset(rc, 'pullListSignature', nil)
     rawset(rc, 'pullAbortReturnDeadline', nil)
     rc.pullCandidateIds = nil
     rc.pullCandidateIndex = nil
@@ -608,15 +606,47 @@ function botpull.ensurePullCampState(rc)
     ensureCampAndAnchor(rc or state.getRunconfig())
 end
 
-local function pullListSignature(apmoblist)
-    if not apmoblist or not apmoblist[1] then return '' end
-    local ids = {}
-    for _, v in ipairs(apmoblist) do
-        local id = v.ID()
-        if id and id > 0 then ids[#ids + 1] = id end
+-- Sync pullSeenSpawnIds with current pull list; return spawns aged past FTE wait (or empty + block if only young).
+-- Returns: agedList, shouldBlock (true when targets exist but none are aged enough yet).
+local function syncAndFilterAgedPullMobs(rc, apmoblist)
+    local seen = rawget(rc, 'pullSeenSpawnIds')
+    if not seen then
+        seen = {}
+        rawset(rc, 'pullSeenSpawnIds', seen)
     end
-    table.sort(ids)
-    return table.concat(ids, ',')
+    local now = mq.gettime()
+    local present = {}
+    local aged = {}
+    if apmoblist then
+        for _, spawn in ipairs(apmoblist) do
+            local id = spawn.ID()
+            if id and id > 0 then
+                present[id] = true
+                if not seen[id] then
+                    seen[id] = now
+                end
+                if (now - seen[id]) >= PULL_SPAWN_FTE_WAIT_MS then
+                    aged[#aged + 1] = spawn
+                end
+            end
+        end
+    end
+    for id in pairs(seen) do
+        if not present[id] then
+            seen[id] = nil
+        end
+    end
+    local hasTarget = apmoblist and apmoblist[1] ~= nil
+    if not hasTarget then
+        return aged, true
+    end
+    if #aged == 0 then
+        if not pullWaitBlocksStatus(rc) then
+            rc.statusMessage = 'Waiting before pull...'
+        end
+        return aged, true
+    end
+    return aged, false
 end
 
 -- Rank spawns by path length; if usepriority, filter to PriorityList first; skip pullAttemptedIds.
@@ -780,35 +810,6 @@ local function tickRoamNav(rc)
     end
 end
 
-local function gatePullSpawnWait(rc, apmoblist)
-    local sig = pullListSignature(apmoblist)
-    local hasTarget = apmoblist and apmoblist[1] ~= nil
-    if not hasTarget then
-        rc.pullRadiusHadTarget = nil
-        rc.pullSpawnWaitSince = nil
-        rawset(rc, 'pullListSignature', nil)
-        return true
-    end
-    local prevSig = rawget(rc, 'pullListSignature')
-    if prevSig ~= sig then
-        rc.pullRadiusHadTarget = nil
-        rc.pullSpawnWaitSince = nil
-        rawset(rc, 'pullListSignature', sig)
-    end
-    if not rc.pullRadiusHadTarget then
-        rc.pullRadiusHadTarget = true
-        rc.pullSpawnWaitSince = mq.gettime()
-    end
-    if rc.pullSpawnWaitSince and (mq.gettime() - rc.pullSpawnWaitSince) < PULL_SPAWN_FTE_WAIT_MS then
-        if not pullWaitBlocksStatus(rc) then
-            rc.statusMessage = 'Waiting before pull...'
-        end
-        return true
-    end
-    rc.pullSpawnWaitSince = nil
-    return false
-end
-
 function botpull.StartPull()
     local rc = state.getRunconfig()
     if not canStartPull(rc) then
@@ -822,13 +823,16 @@ function botpull.StartPull()
 
     ensureCampAndAnchor(rc)
     local apmoblist = spawnutils.buildPullMobList(rc)
-    if gatePullSpawnWait(rc, apmoblist) then
+    local agedList, spawnWait = syncAndFilterAgedPullMobs(rc, apmoblist)
+    if spawnWait then
         local pullCount = apmoblist and #apmoblist or 0
-        bardtwist.BardDbgNow('pull blocked: reason=spawn-wait pullList=%d', pullCount)
+        if pullCount > 0 then
+            bardtwist.BardDbgNow('pull blocked: reason=spawn-wait pullList=%d aged=0', pullCount)
+        end
         return
     end
     local maxCandidates = tonumber(myconfig.pull.backupCandidates) or 3
-    local targets = selectPullTargets(apmoblist, rc, maxCandidates)
+    local targets = selectPullTargets(agedList, rc, maxCandidates)
     if not targets[1] then
         local pullCount = apmoblist and #apmoblist or 0
         bardtwist.BardDbgNow('pull blocked: reason=no-target pullList=%d', pullCount)
