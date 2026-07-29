@@ -877,10 +877,9 @@ function M.draw()
                     elseif entry.key == 'dosongs' then
                         local rc = state.getRunconfig()
                         rc.dosongs = not value
+                        -- Off: stop immediately (cmd only). On: BuffCheck Ensure on next tick (not ImGui).
                         if rc.dosongs == false then
                             bardtwist.StopTwist()
-                        elseif botconfig.config.settings.dobuff then
-                            bardtwist.EnsureDefaultTwistRunning()
                         end
                     else
                         botconfig.config.settings[entry.key] = not value

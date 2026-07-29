@@ -811,12 +811,20 @@ local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
     if not engageTargetId then return end
 
+    local function mezExit(reason, ...)
+        if spellutils.IsMezDebug() then
+            spellutils.MezLog('engageTarget exit: ' .. reason, ...)
+        end
+    end
+
     if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(engageTargetId), state.getRunconfig()) then
+        mezExit('engage_not_allowed id=%s', tostring(engageTargetId))
         disengageCombat('engage_not_allowed')
         return
     end
 
     if utils.isProtectedSpawn(mq.TLO.Spawn(engageTargetId)) then
+        mezExit('protected_spawn id=%s', tostring(engageTargetId))
         disengageCombat('protected_spawn')
         return
     end
@@ -851,13 +859,19 @@ local function engageTarget()
         mq.cmdf('/pet attack %s', engageTargetId)
     end
 
-    if not myconfig.settings.domelee then return end
+    if not myconfig.settings.domelee then
+        mezExit('domelee_off id=%s', tostring(engageTargetId))
+        return
+    end
 
     if mq.TLO.Target.ID() ~= engageTargetId then
         targeting.TargetAndWait(engageTargetId, 500)
     end
 
-    if mq.TLO.Target.ID() ~= engageTargetId then return end
+    if mq.TLO.Target.ID() ~= engageTargetId then
+        mezExit('target_mismatch want=%s got=%s', tostring(engageTargetId), tostring(mq.TLO.Target.ID()))
+        return
+    end
 
     -- Blocked by LoS but reachable: pathfind around the obstruction; stick takes over on arrival.
     if navToEngageTargetIfBlocked(engageTargetId, 'engage') then
@@ -865,6 +879,8 @@ local function engageTarget()
             if state.canStartBusyState(state.STATES.melee) then
                 state.setRunState(state.STATES.melee, { phase = 'moving_closer', deadline = mq.gettime() + 8000, priority = bothooks.getPriority('doMelee') })
             end
+        else
+            mezExit('los_blocked_brd_no_stick id=%s', tostring(engageTargetId))
         end
         return
     end
@@ -885,22 +901,41 @@ function botmelee.retargetAndEngageAfterBardMez(excludeId)
     local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
     local assistName = tankrole.GetAssistTargetName()
     local resolved = nil
+    local via = 'none'
+    local gateOk = false
+    local maHp = nil
     local _, _, maTargetId = spellutils.GetAssistInfo(true, assistpct)
-    if maTargetId and maTargetId ~= 0 and maTargetId ~= excludeId
-        and botmelee.matarTargetPassesAssistEngageGate(maTargetId, rc) then
-        resolved = maTargetId
-    else
-        resolved = resolveBardCampEngageTarget(rc, assistName, assistpct, excludeId)
+    if maTargetId and maTargetId ~= 0 and maTargetId ~= excludeId then
+        gateOk = botmelee.matarTargetPassesAssistEngageGate(maTargetId, rc)
+        if gateOk then
+            resolved = maTargetId
+            via = 'ma_assist'
+        else
+            maHp = mq.TLO.Spawn(maTargetId).PctHPs()
+        end
     end
     if not resolved then
-        spellutils.MezLog('post-mez engage: no resolve (excludeId=%s)', tostring(excludeId))
+        resolved = resolveBardCampEngageTarget(rc, assistName, assistpct, excludeId)
+        if resolved then via = 'camp_fallback' end
+    end
+    spellutils.MezLog(
+        'post-mez resolve: via=%s maId=%s gate=%s assistpct=%s maHp=%s excludeId=%s resolved=%s',
+        via, tostring(maTargetId), tostring(gateOk), tostring(assistpct), tostring(maHp),
+        tostring(excludeId), tostring(resolved))
+    if not resolved then
         return nil
     end
     targeting.TargetAndWait(resolved, 500)
     rc.engageTargetId = resolved
     botmelee.armMobprobEngageGrace(resolved)
     engageTarget()
-    spellutils.MezLog('post-mez engage: id %s', tostring(resolved))
+    local stickTarget = mq.TLO.Stick.StickTarget and mq.TLO.Stick.StickTarget() or nil
+    spellutils.MezLog(
+        'post-mez engage outcome: engageId=%s targetId=%s Combat=%s Stick=%s StickTarget=%s',
+        tostring(rc.engageTargetId), tostring(mq.TLO.Target.ID()),
+        tostring(mq.TLO.Me.Combat() and true or false),
+        tostring(mq.TLO.Stick.Active() and true or false),
+        tostring(stickTarget))
     return resolved
 end
 
@@ -1039,7 +1074,9 @@ function botmelee.AdvCombat()
     if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
 
+    local engageBranch = 'none'
     if id then
+        engageBranch = 'main'
         local prevEngageId = rc.engageTargetId
         local isNewEngage = not prevEngageId or prevEngageId ~= id
         botmelee.armMobprobEngageGrace(id)
@@ -1072,11 +1109,13 @@ function botmelee.AdvCombat()
     elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] then
         local resolved = resolveBardCampEngageTarget(rc, assistName, assistpct)
         if resolved then
+            engageBranch = 'brd_fallback'
             rc.engageTargetId = resolved
             engageTarget()
         else
             local keepId = rc.engageTargetId
             if keepId and botmelee.matarTargetPassesAssistEngageGate(keepId, rc) then
+                engageBranch = 'brd_keep'
                 engageTarget()
             elseif keepId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(keepId)) then
                 rc.engageTargetId = nil
@@ -1084,6 +1123,13 @@ function botmelee.AdvCombat()
         end
     else
         disengageCombat('no_engage_target')
+    end
+    if spellutils.IsMezDebug() and mq.TLO.Me.Class.ShortName() == 'BRD'
+        and rc.MobList[1] and not mq.TLO.Me.Combat() and not mq.TLO.Stick.Active() then
+        local campResolved = resolveBardCampEngageTarget(rc, assistName, assistpct)
+        spellutils.DbgMezTrace(
+            'AdvCombat idle: assistId=%s campResolved=%s engageId=%s branch=%s',
+            tostring(id), tostring(campResolved), tostring(rc.engageTargetId), engageBranch)
     end
     if rc.engageTargetId then
         spawnutils.mergeEngageTargetIntoMobList(rc)
@@ -1128,7 +1174,13 @@ function botmelee.getHookFn(name)
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             local rc = state.getRunconfig()
             if rc.followCatchUp then return end
-            if rc.bardTwistOnceWait and mq.TLO.Me.Class.ShortName() == 'BRD' then return end
+            if rc.bardTwistOnceWait and mq.TLO.Me.Class.ShortName() == 'BRD' then
+                local w = rc.bardTwistOnceWait
+                spellutils.DbgMezTrace(
+                    'doMelee skipped: bardTwistOnceWait evalId=%s engageId=%s',
+                    tostring(w and w.EvalID), tostring(rc.engageTargetId))
+                return
+            end
             -- Pulling intentionally operates outside camp pin; disengage here fights botpull stick/nav.
             if state.getRunState() == state.STATES.pulling then return end
             if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
