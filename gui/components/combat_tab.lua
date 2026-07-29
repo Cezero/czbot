@@ -22,6 +22,8 @@ function M.draw()
     spell_entry.drawTabIntro({ flagKey = 'domelee', flagNoun = 'Melee' })
     if not botconfig.config.melee then botconfig.config.melee = {} end
     local melee = botconfig.config.melee
+    local style = ImGui.GetStyle()
+    ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, style.ItemSpacing.x, 2)
 
     -- Line 1: Assist At, Pet Attack, Off Tank, optional Offset
     ImGui.Text('Assist At')
@@ -52,7 +54,6 @@ function M.draw()
     local value, pressed = ImGui.Checkbox('##combat_offtank', otChecked)
     if pressed then melee.offtank = value; runConfigLoaders() end
 
-    ImGui.Spacing()
     ImGui.Text('MT Sticky')
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip('When this bot is the MT (and not an offtank), stay on target even if MA changes.')
@@ -116,7 +117,6 @@ function M.draw()
     end
 
     -- Line 2: Stick Settings
-    ImGui.Spacing()
     ImGui.Text('Stick Settings')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Stick command when engaging.') end
     ImGui.SameLine()
@@ -127,7 +127,6 @@ function M.draw()
     local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, flags)
     if stickCh and stickNew ~= nil then melee.stickcmd = stickNew; runConfigLoaders() end
 
-    ImGui.Spacing()
     ImGui.Text('Stay behind')
     if ImGui.IsItemHovered() then
         local stickTok = (mq.TLO.Me.Class.ShortName() == 'ROG') and 'behind' or '!front'
@@ -151,7 +150,6 @@ function M.draw()
     end
 
     if mq.TLO.Me.Class.ShortName() == 'ROG' then
-        ImGui.Spacing()
         ImGui.Text('Evade aggro %')
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip('At or above this Me.PctAggro (level 20+), use Hide to dump aggro during combat. Requires Hide ready.')
@@ -165,7 +163,6 @@ function M.draw()
 
     -- Line 3: Min Mana (if class has mana pool)
     if mq.TLO.Me.MaxMana() and mq.TLO.Me.MaxMana() > 0 then
-        ImGui.Spacing()
         ImGui.Text('Min Mana')
         if ImGui.IsItemHovered() then ImGui.SetTooltip('Min mana %% to engage.') end
         ImGui.SameLine()
@@ -174,6 +171,7 @@ function M.draw()
         local mmNew, mmCh = inputs.boundedInt('combat_minmana', mmVal, 0, 100, 5, '##combat_minmana')
         if mmCh then melee.minmana = mmNew; runConfigLoaders() end
     end
+    ImGui.PopStyleVar(1)
 end
 
 return M

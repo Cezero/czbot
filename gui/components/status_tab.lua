@@ -242,7 +242,7 @@ function M.drawControls()
     ImGui.PushStyleColor(ImGuiCol.Button, BLACK)
     ImGui.PushStyleColor(ImGuiCol.Text, RED)
     if ImGui.SmallButton(Icons.FA_POWER_OFF .. '##exit') then
-        if botconfig.config.settings.confirmExit ~= false then
+        if botconfig.config.settings.confirmExit == true then
             _exitConfirm.open = true
             _exitConfirm.pendingClose = nil
             modals.openConfirmModal(EXIT_MODAL_ID)

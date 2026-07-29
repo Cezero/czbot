@@ -61,6 +61,9 @@ function M.draw()
     end
     if not pull.spell then pull.spell = { gem = 'melee', spell = '', range = nil } end
 
+    local style = ImGui.GetStyle()
+    ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, style.ItemSpacing.x, 2)
+
     spell_entry.draw(pull.spell, {
         id = 'pull_spell',
         label = 'Method: ',
@@ -97,13 +100,11 @@ function M.draw()
         { 1, 1, 1, 1 },         { 1, 1, 0, 1 },      { 1, 0.2, 0.2, 1 },
     }
     local conColors = botconfig.ConColors or {}
-    ImGui.Spacing()
     ImGui.Text('Target Filter: ')
     ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local tfNew, tfCh = combos.combo('pull_target_filter', targetFilterIdx, targetFilterOptions, nil, nil)
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Target filter: Con colors or level range for valid pull targets.') end
-    ImGui.Spacing()
     if tfCh then
         pull.usePullLevels = (tfNew == 2)
         runConfigLoaders()
@@ -228,7 +229,6 @@ function M.draw()
     local fteSecNew, fteSecCh = inputs.boundedInt('pull_fteLockoutSec', fteSec, 1, 600, 10, '##pull_fteLockoutSec')
     if fteSecCh then pull.fteLockoutSec = fteSecNew; runConfigLoaders() end
 
-    ImGui.Spacing()
     ImGui.Text('Backup candidates')
     if ImGui.IsItemHovered() then ImGui.SetTooltip('Max pull targets queued per outing (1–5). On FTE, engaged, below 100%% HP, or no-aggro timeout, tries the next target before returning to camp. Set to 1 for single-target behavior.') end
     ImGui.SameLine()
@@ -271,6 +271,7 @@ function M.draw()
         end
         runConfigLoaders()
     end
+    ImGui.PopStyleVar(1)
 end
 
 return M

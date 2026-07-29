@@ -28,7 +28,7 @@
 ---@field maCampAnchor boolean|nil when true, MobList anchor follows nearby MA; inject ATTACK targets
 ---@field maAnchorLeash number|nil max MA distance for anchor/inject; defaults to acleash
 ---@field spelldb string|nil
----@field confirmExit boolean|nil when true, GUI Exit button shows a confirmation dialog (default on)
+---@field confirmExit boolean|nil when true, GUI Exit button shows a confirmation dialog (default off)
 ---@field antiAfk boolean|nil when true, open/close a random bag (or inventory) after ~3–4 min true idle (default on)
 
 ---@class ConfigPullSpell
@@ -1266,8 +1266,8 @@ function M.Load(path)
     -- Leash-to-radius: when on, melee returns to camp instead of chasing an engaged mob past the radius.
     -- Persisted seed for the session-only rc.doCampAcleash (default on).
     if M.config.settings.campAcleash == nil then M.config.settings.campAcleash = true end
-    -- GUI Exit button: show confirmation dialog before terminating (default on).
-    if M.config.settings.confirmExit == nil then M.config.settings.confirmExit = true end
+    -- GUI Exit button: show confirmation dialog before terminating (default off).
+    if M.config.settings.confirmExit == nil then M.config.settings.confirmExit = false end
     -- Anti-AFK: open/close a random bag (or inventory) after ~3–4 min continuous true idle (default on).
     if M.config.settings.antiAfk == nil then M.config.settings.antiAfk = true end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end

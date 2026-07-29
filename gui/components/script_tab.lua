@@ -177,7 +177,7 @@ local function drawScriptTree(tbl)
 end
 
 function M.draw()
-    local confirmOn = (botconfig.config.settings.confirmExit ~= false)
+    local confirmOn = (botconfig.config.settings.confirmExit == true)
     local confirmVal, confirmPressed = ImGui.Checkbox('Confirm before Exit##confirm_exit', confirmOn)
     if confirmPressed then
         botconfig.config.settings.confirmExit = confirmVal
