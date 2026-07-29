@@ -323,7 +323,6 @@ end
 
 local function drawBardTwistSection()
     if not bardtwist.IsBard() then return end
-    ImGui.Spacing()
     if not ImGui.CollapsingHeader('Bard twist') then return end
     -- Read-only info panel: it must never crash the GUI. The body has no Begin/End, so wrapping it in
     -- pcall leaves the ImGui stack balanced even on error; surface the error instead of dying.
@@ -386,7 +385,6 @@ local function rescanNearbyPlayers()
 end
 
 local function drawNearbyPlayersSection()
-    ImGui.Spacing()
     if not ImGui.CollapsingHeader('Players nearby (out of group)') then return end
     if mq.gettime() >= _nearbyPlayersNextScan then
         if not pcall(rescanNearbyPlayers) then _nearbyPlayers = {} end
@@ -761,8 +759,8 @@ function M.draw()
         ImGui.EndTable()
     end
 
-    -- Sit/Mount (full width): progressive disclosure so the landing stays compact.
-    ImGui.Spacing()
+    -- Sit/Mount+Nuke+lists (full width): tighter ItemSpacing so collapsing headers stack compactly.
+    ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, style.ItemSpacing.x, 2)
     -- Mount vars outside the header so the edit modal persists regardless of header state.
     local mountcast = botconfig.config.settings.mountcast or 'none'
     local mountName, mountType = mountcast:match('^%s*(.-)%s*|%s*(.-)%s*$')
@@ -889,8 +887,7 @@ function M.draw()
                     rc.nukeResistDisabledRecent = nil
                     botconfig.saveNukeFlavorsToCommon()
                 end,
-            })
-            ImGui.Spacing()
+                })
         end
     end
 
@@ -902,7 +899,6 @@ function M.draw()
 
     -- Recent activity (newest first): the real actions the bot has taken, so the rapid subsystem-check
     -- ("X Check") idle cycle in the header doesn't hide what actually happened.
-    ImGui.Spacing()
     ImGui.Separator()
     ImGui.TextColored(WHITE, '%s', 'Recent activity')
     if #_activity == 0 then
@@ -915,6 +911,7 @@ function M.draw()
             ImGui.TextColored(LIGHT_GREY, '  %3ds  %s', ago, e.msg)
         end
     end
+    ImGui.PopStyleVar(1)
 end
 
 return M
