@@ -1,4 +1,4 @@
-﻿-- Mob Lists tab: exclude, priority, and charm lists for the current zone.
+﻿-- Lists tab: exclude, priority, and charm lists for the current zone.
 
 local mq = require('mq')
 local ImGui = require('ImGui')

@@ -10,7 +10,6 @@ local chchain_tab = require('gui.components.chchain_tab')
 local buff_tab = require('gui.components.buff_tab')
 local cure_tab = require('gui.components.cure_tab')
 local moblist_tab = require('gui.components.moblist_tab')
-local rolelists_tab = require('gui.components.rolelists_tab')
 local script_tab = require('gui.components.script_tab')
 local status_tab = require('gui.components.status_tab')
 local help_tab = require('gui.components.help_tab')
@@ -50,10 +49,9 @@ local TABS = {
         visible = function() return mq.TLO.Me.Class.ShortName() == 'CLR' end,
     },
     { label = 'Buff',            draw = buff_tab.draw },
-    { label = 'Debuff/Mez/Nuke', draw = debuff_tab.draw },
+    { label = 'Debuff',          draw = debuff_tab.draw, tooltip = 'Debuff/Mez/Nuke' },
     { label = 'Cure',            draw = cure_tab.draw },
-    { label = 'Roles',           draw = rolelists_tab.draw },
-    { label = 'Mob lists',       draw = moblist_tab.draw },
+    { label = 'Lists',           draw = moblist_tab.draw, tooltip = 'Lists & Filters' },
     { label = 'Advanced',        draw = script_tab.draw },
     { label = 'Help',            draw = help_tab.draw },
 }
@@ -79,7 +77,11 @@ local function updateImGui()
         if ImGui.BeginTabBar('CZBot GUI') then
             for _, tab in ipairs(TABS) do
                 if not tab.visible or tab.visible() then
-                    if ImGui.BeginTabItem(tab.label) then
+                    local open = ImGui.BeginTabItem(tab.label)
+                    if tab.tooltip and ImGui.IsItemHovered() then
+                        ImGui.SetTooltip('%s', tab.tooltip)
+                    end
+                    if open then
                         tab.draw()
                         ImGui.EndTabItem()
                     end

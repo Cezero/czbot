@@ -815,18 +815,6 @@ local function cmd_engagextargetonly(args)
     log.say('Engage XTarget-only %s', botconfig.config.settings.engageXTargetOnly == true and 'on' or 'off')
 end
 
-local function cmd_role(args)
-    local ok, key, invalidateRoles = botconfig.ApplyRole(args[2])
-    if invalidateRoles then
-        tankrole.invalidateAll()
-    end
-    if ok then
-        log.say('Applied role preset: \ag%s\ax', key)
-    else
-        log.say('Unknown role "%s" (use: tank, ma, dps, healer)', tostring(args[2]))
-    end
-end
-
 local function cmd_mezdebug(args)
     local spellutils = require('lib.spellutils')
     local mode = args[2] and string.lower(args[2]) or ''
@@ -1542,7 +1530,6 @@ local handlers = {
     macampanchor = cmd_macampanchor,
     engagextargetonly = cmd_engagextargetonly,
     xtargetonly = cmd_engagextargetonly,
-    role = cmd_role,
     mezdebug = cmd_mezdebug,
     buffdebug = cmd_buffdebug,
     barddebug = cmd_barddebug,

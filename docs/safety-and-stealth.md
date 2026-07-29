@@ -67,9 +67,9 @@ On first load, if `noCombatZones` is missing or empty, CZBot seeds these default
 
 Healing and curing are **not** gated by no-combat zones.
 
-### GUI: Mob lists tab
+### GUI: Lists tab
 
-Open the GUI (**`/czshow`**) → **Mob lists** tab.
+Open the GUI (**`/czshow`**) → **Lists** tab.
 
 **No combat zones** appears below the per-zone exclude, priority, and charm lists (global; not per-zone):
 
@@ -89,7 +89,7 @@ Logic lives in `lib/nocombatzones.lua`. Runtime checks use `utils.isNonCombatZon
 
 ## See also
 
-- [Commands and configuration reference](commands-and-configuration-reference.md) — **cz_common.lua** layout, Mob lists commands
+- [Commands and configuration reference](commands-and-configuration-reference.md) — **cz_common.lua** layout, Lists commands
 - [Tanking configuration](tanking-configuration.md) — **acleash** (camp radius and bind stealth radius)
 - [Pull configuration](pull-configuration.md) — exclude/priority lists on the same GUI tab
 - [Bot logic: AddSpawnCheck](botlogic/hook-addspawncheck.md)

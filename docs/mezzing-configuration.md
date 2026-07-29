@@ -5,7 +5,7 @@ This document explains how to set up **mezzing** (crowd control: mez spells on a
 ## Overview
 
 - **Mezzing = debuffs.** There is no separate “mez” section. You add your mez spell(s) under **`config.debuff.spells`** and set **bands** to **notmatar** (adds) so the bot mezzes mobs other than the MA’s target. Optionally use **matar** or **named** for specific cases.
-- **Charm** (mez that makes the mob your pet) uses the same debuff entries; charm spells are auto-detected. Add your charm spell as a debuff and manage allowed mob names in the **Charm list** for the current zone (Mob Lists tab or `/cz charm`). When charm breaks, the bot can recast. See [Debuffing configuration](debuffing-configuration.md).
+- **Charm** (mez that makes the mob your pet) uses the same debuff entries; charm spells are auto-detected. Add your charm spell as a debuff and manage allowed mob names in the **Charm list** for the current zone (Lists tab or `/cz charm`). When charm breaks, the bot can recast. See [Debuffing configuration](debuffing-configuration.md).
 - **Level:** The bot checks the spell’s **MaxLevel** against the mob’s level for Enthrall-type spells; mobs above that level are skipped. Optionally set **Minimum mez level** on the Debuff tab (or **`settings.mezMinLevel`**) to skip trivial low-level adds; `0` disables that filter.
 - For all debuff options (recast, delay, immune check, etc.), see [Debuffing configuration](debuffing-configuration.md).
 
@@ -48,7 +48,7 @@ debuff = {
 
 **Example: charm mez**
 
-Add your charm spell as a debuff entry (charm spells are auto-detected). Manage allowed mob names in the **Charm list** for the current zone (Mob Lists tab or `/cz charm`). The bot will **pet leave** before casting and can request a recast when charm breaks. Set bands as needed (e.g. notmatar, min 30, max 100).
+Add your charm spell as a debuff entry (charm spells are auto-detected). Manage allowed mob names in the **Charm list** for the current zone (Lists tab or `/cz charm`). The bot will **pet leave** before casting and can request a recast when charm breaks. Set bands as needed (e.g. notmatar, min 30, max 100).
 
 ---
 

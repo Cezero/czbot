@@ -4,7 +4,7 @@ CHChain rotates **Complete Heal** casts across clerics listed in **`ch_healers`*
 
 ## Setup
 
-1. **Roles** tab → populate `mt_list` (tank priority).
+1. **Advanced** tab → populate `mt_list` (tank priority).
 2. **CH Chain** tab → populate `ch_healers`, timing, options.
 3. On each cleric in the list: turn on **CH Chain enabled** (or `/cz chchain on`). This is a doHeal-style feature flag — normal heals/buffs continue until the chain starts. Persists in char settings.
 4. Start the chain from **any bot** (e.g. driving toon hotkey): **Start Chain** or `/cz chchain start`. That publishes `kickoff`; enabled clerics arm a local clock (`now + startCountdownMs`), enter exclusive mode, and fire by slot after countdown.

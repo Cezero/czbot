@@ -64,7 +64,6 @@ When **`settings.engageXTargetOnly`** is `true` (Combat tab or **`/cz engagextar
 
 - Default is **`false`** (normal camp mob list behavior).
 - **`/cz attack`** bypasses the gate for that engagement until the target dies or you abort.
-- Role presets can set this per role; see [Role presets](tank-and-assist-roles.md#role-presets).
 
 ---
 

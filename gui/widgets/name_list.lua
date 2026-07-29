@@ -1,6 +1,6 @@
 -- Reusable name-list section: a bordered table of names with Remove (and optional Up/Down reorder),
 -- plus an "Add target" / manual-add row. Consolidates the logic that was triplicated across
--- rolelists_tab (ma_list, mt_list) and moblist_tab (exclude, priority, charm).
+-- script_tab / Advanced (ma_list, mt_list) and moblist_tab (exclude, priority, charm).
 --
 -- Preserves the per-frame buffer-sync fix: the manual-add InputText uses EnterReturnsTrue, so
 -- `changed` only fires on Enter; the caller-visible buffer is synced every frame so the Add button

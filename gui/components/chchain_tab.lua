@@ -30,7 +30,7 @@ end
 
 local function drawTankPriorityReadOnly()
     section.header('Tank priority (mt_list)')
-    ImGui.TextWrapped('Edit tank order on the Roles tab. CH chain heals the first alive tank in this list.')
+    ImGui.TextWrapped('Edit tank order on the Advanced tab. CH chain heals the first alive tank in this list.')
     local rc = state.getRunconfig()
     local list = rc.MtList or {}
     local activeName = nil

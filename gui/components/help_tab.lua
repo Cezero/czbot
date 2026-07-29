@@ -31,7 +31,6 @@ local GROUPS = {
         { "/cz assist set <name>", "Set the Main Assist (persists across reloads)." },
         { "/cz assist automatic", "Set Main Assist to automatic resolution." },
         { "/cz assist status", "Print MA/MT resolution diagnostics." },
-        { "/cz role <tank|ma|dps|healer>", "Apply a role preset: behavior flags + tank/assist designation." },
         { "/cz offtank", "Toggle off-tank mode for this character." },
         { "/cz actor ping|status", "Czbot Actor channel: ping (diagnostic), status (queue depth/drain/drop + traffic)." },
         { "/cz actordebug on|off", "Log ma_update/mt_update send/recv when actordebug is on." },
@@ -76,7 +75,7 @@ local GROUPS = {
         { "/cz followme [group|raid|off|stop]", "Leader follow: group/raid (auto-detect) follows you via Actor channel." },
         { "/cz travel <name>", "Travel mode: follow only, combat/pull suspended." },
     } },
-    { title = "Mob lists & filters", cmds = {
+    { title = "Lists & filters", cmds = {
         { "/cz exclude", "Add your target to the exclude list (never engage)." },
         { "/cz priority", "Add your target to the pull priority list." },
         { "/cz charm", "Add your target to the charm list." },

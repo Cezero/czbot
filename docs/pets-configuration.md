@@ -1,6 +1,6 @@
 # Pets Configuration
 
-This document explains how to configure **pet summoning**, **pet assist** (sending the pet on the engage target), and **pet buffing**. Charm (mez/charm that uses a mob as a pet) is configured in the debuff section; see [Debuffing configuration](debuffing-configuration.md) and the per-zone **Charm list** (Mob Lists tab or `/cz charm`).
+This document explains how to configure **pet summoning**, **pet assist** (sending the pet on the engage target), and **pet buffing**. Charm (mez/charm that uses a mob as a pet) is configured in the debuff section; see [Debuffing configuration](debuffing-configuration.md) and the per-zone **Charm list** (Lists tab or `/cz charm`).
 
 ## Overview
 
@@ -71,7 +71,7 @@ To buff **your pet** or **other group members’ pets**, add buff entries with b
 
 When you use a **charm** spell (e.g. Enchanter mez that makes the mob your pet), it is configured in the **debuff** section:
 
-- Add a debuff entry with the charm spell (charm spells are auto-detected). Manage allowed mob names in the **Charm list** for the current zone (Mob Lists tab or `/cz charm`).
+- Add a debuff entry with the charm spell (charm spells are auto-detected). Manage allowed mob names in the **Charm list** for the current zone (Lists tab or `/cz charm`).
 - Before casting charm, the bot issues **pet leave** so your current pet is released.
 - When charm breaks, the bot can request a recast on that spawn.
 

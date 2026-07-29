@@ -69,7 +69,7 @@ The bot builds a list of valid mobs (within camp leash and filters). This list i
 For each debuff spell, the bot tries the following in order; the **first** valid target wins:
 
 1. **Charm recast** — If charm broke and a recast was requested for this spell.
-2. **Charm targets** — Mobs in the per-zone **Charm list** (Mob Lists tab or `/cz charm`); charm spells are auto-detected (spell has Charm effect).
+2. **Charm targets** — Mobs in the per-zone **Charm list** (Lists tab or `/cz charm`); charm spells are auto-detected (spell has Charm effect).
 3. **notmatar** — Any other mob in the camp list (adds). Only tried if bands include **notmatar**.
 4. **matar** — The MA’s current target. Only tried if the spell’s bands include **matar**.
 5. **named** — Named mob matching the chosen `matar` target (MA by default; MT when `onlyMT=true`). Only tried if bands include **named**.

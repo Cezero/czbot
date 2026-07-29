@@ -103,7 +103,7 @@ debuff = {
 
 ## Charm (special case)
 
-**Charm spells are auto-detected** (spell has the Charm effect, SPA 22). Add your charm spell as a debuff entry. The list of mob names the bot is allowed to charm is a **per-zone list** in the common config: use the **Mob Lists** tab in the UI (Charm list) or **`/cz charm <name>`** / **`/cz charm remove <name>`** to add or remove mobs. When charm breaks, the bot can request a recast on that spawn. Before casting charm, the bot issues **pet leave** so your current pet is released. See also [Pets configuration](pets-configuration.md) for charm in context.
+**Charm spells are auto-detected** (spell has the Charm effect, SPA 22). Add your charm spell as a debuff entry. The list of mob names the bot is allowed to charm is a **per-zone list** in the common config: use the **Lists** tab in the UI (Charm list) or **`/cz charm <name>`** / **`/cz charm remove <name>`** to add or remove mobs. When charm breaks, the bot can request a recast on that spawn. Before casting charm, the bot issues **pet leave** so your current pet is released. See also [Pets configuration](pets-configuration.md) for charm in context.
 
 ---
 

@@ -82,7 +82,7 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 
 **Throttled refresh:** Every ~2s, automatic MA/MT are re-resolved so higher-priority roles can reclaim after rez or role changes.
 
-**Invalidation events:** zone change, `/cz tank set`, `/cz assist set`, role preset Apply, `ma_list`/`mt_list` edits, `/cz reloadcommon`, `maAnchorLeash` change. Use `/cz tank status` for a live diagnostic (cache cleared before printing).
+**Invalidation events:** zone change, `/cz tank set`, `/cz assist set`, `ma_list`/`mt_list` edits, `/cz reloadcommon`, `maAnchorLeash` change. Use `/cz tank status` for a live diagnostic (cache cleared before printing).
 
 ---
 
@@ -111,7 +111,7 @@ ma_list = { "MaBot", "BackupMa" },
 mt_list = { "TankBot", "OfftankBot" },
 ```
 
-Edit via `/czshow` → **Roles** tab or by hand in `cz_common.lua`. After editing on one bot, run **`/cz reloadcommon`** on others sharing the same `cz_common.lua`.
+Edit via `/czshow` → **Advanced** tab or by hand in `cz_common.lua`. After editing on one bot, run **`/cz reloadcommon`** on others sharing the same `cz_common.lua`.
 
 ---
 
