@@ -109,6 +109,13 @@ local function getCurrentTwistGems()
     return parseTwistListString(currentListRaw and tostring(currentListRaw) or '')
 end
 
+--- True when Twist.List is exactly one entry equal to gem (MQ2Twist /twist once list).
+function bardtwist.IsTwistListSolelyGem(gem)
+    if not gem then return false end
+    local gems = getCurrentTwistGems()
+    return #gems == 1 and gems[1] == gem
+end
+
 --- Apply desired twist list: skip if already twisting with same list; /twist start if list matches but stopped; else full /twist.
 ---@return string action tag for debug logging
 local function applyTwistList(desiredGems)
@@ -419,8 +426,6 @@ end
 ---@return boolean true when twistOnceActive was cleared
 function bardtwist.ReconcileTwistOnceActive(mode)
     if not twistOnceActive then return false end
-    local rc = state.getRunconfig()
-    if rc.bardTwistOnceWait then return false end
     mode = mode or bardtwist.GetCurrentTwistMode()
     if not mode then return false end
     local desiredGems = bardtwist.GetTwistListForMode(mode)

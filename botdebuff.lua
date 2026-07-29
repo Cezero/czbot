@@ -791,6 +791,13 @@ end
 
 local BARD_TWIST_ONCE_HARD_CAP_MS = 2000
 
+local function finishTwistOnceWaitWithReason(rc, w, reason, opts)
+    opts = opts or {}
+    spellutils.MezLog('twist-once wait finish: reason=%s evalId=%s gem=%s',
+        tostring(reason), tostring(w.EvalID), tostring(w.entry and w.entry.gem))
+    finishBardTwistOnceWait(rc, w, opts)
+end
+
 --- BRD twist-once wait: wait for song, update debuff state, re-target if needed, resume twist for current mode.
 local function DebuffCheckHandleBardTwistOnceWait(rc)
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' or not rc.bardTwistOnceWait then
@@ -811,27 +818,46 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
     if bardTwistOnceShouldAbort(w, rc) then
         local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
         if stillSinging then w.singingStarted = true end
-        finishBardTwistOnceWait(rc, w, {
+        finishTwistOnceWaitWithReason(rc, w, 'abort', {
             stopTwist = bardtwist.IsTwistOnceActive() or stillSinging,
             attemptedCast = w.singingStarted == true,
         })
         return true
     end
 
-    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
-    if stillSinging then
-        w.singingStarted = true
-        return true
-    end
-
     local now = mq.gettime()
     if w.startedAt and now > w.startedAt + BARD_TWIST_ONCE_ABSOLUTE_MAX_MS then
-        finishBardTwistOnceWait(rc, w, {
+        finishTwistOnceWaitWithReason(rc, w, 'absolute_max', {
             stopTwist = bardtwist.IsTwistOnceActive(),
             attemptedCast = w.singingStarted == true,
         })
         return true
     end
+
+    local onceGem = w.entry.gem
+    local onceListActive = type(onceGem) == 'number' and bardtwist.IsTwistListSolelyGem(onceGem)
+    local stillSinging = mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0
+
+    if onceListActive then
+        w.onceListSeen = true
+    end
+
+    -- MQ2Twist cleared altTwist: List is no longer solely the once gem (only after we saw it).
+    if type(onceGem) == 'number' and not onceListActive and w.onceListSeen then
+        finishTwistOnceWaitWithReason(rc, w, 'once_list_cleared', {
+            attemptedCast = w.singingStarted == true or stillSinging,
+            recordDebuff = (w.singingStarted or stillSinging)
+                and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)),
+        })
+        return true
+    end
+
+    -- Only prolong while MQ2Twist still has the once list; combat-twist casting must not block finish.
+    if onceListActive and stillSinging then
+        w.singingStarted = true
+        return true
+    end
+
     if bardtwist.IsTwistOnceActive() then
         w.singingStarted = true
         local pastDeadline = w.deadline and now >= w.deadline
@@ -842,12 +868,17 @@ local function DebuffCheckHandleBardTwistOnceWait(rc)
         if not pastDeadline and not pastHardCap and not pastTwistOnceWindow then
             return true
         end
+        finishTwistOnceWaitWithReason(rc, w, 'twist_once_window', {
+            attemptedCast = true,
+            recordDebuff = spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)),
+        })
+        return true
     elseif not w.singingStarted and w.deadline and now < w.deadline then
         return true
     end
 
     local attemptedCast = w.singingStarted == true
-    finishBardTwistOnceWait(rc, w, {
+    finishTwistOnceWaitWithReason(rc, w, 'complete', {
         attemptedCast = attemptedCast,
         recordDebuff = attemptedCast and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(w.EvalID)),
     })
