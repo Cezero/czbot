@@ -1025,25 +1025,24 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
     end
     if not peerName or peerName == '' then return false end
     local peer = charinfo.GetInfo(peerName)
-    if not peer then
-        -- Non-peer: use Target buffs when already populated (precast targeted them).
-        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
-            local buffid = mq.TLO.Target.Buff(entry.spell).ID()
-            local buffdur = mq.TLO.Target.Buff(entry.spell).Duration() or 0
-            if buffid and buffid == spellid and buffdur >= BUFF_REFRESH_THRESHOLD_MS then
-                spellutils.BuffSkipObserveDuration(peerName, spellid, buffdur)
-                return true
-            end
+    if peer then
+        -- Watcher peers: trust live watchlist (need/slots/stacks). Leave peer-pet path above alone.
+        local cw = require('lib.charinfowatchers')
+        local scope = cw.phaseToScope(targethit)
+        if scope and scope ~= 'GRPAGG' then
+            return not cw.watchListHas('BUFF', scope, spellid, EvalID)
         end
         return false
     end
-    local dur = spellutils.PeerGetBuffDuration(peer, spellid)
-    if dur ~= nil then return abortFromDuration(peerName, dur) end
-    if spellutils.PeerHasBuff(peer, spellid) then
-        spellutils.BuffSkipObservePresent(peerName, spellid)
-        return true
+    -- Non-peer: use Target buffs when already populated (precast targeted them).
+    if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
+        local buffid = mq.TLO.Target.Buff(entry.spell).ID()
+        local buffdur = mq.TLO.Target.Buff(entry.spell).Duration() or 0
+        if buffid and buffid == spellid and buffdur >= BUFF_REFRESH_THRESHOLD_MS then
+            spellutils.BuffSkipObserveDuration(peerName, spellid, buffdur)
+            return true
+        end
     end
-    spellutils.BuffSkipClear(peerName, spellid)
     return false
 end
 
@@ -1061,18 +1060,12 @@ function spellutils.PeerHasPetBuff(peerInfo, spellid)
 end
 
 -- Returns true if the spawn already has this heal spell (buff or shortbuff). Used for HoT spells (autodetected via IsHoTSpell)
--- to avoid recasting HoTs. Covers self and peer PCs; non-peers are treated as not having the spell (no targeting).
+-- to avoid recasting HoTs on self. Peer heal phases use CharInfo heal watches (isHot); no PeerHasBuff here.
 function spellutils.TargetHasHealSpell(entry, spawnId)
     if not entry or not entry.spell or not spawnId or spawnId <= 0 then return false end
     local myid = mq.TLO.Me.ID()
     if spawnId == myid or spawnId == 1 then
         return mq.TLO.Me.FindBuff(entry.spell)()
-    end
-    local name = mq.TLO.Spawn(spawnId).Name()
-    local peer = charinfo.GetInfo(name)
-    if peer then
-        local spellid = mq.TLO.Spell(entry.spell).ID()
-        return spellutils.PeerHasBuff(peer, spellid)
     end
     return false
 end
