@@ -780,8 +780,18 @@ local function cmd_camprestdistance(args)
 end
 
 local function cmd_targetfilter(args)
-    botconfig.config.settings.TargetFilter = tonumber(args[2])
-    log.say('Setting TargetFilter to %d', botconfig.config.settings.TargetFilter)
+    local tf = tonumber(args[2])
+    if tf == nil then
+        log.say('Usage: /cz targetfilter <0|2>  (0 = LoS NPCs, 2 = All NPCs)')
+        return
+    end
+    if tf == 1 then tf = 0 end
+    if tf ~= 0 and tf ~= 2 then
+        log.say('TargetFilter must be 0 (LoS NPCs) or 2 (All NPCs)')
+        return
+    end
+    botconfig.config.settings.TargetFilter = tf
+    log.say('Setting TargetFilter to %d (%s)', tf, tf == 2 and 'All NPCs' or 'LoS NPCs')
 end
 
 local function cmd_mobfilter(args)
@@ -800,19 +810,6 @@ local function cmd_macampanchor(args)
         botconfig.config.settings.maCampAnchor = not (botconfig.config.settings.maCampAnchor ~= false)
     end
     log.say('MA camp anchor %s', botconfig.config.settings.maCampAnchor ~= false and 'on' or 'off')
-end
-
-local function cmd_engagextargetonly(args)
-    local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'on' or mode == 'true' or mode == '1' then
-        botconfig.config.settings.engageXTargetOnly = true
-    elseif mode == 'off' or mode == 'false' or mode == '0' then
-        botconfig.config.settings.engageXTargetOnly = false
-    else
-        botconfig.config.settings.engageXTargetOnly = not (botconfig.config.settings.engageXTargetOnly == true)
-    end
-    botconfig.ApplyAndPersist()
-    log.say('Engage XTarget-only %s', botconfig.config.settings.engageXTargetOnly == true and 'on' or 'off')
 end
 
 local function cmd_mezdebug(args)
@@ -1522,8 +1519,6 @@ local handlers = {
     targetfilter = cmd_targetfilter,
     mobfilter = cmd_mobfilter,
     macampanchor = cmd_macampanchor,
-    engagextargetonly = cmd_engagextargetonly,
-    xtargetonly = cmd_engagextargetonly,
     mezdebug = cmd_mezdebug,
     buffdebug = cmd_buffdebug,
     barddebug = cmd_barddebug,

@@ -40,16 +40,19 @@ local function isRoamMode()
     return myconfig.pull and myconfig.pull.roam == true
 end
 
---- True when any MobList spawn with LoS is within acleash of the player (roam in-face engage).
+--- True when any MobList spawn with LoS (or Auto-Hater LoS waiver) is within acleash of the player (roam in-face engage).
 local function roamMobInMeleeRange(rc)
     if not rc.MobList or not rc.MobList[1] then return false end
     local tfNum = tonumber(myconfig.settings.TargetFilter) or 0
     local meX, meY, meZ = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
     local acleashSq = myconfig.settings.acleashSq
     if not acleashSq then return false end
+    local level = tonumber(mq.TLO.Me.Level()) or 0
     for _, v in ipairs(rc.MobList) do
         if spawnutils.isAliveEngageSpawn(v) then
-            if tfNum == 2 or v.LineOfSight() then
+            local ok = tfNum == 2 or v.LineOfSight()
+                or (tfNum == 0 and level >= 20 and spawnutils.isOnXTargetAutoHater(v.ID()))
+            if ok then
                 local dSq = utils.getDistanceSquared3D(meX, meY, meZ, v.X(), v.Y(), v.Z())
                 if dSq and dSq <= acleashSq then return true end
             end

@@ -687,15 +687,18 @@ function M.draw()
             ImGui.SameLine(0, 2)
             ImGui.SetNextItemWidth(120)
             local tf = tonumber(botconfig.config.settings.TargetFilter) or 0
-            if tf < 0 or tf > 2 then tf = 0 end
-            local targetFilterIdx = tf + 1
-            local targetFilterOptions = { 'Aggressive NPCs', 'LoS NPCs', 'All NPCs' }
+            local targetFilterIdx = (tf == 2) and 2 or 1
+            local targetFilterOptions = { 'LoS NPCs', 'All NPCs' }
             local tfNew, tfCh = combos.combo('camp_targetfilter', targetFilterIdx, targetFilterOptions,
                 '##camp_targetfilter')
             if tfCh then
-                botconfig.config.settings.TargetFilter = tfNew - 1; runConfigLoaders()
+                botconfig.config.settings.TargetFilter = (tfNew == 2) and 2 or 0
+                runConfigLoaders()
             end
-            if ImGui.IsItemHovered() then ImGui.SetTooltip('Filter for which spawns count as valid camp mobs.') end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip(
+                    'LoS NPCs: camp mobs with line of sight (at level 20+, also XTarget Auto-Haters without LoS).\nAll NPCs: all NPCs in camp radius.')
+            end
             ImGui.EndTable()
         end
         ImGui.PopStyleColor(2)

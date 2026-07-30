@@ -20,7 +20,6 @@ This document explains how to configure the bot when it is the **Main Tank (MT)*
 | **zradius** | 75 | Max vertical (Z) difference from camp; mobs outside this are ignored for the mob list. |
 | **protectCasters** | `false` | MA: mid-fight peel to an add beating a pure caster for **protectCastersSec**. See [Protect casters](#protect-casters). |
 | **protectCastersSec** | `30` | Seconds a MobList add must keep the same pure-caster target before Protect casters peels. |
-| **engageXTargetOnly** | `false` | Reactive engage: only fight XTarget Auto-Hater mobs. Opt-in. See [Reactive engage](#reactive-engage). |
 
 ### Melee section
 
@@ -56,15 +55,6 @@ Under **`config.melee`**:
 ## Using disciplines and combat abilities
 
 To use **disciplines** or **combat abilities** (e.g. kick, bash, backstab), enable **`settings.dodebuff`** and add debuff entries under **`config.debuff.spells`** with **gem** `'disc'` (disciplines) or `'ability'` (combat abilities) and the desired **bands** (e.g. **matar** for the MA's target). Use a **burn** band phase for disciplines you only want during burn windows. See [Melee combat abilities](melee-combat-abilities.md) and [Debuffing configuration](debuffing-configuration.md#burn-window).
-
----
-
-## Reactive engage
-
-When **`settings.engageXTargetOnly`** is `true` (Combat tab or **`/cz engagextargetonly on`**), this bot only **engages**, **melees**, and **debuffs** mobs that appear on its **XTarget** list with the **Auto-Hater** flag. Use this when a separate character pulls and adds land on your XTarget before camp logic picks them up.
-
-- Default is **`false`** (normal camp mob list behavior).
-- **`/cz attack`** bypasses the gate for that engagement until the target dies or you abort.
 
 ---
 

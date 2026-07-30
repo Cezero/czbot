@@ -100,8 +100,7 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **actordebug**   | `on` / `off` / `queue [on/off]` | Role-claim logging, or throttled inbound queue debug. |
 | **tankrole**     | —                       | Alias for `/cz tank status` — automatic MA/MT resolution diagnostics.                                           |
 | **stickcmd**     | `<string>`              | Set stick command (e.g. `hold uw 7`).                                                                             |
-| **targetfilter** | `0` / `1` / `2`         | Filter for mob list: 0 = NPC + aggressive + LOS (pull only aggressive), 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
-| **engagextargetonly** / **xtargetonly** | `on` / `off` or toggle | **Reactive engage** (opt-in, default off): only engage, melee, and debuff mobs on your XTarget Auto-Hater list. Bypass with **`/cz attack`**. Combat tab checkbox or **`settings.engageXTargetOnly`**. |
+| **targetfilter** | `0` / `2` (legacy `1` → `0`) | Camp mob filter: `0` = LoS NPCs (at level 20+, also XTarget Auto-Haters without LoS); `2` = All NPCs in camp radius. |
 | **protectcasters** | `on` / `off` or toggle | **Protect casters** (opt-in, default off): as MA, peel to an add beating a pure caster for **protectCastersSec**. See [Tanking configuration](tanking-configuration.md#protect-casters). |
 | **protectcasterssec** | `<seconds>` | Continuous seconds before Protect casters peels (default 30; Combat tab when enabled). |
 | **burn**         | `[seconds]` / `off`     | Open or close a burn window. Debuffs with a **burn** band phase cast only while the window is active. Status tab **Burn** button does the same. Default window length if seconds omitted. |
@@ -220,13 +219,12 @@ return StoredConfig
 | **sitaggro**       | 60            | When mobs are in camp and level 20+, only sit when `Me.PctAggro` is below this (no hysteresis).                          |
 | **TankName**       | `"manual"`    | Main Tank name or `"automatic"` / `"manual"`. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).                                                                           |
 | **AssistName**     | (unset)       | Main Assist name or `"automatic"` / `"manual"`. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).                                                                         |
-| **TargetFilter**   | `0`           | Mob list filter (0/1/2).                                                                                                |
+| **TargetFilter**   | `0`           | Mob list filter: `0` = LoS NPCs (at level 20+, also XTarget Auto-Haters without LoS); `2` = All NPCs. Legacy `1` remaps to `0`. |
 | **petassist**      | `false`       | Boolean. When true, send pet on engage target; when false, pet does not engage. Default `false`.                                                                                      |
 | **acleash**        | 75            | Camp leash distance.                                                                                                    |
 | **followdistance** | 35            | Follow distance: beyond this the bot runs follow and defers combat, buffs, heals, debuffs, cures, mount, and forage until within range; within it, sit is allowed when mana below sitmana; stand when above sitmana + 3 (hysteresis). |
 | **zradius**        | 75            | Vertical range from camp for mob list.                                                                                  |
 | **campRestDistance** | 15          | Distance (units) to consider "at camp" for leash and return.                                                            |
-| **engageXTargetOnly** | `false`    | Reactive engage: when `true`, only engage/debuff mobs on your XTarget Auto-Hater list. Opt-in; use with a separate puller. **`/cz attack`** bypasses until target dies. |
 | **protectCasters** | `false` | Protect casters: MA peels to an add beating a pure caster for **protectCastersSec**. See [Tanking configuration](tanking-configuration.md#protect-casters). |
 | **protectCastersSec** | `30` | Seconds before Protect casters mid-fight peel. |
 | **antiAfk**      | `true`        | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. Status tab flag or **`/cz antiafk`**. |

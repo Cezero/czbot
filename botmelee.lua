@@ -360,7 +360,10 @@ local function isEngageableMobListSpawn(spawn)
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isSpawnWithinCampPin(spawn, rc) then return false end
     local tfNum = tonumber(myconfig.settings.TargetFilter) or 0
     if tfNum == 2 then return true end
-    return spawn.LineOfSight()
+    if tfNum ~= 0 then return false end
+    if spawn.LineOfSight() then return true end
+    return (tonumber(mq.TLO.Me.Level()) or 0) >= 20
+        and spawnutils.isOnXTargetAutoHater(sid)
 end
 
 
@@ -789,8 +792,8 @@ end
 -- waiting for LoS or a path to open (the mob or group moving). Returns true when LoS is blocked (the
 -- caller must not /stick); false when LoS is clear (caller sticks normally).
 -- Note: we intentionally do NOT gate on aggro here. Proactive no-LoS targeting is prevented upstream
--- (the MT only auto-selects mobs it can see; no-LoS picks come from the XTarget Auto-Hater path), and
--- an assist target is the group's committed mob — both are legitimate things to path to.
+-- (LoS TargetFilter; at level 20+ Auto-Haters may enter MobList without LoS), and an assist target
+-- is the group's committed mob — both are legitimate things to path to.
 local function navToEngageTargetIfBlocked(engageTargetId, context)
     if mq.TLO.Target.LineOfSight() then
         logEngageLoSClear(engageTargetId)
@@ -946,27 +949,6 @@ function botmelee.retargetAndEngageAfterBardMez(excludeId)
     return resolved
 end
 
--- Reactive engage selection (settings.engageXTargetOnly): pick the engage target ONLY from mobs on our
--- XTarget Auto-Hater list (aggro'd on the group). Closest-first, prefers the current engage target;
--- mez handling via selectEngageTargetFromLosList. Deliberately skips the /assist-based role resolution
--- so we don't spam /assist (and the "Auto attack on assist" game message) or proactively grab MobList NPCs.
-local function selectXTargetEngageTarget(rc)
-    local cands = spawnutils.getXTargetAutoHaterEngageables(rc)
-    if #cands == 0 then return nil end
-    local engageId = rc.engageTargetId
-    if engageId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then engageId = nil end
-    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
-    table.sort(cands, function(a, b)
-        local aId, bId = a.ID(), b.ID()
-        if engageId and aId == engageId and bId ~= engageId then return true end
-        if engageId and aId ~= engageId and bId == engageId then return false end
-        local da = utils.getDistanceSquared2D(meX, meY, a.X(), a.Y())
-        local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
-        return (da or 0) < (db or 0)
-    end)
-    return selectEngageTargetFromLosList(cands, engageId)
-end
-
 -- Resolve engageTargetId from role (MA picker / MT follower / OT / DPS), then engage or disengage.
 function botmelee.AdvCombat()
     local rc = state.getRunconfig()
@@ -998,8 +980,6 @@ function botmelee.AdvCombat()
         id = resolveMaBotTarget(rc)
     elseif rc.attackCommandEngage and rc.engageTargetId then
         id = rc.engageTargetId
-    elseif myconfig.settings.engageXTargetOnly == true and not rc.attackCommandEngage then
-        id = selectXTargetEngageTarget(rc)
     elseif myconfig.melee.offtank and assistName and mainTankName then
         id = resolveOfftankTarget(assistName, mainTankName, assistpct)
     elseif tankrole.AmIMainTank() and assistName and not tankrole.AmIMainAssist() then
@@ -1147,18 +1127,8 @@ function botmelee.getHookFn(name)
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local chaseEngage = spawnutils.shouldChaseOutsideCamp(rc)
             if not rc.MobList[1] and not chaseEngage then
-                -- The camp MobList can be empty even with a mob aggro'd on us: TargetFilter "Aggressive NPCs"
-                -- requires LineOfSight, so an auto-hater behind a pillar / up stairs (e.g. Sebilis, Velketor's)
-                -- is filtered out of MobList. The engageXTargetOnly path (AdvCombat -> selectXTargetEngageTarget
-                -- -> getXTargetAutoHaterEngageables) is deliberately LoS-not-required and CAN take it, so don't
-                -- disengage here when a reachable XTarget auto-hater exists -- fall through and let AdvCombat
-                -- engage and nav to it. Auto-haters are already aggro'd on us, so this adds no over-pull.
-                local xtEngage = myconfig.settings.engageXTargetOnly == true
-                    and #spawnutils.getXTargetAutoHaterEngageables(rc) > 0
-                if not xtEngage then
-                    disengageCombat('moblist_empty')
-                    return
-                end
+                disengageCombat('moblist_empty')
+                return
             end
             tryRogueEvade()
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil

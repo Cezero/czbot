@@ -133,7 +133,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'warpThreshold', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'buffNonPeerRaid', 'antiAfk' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'warpThreshold', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
@@ -1278,7 +1278,6 @@ function M.Load(path)
     if (M.config.settings.campRestDistance == nil) then M.config.settings.campRestDistance = 15 end
     if (M.config.settings.warpThreshold == nil) then M.config.settings.warpThreshold = 600 end
     if M.config.settings.maCampAnchor == nil then M.config.settings.maCampAnchor = true end
-    if M.config.settings.engageXTargetOnly == nil then M.config.settings.engageXTargetOnly = false end
     -- Character-wide minimum mez level (0 = disabled; spell MaxLevel still applies above).
     if M.config.settings.mezMinLevel == nil then M.config.settings.mezMinLevel = 0 end
     M.config.settings.mezMinLevel = tonumber(M.config.settings.mezMinLevel) or 0
@@ -1288,9 +1287,10 @@ function M.Load(path)
     if M.config.settings.protectCasters == nil then M.config.settings.protectCasters = false end
     if M.config.settings.protectCastersSec == nil then M.config.settings.protectCastersSec = 30 end
     M.config.settings.protectCastersSec = tonumber(M.config.settings.protectCastersSec) or 30
-    -- Drop legacy AE-tank keys if present in old character configs.
+    -- Drop legacy AE-tank / reactive-engage keys if present in old character configs.
     M.config.settings.tankAllMobs = nil
     M.config.settings.aeTankIgnoreMezzer = nil
+    M.config.settings.engageXTargetOnly = nil
     -- Leash-to-radius: when on, melee returns to camp instead of chasing an engaged mob past the radius.
     -- Persisted seed for the session-only rc.doCampAcleash (default on).
     if M.config.settings.campAcleash == nil then M.config.settings.campAcleash = true end
@@ -1301,9 +1301,12 @@ function M.Load(path)
     -- Anti-AFK: open/close a random bag (or inventory) after ~3–4 min continuous true idle (default on).
     if M.config.settings.antiAfk == nil then M.config.settings.antiAfk = true end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end
+    -- TargetFilter: 0 = LoS NPCs, 2 = All NPCs. Legacy 1 (old LoS) remaps to 0; keep 2 stable.
     if (M.config.settings.TargetFilter == nil) then M.config.settings.TargetFilter = 0 end
-    if M.config.settings.TargetFilter ~= nil then M.config.settings.TargetFilter = tonumber(M.config.settings
-        .TargetFilter) or 0 end
+    local tf = tonumber(M.config.settings.TargetFilter) or 0
+    if tf == 1 then tf = 0 end
+    if tf ~= 0 and tf ~= 2 then tf = 0 end
+    M.config.settings.TargetFilter = tf
     if (M.config.settings.petassist == nil) then M.config.settings.petassist = false end
     if (M.config.settings.spelldb == nil) then M.config.settings.spelldb = 'spells.db' end
     -- Drop legacy role-presets table if present in old character configs (no longer used).

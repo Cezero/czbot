@@ -66,18 +66,6 @@ function M.draw()
         runConfigLoaders()
     end
 
-    ImGui.Text('Engage XTarget only')
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('When on, only engage mobs on your XTarget (Auto-Hater / aggro\'d on the group).\nUse with an external puller; stops proactive engaging of nearby NPCs. A manual /cz attack still works.')
-    end
-    ImGui.SameLine()
-    local xtOnlyChecked = (botconfig.config.settings.engageXTargetOnly == true)
-    local xtVal, xtPressed = ImGui.Checkbox('##combat_engageXTargetOnly', xtOnlyChecked)
-    if xtPressed then
-        botconfig.config.settings.engageXTargetOnly = xtVal
-        runConfigLoaders()
-    end
-
     ImGui.Text('Charm pet setup')
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip('When you charm a mob, automatically set the new charm pet to taunt OFF (so it does not steal aggro from your tank) and send it to attack the current target. Pet buffs/heals still run via the normal loops.')

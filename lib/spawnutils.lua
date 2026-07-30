@@ -494,8 +494,16 @@ end
 local function filterSpawnTargetFilter(spawn, targetFilterNum)
     if not isCampNpcSpawn(spawn) then return false end
     if targetFilterNum == 2 then return true end
-    if targetFilterNum == 1 then return spawn.LineOfSight() end
-    if targetFilterNum == 0 then return spawn.Aggressive() and spawn.LineOfSight() end
+    -- 0 = LoS NPCs (legacy 1 remapped to 0 on load). Require LoS, except at level 20+
+    -- waive LoS for spawns already on an XTarget Auto-Hater slot.
+    if targetFilterNum == 0 then
+        if spawn.LineOfSight() then return true end
+        if (tonumber(mq.TLO.Me.Level()) or 0) >= 20
+            and spawnutils.isOnXTargetAutoHater(spawn.ID()) then
+            return true
+        end
+        return false
+    end
     return false
 end
 
@@ -646,7 +654,7 @@ function spawnutils.buildCampMobList(rc)
         tfNum = tfNum,
         excludeSet = excludeSet,
     }
-    -- Single zone scan with hoisted anchor/filter options (LOS/Aggressive last in TargetFilter).
+    -- Single zone scan with hoisted anchor/filter options (TargetFilter last).
     local function predicate(spawn)
         local spawnType = spawn and spawn.Type()
         if not spawnType or spawnType == '' then return false end
@@ -743,37 +751,6 @@ function spawnutils.mergeEngageTargetIntoMobList(rc)
     end
     local sp = mq.TLO.Spawn(id)
     if sp and sp.ID() then table.insert(rc.MobList, sp) end
-end
-
---- NPCs on XTarget Auto-Hater slots within camp that pass engage safety filters (LoS not required).
-function spawnutils.getXTargetAutoHaterEngageables(rc)
-    rc = rc or state.getRunconfig()
-    local out = {}
-    local n = mq.TLO.Me.XTarget() or 0
-    if n == 0 then return out end
-    local myconfig = botconfig.config
-    local zradius = myconfig.settings.zradius or 75
-    local acleash = tonumber(myconfig.settings.acleash) or 75
-    local acleashSq = myconfig.settings.acleashSq or (acleash * acleash)
-    local cx, cy, cz = spawnutils.getMobListAnchor(rc)
-    local seen = {}
-    for i = 1, n do
-        local xt = mq.TLO.Me.XTarget(i)
-        local xtid = xt and xt.ID() or nil
-        if xtid and xtid > 0 and not seen[xtid] and spawnutils.isAutoHaterXTarget(xt) then
-            seen[xtid] = true
-            local spawn = mq.TLO.Spawn(xtid)
-            if spawnutils.isNpcEngageTarget(spawn)
-                and spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
-                and spawnutils.filterSpawnProtected(spawn)
-                and spawnutils.filterSpawnExcludeAndFTE(spawn, rc)
-                and not utils.isCharmSkipped(xtid, rc)
-                and not (spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(xtid, rc)) then
-                out[#out + 1] = spawn
-            end
-        end
-    end
-    return out
 end
 
 --- True if spawnId currently occupies an XTarget Auto-Hater slot.
@@ -879,6 +856,13 @@ function spawnutils.explainMobFilter(spawnId)
     printf('  roam unpullable: %s',
         (spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(spawnId, rc)) and 'FAIL' or 'pass')
     printf('  TargetFilter (%d): %s', tfNum, filterSpawnTargetFilter(spawn, tfNum) and 'pass' or 'FAIL')
+    if tfNum == 0 then
+        local los = spawn.LineOfSight() and true or false
+        local xt = spawnutils.isOnXTargetAutoHater(spawnId)
+        local lvl = tonumber(mq.TLO.Me.Level()) or 0
+        printf('    LoS=%s XTargetAutoHater=%s level=%d (LoS waived if level>=20 and AutoHater)',
+            tostring(los), tostring(xt), lvl)
+    end
     printf('  filterSpawnForCamp: %s', filterSpawnForCamp(spawn, rc) and 'pass' or 'FAIL')
 
     local tankrole = require('lib.tankrole')

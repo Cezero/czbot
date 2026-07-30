@@ -29,7 +29,7 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.sitaggro** | number | 60 | When mobs in camp and level 20+, only sit when Me.PctAggro is below this. |
 | **settings.TankName** | string | `"manual"` | Main Tank name or `"automatic"` / `"manual"`. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |
 | **settings.AssistName** | string | (unset) | Main Assist name or `"automatic"` / `"manual"`. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |
-| **settings.TargetFilter** | number | 0 | Mob list filter: 0 = NPC + aggressive + LOS, 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
+| **settings.TargetFilter** | number | 0 | Mob list filter: `0` = LoS NPCs (at level 20+, also include XTarget Auto-Haters without LoS); `2` = All NPCs in camp radius. Legacy `1` remaps to `0` on load. |
 | **settings.petassist** | boolean | `false` | When true, send pet on engage target. |
 | **settings.acleash** | number | 75 | Camp leash distance (max distance from camp for mob list / targeting). Also bind-point stealth radius. See [Safety and stealth](safety-and-stealth.md). |
 | **settings.followdistance** | number | 35 | Follow distance: beyond this the bot runs follow; within it, sit allowed when mana below sitmana. |
@@ -38,7 +38,6 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.warpThreshold** | number | 600 | Inter-tick 3D position jump (units) treated as a zone reset (clear camp/engage). `<= 0` disables. See [Events](botlogic/events.md#onzonechange-and-delayonzone). |
 | **settings.maCampAnchor** | boolean | `true` | When on, non-MA bots center MobList on the resolved MA within **maAnchorLeash**. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md#maanchorleash). |
 | **settings.maAnchorLeash** | number | (falls back to **acleash**, then 75) | Max MA distance for mob bubble anchor, combat inject, and **ma_list** fallback (not **mt_list**). See [Automatic MA/MT Selection](automatic-ma-mt-selection.md#maanchorleash). |
-| **settings.engageXTargetOnly** | boolean | `false` | Reactive engage: only fight XTarget Auto-Hater mobs. See [Tanking configuration](tanking-configuration.md#reactive-engage). |
 | **settings.protectCasters** | boolean | `false` | Protect casters: MA peels to an add beating a pure caster. See [Tanking configuration](tanking-configuration.md#protect-casters). |
 | **settings.protectCastersSec** | number | `30` | Seconds before Protect casters mid-fight peel. |
 | **settings.antiAfk** | boolean | `true` | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. |
