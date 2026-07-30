@@ -8,6 +8,7 @@ local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
 local botmove = require('botmove')
 local pcphasethrottle = require('lib.pcphasethrottle')
+local charinfowatchers = require('lib.charinfowatchers')
 
 local botcure = {}
 local CureClass = {}
@@ -31,6 +32,7 @@ function botcure.LoadCureConfig()
             end
         end,
     })
+    charinfowatchers.registerCureWatchers()
 end
 
 castutils.RegisterSectionLoader('cure', 'docure', botcure.LoadCureConfig)
@@ -104,22 +106,35 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
 end
 
 local function CureEvalGroupCure(index, entry)
+    local spellId = spellutils.GetSpellId(entry)
+    if not spellId then return nil, nil end
     local typelist = CureTypeList(index)
-    local function needCure(grpmember, grpid, grpname, peer)
-        if peer then
-            for _, v in pairs(CureType[index] or {}) do
-                local detrimentals = peer.Detrimentals or nil
-                local key = (string.lower(v) ~= 'all') and CureTypeToPeerKey[string.lower(v)]
-                local curetype = key and (peer[key] or nil) or nil
-                if (string.lower(v) == 'all' and detrimentals and detrimentals > 0) or (string.lower(v) ~= 'all' and curetype and curetype > 0) then
-                    return true
+    local function selfPasses()
+        return spellutils.SpawnDetrimentalsForCure(mq.TLO.Me.ID(), typelist)
+            or (function()
+                for _, v in pairs(CureType[index] or {}) do
+                    local u = string.lower(v)
+                    if u == 'all' and mq.TLO.Me.BuffsPopulated() then
+                        -- approximate: any detrimental on self via counters
+                        if (mq.TLO.Me.Poisoned and mq.TLO.Me.Poisoned())
+                            or (mq.TLO.Me.Diseased and mq.TLO.Me.Diseased())
+                            or (mq.TLO.Me.Cursed and mq.TLO.Me.Cursed())
+                            or (mq.TLO.Me.Corrupted and mq.TLO.Me.Corrupted()) then
+                            return true
+                        end
+                    end
+                    if u == 'poison' and mq.TLO.Me.Poisoned and mq.TLO.Me.Poisoned() then return true end
+                    if u == 'disease' and mq.TLO.Me.Diseased and mq.TLO.Me.Diseased() then return true end
+                    if u == 'curse' and mq.TLO.Me.Cursed and mq.TLO.Me.Cursed() then return true end
+                    if u == 'corruption' and mq.TLO.Me.Corrupted and mq.TLO.Me.Corrupted() then return true end
                 end
-            end
-            return false
-        end
-        return spellutils.SpawnDetrimentalsForCure(grpid, typelist)
+                return false
+            end)()
     end
-    return castutils.evalGroupAECount(entry, 'groupcure', index, CureClass, 'groupcure', needCure, {})
+    if not charinfowatchers.grpAggShouldCast('CURE', spellId, entry.tarcnt, selfPasses) then
+        return nil, nil
+    end
+    return mq.TLO.Me.ID(), 'groupcure'
 end
 
 local function CureEval(index)
@@ -188,7 +203,7 @@ local function CureEval(index)
     return nil, nil
 end
 
-local CURE_PHASE_ORDER = { 'self', 'tank', 'groupcure', 'groupmember', 'pc' }
+local CURE_PHASE_ORDER = { 'self', 'tank', 'offtank', 'groupcure', 'groupmember', 'pc' }
 local CURE_PHASE_ORDER_PRIORITY = { 'priority' }
 
 --- Single place for cure context: tank, tankid, class-ordered bots, botcount. Both priorityCure and doCure use this.
@@ -196,6 +211,10 @@ local function cureBuildContext()
     local tank, tankid = spellutils.GetTankInfo(false)
     local bots = spellutils.GetBotListOrdered()
     return { tank = tank, tankid = tankid, bots = bots, botcount = #bots }
+end
+
+local function cureBandHasPhase(spellIndex, phase)
+    return CureClass[spellIndex] and CureClass[spellIndex][phase] and true or false
 end
 
 local function cureGetTargetsForPhase(phase, context, pcAllowed)
@@ -227,13 +246,12 @@ local function cureGetTargetsForPhase(phase, context, pcAllowed)
         return out
     end
     if phase == 'self' then return castutils.getTargetsSelf() end
-    if phase == 'tank' then return castutils.getTargetsTank(context) end
-    if phase == 'groupcure' then return castutils.getTargetsGroupCaster('groupcure') end
-    if phase == 'groupmember' then return castutils.getTargetsGroupMember(context, { botsFirst = true, excludeBotsFromGroup = true }) end
-    if phase == 'pc' then
-        if not pcAllowed then return {} end
-        return castutils.getTargetsPc(context)
+    if phase == 'tank' or phase == 'offtank' or phase == 'groupmember' or phase == 'pc' then
+        if phase == 'pc' and not pcAllowed then return {} end
+        local count = botconfig.getSpellCount('cure')
+        return charinfowatchers.unionTargetsForPhase('cure', phase, count, cureBandHasPhase)
     end
+    if phase == 'groupcure' then return castutils.getTargetsGroupCaster('groupcure') end
     return {}
 end
 

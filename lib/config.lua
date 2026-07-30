@@ -165,7 +165,7 @@ end
 -- Canonical default spell entry per section. getDefaultSpellEntry returns a copy so callers do not mutate.
 local defaultSpellEntries = {
     heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, inCombat = false, bands = { { targetphase = { 'self', 'tank', 'groupmember' }, validtargets = { 'all' }, min = 0, max = 60 } }, healResource = 'hp', precondition = nil },
-    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, combatOnly = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
+    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, combatOnly = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = {}, precondition = nil },
     debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'matar', 'notmatar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, stopWhen = nil, onlyMT = false },
     cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = { 'all' }, enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
@@ -234,7 +234,7 @@ local _pendingMutators = nil
 
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
-local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
+local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ot_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
 
 local function commonFilePath()
     return mq.configDir .. '/' .. COMMON_FILENAME

@@ -45,7 +45,7 @@ local CASTING_LIB_SUCCESS_RESULTS = {
 }
 --- When buff remaining time on target is below this (ms), do not interrupt with "buff already present" (allow refresh cast to complete). Should match botbuff's refresh window (e.g. 24s for self).
 --- Observation cache arms nextCheckAt for min(remaining - this, 30s) so charinfo is not re-read every tick.
-local BUFF_REFRESH_THRESHOLD_MS = 24000
+local BUFF_REFRESH_THRESHOLD_MS = 20000
 --- When a debuff returns CAST_TAKEHOLD (blocked by another spell), skip that debuff on this spawn for this many ms.
 local BLOCKED_SKIP_MS = 300000
 
@@ -788,7 +788,7 @@ function spellutils.PeerGetPetBuffDuration(peerInfo, spellid)
 end
 
 -- Buff observation cache: (peerName, spellId) → { present, durationMs, observedAt, nextCheckAt }.
--- Cap between charinfo re-reads at ~30s; refresh window remains BUFF_REFRESH_THRESHOLD_MS (24s).
+-- Cap between charinfo re-reads at ~30s; refresh window remains BUFF_REFRESH_THRESHOLD_MS (20s).
 local BUFF_SKIP_LONG_MS = 30000
 local BUFF_SKIP_PRESENT_MS = 30000
 local BUFF_OBS_JITTER_MS = 500
@@ -959,8 +959,12 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
         if dur == nil then return false end
         if dur >= BUFF_REFRESH_THRESHOLD_MS then
             spellutils.BuffSkipObserveDuration(peerKey, spellid, dur)
-            if entry.spellicon and entry.spellicon ~= 0 then
-                spellutils.BuffSkipObserveDuration(peerKey, entry.spellicon, dur)
+            if entry.spellicon then
+                local icons = type(entry.spellicon) == 'table' and entry.spellicon
+                    or ((entry.spellicon ~= 0) and { entry.spellicon } or {})
+                for _, iconId in ipairs(icons) do
+                    spellutils.BuffSkipObserveDuration(peerKey, iconId, dur)
+                end
             end
             return true
         end
@@ -1120,24 +1124,43 @@ function spellutils.SpawnNeedsBuff(spawnId, spellName, spellicon)
     local sp = mq.TLO.Spawn(spawnId)
     if not sp or not sp.ID() or sp.ID() == 0 then return false end
     if not sp.BuffsPopulated or not sp.BuffsPopulated() then return false end
-    -- MQ2 `Buff(spellName)` can return a different buff on partial-name matches.
-    -- Only treat it as "has this buff" when the matched buff's spell id equals the configured spell id.
     local spellid
     do
         local ok, id = pcall(function() return mq.TLO.Spell(spellName).ID() end)
         spellid = ok and id or nil
     end
 
-    local buff = sp.Buff(spellName)
-    local hasAnyBuffMatchByName = buff and buff() or false
-    if not hasAnyBuffMatchByName then return true end
-    if not spellid then
-        -- Can't resolve spell id: preserve legacy behavior (presence by name means we consider it "already buffed").
+    local function hasMatchingBuff(checkId, checkName)
+        if checkName and checkName ~= '' then
+            local buff = sp.Buff(checkName)
+            if buff and buff() then
+                local matchedBuffId = buff.ID() or nil
+                if not checkId then return true end
+                if matchedBuffId == checkId then return true end
+            end
+        end
+        if checkId and checkId > 0 then
+            local maxSlots = (sp.MaxBuffSlots and sp.MaxBuffSlots()) or 40
+            for i = 1, maxSlots do
+                local b = sp.Buff(i)
+                if b and b() and b.ID and b.ID() == checkId then return true end
+            end
+        end
         return false
     end
 
-    local matchedBuffId = buff.ID() or nil
-    return matchedBuffId ~= spellid
+    if hasMatchingBuff(spellid, spellName) then return false end
+
+    local icons = type(spellicon) == 'table' and spellicon
+        or ((spellicon and spellicon ~= 0) and { spellicon } or {})
+    for _, iconId in ipairs(icons) do
+        local n = tonumber(iconId)
+        if n and n > 0 then
+            local iconName = mq.TLO.Spell(n).Name()
+            if hasMatchingBuff(n, iconName) then return false end
+        end
+    end
+    return true
 end
 
 -- Spawn: does this spawn have a matching detrimental? Same as buffs: only valid after targeting
@@ -2222,8 +2245,12 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     local spellid = mq.TLO.Spell(spell).ID()
     if sub == 'buff' and EvalID and spellid then
         spellutils.BuffSkipClearForCast(EvalID, spellid)
-        if entry.spellicon and entry.spellicon ~= 0 then
-            spellutils.BuffSkipClearForCast(EvalID, entry.spellicon)
+        if entry.spellicon then
+            local icons = type(entry.spellicon) == 'table' and entry.spellicon
+                or ((entry.spellicon ~= 0) and { entry.spellicon } or {})
+            for _, iconId in ipairs(icons) do
+                spellutils.BuffSkipClearForCast(EvalID, iconId)
+            end
         end
     end
     if not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib and SpellResisted then
@@ -2471,8 +2498,22 @@ function spellutils.handleSpellCheckReentry(sub, options)
     if not spellutils.IsMemorizing() and rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub == 'heal' and rc.CurSpell.target and mq.TLO.Target.ID() == rc.CurSpell.target then
         local entry = botconfig.getSpellEntry('heal', rc.CurSpell.spell)
         if entry then
-            spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target,
-                rc.CurSpell.target, entry)
+            local cw = require('lib.charinfowatchers')
+            local scope = cw.interruptScopeForTargethit(rc.CurSpell.targethit)
+            local peerWatcher = scope and scope ~= 'GRPAGG' and rc.CurSpell.targethit ~= 'self'
+                and rc.CurSpell.targethit ~= 'corpse' and rc.CurSpell.targethit ~= 'mypet'
+                and rc.CurSpell.targethit ~= 'pet' and rc.CurSpell.targethit ~= 'xtgt'
+            if peerWatcher then
+                local spellid = spellutils.GetSpellId(entry)
+                if spellid and not cw.watchListHas('HEAL', scope, spellid, rc.CurSpell.target) then
+                    spellutils.interruptActiveCast(rc)
+                    spellutils.clearCastingStateOrResume()
+                    return false
+                end
+            else
+                spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target,
+                    rc.CurSpell.target, entry)
+            end
             if not rc.CurSpell.phase then
                 return false
             end
@@ -3099,11 +3140,53 @@ function spellutils.InterruptCheck()
     if not criteria then return false end
     if not target or not spell or not criteria or not sub then return false end
 
-    -- Group v1/v2 heal: re-check evalGroupAECount mid-cast; interrupt if band/tarcnt no longer satisfied.
-    if sub == 'heal' and criteria == 'groupheal' and entry and spellutils.IsGroupV1OrV2HealEntry(entry) then
-        local botheal = require('botheal')
-        local gid, _ghit = botheal.EvalGroupHealIfNeeded(spell)
-        if not gid then
+    local charinfowatchers = require('lib.charinfowatchers')
+    local kind = charinfowatchers.sectionToKind(sub)
+    local scope = charinfowatchers.interruptScopeForTargethit(criteria)
+
+    -- Group AE: re-check GRPAGG readiness mid-cast.
+    if kind and (criteria == 'groupheal' or criteria == 'groupbuff' or criteria == 'groupcure') then
+        if scope == 'GRPAGG' then
+            local botheal = (sub == 'heal') and require('botheal') or nil
+            local stillOk
+            if sub == 'heal' and botheal and botheal.EvalGroupHealIfNeeded then
+                local gid = botheal.EvalGroupHealIfNeeded(spell)
+                stillOk = gid ~= nil
+            elseif sub == 'buff' or sub == 'cure' then
+                -- Self-tiebreaker re-eval via grpAggShouldCast with a simple self check deferred to modules.
+                stillOk = charinfowatchers.grpAggShouldCast(kind, spellid, entry.tarcnt, function()
+                    if sub == 'cure' then
+                        local ct = entry.curetype
+                        if type(ct) == 'table' then
+                            for _, t in ipairs(ct) do
+                                local u = type(t) == 'string' and t:lower() or ''
+                                if u == 'all' or u == 'poison' and (mq.TLO.Me.Poisoned() or false) then return true end
+                                if u == 'disease' and (mq.TLO.Me.Diseased() or false) then return true end
+                                if u == 'curse' and (mq.TLO.Me.Cursed() or false) then return true end
+                                if u == 'corruption' and (mq.TLO.Me.Corrupted() or false) then return true end
+                            end
+                        end
+                        return false
+                    end
+                    -- buff group AE: treat self as needing if Me doesn't have spell
+                    local present = mq.TLO.Me.Buff(spellname)() or mq.TLO.Me.Song(spellname)()
+                    if not present then return true end
+                    local dur = mq.TLO.Me.Buff(spellname).Duration() or mq.TLO.Me.Song(spellname).Duration() or 0
+                    return dur < 20000
+                end)
+            end
+            if stillOk == false then
+                spellutils.interruptActiveCast(rc)
+                spellutils.clearCastingStateOrResume()
+                return
+            end
+        end
+    end
+
+    -- Peer watcher targets: interrupt when spawn leaves GetWatchList for this spell.
+    if kind and scope and scope ~= 'GRPAGG' and target and target ~= mq.TLO.Me.ID() then
+        if not charinfowatchers.watchListHas(kind, scope, spellid, target) then
+            log.say('Interrupting %s, target left watchlist', spellname)
             spellutils.interruptActiveCast(rc)
             spellutils.clearCastingStateOrResume()
             return
@@ -3113,8 +3196,10 @@ function spellutils.InterruptCheck()
     if not mq.TLO.Target.ID() or mq.TLO.Target.ID() == 0 then return false end
     local targetSpawn = mq.TLO.Target
 
-    -- Heal threshold must run even when Cast.Status() contains 'M' (e.g. HoT channeling), so we clear when target is above band.
-    if sub == 'heal' then
+    -- Heal threshold for self / non-watcher phases only.
+    local peerWatcherHeal = (sub == 'heal' and scope and scope ~= 'GRPAGG' and criteria ~= 'self' and criteria ~= 'corpse'
+        and criteria ~= 'mypet' and criteria ~= 'pet' and criteria ~= 'xtgt')
+    if sub == 'heal' and not peerWatcherHeal then
         spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
     end
     if spellutils.IsMemorizing() then return false end
@@ -3126,7 +3211,9 @@ function spellutils.InterruptCheck()
         mq.cmd('/squelch /mqtarget clear')
         spellutils.clearCastingStateOrResume()
     end
-    spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
+    if sub == 'heal' and not peerWatcherHeal then
+        spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
+    end
     if sub == 'debuff' then
         spellutils.InterruptCheckDontStack(entry, target, spellname)
     end

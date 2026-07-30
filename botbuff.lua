@@ -13,6 +13,8 @@ local pcphasethrottle = require('lib.pcphasethrottle')
 local tickprof = require('lib.tickprof')
 local log = require('lib.log')
 
+local charinfowatchers = require('lib.charinfowatchers')
+
 local botbuff = {}
 local BuffClass = {}
 local bardtwist = require('lib.bardtwist')
@@ -36,6 +38,7 @@ function botbuff.LoadBuffConfig()
         bandsKey = 'buff',
         storeIn = BuffClass,
         perEntryAfterBands = function(entry, i)
+            entry.spellicon = charinfowatchers.normalizeSpelliconList(entry.spellicon)
             BuffClass[i].petspell = spellutils.IsPetSummonSpell(entry) or BuffClass[i].petspell
             buffphase.sanitizeRuntimePhases(entry, BuffClass[i])
         end,
@@ -43,6 +46,7 @@ function botbuff.LoadBuffConfig()
     if rebuildBuffIndicesByPhase then
         rebuildBuffIndicesByPhase()
     end
+    charinfowatchers.registerBuffWatchers()
 end
 
 castutils.RegisterSectionLoader('buff', 'dobuff', botbuff.LoadBuffConfig)
@@ -66,15 +70,19 @@ end
 local function IconCheck(index, EvalID, knownName, peerHint, context, hoist)
     local entry = botconfig.getSpellEntry('buff', index)
     if not entry then return true end
-    local spellicon = entry.spellicon
-    if not spellicon or spellicon == 0 then return true end
+    local icons = charinfowatchers.normalizeSpelliconList(entry.spellicon)
+    if #icons == 0 then return true end
     local botname = knownName
     if not botname or botname == '' then
         botname = mq.TLO.Spawn(EvalID).Name()
     end
     local info = peerHint or resolvePeer(botname, context, hoist)
-    local hasIcon = info and spellutils.PeerHasBuff(info, spellicon)
-    return not hasIcon
+    for _, spellicon in ipairs(icons) do
+        if info and spellutils.PeerHasBuff(info, spellicon) then
+            return false
+        end
+    end
+    return true
 end
 
 --- Peer needs this buff? Duration skip → PeerHasBuff → Stacks/range. Spawn only if casting path needed.
@@ -112,18 +120,24 @@ local function BuffEvalBotNeedsBuff(botid, botname, spellid, rangeSq, index, tar
     local peer = peerHint or resolvePeer(botname, context, hoist)
     if not peer then return nil, nil end
     local entry = botconfig.getSpellEntry('buff', index)
-    local spellicon = entry and entry.spellicon
+    local icons = charinfowatchers.normalizeSpelliconList(entry and entry.spellicon)
 
     if peerBuffStillUp(botname, peer, spellid) then
         spellutils.BuffLog('skip %s [%s]: already has it', botname, targethit)
         return nil, nil
     end
-    if spellicon and spellicon ~= 0 and peerBuffStillUp(botname, peer, spellicon) then
-        spellutils.BuffLog('skip %s [%s]: already has it (icon)', botname, targethit)
-        return nil, nil
+    for _, spellicon in ipairs(icons) do
+        if peerBuffStillUp(botname, peer, spellicon) then
+            spellutils.BuffLog('skip %s [%s]: already has it (icon)', botname, targethit)
+            return nil, nil
+        end
     end
 
-    local botbuffstack = peer:Stacks(spellid)
+    -- Stacks already applied in CharInfo buff watchers for peer phases; still check FreeBuffSlots/range.
+    local botbuffstack = true
+    if not charinfowatchers.phaseToScope(targethit) then
+        botbuffstack = peer:Stacks(spellid)
+    end
     local botfreebuffslots = peer.FreeBuffSlots
     local spawnid = peer.ID
     if not spawnid or spawnid <= 0 then
@@ -182,10 +196,14 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             local petEntry = botconfig.getSpellEntry('buff', index)
             local spellicon = petEntry and petEntry.spellicon
             local iconBlocks = false
-            if spellicon and spellicon ~= 0 then
-                local iconSpell = mq.TLO.Spell(spellicon).Name()
-                if iconSpell and iconSpell ~= '' then
-                    iconBlocks = (mq.TLO.Me.Buff(iconSpell)() or mq.TLO.Me.Song(iconSpell)()) and true or false
+            local icons = type(spellicon) == 'table' and spellicon
+                or ((spellicon and spellicon ~= 0) and { spellicon } or {})
+            for _, iconId in ipairs(icons) do
+                local iconSpell = mq.TLO.Spell(iconId).Name()
+                if iconSpell and iconSpell ~= ''
+                    and (mq.TLO.Me.Buff(iconSpell)() or mq.TLO.Me.Song(iconSpell)()) then
+                    iconBlocks = true
+                    break
                 end
             end
             if not iconBlocks then
@@ -235,10 +253,14 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             local entry = botconfig.getSpellEntry('buff', index)
             local spellicon = entry and entry.spellicon
             local iconBlocks = false
-            if spellicon and spellicon ~= 0 then
-                local iconSpell = mq.TLO.Spell(spellicon).Name()
-                if iconSpell and iconSpell ~= '' then
-                    iconBlocks = (mq.TLO.Me.Buff(iconSpell)() or mq.TLO.Me.Song(iconSpell)()) and true or false
+            local icons = type(spellicon) == 'table' and spellicon
+                or ((spellicon and spellicon ~= 0) and { spellicon } or {})
+            for _, iconId in ipairs(icons) do
+                local iconSpell = mq.TLO.Spell(iconId).Name()
+                if iconSpell and iconSpell ~= ''
+                    and (mq.TLO.Me.Buff(iconSpell)() or mq.TLO.Me.Song(iconSpell)()) then
+                    iconBlocks = true
+                    break
                 end
             end
             if not iconBlocks then
@@ -298,20 +320,22 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range, aeRange, c
         _, aeRange = getSpellRanges(entry)
     end
     if not aeRange or aeRange <= 0 then return nil, nil end
-    local aeRangeSq = aeRange * aeRange
-    local peerByName = (hoist and hoist.peerByName) or (context and context.peerByName)
-    local function needBuff(grpmember, grpid, grpname, peer)
-        peer = peer or resolvePeer(grpname, context, hoist)
-        if peer then
-            if peerBuffStillUp(grpname, peer, spellid) then return false end
-            local stacks = peer:Stacks(spellid)
-            local free = peer.FreeBuffSlots
-            return stacks and free and free > 0
-        end
-        return spellutils.SpawnNeedsBuff(grpid, spell, entry.spellicon)
+    local sid = spellid or spellutils.GetSpellId(entry)
+    if not sid then return nil, nil end
+
+    local function selfPasses()
+        local present = mq.TLO.Me.Buff(spell)() or mq.TLO.Me.Song(spell)()
+        if not present then return true end
+        local dur = mq.TLO.Me.Buff(spell).Duration() or mq.TLO.Me.Song(spell).Duration() or 0
+        return dur < 20000
     end
-    return castutils.evalGroupAECount(entry, 'groupbuff', index, BuffClass, 'groupbuff', needBuff,
-        { aeRangeSq = aeRangeSq, includeMemberZero = true, peerByName = peerByName })
+
+    if not charinfowatchers.grpAggShouldCast('BUFF', sid, entry.tarcnt, selfPasses) then
+        return nil, nil
+    end
+    local spellEnt = spellutils.GetSpellEntity(entry)
+    local id = (spellEnt and spellEnt.TargetType() == 'Group v1') and 1 or mq.TLO.Me.ID()
+    return id, 'groupbuff'
 end
 
 local function resolveMemberClassShortName(grpmember, grpname, peer, context, hoist)
@@ -445,7 +469,7 @@ local function BuffEvalPetById(index, spellid, rangeSq, petId, context, hoist)
     return nil, nil
 end
 
-local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
+local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'offtank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
 --- Light-locked passes: self+tank only (all RR phases denied by cooldown/interval).
 local BUFF_PHASE_ORDER_LIGHT = { 'self', 'tank' }
 
@@ -494,20 +518,33 @@ local function filterCorpses(targets)
     return out
 end
 
+local function buffHasNameList(spellIndex)
+    local entry = botconfig.getSpellEntry('buff', spellIndex)
+    return entry and type(entry.buffNames) == 'table' and #entry.buffNames > 0 or false
+end
+
+local function buffBandHasPhase(spellIndex, phase)
+    if phase == 'byname' then
+        if buffHasNameList(spellIndex) then return true end
+        return BuffClass[spellIndex] and BuffClass[spellIndex].name and true or false
+    end
+    if phase == 'pet' or phase == 'mypet' then
+        local meta = _buffSpellMeta[spellIndex]
+        if meta and meta.isGroupAE then return false end
+    end
+    return castutils.bandHasPhaseSimple(BuffClass, spellIndex, phase)
+end
+
 local function buffGetTargetsForPhase(phase, context, hoist)
     if phase == 'self' then return castutils.getTargetsSelf() end
-    if phase == 'tank' then return filterCorpses(castutils.getTargetsTank(context)) end
+    if phase == 'tank' or phase == 'offtank' or phase == 'groupmember' or phase == 'pc' then
+        buffEnsureRoster(context)
+        local count = botconfig.getSpellCount('buff')
+        return filterCorpses(charinfowatchers.unionTargetsForPhase('buff', phase, count, buffBandHasPhase))
+    end
     if phase == 'groupbuff' then
         buffEnsureRoster(context)
         return castutils.getTargetsGroupCaster('groupbuff')
-    end
-    if phase == 'groupmember' then
-        buffEnsureRoster(context)
-        return filterCorpses(castutils.getTargetsGroupMember(context, { excludeSelfAndTank = true }))
-    end
-    if phase == 'pc' then
-        buffEnsureRoster(context)
-        return filterCorpses(castutils.getTargetsPc(context, { excludeTank = true }))
     end
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then
@@ -531,13 +568,10 @@ local function buffGetTargetsForPhase(phase, context, hoist)
             if botid and botid > 0 then out[#out + 1] = { id = botid, targethit = 'byname', name = n } end
         end
         for idx = 1, context.buffCount do
-            -- Managed per-buff name list (clean UI). Resolved by spawn name, so it covers PCs that are
-            -- NOT in the bot network (e.g. guildmates) as well as networked characters.
             local entry = botconfig.getSpellEntry('buff', idx)
             if entry and type(entry.buffNames) == 'table' then
                 for _, name in ipairs(entry.buffNames) do addByName(name) end
             end
-            -- Legacy key-based byname (backward compat): network peers only.
             if BuffClass[idx] and BuffClass[idx].name then
                 for name, c in pairs(BuffClass[idx]) do
                     if name ~= 'name' and name ~= 'classes' and name ~= 'classesAll' and type(name) == 'string'
@@ -554,11 +588,6 @@ local function buffGetTargetsForPhase(phase, context, hoist)
     return {}
 end
 
-local function buffHasNameList(spellIndex)
-    local entry = botconfig.getSpellEntry('buff', spellIndex)
-    return entry and type(entry.buffNames) == 'table' and #entry.buffNames > 0 or false
-end
-
 --- Throttled multi-target buff phases (mirrors pcphasethrottle THROTTLED.buff).
 local BUFF_RR_THROTTLED = {
     byname = true,
@@ -568,19 +597,6 @@ local BUFF_RR_THROTTLED = {
     mypet = true,
     pet = true,
 }
-
-local function buffBandHasPhase(spellIndex, phase)
-    if phase == 'byname' then
-        if buffHasNameList(spellIndex) then return true end
-        return BuffClass[spellIndex] and BuffClass[spellIndex].name and true or false
-    end
-    if phase == 'pet' or phase == 'mypet' then
-        -- Prewarmed meta only — no IsGroupAEBuffEntry TLO in the phase probe hot path.
-        local meta = _buffSpellMeta[spellIndex]
-        if meta and meta.isGroupAE then return false end
-    end
-    return castutils.bandHasPhaseSimple(BuffClass, spellIndex, phase)
-end
 
 local function getOrBuildSpellCache(spellIndex, spellCache)
     local cached = spellCache and spellCache[spellIndex]
