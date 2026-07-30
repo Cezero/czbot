@@ -18,7 +18,8 @@ This document explains how to configure the bot when it is the **Main Tank (MT)*
 | **TankName** | `"manual"` | Main Tank name or `"automatic"` / `"manual"`. See [Tank and Assist Roles](tank-and-assist-roles.md) and [Automatic MA/MT Selection](automatic-ma-mt-selection.md). |
 | **acleash** | 75 | Max horizontal distance (X,Y) from camp for valid targets and mob list. Also used for corpse rez range and **bind-point stealth** radius (distance from primary bind coordinates). See [Safety and stealth](safety-and-stealth.md). |
 | **zradius** | 75 | Max vertical (Z) difference from camp; mobs outside this are ignored for the mob list. |
-| **tankAllMobs** | `false` | AE-tank: MT cycles taunt on loose XTarget adds. Opt-in. See [AE-tank](#ae-tank). |
+| **protectCasters** | `false` | MA: mid-fight peel to an add beating a pure caster for **protectCastersSec**. See [Protect casters](#protect-casters). |
+| **protectCastersSec** | `30` | Seconds a MobList add must keep the same pure-caster target before Protect casters peels. |
 | **engageXTargetOnly** | `false` | Reactive engage: only fight XTarget Auto-Hater mobs. Opt-in. See [Reactive engage](#reactive-engage). |
 
 ### Melee section
@@ -67,13 +68,14 @@ When **`settings.engageXTargetOnly`** is `true` (Combat tab or **`/cz engagextar
 
 ---
 
-## AE-tank
+## Protect casters
 
-When **`settings.tankAllMobs`** is `true` and this bot is the **Main Tank**, it **taunt-cycles** loose **XTarget** adds near camp instead of only holding the MA target. Default is **`false`**.
+When **`settings.protectCasters`** is `true` and this bot is the **Main Assist**, it monitors MobList adds with a scheduled one-mob-per-tick checker. If an **unmezzed** add continuously targets a **pure caster** (CLR, DRU, SHM, ENC, WIZ, MAG, NEC) in **group or raid** for **`settings.protectCastersSec`** seconds (default **30**), the MA switches onto that add — same mid-fight refocus pattern as the **named** override (publishes the new engage via the normal assist path). Sticky **named** targets are not abandoned for a trash peel.
 
-- Suppressed when an **Enchanter** or **Bard** is in group (assumed mezzer) unless **`settings.aeTankIgnoreMezzer`** is `true` (**`/cz aetankmezzer on`**).
-- Toggle: **`/cz aetank on|off`** or Combat tab **AE-tank**.
-- Debug: **`/cz aetankdebug on`**.
+**Always** (toggle on or off): when the MA’s engage target dies and it picks the next MobList mob, non-mezzed adds that currently have a pure caster targeted are preferred over other trash (after named / puller). With the toggle **on**, the add with the **longest accrued** caster-threat timer wins that re-pick.
+
+- Toggle: **`/cz protectcasters on|off`** or Combat tab **Protect casters**.
+- Seconds: **`/cz protectcasterssec <n>`** or Combat tab when enabled.
 
 ---
 

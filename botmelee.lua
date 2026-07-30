@@ -12,6 +12,7 @@ local spawnutils = require('lib.spawnutils')
 local charm = require('lib.charm')
 local spellstates = require('lib.spellstates')
 local spellutils = require('lib.spellutils')
+local protectcasters = require('lib.protectcasters')
 local log = require('lib.log')
 local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
@@ -617,6 +618,8 @@ local function selectMATarget()
             if not currentSpawn.Named() then
                 local namedId = findClosestEngageableNamed(rc.MobList)
                 if namedId then return namedId end
+                local protectId = protectcasters.getReadyThreatId(rc, engageId)
+                if protectId then return protectId end
             end
             return engageId
         end
@@ -642,12 +645,13 @@ local function selectMATarget()
         return maTargetFallbackWithoutMobList(rc)
     end
 
-    -- Initial pick: named first, then closest engageable (mez/distance rules).
+    -- Initial pick: named first, then caster-threatened adds, then closest engageable.
     local namedId = findClosestEngageableNamed(rc.MobList)
     if namedId then return namedId end
 
     local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
     local pullerTarID = tankrole.GetPullerTargetID()
+    local protectOn = myconfig.settings.protectCasters == true
     local losList = {}
     for _, v in ipairs(rc.MobList) do
         if isEngageableMobListSpawn(v) then losList[#losList + 1] = v end
@@ -661,6 +665,9 @@ local function selectMATarget()
             if aId == pullerTarID and bId ~= pullerTarID then return true end
             if aId ~= pullerTarID and bId == pullerTarID then return false end
         end
+        local aThreat = protectcasters.repickThreatScore(a, protectOn)
+        local bThreat = protectcasters.repickThreatScore(b, protectOn)
+        if aThreat ~= bThreat then return aThreat > bThreat end
         local da = utils.getDistanceSquared2D(meX, meY, a.X(), a.Y())
         local db = utils.getDistanceSquared2D(meX, meY, b.X(), b.Y())
         return (da or 0) < (db or 0)
@@ -960,78 +967,6 @@ local function selectXTargetEngageTarget(rc)
     return selectEngageTargetFromLosList(cands, engageId)
 end
 
--- AE-tank (settings.tankAllMobs, default off): when enabled and this bot is the MT with NO mezzer
--- (ENC/BRD) in group, actively grab aggro on XTarget Auto-Hater mobs near camp that aren't currently
--- on us by taunting them in turn. Auto-suppresses when a mezzer is present unless aeTankIgnoreMezzer.
-local _aeTauntNextTime = 0
-local _aeDebug = false
-local _aeDebugNextTime = 0
-
-function botmelee.SetAeTankDebug(on) _aeDebug = on and true or false end
-function botmelee.IsAeTankDebug() return _aeDebug end
-
-local function aeDbg(fmt, ...)
-    if not _aeDebug then return end
-    if mq.gettime() < _aeDebugNextTime then return end
-    _aeDebugNextTime = mq.gettime() + 2000
-    log.say('[aetank] ' .. fmt, ...)
-end
-
-local function mezzerInGroup()
-    local n = tonumber(mq.TLO.Group.Members()) or 0
-    for i = 0, n do
-        local m = mq.TLO.Group.Member(i)
-        local cls = m and m.Class and m.Class.ShortName()
-        if cls == 'ENC' or cls == 'BRD' then return true end
-    end
-    return false
-end
-
-local AE_HATE_ABILITIES = { 'Taunt', 'Bash', 'Kick' }
-
--- Returns the id of a loose auto-hater mob for melee to engage until it's on us, or nil when inactive.
-local function aeTankGrab(rc)
-    if myconfig.settings.tankAllMobs ~= true then return nil end
-    if rc.attackCommandEngage then aeDbg('idle: /cz attack engage is active'); return nil end
-    if not tankrole.AmIMainTank() then
-        aeDbg('idle: not Main Tank (TankName=%s, me=%s)', tostring(tankrole.GetMainTankName()), tostring(mq.TLO.Me.Name()))
-        return nil
-    end
-    if mezzerInGroup() and myconfig.settings.aeTankIgnoreMezzer ~= true then
-        aeDbg('idle: Enchanter/Bard in group -> AE-tank auto-suppressed (enable "Ignore mezzer" to override)')
-        return nil
-    end
-    local meId = mq.TLO.Me.ID()
-    local engageables = spawnutils.getXTargetAutoHaterEngageables(rc)
-    local target = nil
-    for _, spawn in ipairs(engageables) do
-        local sid = spawn.ID()
-        if sid and ((spawn.Target and spawn.Target.ID()) or 0) ~= meId then target = spawn; break end
-    end
-    if not target then
-        aeDbg('idle: %d engageable XTarget mob(s), all already on me', #engageables)
-        return nil
-    end
-    local sid = target.ID()
-    if mq.gettime() >= _aeTauntNextTime then
-        local cmds, names = {}, {}
-        for _, ab in ipairs(AE_HATE_ABILITIES) do
-            if mq.TLO.Me.AbilityReady(ab)() then
-                cmds[#cmds + 1] = '/squelch /doability ' .. ab
-                names[#names + 1] = ab
-            end
-        end
-        if #cmds > 0 then
-            mq.cmdf('/multiline ; /squelch /target id %s ; %s', sid, table.concat(cmds, ' ; '))
-            aeDbg('grabbing %s (%s): %s + auto-attack', tostring((target.CleanName and target.CleanName()) or sid), tostring(sid), table.concat(names, '+'))
-        else
-            aeDbg('grabbing %s (%s): auto-attack (Taunt/Bash/Kick on cooldown)', tostring((target.CleanName and target.CleanName()) or sid), tostring(sid))
-        end
-        _aeTauntNextTime = mq.gettime() + 1000
-    end
-    return sid
-end
-
 -- Resolve engageTargetId from role (MA picker / MT follower / OT / DPS), then engage or disengage.
 function botmelee.AdvCombat()
     local rc = state.getRunconfig()
@@ -1039,7 +974,9 @@ function botmelee.AdvCombat()
     local assistName = tankrole.GetAssistTargetName()
     local mainTankName = tankrole.GetMainTankName()
     local assistpct = myconfig.melee.assistpct or 99
-    local aeLooseId = aeTankGrab(rc)
+
+    -- Protect casters scheduler (no-op when off / not MA / no adds).
+    protectcasters.tick(rc)
 
     if mainTankName == mq.TLO.Me.Name() and mq.TLO.Target.Type() == 'PC' then
         clearTankCombatState()
@@ -1070,7 +1007,6 @@ function botmelee.AdvCombat()
     elseif assistName then
         id = resolveMeleeAssistTarget(assistName, assistpct)
     end
-    if aeLooseId then id = aeLooseId end
     if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
 

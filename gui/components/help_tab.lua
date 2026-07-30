@@ -51,8 +51,8 @@ local GROUPS = {
         { "/cz dodrag on|off", "Toggle corpse dragging." },
         { "/cz doforage on|off", "Toggle auto-forage." },
         { "/cz engagextargetonly on|off   (xtargetonly)", "Reactive mode: only engage mobs on your XTarget (use with a separate puller)." },
-        { "/cz aetank on|off", "AE-tank: as MT, taunt all XTarget mobs near camp (auto-off when a mezzer is in group)." },
-        { "/cz aetankmezzer on|off", "Let AE-tank run even with an Enchanter/Bard in group (e.g. a non-mezzing bard)." },
+        { "/cz protectcasters on|off", "MA: mid-fight peel to an add beating a pure caster for N seconds (Combat tab)." },
+        { "/cz protectcasterssec <n>", "Seconds an add must keep a pure-caster target before Protect casters peels (default 30)." },
         { "/cz antiafk on|off", "Toggle anti-AFK (open/close a random bag or inventory after ~3–4 min true idle)." },
         { "/cz burn [seconds|off]", "Open a burn window; debuffs with a Burn band phase cast during it." },
         { "/cz togglenuke", "Toggle nuke usage." },
@@ -93,7 +93,6 @@ local GROUPS = {
         { "/cz mezdebug on|off", "Log why mez targets are picked or skipped." },
         { "/cz buffdebug on|off", "Log why a buff is or isn't cast on a target." },
         { "/cz followdebug on|off", "Log follow leash/nav decisions (~1/s). Enable on one stuck bot." },
-        { "/cz aetankdebug on|off", "Log why AE-tank is idle (not MT, mezzer suppress, taunt cooldown, nothing loose)." },
         { "/cz tickdebug on|off", "Log tick gap/processing time; per-hook breakdown when proc exceeds 100ms." },
         { "/cz tickdebug spans on|off", "Nested sub-step timing for slow hooks (doHeal/doBuff/doCure/czactor/AddSpawnCheck)." },
         { "/cz echo <text>", "Echo a message (testing)." },
@@ -113,7 +112,7 @@ local GROUPS = {
 function M.draw()
     ImGui.TextWrapped(
         "Quick reference for /cz commands. Most toggles accept on|off|toggle; with no argument they flip. " ..
-        "Many are broadcast-friendly across your crew (e.g. /bcaa //cz aetank on).")
+        "Many are broadcast-friendly across your crew (e.g. /bcaa //cz protectcasters on).")
     ImGui.Spacing()
     for _, g in ipairs(GROUPS) do
         section.header(g.title)

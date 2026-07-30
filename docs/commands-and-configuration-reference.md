@@ -95,8 +95,8 @@ These affect runtime only (not saved to the config file). They reset when the bo
 | **stickcmd**     | `<string>`              | Set stick command (e.g. `hold uw 7`).                                                                             |
 | **targetfilter** | `0` / `1` / `2`         | Filter for mob list: 0 = NPC + aggressive + LOS (pull only aggressive), 1 = NPC + LOS, 2 = exclude PCs/mercs/etc. |
 | **engagextargetonly** / **xtargetonly** | `on` / `off` or toggle | **Reactive engage** (opt-in, default off): only engage, melee, and debuff mobs on your XTarget Auto-Hater list. Bypass with **`/cz attack`**. Combat tab checkbox or **`settings.engageXTargetOnly`**. |
-| **aetank**       | `on` / `off` or toggle  | **AE-tank** (opt-in, default off): as MT, taunt-cycle loose XTarget adds near camp. Suppressed when an Enchanter or mezzing Bard is in group unless **`/cz aetankmezzer on`**. |
-| **aetankmezzer** | `on` / `off` or toggle  | Allow AE-tank even with Enchanter/Bard in group.                                                                  |
+| **protectcasters** | `on` / `off` or toggle | **Protect casters** (opt-in, default off): as MA, peel to an add beating a pure caster for **protectCastersSec**. See [Tanking configuration](tanking-configuration.md#protect-casters). |
+| **protectcasterssec** | `<seconds>` | Continuous seconds before Protect casters peels (default 30; Combat tab when enabled). |
 | **burn**         | `[seconds]` / `off`     | Open or close a burn window. Debuffs with a **burn** band phase cast only while the window is active. Status tab **Burn** button does the same. Default window length if seconds omitted. |
 | **antiafk**      | `on` / `off` or toggle  | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. Status tab flag or **`settings.antiAfk`**. |
 | **charmpetsetup** | `on` / `off` or toggle | Auto-setup charm pets (taunt off, assist on) after charm lands.                                                   |
@@ -140,7 +140,6 @@ These toggle verbose printf tracing for specific subsystems (session-only; not s
 | **mezdebug** | Mez target pick/skip reasons. |
 | **buffdebug** | Buff cast/skip reasons. |
 | **followdebug** | Follow leash/nav decisions (~1/s): charinfo vs spawn path, d2, suppress, nav action. Enable on one bot only. |
-| **aetankdebug** | AE-tank idle reasons (not MT, mezzer suppress, cooldown, no loose adds). |
 
 ### Master pause
 
@@ -221,8 +220,8 @@ return StoredConfig
 | **zradius**        | 75            | Vertical range from camp for mob list.                                                                                  |
 | **campRestDistance** | 15          | Distance (units) to consider "at camp" for leash and return.                                                            |
 | **engageXTargetOnly** | `false`    | Reactive engage: when `true`, only engage/debuff mobs on your XTarget Auto-Hater list. Opt-in; use with a separate puller. **`/cz attack`** bypasses until target dies. |
-| **tankAllMobs**  | `false`       | AE-tank: MT taunt-cycles loose XTarget adds. Opt-in. See [Tanking configuration](tanking-configuration.md#ae-tank). |
-| **aeTankIgnoreMezzer** | `false` | When `true`, AE-tank runs even if an Enchanter or Bard is in group. |
+| **protectCasters** | `false` | Protect casters: MA peels to an add beating a pure caster for **protectCastersSec**. See [Tanking configuration](tanking-configuration.md#protect-casters). |
+| **protectCastersSec** | `30` | Seconds before Protect casters mid-fight peel. |
 | **antiAfk**      | `true`        | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. Status tab flag or **`/cz antiafk`**. |
 | **charmPetAutoSetup** | `true`   | After charm lands, configure pet (taunt off, assist). |
 | **campAcleash**  | (varies)      | When on, chase mobs beyond camp **acleash** radius. Toggle via Combat tab or **`/cz togglecampacleash`**. |

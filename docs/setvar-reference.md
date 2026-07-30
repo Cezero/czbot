@@ -39,8 +39,8 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.maCampAnchor** | boolean | `true` | When on, non-MA bots center MobList on the resolved MA within **maAnchorLeash**. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md#maanchorleash). |
 | **settings.maAnchorLeash** | number | (falls back to **acleash**, then 75) | Max MA distance for mob bubble anchor, combat inject, and **ma_list** fallback (not **mt_list**). See [Automatic MA/MT Selection](automatic-ma-mt-selection.md#maanchorleash). |
 | **settings.engageXTargetOnly** | boolean | `false` | Reactive engage: only fight XTarget Auto-Hater mobs. See [Tanking configuration](tanking-configuration.md#reactive-engage). |
-| **settings.tankAllMobs** | boolean | `false` | AE-tank: MT taunt-cycles loose XTarget adds. See [Tanking configuration](tanking-configuration.md#ae-tank). |
-| **settings.aeTankIgnoreMezzer** | boolean | `false` | Allow AE-tank with Enchanter/Bard in group. |
+| **settings.protectCasters** | boolean | `false` | Protect casters: MA peels to an add beating a pure caster. See [Tanking configuration](tanking-configuration.md#protect-casters). |
+| **settings.protectCastersSec** | number | `30` | Seconds before Protect casters mid-fight peel. |
 | **settings.antiAfk** | boolean | `true` | Anti-AFK: open/close a random bag (or inventory) after ~3–4 min true idle. |
 | **settings.charmPetAutoSetup** | boolean | `true` | Auto-configure charm pets after charm lands. |
 | **settings.campAcleash** | boolean | (varies) | Chase beyond camp **acleash** when on. |

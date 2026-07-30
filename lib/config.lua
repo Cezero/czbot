@@ -133,7 +133,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'warpThreshold', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'campAcleash', 'confirmExit', 'buffNonPeerRaid', 'antiAfk' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'warpThreshold', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
@@ -1284,10 +1284,13 @@ function M.Load(path)
     M.config.settings.mezMinLevel = tonumber(M.config.settings.mezMinLevel) or 0
     -- On charming a mob, auto-configure the new charm pet (taunt off + send to current target).
     if M.config.settings.charmPetAutoSetup == nil then M.config.settings.charmPetAutoSetup = true end
-    -- AE-tank: when on (and no mezzer in group), the MT taunts XTarget mobs near camp that aren't on it.
-    if M.config.settings.tankAllMobs == nil then M.config.settings.tankAllMobs = false end
-    -- AE-tank override: keep AE-tanking even when an Enchanter/Bard is in the group (e.g. a non-mezzing bard).
-    if M.config.settings.aeTankIgnoreMezzer == nil then M.config.settings.aeTankIgnoreMezzer = false end
+    -- Protect casters: MA mid-fight peel when an add beats a pure caster for protectCastersSec.
+    if M.config.settings.protectCasters == nil then M.config.settings.protectCasters = false end
+    if M.config.settings.protectCastersSec == nil then M.config.settings.protectCastersSec = 30 end
+    M.config.settings.protectCastersSec = tonumber(M.config.settings.protectCastersSec) or 30
+    -- Drop legacy AE-tank keys if present in old character configs.
+    M.config.settings.tankAllMobs = nil
+    M.config.settings.aeTankIgnoreMezzer = nil
     -- Leash-to-radius: when on, melee returns to camp instead of chasing an engaged mob past the radius.
     -- Persisted seed for the session-only rc.doCampAcleash (default on).
     if M.config.settings.campAcleash == nil then M.config.settings.campAcleash = true end

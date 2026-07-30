@@ -90,28 +90,31 @@ function M.draw()
         runConfigLoaders()
     end
 
-    ImGui.Text('Tank all mobs (AE-tank)')
+    ImGui.Text('Protect casters')
     if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Main-tank only: actively taunt every XTarget mob near camp that is not on you, cycling to grab/hold the whole pull.\nAuto-suppressed when an Enchanter/Bard is in your group (so it never wakes/steals your mezzer\'s targets).\nUses the base Taunt skill (no AE-taunt this era), re-taunting peelers to keep them.')
+        ImGui.SetTooltip('Main Assist only: if an unmezzed add beats a pure caster (CLR/DRU/SHM/ENC/WIZ/MAG/NEC) in group/raid for the Seconds below, switch the group onto that add (like named override).\nAlso prioritizes caster-threatened adds when picking the next mob after the current one dies (even when this toggle is off).')
     end
     ImGui.SameLine()
-    local atChecked = (botconfig.config.settings.tankAllMobs == true)
-    local atVal, atPressed = ImGui.Checkbox('##combat_tankAllMobs', atChecked)
-    if atPressed then
-        botconfig.config.settings.tankAllMobs = atVal
+    local pcChecked = (botconfig.config.settings.protectCasters == true)
+    local pcVal, pcPressed = ImGui.Checkbox('##combat_protectCasters', pcChecked)
+    if pcPressed then
+        botconfig.config.settings.protectCasters = pcVal
+        if not pcVal then require('lib.protectcasters').clear() end
         runConfigLoaders()
     end
 
-    if atChecked then
-        ImGui.Text('   \u{2514} Ignore mezzer in group')
+    if pcChecked then
+        ImGui.SameLine()
+        ImGui.Text('Seconds')
         if ImGui.IsItemHovered() then
-            ImGui.SetTooltip('By default AE-tank turns itself off when an Enchanter/Bard is in your group.\nEnable this to keep AE-tanking anyway -- e.g. when your bard is just twisting songs, not mezzing.')
+            ImGui.SetTooltip('Continuous seconds an add must keep the same pure-caster target before mid-fight peel (default 30).')
         end
         ImGui.SameLine()
-        local amChecked = (botconfig.config.settings.aeTankIgnoreMezzer == true)
-        local amVal, amPressed = ImGui.Checkbox('##combat_aeTankIgnoreMezzer', amChecked)
-        if amPressed then
-            botconfig.config.settings.aeTankIgnoreMezzer = amVal
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local pcsVal = botconfig.config.settings.protectCastersSec or 30
+        local pcsNew, pcsCh = inputs.boundedInt('combat_protectCastersSec', pcsVal, 5, 120, 5, '##combat_protectCastersSec')
+        if pcsCh then
+            botconfig.config.settings.protectCastersSec = pcsNew
             runConfigLoaders()
         end
     end

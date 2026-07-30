@@ -930,17 +930,33 @@ local function cmd_burn(args)
     log.say('Burn window started (%ds). Debuffs with a Burn band phase will cast.', sec)
 end
 
-local function cmd_aetank(args)
+local function cmd_protectcasters(args)
     local mode = args[2] and string.lower(args[2]) or ''
     if mode == 'on' or mode == 'true' or mode == '1' then
-        botconfig.config.settings.tankAllMobs = true
+        botconfig.config.settings.protectCasters = true
     elseif mode == 'off' or mode == 'false' or mode == '0' then
-        botconfig.config.settings.tankAllMobs = false
+        botconfig.config.settings.protectCasters = false
     else
-        botconfig.config.settings.tankAllMobs = not (botconfig.config.settings.tankAllMobs == true)
+        botconfig.config.settings.protectCasters = not (botconfig.config.settings.protectCasters == true)
+    end
+    if not botconfig.config.settings.protectCasters then
+        require('lib.protectcasters').clear()
     end
     botconfig.ApplyAndPersist()
-    log.say('AE-tank %s', (botconfig.config.settings.tankAllMobs == true) and 'on' or 'off')
+    log.say('Protect casters %s', (botconfig.config.settings.protectCasters == true) and 'on' or 'off')
+end
+
+local function cmd_protectcasterssec(args)
+    local val = tonumber(args[2])
+    if not val or val < 1 then
+        log.say('Usage: /cz protectcasterssec <seconds> (current: %s)', tostring(botconfig.config.settings.protectCastersSec or 30))
+        return
+    end
+    if val < 5 then val = 5 end
+    if val > 120 then val = 120 end
+    botconfig.config.settings.protectCastersSec = val
+    botconfig.ApplyAndPersist()
+    log.say('Protect casters seconds set to %d', val)
 end
 
 local function cmd_antiafk(args)
@@ -954,28 +970,6 @@ local function cmd_antiafk(args)
     end
     botconfig.ApplyAndPersist()
     log.say('Anti-AFK %s', (botconfig.config.settings.antiAfk ~= false) and 'on' or 'off')
-end
-
-local function cmd_aetankmezzer(args)
-    local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'on' or mode == 'true' or mode == '1' then
-        botconfig.config.settings.aeTankIgnoreMezzer = true
-    elseif mode == 'off' or mode == 'false' or mode == '0' then
-        botconfig.config.settings.aeTankIgnoreMezzer = false
-    else
-        botconfig.config.settings.aeTankIgnoreMezzer = not (botconfig.config.settings.aeTankIgnoreMezzer == true)
-    end
-    botconfig.ApplyAndPersist()
-    log.say('AE-tank ignore-mezzer %s', (botconfig.config.settings.aeTankIgnoreMezzer == true) and 'on (AE-tank runs with ENC/BRD in group)' or 'off (auto-suppress on ENC/BRD)')
-end
-
-local function cmd_aetankdebug(args)
-    local botmelee = require('botmelee')
-    local mode = args[2] and string.lower(args[2]) or ''
-    if mode == 'on' or mode == 'true' or mode == '1' then botmelee.SetAeTankDebug(true)
-    elseif mode == 'off' or mode == 'false' or mode == '0' then botmelee.SetAeTankDebug(false)
-    else botmelee.SetAeTankDebug(not botmelee.IsAeTankDebug()) end
-    log.say('AE-tank debug logging %s', botmelee.IsAeTankDebug() and 'on' or 'off')
 end
 
 local function cmd_charmpetsetup(args)
@@ -1537,10 +1531,9 @@ local handlers = {
     tickdebug = cmd_tickdebug,
     actordebug = cmd_actordebug,
     charmpetsetup = cmd_charmpetsetup,
-    aetank = cmd_aetank,
-    aetankmezzer = cmd_aetankmezzer,
-    aetankdebug = cmd_aetankdebug,
     antiafk = cmd_antiafk,
+    protectcasters = cmd_protectcasters,
+    protectcasterssec = cmd_protectcasterssec,
     burn = cmd_burn,
     maanchorleash = cmd_maanchorleash,
     offtank = cmd_offtank,
