@@ -69,10 +69,6 @@ local processMessage
 local INLINE_IMMEDIATE_IDS = {
     ping = true,
 }
-local FOLLOW_PRIORITY_IDS = {
-    follow_me = true,
-    follow_me_off = true,
-}
 local _nextPingAt = 0
 local _nextOtHeartbeatAt = 0
 local _nextClaimPruneAt = 0
@@ -197,18 +193,6 @@ local function entryMessageId(entry)
     return entry and entry.content and entry.content.id or nil
 end
 
-local function isFollowPriorityEntry(entry)
-    local id = entryMessageId(entry)
-    return id and FOLLOW_PRIORITY_IDS[id] == true
-end
-
-local function findNewestFollowIndex()
-    for i = _inboundTail - 1, _inboundHead, -1 do
-        if isFollowPriorityEntry(_inboundQueue[i]) then return i end
-    end
-    return nil
-end
-
 local function dequeueInbound()
     if _inboundHead >= _inboundTail then return nil end
     local msg = _inboundQueue[_inboundHead]
@@ -225,11 +209,6 @@ end
 local function enqueueInboundBack(entry)
     _inboundQueue[_inboundTail] = entry
     _inboundTail = _inboundTail + 1
-end
-
-local function enqueueInboundFront(entry)
-    _inboundHead = _inboundHead - 1
-    _inboundQueue[_inboundHead] = entry
 end
 
 local function recordDroppedEntry(entry)
@@ -272,35 +251,18 @@ end
 local function enforceInboundCap()
     local droppedNow = 0
     while inboundDepth() > INBOUND_QUEUE_MAX_DEPTH do
-        local keepIdx = findNewestFollowIndex()
-        if keepIdx and keepIdx == _inboundHead then
-            local follow = dequeueInbound()
-            local victim = dequeueInbound()
-            if victim then
-                recordDroppedEntry(victim)
-                droppedNow = droppedNow + 1
-            end
-            if follow then enqueueInboundFront(follow) end
-            if not victim then break end
-        else
-            local victim = dequeueInbound()
-            if not victim then break end
-            recordDroppedEntry(victim)
-            droppedNow = droppedNow + 1
-        end
+        local victim = dequeueInbound()
+        if not victim then break end
+        recordDroppedEntry(victim)
+        droppedNow = droppedNow + 1
     end
     maybeWarnQueueDrops(droppedNow)
 end
 
 local function enqueueInbound(entry)
-    local id = entryMessageId(entry)
-    if id and FOLLOW_PRIORITY_IDS[id] then
-        enqueueInboundFront(entry)
-    else
-        enqueueInboundBack(entry)
-    end
+    enqueueInboundBack(entry)
     _trafficEnqueued = _trafficEnqueued + 1
-    bumpIdCount(_enqueueIdCounts, id)
+    bumpIdCount(_enqueueIdCounts, entryMessageId(entry))
     enforceInboundCap()
     maybeWarnQueueDepth()
     maybeLogQueueDebug()
