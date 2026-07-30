@@ -8,6 +8,13 @@ This document is a single reference for all **/cz** commands and the **configura
 
 All commands are used as **`/cz <command> [arguments]`**. Arguments are optional unless noted.
 
+### Multi-box remote commands
+
+- **Local:** run `/cz <cmd> ...` on the client that should act.
+- **Remote (MQRemote):** `/rc <scope> /cz <cmd> ...` where `<scope>` is `group`, `raid`, a character name, or `zone` (as supported by MQRemote). Examples: `/rc group /cz protectcasters on`, `/rc SomeToon /cz reloadcommon`.
+- **Actor channel:** prefer leader commands that already sync peers without `/rc` — `/cz followme`, `/cz camphere`, `/cz attack`, and MA/MT handoff. See [CZBot Actor channel](czbot-actor-channel.md).
+- In-game quick list: CZBot window **Help** tab (`/czshow`).
+
 ### Toggles
 
 These turn a feature on or off. Use **`/cz <cmd> on`**, **`/cz <cmd> off`**, or **`/cz <cmd>`** to toggle.

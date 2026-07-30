@@ -16,7 +16,7 @@ local GROUPS = {
         { "/czp", "Pause / resume the bot." },
         { "/cz quit   (/czquit)", "Stop the bot (ends the Lua script)." },
         { "/cz stop", "Stop following and clear camp." },
-        { "/cz abort", "Abort the current action / cast." },
+        { "/cz abort [off]", "Stop cast/engage, clear target, turn off domelee and dodebuff. Use abort off to re-enable them." },
         { "/cz refresh   (refreshspells)", "Reload the spell config from disk." },
         { "/cz reloadcommon", "Reload cz_common.lua (shared MA/MT lists, immune list, junk)." },
         { "/cz import lua <file>", "Import a config from a Lua file." },
@@ -35,7 +35,8 @@ local GROUPS = {
         { "/cz actor ping|status", "Czbot Actor channel: ping (diagnostic), status (queue depth/drain/drop + traffic)." },
         { "/cz actordebug on|off", "Log ma_update/mt_update send/recv when actordebug is on." },
         { "/cz actordebug queue [on|off]", "Throttled inbound queue enqueue/drain/drop stats (not per-message)." },
-        { "/cz attack", "Manually engage your current target (overrides XTarget-only)." },
+        { "/cz attack [name]", "Engage the MA's live Target now (Actor broadcast to group/raid); bypasses assist-% and XTarget-only. Optional player name." },
+        { "/cz disengage", "Release the current combat target. On the MA, also broadcasts ma_disengage to peers. Does not turn off domelee/dodebuff." },
         { "/cz cast <alias>", "Cast a configured spell/ability by its alias." },
     } },
     { title = "Combat behavior", cmds = {
@@ -55,7 +56,7 @@ local GROUPS = {
         { "/cz protectcasterssec <n>", "Seconds an add must keep a pure-caster target before Protect casters peels (default 30)." },
         { "/cz antiafk on|off", "Toggle anti-AFK (open/close a random bag or inventory after ~3–4 min true idle)." },
         { "/cz burn [seconds|off]", "Open a burn window; debuffs with a Burn band phase cast during it." },
-        { "/cz togglenuke", "Toggle nuke usage." },
+        { "/cz togglenuke <flavor> [on|off]", "Toggle a nuke resist flavor (fire, ice, magic, poison, disease; cold=ice)." },
         { "/cz togglesongs", "Toggle the bard song twist." },
         { "/cz mobprob on|off", "Toggle MobProb /nav on LoS/range errors (default off)." },
         { "/cz evadepct <n>", "Rogue: PctAggro at which to dump aggro with Hide." },
@@ -63,16 +64,16 @@ local GROUPS = {
     } },
     { title = "Camp & movement", cmds = {
         { "/cz makecamp on|off", "Set / clear camp at your current spot." },
-        { "/cz camphere [group|raid|off|stop]", "Leader camp: camp here + tell group/raid (auto-detect) via Actor channel to camp at their spot." },
+        { "/cz camphere [group|raid|off|stop]", "Leader camp: camp here + tell group/raid (auto-detect) via Actor channel to camp at their spot. Mutually exclusive with followme." },
         { "/cz leash", "Return to camp now." },
         { "/cz acleash <n>", "Camp radius (which mobs count as in-camp)." },
         { "/cz camprestdistance <n>", "How close counts as 'at camp' for the return." },
-        { "/cz targetfilter <0|1|2>", "Camp mob filter: 0 = Aggressive NPCs, 1 = LoS NPCs, 2 = All NPCs." },
+        { "/cz targetfilter <0|1|2>", "Camp mob filter: 0 = aggressive+LOS (pull aggressive), 1 = NPC+LOS, 2 = exclude PCs/mercs." },
         { "/cz togglecampacleash", "Toggle 'leash to radius' (chase beyond camp radius, or not)." },
         { "/cz macampanchor", "Toggle anchoring the mob bubble on the Main Assist." },
         { "/cz maanchorleash <n>", "Max MA distance for the anchor and ma/mt fallback lists." },
         { "/cz follow <name>", "Follow a PC." },
-        { "/cz followme [group|raid|off|stop]", "Leader follow: group/raid (auto-detect) follows you via Actor channel." },
+        { "/cz followme [group|raid|off|stop]", "Leader follow: group/raid (auto-detect) follows you via Actor channel. Mutually exclusive with camphere." },
         { "/cz travel <name>", "Travel mode: follow only, combat/pull suspended." },
     } },
     { title = "Lists & filters", cmds = {
@@ -82,7 +83,7 @@ local GROUPS = {
         { "/cz mobfilter <...>", "Adjust mob-list filtering for the current zone." },
         { "/cz addjunk <item>", "Add an item to the zone junk list (destroyed on forage)." },
         { "/cz foragezone on|off", "Enable / disable auto-forage in the current zone." },
-        { "/cz fte", "First-to-engage (FTE) lock handling." },
+        { "/cz fte clear [all]", "Clear FTE lock for your targeted NPC, or all entries." },
         { "/cz xarc <...>", "Advanced XTarget configuration." },
     } },
     { title = "CC / pets / cleric chain", cmds = {
@@ -95,16 +96,16 @@ local GROUPS = {
         { "/cz followdebug on|off", "Log follow leash/nav decisions (~1/s). Enable on one stuck bot." },
         { "/cz tickdebug on|off", "Log tick gap/processing time; per-hook breakdown when proc exceeds 100ms." },
         { "/cz tickdebug spans on|off", "Nested sub-step timing for slow hooks (doHeal/doBuff/doCure/czactor/AddSpawnCheck)." },
-        { "/cz echo <text>", "Echo a message (testing)." },
+        { "/cz echo <section.key>", "Print the current value of a config path (e.g. heal.interruptlevel)." },
     } },
     { title = "Utility", cmds = {
         { "/cz addspell <...>", "Add a spell entry to a section." },
-        { "/cz saytarget   (syt)", "Announce your current target in chat." },
-        { "/cz clickdoor", "Click the nearest door." },
-        { "/cz linkitem <slot>", "Link an equipped item to chat." },
-        { "/cz linkaugs", "Link your augments to chat." },
+        { "/cz saytarget [group|raid] <message>", "With an NPC targeted: /say the message locally and send peers via MQRemote to say it too (staggered). Default scope: raid if in raid, else group." },
+        { "/cz clickdoor", "Target the nearest door (/doortarget), wait, then /click left door." },
+        { "/cz linkitem <slot> [hp]", "Link an equipped item to chat (optional HP filter)." },
+        { "/cz linkaugs <slot>", "Link augments in the given equipment slot." },
         { "/cz spread", "Spread out from nearby characters." },
-        { "/cz draghack", "Toggle the corpse-drag hack." },
+        { "/cz draghack", "Toggle the corpse-drag hack (sumcorpse)." },
         { "/cz raid save|load <name>", "Save / load a raid roster." },
     } },
 }
@@ -112,7 +113,8 @@ local GROUPS = {
 function M.draw()
     ImGui.TextWrapped(
         "Quick reference for /cz commands. Most toggles accept on|off|toggle; with no argument they flip. " ..
-        "Many are broadcast-friendly across your crew (e.g. /bcaa //cz protectcasters on).")
+        "Run the same toggle on every box with MQRemote (e.g. /rc group /cz protectcasters on). " ..
+        "/cz followme and /cz camphere sync peers via the Actor channel — run them once on the leader.")
     ImGui.Spacing()
     for _, g in ipairs(GROUPS) do
         section.header(g.title)
