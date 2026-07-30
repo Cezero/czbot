@@ -972,7 +972,7 @@ function botheal.HealCheck(runPriority)
             if not peerNeedsHealFromSnap(snap, th.tank, spellCtx.spellrangeSq, nil, nil) then
                 return nil, nil
             end
-            return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'tank')
+            return targetId, 'tank'
         end
         if targethit == 'offtank' then
             if not th or not th.offtank then return nil, nil end
@@ -980,7 +980,7 @@ function botheal.HealCheck(runPriority)
             if not charinfowatchers.watchListHas('HEAL', 'LIST', spellId, targetId) then return nil, nil end
             local snap = ensureHealSnap(context, targetId, nil)
             if peerNeedsHealFromSnap(snap, th.offtank, spellCtx.spellrangeSq, nil, nil) then
-                return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'offtank')
+                return targetId, 'offtank'
             end
             return nil, nil
         end
@@ -1027,7 +1027,7 @@ function botheal.HealCheck(runPriority)
                 if not charinfowatchers.watchListHas('HEAL', 'ALL', spellId, targetId) then return nil, nil end
                 local snap = ensureHealSnap(context, targetId, name)
                 if peerNeedsHealFromSnap(snap, th.pc, spellCtx.spellrangeSq, nil, nil) then
-                    return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'pc')
+                    return targetId, 'pc'
                 end
                 return nil, nil
             end
@@ -1035,7 +1035,7 @@ function botheal.HealCheck(runPriority)
                 if not charinfowatchers.watchListHas('HEAL', 'INGROUP', spellId, targetId) then return nil, nil end
                 local snap = ensureHealSnap(context, targetId, name)
                 if peerNeedsHealFromSnap(snap, th.groupmember, spellCtx.spellrangeSq, nil, nil) then
-                    return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'groupmember')
+                    return targetId, 'groupmember'
                 end
                 return nil, nil
             end

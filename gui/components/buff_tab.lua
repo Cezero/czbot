@@ -46,7 +46,7 @@ local TARGETPHASE_OPTIONS_BUFF = {
     { key = 'self',        label = 'Self',     tooltip = 'Buff self.' },
     { key = 'tank',        label = 'Tank',     tooltip = 'Buff tank (main assist).' },
     { key = 'groupmember', label = 'Group',     tooltip = 'Buff your group members (class filter below).' },
-    { key = 'pc',          label = 'All chars', tooltip = 'Single-target: buff networked characters in range (any group), class-filtered below.' },
+    { key = 'pc',          label = 'All chars', tooltip = 'Single-target or Group v2 AE: buff networked characters from the CharInfo ALL watchlist (any group), class-filtered at register time.' },
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Buff your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Buff other group pets.' },
     { key = 'groupbuff',   label = 'Grp Buff', tooltip = 'Group v1 AE: cast on self (no target) when enough of your group need the buff. tarcnt includes self.' },
@@ -55,7 +55,7 @@ local TARGETPHASE_OPTIONS_BUFF = {
 local TARGETPHASE_GROUPV2_PC = {
     key = 'pc',
     label = 'All chars',
-    tooltip = 'Group v2 remote: cast on one networked peer per group to AE their group. Uses tarcnt and class filter; one anchor per group (raid recommended for multi-group dedup).',
+    tooltip = 'Group v2 AE: cast on CharInfo ALL-watchlist peers; AE covers their group and they leave the watchlist when buffed.',
 }
 
 local TARGETPHASE_GROUPV2_GROUPBUFF = {
@@ -202,7 +202,7 @@ local function buffCustomSection(entry, idPrefix, onChanged)
         ImGui.Text('Target count')
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip(
-                'Minimum group members in AE range (including yourself for Grp Buff) that must need this buff before casting. Remote All chars uses the same count for the anchor peer\'s group.')
+                'Minimum group members needing this buff before casting Grp Buff on self (tarcnt includes yourself). Peer All-chars targeting uses the CharInfo watchlist.')
         end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)

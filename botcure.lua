@@ -43,72 +43,38 @@ local function CureTypeList(index)
     return list
 end
 
-local CureTypeToPeerKey = {
-    poison = "CountPoison",
-    disease = "CountDisease",
-    curse = "CountCurse",
-    corruption = "CountCorruption",
-}
-
+--- Self / non-peer need check. Peers: watchlist already applied; only range.
 local function CureEvalForTarget(index, botname, botid, botclass, targethit, spelltartype, resumePhase, resumeGroupIndex)
     local cureindex = CureClass[index]
     if not cureindex then return nil, nil end
     if not botname then
-        local meId = mq.TLO.Me.ID()
-        if not spellutils.EnsureSpawnBuffsPopulated(meId, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then
-            return nil, nil
-        end
-        if spellutils.SpawnDetrimentalsForCure(meId, CureTypeList(index)) and targethit == 'self' then
-            return meId, 'self'
+        if spellutils.MeDetrimentalsForCure(CureTypeList(index)) and targethit == 'self' then
+            return mq.TLO.Me.ID(), 'self'
         end
         return nil, nil
     end
-    for _, v in pairs(CureType[index] or {}) do
-        local peer = charinfo.GetInfo(botname)
-        if peer then
-            local detrimentals = peer.Detrimentals or nil
-            local key = (string.lower(v) ~= 'all') and CureTypeToPeerKey[string.lower(v)]
-            local curetype = key and (peer[key] or nil) or nil
-            if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
-                if targethit == 'tank' then return botid, 'tank' end
-                if targethit == 'offtank' and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, 'offtank'
-                end
-                -- groupmember/pc: CharInfo watchlist already filtered by class.
-                if (targethit == 'groupmember' or targethit == 'pc') and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, targethit
-                end
-                if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, botclass
-                end
-            end
-            if string.lower(v) ~= 'all' and curetype and curetype > 0 then
-                if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, 'tank'
-                end
-                if targethit == 'offtank' and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, 'offtank'
-                end
-                if (targethit == 'groupmember' or targethit == 'pc') and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, targethit
-                end
-                if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, botclass
-                end
-            end
+    if not botid or botid <= 0 then return nil, nil end
+
+    if charinfo.GetInfo(botname) then
+        if not spellutils.DistanceCheck('cure', index, botid) then return nil, nil end
+        if targethit == 'tank' or targethit == 'offtank' or targethit == 'groupmember' or targethit == 'pc' then
+            return botid, targethit
         end
+        -- Legacy class token targethit (CureEval pc path).
+        if type(targethit) == 'string' and cureindex[targethit] then
+            return botid, targethit
+        end
+        return nil, nil
     end
-    if botname and botid and not charinfo.GetInfo(botname) then
-        if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then
-            return nil, nil
-        end
-        local typelist = CureTypeList(index)
-        local needCure = spellutils.SpawnDetrimentalsForCure(botid, typelist)
-        if needCure and spellutils.DistanceCheck('cure', index, botid) then
-            if targethit == 'tank' then return botid, 'tank' end
-            if targethit == 'offtank' then return botid, 'offtank' end
-            if targethit == 'groupmember' or targethit == 'pc' then return botid, targethit end
-        end
+
+    -- Non-peer: Spawn buff walk.
+    if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then
+        return nil, nil
+    end
+    if not spellutils.SpawnDetrimentalsForCure(botid, CureTypeList(index)) then return nil, nil end
+    if not spellutils.DistanceCheck('cure', index, botid) then return nil, nil end
+    if targethit == 'tank' or targethit == 'offtank' or targethit == 'groupmember' or targethit == 'pc' then
+        return botid, targethit
     end
     return nil, nil
 end
@@ -118,26 +84,7 @@ local function CureEvalGroupCure(index, entry)
     if not spellId then return nil, nil end
     local typelist = CureTypeList(index)
     local function selfPasses()
-        return spellutils.SpawnDetrimentalsForCure(mq.TLO.Me.ID(), typelist)
-            or (function()
-                for _, v in pairs(CureType[index] or {}) do
-                    local u = string.lower(v)
-                    if u == 'all' and mq.TLO.Me.BuffsPopulated() then
-                        -- approximate: any detrimental on self via counters
-                        if (mq.TLO.Me.Poisoned and mq.TLO.Me.Poisoned())
-                            or (mq.TLO.Me.Diseased and mq.TLO.Me.Diseased())
-                            or (mq.TLO.Me.Cursed and mq.TLO.Me.Cursed())
-                            or (mq.TLO.Me.Corrupted and mq.TLO.Me.Corrupted()) then
-                            return true
-                        end
-                    end
-                    if u == 'poison' and mq.TLO.Me.Poisoned and mq.TLO.Me.Poisoned() then return true end
-                    if u == 'disease' and mq.TLO.Me.Diseased and mq.TLO.Me.Diseased() then return true end
-                    if u == 'curse' and mq.TLO.Me.Cursed and mq.TLO.Me.Cursed() then return true end
-                    if u == 'corruption' and mq.TLO.Me.Corrupted and mq.TLO.Me.Corrupted() then return true end
-                end
-                return false
-            end)()
+        return spellutils.MeDetrimentalsForCure(typelist)
     end
     if not charinfowatchers.grpAggShouldCast('CURE', spellId, entry.tarcnt, selfPasses) then
         return nil, nil
@@ -149,6 +96,7 @@ local function CureEval(index)
     local entry = botconfig.getSpellEntry('cure', index)
     local spell, _, spelltartype = spellutils.GetSpellInfo(entry)
     if not spell then return nil, nil end
+    local spellId = spellutils.GetSpellId(entry)
     local bots = spellutils.GetBotListOrdered()
     local botcount = charinfo.GetPeerCnt()
     local tank, tankid = spellutils.GetTankInfo(false)
@@ -158,7 +106,8 @@ local function CureEval(index)
         local id, hit = CureEvalForTarget(index, nil, nil, nil, 'self', spelltartype)
         if id then return id, hit end
     end
-    if cureindex.tank and tankid then
+    if cureindex.tank and tankid and spellId
+        and charinfowatchers.watchListHas('CURE', 'LIST', spellId, tankid) then
         local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype, 'after_tank', nil)
         if id then return id, hit end
     end
@@ -166,15 +115,14 @@ local function CureEval(index)
         local id, hit = CureEvalGroupCure(index, entry)
         if id then return id, hit end
     end
-    if cureindex.groupmember then
+    if cureindex.groupmember and spellId then
         for i = 1, botcount do
             local botname = bots[i]
             local peer = botname and charinfo.GetInfo(botname)
             local botid = peer and peer.ID
-            local botclass = peer and peer.Class and peer.Class.ShortName
-            if botclass then botclass = string.lower(botclass) end
-            if cureindex[botclass] and botid and mq.TLO.Group.Member(botname).ID() then
-                local id, hit = CureEvalForTarget(index, botname, botid, botclass, 'groupmember', spelltartype)
+            if botid and botid > 0 and mq.TLO.Group.Member(botname).ID()
+                and charinfowatchers.watchListHas('CURE', 'INGROUP', spellId, botid) then
+                local id, hit = CureEvalForTarget(index, botname, botid, nil, 'groupmember', spelltartype)
                 if id then return id, hit end
             end
         end
@@ -193,16 +141,14 @@ local function CureEval(index)
             end
         end
     end
-    if cureindex.pc and botcount then
+    if cureindex.pc and spellId and botcount then
         for i = 1, botcount do
             local botname = bots[i]
             if botname then
                 local peer = charinfo.GetInfo(botname)
                 local botid = peer and peer.ID
-                local botclass = peer and peer.Class and peer.Class.ShortName
-                if botclass then botclass = string.lower(botclass) end
-                if botclass and botid and cureindex[botclass] then
-                    local id, hit = CureEvalForTarget(index, botname, botid, botclass, botclass, spelltartype)
+                if botid and botid > 0 and charinfowatchers.watchListHas('CURE', 'ALL', spellId, botid) then
+                    local id, hit = CureEvalForTarget(index, botname, botid, nil, 'pc', spelltartype)
                     if id then return id, hit end
                 end
             end
@@ -269,19 +215,30 @@ local function cureTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local spell, _, spelltartype = spellutils.GetSpellInfo(entry)
     if not spell then return nil, nil end
     local botname = (targethit ~= 'self') and mq.TLO.Spawn(targetId).CleanName() or nil
-    local botclass = targethit
     if targethit == 'self' then
         return CureEvalForTarget(spellIndex, nil, nil, nil, 'self', spelltartype)
-    end
-    if targethit == 'tank' then
-        local id, hit = CureEvalForTarget(spellIndex, context.tank, context.tankid, nil, 'tank', spelltartype, nil, nil)
-        if id == targetId then return id, hit end
-        return nil, nil
     end
     if targethit == 'groupcure' then
         return CureEvalGroupCure(spellIndex, entry)
     end
-    local id, hit = CureEvalForTarget(spellIndex, botname, targetId, botclass, targethit, spelltartype, nil, nil)
+
+    local watchScope = charinfowatchers.phaseToScope(targethit)
+    if watchScope and watchScope ~= 'GRPAGG' then
+        local spellId = spellutils.GetSpellId(entry)
+        if not spellId or not charinfowatchers.watchListHas('CURE', watchScope, spellId, targetId) then
+            return nil, nil
+        end
+        if targethit == 'tank' then
+            local id, hit = CureEvalForTarget(spellIndex, context.tank, context.tankid, nil, 'tank', spelltartype, nil, nil)
+            if id == targetId then return id, hit end
+            return nil, nil
+        end
+        local id, hit = CureEvalForTarget(spellIndex, botname, targetId, nil, targethit, spelltartype, nil, nil)
+        if id == targetId then return id, hit end
+        return nil, nil
+    end
+
+    local id, hit = CureEvalForTarget(spellIndex, botname, targetId, targethit, targethit, spelltartype, nil, nil)
     if id == targetId then return id, hit end
     return nil, nil
 end

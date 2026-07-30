@@ -1088,16 +1088,9 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         if sp and sp.Type and sp.Type() == 'Corpse' then return false end
     end
     local detail = string.format('id=%s sub=%s', tostring(spawnId), tostring(sub))
-    -- Caster's own buffs: Me.BuffsPopulated() is valid without targeting self; avoid /tar so MT keeps mob targeted.
+    -- Local character buffs are always available; never /tar or wait on Me.
     if spawnId == mq.TLO.Me.ID() then
-        if mq.TLO.Me.BuffsPopulated() then return true end
-        state.getRunconfig().statusMessage = string.format('Waiting for target buffs (id %s)', spawnId)
-        tickprof.span('EnsureBuffs.self_wait', function()
-            mq.delay(1000, function() return mq.TLO.Me.BuffsPopulated() == true end)
-        end, detail)
-        local ok = mq.TLO.Me.BuffsPopulated()
-        if not ok then state.getRunconfig().statusMessage = '' end
-        return ok
+        return true
     end
     if mq.TLO.Target.ID() == spawnId then
         local sp = mq.TLO.Spawn(spawnId)
