@@ -413,6 +413,22 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
             return false
         end
     end
+    -- DebuffList-first: skip Spawn buff-slot walks when we already track a long-enough duration.
+    local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
+    local durationSec = tonumber(ctx.spelldur) or 0
+    if durationSec <= 0 and entry.gem == 'disc' then
+        durationSec = spellutils.GetSpellDurationSec(entry)
+    end
+    if durationSec > 0 and spawnId and ctx.spellid and not entry.recastActive then
+        if spellstates.HasDebuffLongerThan(spawnId, ctx.spellid, debuffRefreshThresholdMs) then
+            if isMez and phase == 'notmatar' and not spellutils.SpawnMezActive(spawnId) then
+                spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
+                spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
+            else
+                return mezSkip('debuff still active')
+            end
+        end
+    end
     local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
         if phase == 'notmatar' and isMez then
@@ -424,15 +440,9 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
             return false
         end
     end
-    local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
-    local durationSec = tonumber(ctx.spelldur) or 0
-    if durationSec <= 0 and entry.gem == 'disc' then
-        durationSec = spellutils.GetSpellDurationSec(entry)
-    end
     if durationSec > 0 and spawn.ID() and ctx.spellid and not entry.recastActive then
-        local trackedActive = spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs)
         local onTargetActive = spellutils.SpawnHasDebuffSpellId(ctx.spellid, spawn.ID(), debuffRefreshThresholdMs)
-        if trackedActive or onTargetActive then
+        if onTargetActive then
             if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
                 spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
                 spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)

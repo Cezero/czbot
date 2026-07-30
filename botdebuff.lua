@@ -15,11 +15,14 @@ local log = require('lib.log')
 
 local botdebuff = {}
 local DebuffBands = {}
+local _hasCharmSpell = false
+local _hasNotmatarBand = false
 local bardtwist = require('lib.bardtwist')
 local botmelee = require('botmelee')
 local targeting = require('lib.targeting')
 local castinterrupt = require('lib.castinterrupt')
 local spawnutils = require('lib.spawnutils')
+local tickprof = require('lib.tickprof')
 
 local function defaultDebuffEntry()
     return botconfig.getDefaultSpellEntry('debuff')
@@ -52,6 +55,17 @@ function botdebuff.LoadDebuffConfig()
         storeIn = DebuffBands,
         perEntryNormalize = normalizeDebuffEntry,
     })
+    _hasCharmSpell = false
+    _hasNotmatarBand = false
+    local count = botconfig.getSpellCount('debuff')
+    for i = 1, count do
+        local entry = botconfig.getSpellEntry('debuff', i)
+        if entry and entry.enabled ~= false then
+            if spellutils.IsCharmSpell(entry) then _hasCharmSpell = true end
+            local db = DebuffBands[i]
+            if db and db.notmatar then _hasNotmatarBand = true end
+        end
+    end
 end
 
 castutils.RegisterSectionLoader('debuff', 'dodebuff', botdebuff.LoadDebuffConfig)
@@ -92,7 +106,7 @@ local function debuffMatarSpawnForTarget(chosenTargetId, ctx)
     return nil
 end
 
-local function DebuffEvalBuildContext(index)
+local function DebuffEvalBuildContext(index, shared)
     local myconfig = botconfig.config
     local entry = botconfig.getSpellEntry('debuff', index)
     if not entry then return nil end
@@ -101,16 +115,28 @@ local function DebuffEvalBuildContext(index)
     local gem = entry.gem
     local spellId, spellMaxLvl, myrange, spelldur, minCastDistSq, aeRange, minCastDist = nil, nil, nil, nil, nil, nil,
         nil
-    -- Decoupled targets:
-    -- - MA target drives default debuff/tanktar targeting.
-    -- - MT target is available for `onlyMT` debuffs and for mez exception.
-    local _tank, tankid, mtTargetId, mtTargetHp = spellutils.GetTankInfo(true)
-    if mtTargetId == 0 then mtTargetId = nil end
-    local mtTargetLvl = mtTargetId and mq.TLO.Spawn(mtTargetId).Level()
-
-    local _assist, assistid, maTargetId, maTargetHp = spellutils.GetAssistInfo(true)
-    if maTargetId == 0 then maTargetId = nil end
-    local maTargetLvl = maTargetId and mq.TLO.Spawn(maTargetId).Level()
+    -- Prefer pass-local MA/MT from DebuffCheck; fall back to Assist/Tank TLOs.
+    local assistid, maTargetId, maTargetHp, maTargetLvl
+    local tankid, mtTargetId, mtTargetHp, mtTargetLvl
+    if shared then
+        assistid = shared.assistid
+        maTargetId = shared.maTargetId
+        maTargetHp = shared.maTargethp
+        maTargetLvl = shared.maTargetLvl
+        tankid = shared.tankid
+        mtTargetId = shared.mtTargetId
+        mtTargetHp = shared.mtTargethp
+        mtTargetLvl = shared.mtTargetLvl
+    else
+        local _tank
+        _tank, tankid, mtTargetId, mtTargetHp = spellutils.GetTankInfo(true)
+        if mtTargetId == 0 then mtTargetId = nil end
+        mtTargetLvl = mtTargetId and mq.TLO.Spawn(mtTargetId).Level()
+        local _assist
+        _assist, assistid, maTargetId, maTargetHp = spellutils.GetAssistInfo(true)
+        if maTargetId == 0 then maTargetId = nil end
+        maTargetLvl = maTargetId and mq.TLO.Spawn(maTargetId).Level()
+    end
     if gem ~= 'ability' and gem ~= 'script' then
         local spellEntity = spellutils.GetSpellEntity(entry)
         if not spellEntity then return nil end
@@ -158,7 +184,7 @@ local function DebuffEvalBuildContext(index)
         aeRange = aeRange,
         minCastDist = minCastDist,
         minCastDistSq = minCastDistSq,
-        mobList = state.getRunconfig().MobList or {},
+        mobList = (shared and shared.mobList) or (state.getRunconfig().MobList or {}),
         mobMin = mobMin,
         mobMax = mobMax,
         aggroMin = aggroMin,
@@ -166,6 +192,14 @@ local function DebuffEvalBuildContext(index)
         mintar = db and db.mintar,
         maxtar = db and db.maxtar,
     }
+end
+
+--- Pass-local spell context cache (set on DebuffCheck context as getSpellCtx).
+local function spellCtxFor(context, index)
+    if context and context.getSpellCtx then
+        return context.getSpellCtx(index)
+    end
+    return DebuffEvalBuildContext(index, context)
 end
 
 -- Returns true if spawn is a valid target for this debuff (range, level, stacks, duration, AE mintar).
@@ -342,6 +376,29 @@ end
 
 local DEBUFF_PHASE_ORDER = { 'charm', 'burn', 'notmatar', 'matar', 'named' }
 
+--- Cache notmatar SpawnNeedsDebuff results for this DebuffCheck pass (spellIndex -> spawnId -> bool).
+local function notmatarNeedCached(context, spellIndex, sctx, spawn)
+    local vid = spawn and spawn.ID and spawn.ID() or nil
+    if not vid or not sctx then return false end
+    context.notmatarNeedCache = context.notmatarNeedCache or {}
+    local bySpell = context.notmatarNeedCache[spellIndex]
+    if not bySpell then
+        bySpell = {}
+        context.notmatarNeedCache[spellIndex] = bySpell
+    end
+    local cached = bySpell[vid]
+    if cached ~= nil then return cached end
+    local db = DebuffBands[spellIndex]
+    local need = false
+    if not charm.isCharmSkipped(vid, state.getRunconfig())
+        and castutils.hpEvalSpawn(spawn, { min = db.mobMin, max = db.mobMax })
+        and DebuffSpawnNeedsSpell(sctx.entry, sctx, spawn, 'notmatar') then
+        need = true
+    end
+    bySpell[vid] = need
+    return need
+end
+
 local function debuffGetTargetsForPhase(phase, context)
     local out = {}
     local mobList = context.mobList or state.getRunconfig().MobList or {}
@@ -351,11 +408,12 @@ local function debuffGetTargetsForPhase(phase, context)
                 if v and v.id then out[#out + 1] = { id = v.id, targethit = v.targethit or 'charmtar' } end
             end
         end
+        if not _hasCharmSpell then return out end
         local count = context.debuffCount or botconfig.getSpellCount('debuff')
         for i = 1, count do
             local entry = botconfig.getSpellEntry('debuff', i)
             if entry and spellutils.IsCharmSpell(entry) then
-                local dctx = DebuffEvalBuildContext(i)
+                local dctx = spellCtxFor(context, i)
                 if dctx then
                     local id, hit = charm.EvalTarget(i, dctx)
                     if id then out[#out + 1] = { id = id, targethit = hit or 'charmtar' } end
@@ -401,12 +459,17 @@ local function debuffGetTargetsForPhase(phase, context)
             for si = 1, spellCount do
                 local db = DebuffBands[si]
                 if db and db.burn and db.notmatar then
-                    local ctx = DebuffEvalBuildContext(si)
-                    if ctx then
-                        local id, hit = DebuffEvalNotmatar(si, ctx)
-                        if id and not seen[id] then
-                            seen[id] = true
-                            out[#out + 1] = { id = id, targethit = hit or 'notmatar' }
+                    local sctx = spellCtxFor(context, si)
+                    if sctx then
+                        for _, v in ipairs(mobList) do
+                            local vid = v.ID and v.ID() or nil
+                            if vid and vid ~= maTargetId and notmatarNeedCached(context, si, sctx, v) then
+                                if not seen[vid] then
+                                    seen[vid] = true
+                                    out[#out + 1] = { id = vid, targethit = 'notmatar' }
+                                end
+                                break
+                            end
                         end
                     end
                 end
@@ -429,20 +492,24 @@ local function debuffGetTargetsForPhase(phase, context)
         return out
     end
     if phase == 'notmatar' then
-        -- Only return spawns that still need a notmatar debuff (walks mobList like DebuffEvalNotmatar).
-        -- A static "all non-MA mobs" list re-scans already-mezzed adds every tick and can appear stuck
-        -- on the first entry while never casting on the next eligible add.
+        if not _hasNotmatarBand then return out end
+        -- Discover + cache need per spell×spawn for scanned pairs; needsSpell prefers cache.
         local seen = {}
         local spellCount = context.debuffCount or botconfig.getSpellCount('debuff')
         for si = 1, spellCount do
             local db = DebuffBands[si]
             if db and db.notmatar then
-                local ctx = DebuffEvalBuildContext(si)
-                if ctx then
-                    local id, hit = DebuffEvalNotmatar(si, ctx)
-                    if id and not seen[id] then
-                        seen[id] = true
-                        out[#out + 1] = { id = id, targethit = hit or 'notmatar' }
+                local sctx = spellCtxFor(context, si)
+                if sctx then
+                    for _, v in ipairs(mobList) do
+                        local vid = v.ID and v.ID() or nil
+                        if vid and vid ~= maTargetId and notmatarNeedCached(context, si, sctx, v) then
+                            if not seen[vid] then
+                                seen[vid] = true
+                                out[#out + 1] = { id = vid, targethit = 'notmatar' }
+                            end
+                            break
+                        end
                     end
                 end
             end
@@ -498,14 +565,14 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         if context.charmRecasts and context.charmRecasts[spellIndex] and context.charmRecasts[spellIndex].id == targetId then
             return targetId, context.charmRecasts[spellIndex].targethit or 'charmtar'
         end
-        local ctx = DebuffEvalBuildContext(spellIndex)
+        local ctx = spellCtxFor(context, spellIndex)
         if ctx then
             local id, hit = charm.EvalTarget(spellIndex, ctx)
             if id == targetId then return id, hit or 'charmtar' end
         end
         return nil, nil
     end
-    local ctx = DebuffEvalBuildContext(spellIndex)
+    local ctx = spellCtxFor(context, spellIndex)
     if not ctx then return nil, nil end
     if targethit == 'matar' then
         local id, hit = DebuffEvalMatar(spellIndex, ctx)
@@ -536,13 +603,22 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
         return nil, nil
     end
     if targethit == 'notmatar' then
-        local entry = ctx.entry
-        local db = DebuffBands[spellIndex]
         if not db or not db.notmatar then return nil, nil end
+        local cache = context.notmatarNeedCache and context.notmatarNeedCache[spellIndex]
+        if cache and cache[targetId] ~= nil then
+            if not cache[targetId] then return nil, nil end
+            -- Discovery already ran SpawnNeedsDebuff; cheap HP/alive only.
+            if castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax })
+                and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(targetId)) then
+                return targetId, 'notmatar'
+            end
+            return nil, nil
+        end
         for _, v in ipairs(ctx.mobList) do
             local vid = v.ID and v.ID() or v
             if vid == targetId then
-                if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax }) and DebuffSpawnNeedsSpell(entry, ctx, v, 'notmatar') then
+                if castutils.hpEvalSpawn(v, { min = db.mobMin, max = db.mobMax })
+                    and DebuffSpawnNeedsSpell(ctx.entry, ctx, v, 'notmatar') then
                     return targetId, 'notmatar'
                 end
                 break
@@ -1046,10 +1122,11 @@ local function debuffGetSpellIndices(phase, count, ctx, target)
         for i = 1, count do
             if ctx.charmRecasts[i] then out[#out + 1] = i end
         end
+        if not _hasCharmSpell then return out end
         for i = 1, count do
             local entry = botconfig.getSpellEntry('debuff', i)
             if entry and spellutils.IsCharmSpell(entry) then
-                local dctx = DebuffEvalBuildContext(i)
+                local dctx = spellCtxFor(ctx, i)
                 if dctx and charm.EvalTarget(i, dctx) then
                     local found = false
                     for _, si in ipairs(out) do
@@ -1132,13 +1209,23 @@ end
 
 --- Single place for debuff hook context:
 --- MA/MT targets are computed here so `matar`/`notmatar`/`named` phase targeting can be decoupled.
-local function debuffBuildContext(rc)
+local function debuffBuildContext(rc, maTargetId, mtTargetId)
     rc = rc or state.getRunconfig()
     local count = botconfig.getSpellCount('debuff')
-    local _, _, maTargetId = spellutils.GetAssistInfo(true)
+    if maTargetId == nil then
+        local _
+        _, _, maTargetId = spellutils.GetAssistInfo(true)
+    end
     if maTargetId == 0 then maTargetId = nil end
-    local _, _, mtTargetId = spellutils.GetTankInfo(true)
+    if mtTargetId == nil then
+        local _
+        _, _, mtTargetId = spellutils.GetTankInfo(true)
+    end
     if mtTargetId == 0 then mtTargetId = nil end
+    local maTargetHp = maTargetId and mq.TLO.Spawn(maTargetId).PctHPs() or nil
+    local mtTargetHp = mtTargetId and mq.TLO.Spawn(mtTargetId).PctHPs() or nil
+    local maTargetLvl = maTargetId and mq.TLO.Spawn(maTargetId).Level() or nil
+    local mtTargetLvl = mtTargetId and mq.TLO.Spawn(mtTargetId).Level() or nil
     local charmRecasts = {}
     for i = 1, count do
         local id, hit = charm.GetRecastRequestForIndex(i)
@@ -1147,6 +1234,10 @@ local function debuffBuildContext(rc)
     return {
         maTargetId = maTargetId,
         mtTargetId = mtTargetId,
+        maTargethp = maTargetHp,
+        mtTargethp = mtTargetHp,
+        maTargetLvl = maTargetLvl,
+        mtTargetLvl = mtTargetLvl,
         charmRecasts = charmRecasts,
         debuffCount = count,
         mobList = rc.MobList or {},
@@ -1172,11 +1263,13 @@ function botdebuff.DebuffCheck(runPriority)
         return false
     end
     if state.getMobCount() <= 0 then return false end
+    local maTargetId, mtTargetId
     if rc.MobList and rc.MobList[1] and not rc.bardTwistOnceWait then
         local desiredPetTargetId = rc.engageTargetId
-        local _, _, maTargetId = spellutils.GetAssistInfo(true)
+        local _
+        _, _, maTargetId = spellutils.GetAssistInfo(true)
         if maTargetId == 0 then maTargetId = nil end
-        local _, _, mtTargetId = spellutils.GetTankInfo(true)
+        _, _, mtTargetId = spellutils.GetTankInfo(true)
         if mtTargetId == 0 then mtTargetId = nil end
 
         -- Sticky MT mode: pets stay on MT's target even when a tanktar debuff is aimed at MA.
@@ -1194,9 +1287,21 @@ function botdebuff.DebuffCheck(runPriority)
             botmelee.AdvCombat()
         end
     end
-    local ctx = debuffBuildContext(rc)
+    local ctx = tickprof.span('context', function()
+        return debuffBuildContext(rc, maTargetId, mtTargetId)
+    end)
     local count = ctx.debuffCount
     if count <= 0 then return false end
+    local spellCtxCache = {}
+    ctx.getSpellCtx = function(index)
+        local cached = spellCtxCache[index]
+        if cached ~= nil then
+            return cached or nil
+        end
+        local built = DebuffEvalBuildContext(index, ctx)
+        spellCtxCache[index] = built or false
+        return built
+    end
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
@@ -1213,8 +1318,20 @@ function botdebuff.DebuffCheck(runPriority)
     local function getSpellIndices(phase, target)
         return debuffGetSpellIndices(phase, count, ctx, target)
     end
-    local result = spellutils.RunPhaseFirstSpellCheck('debuff', 'doDebuff', DEBUFF_PHASE_ORDER, debuffGetTargetsForPhase,
-        getSpellIndices, debuffTargetNeedsSpell, ctx, options)
+    local function getTargets(phase, context)
+        return tickprof.span('targets', function()
+            return debuffGetTargetsForPhase(phase, context)
+        end)
+    end
+    local function needsSpell(spellIndex, targetId, targethit, context, phase)
+        return tickprof.span('needs', function()
+            return debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
+        end)
+    end
+    local result = tickprof.span('spellcheck', function()
+        return spellutils.RunPhaseFirstSpellCheck('debuff', 'doDebuff', DEBUFF_PHASE_ORDER, getTargets,
+            getSpellIndices, needsSpell, ctx, options)
+    end)
     refreshBardCombatTwistIfNeeded()
     return result
 end
