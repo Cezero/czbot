@@ -176,6 +176,28 @@ local function buffCustomSection(entry, idPrefix, onChanged)
         ImGui.SetTooltip(s.error)
     end
     ImGui.Spacing()
+    if spellutils.IsShrinkSpell(entry) then
+        ImGui.Text('Height')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(
+                'Cast when target Height exceeds this value (SPA 89 shrink). Peers use CharInfo Height; self uses Me.Height. Typical: 2.4–2.5.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local h = tonumber(entry.height)
+        if h == nil or h <= 0 then h = 2.4 end
+        local newH, hCh = ImGui.InputFloat('##' .. idPrefix .. '_height', h, 0.1, 0.5, '%.2f')
+        if hCh and newH ~= nil then
+            local n = tonumber(newH)
+            if n and n > 0 then
+                entry.height = n
+            else
+                entry.height = nil
+            end
+            if onChanged then onChanged() end
+        end
+        ImGui.Spacing()
+    end
     if isGroupAEBuffEntry(entry) then
         ImGui.Text('Target count')
         if ImGui.IsItemHovered() then

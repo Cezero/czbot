@@ -85,6 +85,28 @@ local function IconCheck(index, EvalID, knownName, peerHint, context, hoist)
     return true
 end
 
+--- Optional entry.height: cast only when spawn Height exceeds threshold (SPA 89 shrink). Nil/0 = no filter.
+local function heightAllowsSpawn(entry, spawnId)
+    local threshold = entry and tonumber(entry.height)
+    if (not threshold or threshold <= 0) and spellutils.IsShrinkSpell(entry) then
+        threshold = 2.4
+    end
+    if not threshold or threshold <= 0 then return true end
+    if not spawnId or spawnId <= 0 then return false end
+    local ht = mq.TLO.Spawn(spawnId).Height()
+    return ht ~= nil and ht > threshold
+end
+
+local function heightAllowsMe(entry)
+    local threshold = entry and tonumber(entry.height)
+    if (not threshold or threshold <= 0) and spellutils.IsShrinkSpell(entry) then
+        threshold = 2.4
+    end
+    if not threshold or threshold <= 0 then return true end
+    local ht = mq.TLO.Me.Height()
+    return ht ~= nil and ht > threshold
+end
+
 --- Peer needs this buff? Duration skip → PeerHasBuff → Stacks/range. Spawn only if casting path needed.
 local function peerBuffStillUp(peerName, peer, spellid)
     if not peerName or not peer or not spellid then return false end
@@ -217,6 +239,10 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             return nil, nil
         end
         if BuffClass[index].self then
+            if not heightAllowsMe(entry) then
+                spellutils.BuffLog('skip self %s: height at or below threshold', spell)
+                return nil, nil
+            end
             if spellid and spellutils.BuffSkipIsActive(selfKey, spellid) then
                 spellutils.BuffLog('skip self %s: duration skip window', spell)
                 return nil, nil
@@ -300,7 +326,9 @@ local function BuffEvalTank(index, entry, spell, spellid, rangeSq, tank, tankid,
     if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff', index, 'tank', nil, 'after_tank', nil) then
         return nil, nil
     end
-    if spellutils.SpawnNeedsBuff(tankid, spell, entry.spellicon) then return tankid, 'tank' end
+    if heightAllowsSpawn(entry, tankid) and spellutils.SpawnNeedsBuff(tankid, spell, entry.spellicon) then
+        return tankid, 'tank'
+    end
     return nil, nil
 end
 
@@ -691,6 +719,15 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         return nil, nil
     end
 
+    -- Phase target list is a union across spells; require this spell's watchlist (heal already does this).
+    local watchScope = charinfowatchers.phaseToScope(phase)
+    if watchScope and watchScope ~= 'GRPAGG' then
+        local watchSid = spellutils.GetSpellId(entry) or sid
+        if not charinfowatchers.watchListHas('BUFF', watchScope, watchSid, targetId) then
+            return nil, nil
+        end
+    end
+
     if phase == 'self' then
         return tickprof.span('self_eval', function()
             return BuffEvalSelf(spellIndex, entry, spell, sid, range, myid, myclass, tanktar, hoist, cached)
@@ -720,7 +757,9 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         if not spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'offtank', nil, nil, nil) then
             return nil, nil
         end
-        if spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then return targetId, 'offtank' end
+        if heightAllowsSpawn(entry, targetId) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
+            return targetId, 'offtank'
+        end
         return nil, nil
     end
     if phase == 'groupbuff' then
@@ -747,6 +786,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
             if id then return id, hit end
         elseif IconCheck(spellIndex, targetId, name, nil, context, hoist)
             and spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'byname', nil, nil, nil)
+            and heightAllowsSpawn(entry, targetId)
             and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
             local sp = mq.TLO.Spawn(targetId)
             local dSq = sp and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
@@ -765,6 +805,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
             return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, 'groupmember', peer, context, hoist)
         elseif IconCheck(spellIndex, targetId, grpname, nil, context, hoist) then
             if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'groupmember', nil, nil, nil)
+                and heightAllowsSpawn(entry, targetId)
                 and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
                 return targetId, 'groupmember'
             end
@@ -786,6 +827,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
             return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, 'pc', peer, context, hoist)
         elseif IconCheck(spellIndex, targetId, grpname, nil, context, hoist) then
             if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'pc', nil, nil, nil)
+                and heightAllowsSpawn(entry, targetId)
                 and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
                 return targetId, 'pc'
             end

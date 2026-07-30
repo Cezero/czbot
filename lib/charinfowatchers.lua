@@ -161,6 +161,10 @@ function M.registerBuffWatchers()
             entry.spellicon = equivIds
             local bands = entry.bands
             if spellId and type(bands) == 'table' then
+                local height = tonumber(entry.height) or 0
+                if height <= 0 and spellutils.IsShrinkSpell(entry) then
+                    height = 2.4
+                end
                 for _, band in ipairs(bands) do
                     forEachWatcherPhase(band, listNames, function(scope, _phase, classes)
                         charinfo.RegisterBuffWatcher({
@@ -169,6 +173,7 @@ function M.registerBuffWatchers()
                             classes = (scope == 'LIST') and {} or classes,
                             names = (scope == 'LIST') and listNames or nil,
                             equivIds = equivIds,
+                            height = height,
                         })
                     end)
                 end

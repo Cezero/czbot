@@ -36,6 +36,7 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 | **inIdle** | Optional. **Bard only.** When `true` (default), this buff is included in the idle twist list. When `false`, it is not twisted when idle. Ignored for non-bards. GUI shows "In idle" only for Bards. |
 | **combatOnly** | Optional. **Non-bard only** (ignored for BRD). When `true`, the auto buff loop **only** considers this spell when mobs are in camp — never while idle. Implies combat allowance; you do not need **inCombat** for eligibility (you may still set **inCombat** for documentation clarity). Default is `false`. GUI shows "Combat only" for non-bards. |
 | **spellicon** | Optional. List of spell IDs treated as equivalents for “already has buff” detection (e.g. `{ 1234, 5678 }`). Legacy scalar `spellicon = 1234` is normalized to a one-element list on load. Empty/`{}` = only the buff spell itself. |
+| **height** | Optional. For shrink (SPA 89) buffs: cast when target `Height` exceeds this decimal (e.g. `2.4`). Peers use CharInfo `Height`; self uses `Me.Height`. The buff GUI shows this field automatically when the spell has SPA 89. Replaces a Height precondition. |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
 ### Buff bands

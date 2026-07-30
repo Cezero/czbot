@@ -1906,6 +1906,8 @@ function spellutils.IsSnareSpell(entry) return entryHasSPA(entry, 3) end
 function spellutils.IsSlowSpell(entry) return entryHasSPA(entry, 11) end
 function spellutils.IsFearSpell(entry) return entryHasSPA(entry, 23) end
 function spellutils.IsRootSpell(entry) return entryHasSPA(entry, 99) end
+-- SPA 89 = Height (shrink / model size). MacroQuest SPA_HEIGHT.
+function spellutils.IsShrinkSpell(entry) return entryHasSPA(entry, 89) end
 
 -- For a slow/snare/root/fear debuff, the spawn-effect category to auto-skip when already present, plus
 -- a short label for the GUI. Returns (categoryTag, label) or nil. Single primary classification (root
