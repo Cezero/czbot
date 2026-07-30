@@ -94,7 +94,13 @@ local function getMatarChosenTargetId(entry, ctx)
 end
 
 --- MobList spawn for matar eval; OT engage target allowed when briefly outside MobList.
+--- Prefer direct Spawn when chosen id is already MA/MT (avoids MobList scan on the hot path).
 local function debuffMatarSpawnForTarget(chosenTargetId, ctx)
+    if not chosenTargetId then return nil end
+    if chosenTargetId == ctx.maTargetId or chosenTargetId == ctx.mtTargetId then
+        local sp = mq.TLO.Spawn(chosenTargetId)
+        if spawnutils.isAliveEngageSpawn(sp) then return sp end
+    end
     for _, v in ipairs(ctx.mobList) do
         if v.ID() == chosenTargetId then return v end
     end
@@ -399,6 +405,35 @@ local function notmatarNeedCached(context, spellIndex, sctx, spawn)
     return need
 end
 
+--- Pass-local CheckGemReadiness (once per spell index per DebuffCheck).
+local function debuffGemReady(context, spellIndex, entry)
+    if not context then
+        return spellutils.CheckGemReadiness('debuff', spellIndex, entry)
+    end
+    context.gemReadyCache = context.gemReadyCache or {}
+    local cached = context.gemReadyCache[spellIndex]
+    if cached ~= nil then return cached end
+    cached = spellutils.CheckGemReadiness('debuff', spellIndex, entry) and true or false
+    context.gemReadyCache[spellIndex] = cached
+    return cached
+end
+
+--- Pass-local matar/named need cache (spellIndex -> spawnId -> bool).
+local function matarNeedCached(context, spellIndex, spawnId, computeFn)
+    if not context or not spawnId then return computeFn() end
+    context.matarNeedCache = context.matarNeedCache or {}
+    local bySpell = context.matarNeedCache[spellIndex]
+    if not bySpell then
+        bySpell = {}
+        context.matarNeedCache[spellIndex] = bySpell
+    end
+    local cached = bySpell[spawnId]
+    if cached ~= nil then return cached end
+    cached = computeFn() and true or false
+    bySpell[spawnId] = cached
+    return cached
+end
+
 local function debuffGetTargetsForPhase(phase, context)
     local out = {}
     local mobList = context.mobList or state.getRunconfig().MobList or {}
@@ -575,30 +610,44 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     local ctx = spellCtxFor(context, spellIndex)
     if not ctx then return nil, nil end
     if targethit == 'matar' then
-        local id, hit = DebuffEvalMatar(spellIndex, ctx)
-        if id == targetId then
-            if not onlyMTDebuffAllowed(entry) then return nil, nil end
-            return id, hit
-        end
-        -- Burn-only on MA target (no matar flag on band).
-        local db = DebuffBands[spellIndex]
-        if db and db.burn and not db.matar and not db.notmatar and not db.named and state.IsBurnActive() then
-            local chosenTargetId = getMatarChosenTargetId(entry, ctx)
-            if chosenTargetId == targetId and castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax }) then
-                for _, v in ipairs(ctx.mobList) do
-                    if v.ID() == targetId and DebuffSpawnNeedsSpell(entry, ctx, v, 'matar') then
-                        return targetId, 'matar'
+        if not debuffGemReady(context, spellIndex, entry) then return nil, nil end
+        if not onlyMTDebuffAllowed(entry) then return nil, nil end
+        local function acceptIfNeeded()
+            local need = matarNeedCached(context, spellIndex, targetId, function()
+                local id = DebuffEvalMatar(spellIndex, ctx)
+                if id == targetId then return true end
+                -- Burn-only on MA target (no matar flag on band).
+                if db and db.burn and not db.matar and not db.notmatar and not db.named and state.IsBurnActive() then
+                    local chosenTargetId = getMatarChosenTargetId(entry, ctx)
+                    if chosenTargetId == targetId and castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax }) then
+                        local spawn = debuffMatarSpawnForTarget(targetId, ctx)
+                        if spawn and DebuffSpawnNeedsSpell(entry, ctx, spawn, 'matar') then
+                            return true
+                        end
                     end
                 end
+                return false
+            end)
+            if not need then return nil, nil end
+            if castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax })
+                and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(targetId)) then
+                return targetId, 'matar'
             end
+            return nil, nil
         end
-        return nil, nil
+        return acceptIfNeeded()
     end
     if targethit == 'named' then
-        local id, hit = DebuffEvalNamedMatar(spellIndex, ctx)
-        if id == targetId then
-            if not onlyMTDebuffAllowed(entry) then return nil, nil end
-            return id, hit
+        if not debuffGemReady(context, spellIndex, entry) then return nil, nil end
+        if not onlyMTDebuffAllowed(entry) then return nil, nil end
+        local need = matarNeedCached(context, spellIndex, targetId, function()
+            local id = DebuffEvalNamedMatar(spellIndex, ctx)
+            return id == targetId
+        end)
+        if not need then return nil, nil end
+        if castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax })
+            and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(targetId)) then
+            return targetId, 'matar'
         end
         return nil, nil
     end
@@ -1302,6 +1351,7 @@ function botdebuff.DebuffCheck(runPriority)
         spellCtxCache[index] = built or false
         return built
     end
+    local indicesByPhase = {}
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
@@ -1316,7 +1366,11 @@ function botdebuff.DebuffCheck(runPriority)
         end,
     }
     local function getSpellIndices(phase, target)
-        return debuffGetSpellIndices(phase, count, ctx, target)
+        local cached = indicesByPhase[phase]
+        if cached then return cached end
+        cached = debuffGetSpellIndices(phase, count, ctx, target)
+        indicesByPhase[phase] = cached
+        return cached
     end
     local function getTargets(phase, context)
         return tickprof.span('targets', function()

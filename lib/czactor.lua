@@ -73,8 +73,6 @@ local _nextPingAt = 0
 local _nextOtHeartbeatAt = 0
 local _nextClaimPruneAt = 0
 local _lastMaEngagedSpawnId = nil
-local _maEngagedHeartbeatNext = 0
-local MA_ENGAGED_HEARTBEAT_MS = 2000
 local MA_DISENGAGE_TRANSIENT_REASONS = {
     no_engage_target = true,
     engage_not_allowed = true,
@@ -361,7 +359,6 @@ local function scheduleInitialTimers(now)
     _nextPingAt = now + nameJitterMs(me, PING_INTERVAL_MS)
     _nextClaimPruneAt = now + nameJitterMs(me, 1000)
     _nextOtHeartbeatAt = now + nameJitterMs(me, OT_HEARTBEAT_MS)
-    _maEngagedHeartbeatNext = now + nameJitterMs(me, MA_ENGAGED_HEARTBEAT_MS)
 end
 
 function czactor.shutdown()
@@ -600,9 +597,10 @@ local function applyAttackEngage(content, sender)
     end
 end
 
-function czactor.publishMaEngaged(spawnId, mobName, force)
+--- Publish ma_engaged once per spawn ID (no heartbeat; peers resolve ongoing target via Charinfo).
+function czactor.publishMaEngaged(spawnId, mobName)
     if not spawnId or spawnId <= 0 then return end
-    if not force and _lastMaEngagedSpawnId == spawnId then return end
+    if _lastMaEngagedSpawnId == spawnId then return end
     _lastMaEngagedSpawnId = spawnId
     czactor.publish('ma_engaged', {
         spawnId = spawnId,
@@ -611,18 +609,8 @@ function czactor.publishMaEngaged(spawnId, mobName, force)
     })
 end
 
---- Re-broadcast ma_engaged while MA holds engageTargetId (followers recover missed messages).
-function czactor.tickMaEngagedHeartbeat(spawnId, mobName)
-    if not spawnId or spawnId <= 0 then return end
-    local now = mq.gettime()
-    if now < _maEngagedHeartbeatNext then return end
-    _maEngagedHeartbeatNext = now + MA_ENGAGED_HEARTBEAT_MS + nameJitterMs(myName(), MA_ENGAGED_HEARTBEAT_MS)
-    czactor.publishMaEngaged(spawnId, mobName, true)
-end
-
 function czactor.publishMaDisengage(reason)
     _lastMaEngagedSpawnId = nil
-    _maEngagedHeartbeatNext = 0
     czactor.publish('ma_disengage', {
         reason = reason or 'disengage',
         scope = roleBroadcastScope(),

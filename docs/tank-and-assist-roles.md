@@ -8,7 +8,7 @@ This document explains how to configure **Main Tank (MT)**, **Main Assist (MA)**
   The character who receives **heals** (healers prioritize this person). MT bots **never pick** camp mobs. When MA and MT are different bots, the MT follows the MA's target immediately (ignores assist-at %). **`mtSticky`** makes a separate MT bot keep its current target once engaged; it is **ignored** when the same bot is both MA and MT.
 
 - **Main Assist (MA)**  
-  The character who **selects targets** from the mob list and whose target DPS/offtank follow. The MA bot picks from MobList (named first, puller priority, sticky mid-fight with named override). Selecting a different valid NPC mid-fight adopts that spawn and broadcasts a new **`ma_engaged`** so peers follow. **`/cz attack`** engages the MA's **live** Target **immediately** (not a sticky cache) and keeps that engagement until the target dies, the MA retargets, you run `/cz abort`, turn off domelee, or issue another `/cz attack`.
+  The character who **selects targets** from the mob list and whose target DPS/offtank follow. The MA bot picks from MobList (named first, puller priority, sticky mid-fight with named override). Selecting a different valid NPC mid-fight adopts that spawn and broadcasts a one-shot **`ma_engaged`** for that spawn ID; peers follow the live target via Charinfo. **`/cz attack`** engages the MA's **live** Target **immediately** (not a sticky cache) and keeps that engagement until the target dies, the MA retargets, you run `/cz abort`, turn off domelee, or issue another `/cz attack`.
 
 - **Puller**  
   Set in the game (group window). When this bot is the **MA**, it prefers the **Puller's target** when choosing which mob to engage from the camp list (e.g. the mob the puller is bringing in).

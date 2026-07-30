@@ -32,7 +32,7 @@ The `czbot` mailbox is registered once at macro startup and removed on macro exi
 | `rez_claim` | Rez coordination — peer excludes claimed corpse for 60s ([Rez coordination](#rez-coordination)) |
 | `ma_update` | Manual MA override from `/cz assist set <name>` (peers on `automatic` follow until unavailable) |
 | `mt_update` | Manual MT override from `/cz tank set <name>` |
-| `ma_engaged` | MA bot engaged a target — peers learn spawn ID immediately ([MA engage coordination](#ma-engage-coordination)) |
+| `ma_engaged` | MA bot engaged a target — one-shot signal; peers resolve ongoing target via Charinfo ([MA engage coordination](#ma-engage-coordination)) |
 | `ma_disengage` | MA bot cleared engagement — peers resume follow-leash behavior |
 | `attack` | Group/raid attack broadcast from `/cz attack` — peers engage spawn ID immediately ([Group attack](#group-attack)) |
 | `follow_me` / `follow_me_off` | Leader follow broadcast (replaces `/rc` for `/cz followme`) |
@@ -85,7 +85,7 @@ When MT and MA are on **different** mobs, the offtank still tanks the MA target 
 
 ## MA engage coordination
 
-When the **Main Assist** bot sets an engage target, it broadcasts **`ma_engaged`** with the NPC spawn ID. In-scope peers (same group/raid, same zone) store this as `MaActorEngaged` and use it via `GetAssistInfo()` **before** charinfo target data. When the MA switches to a different valid NPC (client Target adopt), it republishes **`ma_engaged`** with the new spawn ID that same tick so peers update immediately.
+When the **Main Assist** bot sets an engage target, it broadcasts a single **`ma_engaged`** with the NPC spawn ID (once per spawn ID; no heartbeat). In-scope peers (same group/raid, same zone) store this as `MaActorEngaged` for engage signaling (follow catch-up, `/cz attack` latch clear). Ongoing MA target resolution in `GetAssistInfo()` prefers **Charinfo peer Target**; `MaActorEngaged` is only a fallback when Charinfo has no valid NPC yet. When the MA switches to a different valid NPC (client Target adopt), it publishes one new **`ma_engaged`** for that spawn ID so peers refresh latch/follow side effects; peers then follow the live target via Charinfo.
 
 | Field | Purpose |
 |-------|---------|
@@ -98,7 +98,7 @@ When the **Main Assist** bot sets an engage target, it broadcasts **`ma_engaged`
 
 **Peer behavior while MA is engaged:**
 
-- OT add selection, notmatar debuffing, and other MA-target-aware logic see the spawn ID immediately (no assist-at percentage wait).
+- OT add selection, notmatar debuffing, and other MA-target-aware logic use Charinfo for the MA’s live Target (with `ma_engaged` as a short fallback when Charinfo lags).
 - DPS melee still waits for **`melee.assistpct`** unless overridden with **`/cz attack`**.
 - When **`ma_engaged`** arrives with a **new** `spawnId`, peers clear a local **`attackCommandEngage`** latch so they can follow the MA retarget (`mtSticky` / offtank sticky still apply in their resolvers).
 - Follow-leash behavior while MA is engaged uses an explicit **`followCatchUp`** flag on followers with active follow:
@@ -122,7 +122,7 @@ When any peer runs **`/cz attack`**, it resolves the assist’s **live** Target 
 | `assistName` | Optional: assist name used to resolve the target |
 | `zone` | Sender zone (receivers accept only same-zone senders) |
 
-Unlike **`ma_engaged`**, which informs peers of the MA target for OT/debuff without forcing DPS melee, **`attack`** forces immediate engagement on all receivers (same as local `/cz attack`).
+Unlike **`ma_engaged`**, which signals MA engage (and falls back when Charinfo lags) without forcing DPS melee, **`attack`** forces immediate engagement on all receivers (same as local `/cz attack`).
 
 ## Rez coordination
 

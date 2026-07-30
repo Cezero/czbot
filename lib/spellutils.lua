@@ -372,6 +372,30 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
             return mezSkip('below mez min level ' .. minL)
         end
     end
+
+    local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
+    local durationSec = tonumber(ctx.spelldur) or 0
+    if durationSec <= 0 and entry.gem == 'disc' then
+        durationSec = spellutils.GetSpellDurationSec(entry)
+    end
+    -- DebuffList + CC auto-skip immediately after range (before stopWhen/dontStack/StacksSpawn walks).
+    if durationSec > 0 and spawnId and ctx.spellid and not entry.recastActive then
+        if spellstates.HasDebuffLongerThan(spawnId, ctx.spellid, debuffRefreshThresholdMs) then
+            if isMez and phase == 'notmatar' and not spellutils.SpawnMezActive(spawnId) then
+                spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
+                spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
+            else
+                return mezSkip('debuff still active')
+            end
+        end
+    end
+    if spawnId and not isMez and not entry.recastActive then
+        local ccCat = spellutils.GetCCDebuffCategory(entry)
+        if ccCat and spellutils.SpawnHasStopWhenCategory(spawnId, { ccCat }) then
+            return false
+        end
+    end
+
     -- recastActive (e.g. SK threat-snare) re-casts even when the spell's own effect is already on the
     -- mob: it overrides a dontStack/stopWhen on its OWN category (other categories still apply) plus the
     -- won't-re-stack and debuff-still-active gates below. HP/level/range/mob-count bands still apply.
@@ -401,34 +425,17 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         and spellutils.SpawnHasDebuffSpell(entry.spell, spawnId) then
         return mezSkip('our mez on spawn')
     end
-    -- First-class slow/snare/root/fear: auto-skip a spawn that already has the matching effect (from
-    -- anyone), even with no explicit dontStack/stopWhen entry. Combined with the matar->notmatar
-    -- evaluation order this means the engaged (MA/MT) mob is debuffed first, then the bot moves on to
-    -- camp adds instead of re-applying an already-active CC/mitigation debuff.
-    -- entry.recastActive opts out (e.g. a Shadow Knight mashing snare/Darkness on the MA target to
-    -- build and hold aggro while tanking wants to keep casting even though the mob is already snared).
-    if spawnId and not isMez and not entry.recastActive then
-        local ccCat = spellutils.GetCCDebuffCategory(entry)
-        if ccCat and spellutils.SpawnHasStopWhenCategory(spawnId, { ccCat }) then
-            return false
+
+    -- Ability / duration-0 nuke: skip SpellStacksSpawn and SpawnHasDebuffSpellId.
+    local isNukeNoDuration = spellutils.IsNukeSpell(entry) and not spellutils.IsConcussionSpell(entry)
+        and durationSec <= 0 and not entry.dontStack and not entry.stopWhen
+    if gem == 'ability' or isNukeNoDuration then
+        if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
+            return mezSkip('not enough mobs in AE range')
         end
+        return true
     end
-    -- DebuffList-first: skip Spawn buff-slot walks when we already track a long-enough duration.
-    local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
-    local durationSec = tonumber(ctx.spelldur) or 0
-    if durationSec <= 0 and entry.gem == 'disc' then
-        durationSec = spellutils.GetSpellDurationSec(entry)
-    end
-    if durationSec > 0 and spawnId and ctx.spellid and not entry.recastActive then
-        if spellstates.HasDebuffLongerThan(spawnId, ctx.spellid, debuffRefreshThresholdMs) then
-            if isMez and phase == 'notmatar' and not spellutils.SpawnMezActive(spawnId) then
-                spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
-                spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
-            else
-                return mezSkip('debuff still active')
-            end
-        end
-    end
+
     local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
         if phase == 'notmatar' and isMez then
@@ -2079,18 +2086,21 @@ function spellutils.GetAssistInfo(includeTarget, assistpct, assistNameOverride)
 
     local unavailable = isAssistUnavailable(assistName, assistid)
     local assistar, assistarhp
-    local actorTar = require('lib.czactor').getMaEngagedSpawnId(assistName)
-    actorTar = actorTar and filterNpcEngageTargetId(actorTar) or nil
-    if actorTar and actorTar > 0 and utils.isAliveEngageSpawn(mq.TLO.Spawn(actorTar)) then
-        assistar = actorTar
-        assistarhp = mq.TLO.Spawn(actorTar).PctHPs()
-    end
-    if not assistar and not unavailable then
+    -- Prefer live Charinfo / self Target; fall back to ma_engaged when Charinfo has no NPC yet.
+    if not unavailable then
         local _, _, t, h = getLeaderPcTargetInfo(assistName, true)
         assistar, assistarhp = t, h
-    elseif not assistar and assistName == mq.TLO.Me.Name() then
+    elseif assistName == mq.TLO.Me.Name() then
         local t, h = selfTargetIdFromMobList()
         if t then assistar, assistarhp = t, h end
+    end
+    if not assistar then
+        local actorTar = require('lib.czactor').getMaEngagedSpawnId(assistName)
+        actorTar = actorTar and filterNpcEngageTargetId(actorTar) or nil
+        if actorTar and actorTar > 0 and utils.isAliveEngageSpawn(mq.TLO.Spawn(actorTar)) then
+            assistar = actorTar
+            assistarhp = mq.TLO.Spawn(actorTar).PctHPs()
+        end
     end
 
     if assistar == 0 then assistar = nil end

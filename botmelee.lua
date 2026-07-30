@@ -1101,9 +1101,10 @@ function botmelee.AdvCombat()
         end
         if tankrole.AmIMainAssist() then
             local czactor = require('lib.czactor')
-            -- New spawn id bypasses publish de-dupe; peers get ma_engaged same tick as Target-adopt.
-            czactor.publishMaEngaged(rc.engageTargetId, name)
-            czactor.tickMaEngagedHeartbeat(rc.engageTargetId, name)
+            -- One ma_engaged per new spawn id; peers resolve ongoing target via Charinfo.
+            if isNewEngage then
+                czactor.publishMaEngaged(rc.engageTargetId, name)
+            end
         end
         engageTarget()
     elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] then
