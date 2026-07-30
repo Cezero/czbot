@@ -1,6 +1,5 @@
 ﻿local mq = require('mq')
 local botconfig = require('lib.config')
-local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
 local state = require('lib.state')
 local charinfo = require('plugin.charinfo')
@@ -9,6 +8,7 @@ local castutils = require('lib.castutils')
 local botmove = require('botmove')
 local pcphasethrottle = require('lib.pcphasethrottle')
 local charinfowatchers = require('lib.charinfowatchers')
+local tickprof = require('lib.tickprof')
 
 local botcure = {}
 local CureClass = {}
@@ -60,14 +60,13 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
         if targethit == 'tank' or targethit == 'offtank' or targethit == 'groupmember' or targethit == 'pc' then
             return botid, targethit
         end
-        -- Legacy class token targethit (CureEval pc path).
         if type(targethit) == 'string' and cureindex[targethit] then
             return botid, targethit
         end
         return nil, nil
     end
 
-    -- Non-peer: Spawn buff walk.
+    -- Non-peer: Spawn buff walk (only when nonPeerGroupMembers flag is set by caller).
     if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then
         return nil, nil
     end
@@ -79,6 +78,20 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
     return nil, nil
 end
 
+local function nonPeerCureNeeds(index)
+    if not charinfowatchers.hasNonPeerGroupMembers() then return 0 end
+    local typelist = CureTypeList(index)
+    local n = 0
+    for _, m in ipairs(charinfowatchers.getNonPeerGroupMembers()) do
+        if m.id and m.id > 0
+            and spellutils.EnsureSpawnBuffsPopulated(m.id, 'cure', index, 'groupcure', typelist, nil, nil)
+            and spellutils.SpawnDetrimentalsForCure(m.id, typelist) then
+            n = n + 1
+        end
+    end
+    return n
+end
+
 local function CureEvalGroupCure(index, entry)
     local spellId = spellutils.GetSpellId(entry)
     if not spellId then return nil, nil end
@@ -86,85 +99,19 @@ local function CureEvalGroupCure(index, entry)
     local function selfPasses()
         return spellutils.MeDetrimentalsForCure(typelist)
     end
-    if not charinfowatchers.grpAggShouldCast('CURE', spellId, entry.tarcnt, selfPasses) then
+    if not charinfowatchers.grpAggShouldCast('CURE', spellId, entry.tarcnt, selfPasses, nonPeerCureNeeds(index)) then
         return nil, nil
     end
     return mq.TLO.Me.ID(), 'groupcure'
 end
 
-local function CureEval(index)
-    local entry = botconfig.getSpellEntry('cure', index)
-    local spell, _, spelltartype = spellutils.GetSpellInfo(entry)
-    if not spell then return nil, nil end
-    local spellId = spellutils.GetSpellId(entry)
-    local bots = spellutils.GetBotListOrdered()
-    local botcount = charinfo.GetPeerCnt()
-    local tank, tankid = spellutils.GetTankInfo(false)
-    local cureindex = CureClass[index]
-    if not cureindex then return nil, nil end
-    if cureindex.self then
-        local id, hit = CureEvalForTarget(index, nil, nil, nil, 'self', spelltartype)
-        if id then return id, hit end
-    end
-    if cureindex.tank and tankid and spellId
-        and charinfowatchers.watchListHas('CURE', 'LIST', spellId, tankid) then
-        local id, hit = CureEvalForTarget(index, tank, tankid, nil, 'tank', spelltartype, 'after_tank', nil)
-        if id then return id, hit end
-    end
-    if cureindex.groupcure then
-        local id, hit = CureEvalGroupCure(index, entry)
-        if id then return id, hit end
-    end
-    if cureindex.groupmember and spellId then
-        for i = 1, botcount do
-            local botname = bots[i]
-            local peer = botname and charinfo.GetInfo(botname)
-            local botid = peer and peer.ID
-            if botid and botid > 0 and mq.TLO.Group.Member(botname).ID()
-                and charinfowatchers.watchListHas('CURE', 'INGROUP', spellId, botid) then
-                local id, hit = CureEvalForTarget(index, botname, botid, nil, 'groupmember', spelltartype)
-                if id then return id, hit end
-            end
-        end
-        for i = 1, mq.TLO.Group.Members() do
-            local grpmember = mq.TLO.Group.Member(i)
-            if grpmember and grpmember.Class then
-                local grpname = grpmember.Name()
-                local grpid = grpmember.ID()
-                local grpclass = grpmember.Class.ShortName()
-                if grpclass then grpclass = string.lower(grpclass) end
-                if grpid and grpid > 0 and cureindex[grpclass] and not charinfo.GetInfo(grpname) then
-                    local id, hit = CureEvalForTarget(index, grpname, grpid, grpclass, 'groupmember', spelltartype,
-                        'groupmember', i)
-                    if id then return id, hit end
-                end
-            end
-        end
-    end
-    if cureindex.pc and spellId and botcount then
-        for i = 1, botcount do
-            local botname = bots[i]
-            if botname then
-                local peer = charinfo.GetInfo(botname)
-                local botid = peer and peer.ID
-                if botid and botid > 0 and charinfowatchers.watchListHas('CURE', 'ALL', spellId, botid) then
-                    local id, hit = CureEvalForTarget(index, botname, botid, nil, 'pc', spelltartype)
-                    if id then return id, hit end
-                end
-            end
-        end
-    end
-    return nil, nil
-end
-
 local CURE_PHASE_ORDER = { 'self', 'tank', 'offtank', 'groupcure', 'groupmember', 'pc' }
 local CURE_PHASE_ORDER_PRIORITY = { 'priority' }
 
---- Single place for cure context: tank, tankid, class-ordered bots, botcount. Both priorityCure and doCure use this.
+--- Tank only — peer targets come from CharInfo watch unions.
 local function cureBuildContext()
     local tank, tankid = spellutils.GetTankInfo(false)
-    local bots = spellutils.GetBotListOrdered()
-    return { tank = tank, tankid = tankid, bots = bots, botcount = #bots }
+    return { tank = tank, tankid = tankid }
 end
 
 local function cureBandHasPhase(spellIndex, phase)
@@ -203,44 +150,65 @@ local function cureGetTargetsForPhase(phase, context, pcAllowed)
     if phase == 'tank' or phase == 'offtank' or phase == 'groupmember' or phase == 'pc' then
         if phase == 'pc' and not pcAllowed then return {} end
         local count = botconfig.getSpellCount('cure')
-        return charinfowatchers.unionTargetsForPhase('cure', phase, count, cureBandHasPhase)
+        local out = charinfowatchers.unionTargetsForPhase('cure', phase, count, cureBandHasPhase)
+        if phase == 'groupmember' and charinfowatchers.hasNonPeerGroupMembers() then
+            local seen = {}
+            for i = 1, #out do
+                if out[i].id then seen[out[i].id] = true end
+            end
+            for _, m in ipairs(charinfowatchers.getNonPeerGroupMembers()) do
+                if m.id and m.id > 0 and not seen[m.id] then
+                    seen[m.id] = true
+                    out[#out + 1] = { id = m.id, targethit = 'groupmember', name = m.name, nonPeer = true }
+                end
+            end
+        end
+        return out
     end
     if phase == 'groupcure' then return castutils.getTargetsGroupCaster('groupcure') end
     return {}
 end
 
 local function cureTargetNeedsSpell(spellIndex, targetId, targethit, context)
-    local entry = botconfig.getSpellEntry('cure', spellIndex)
-    if not entry or not CureClass[spellIndex] then return nil, nil end
-    local spell, _, spelltartype = spellutils.GetSpellInfo(entry)
-    if not spell then return nil, nil end
-    local botname = (targethit ~= 'self') and mq.TLO.Spawn(targetId).CleanName() or nil
-    if targethit == 'self' then
-        return CureEvalForTarget(spellIndex, nil, nil, nil, 'self', spelltartype)
-    end
-    if targethit == 'groupcure' then
-        return CureEvalGroupCure(spellIndex, entry)
-    end
+    return tickprof.span('needs', function()
+        local entry = botconfig.getSpellEntry('cure', spellIndex)
+        if not entry or not CureClass[spellIndex] then return nil, nil end
+        local spell, _, spelltartype = spellutils.GetSpellInfo(entry)
+        if not spell then return nil, nil end
+        local botname = (targethit ~= 'self') and mq.TLO.Spawn(targetId).CleanName() or nil
+        if targethit == 'self' then
+            return CureEvalForTarget(spellIndex, nil, nil, nil, 'self', spelltartype)
+        end
+        if targethit == 'groupcure' then
+            return CureEvalGroupCure(spellIndex, entry)
+        end
 
-    local watchScope = charinfowatchers.phaseToScope(targethit)
-    if watchScope and watchScope ~= 'GRPAGG' then
-        local spellId = spellutils.GetSpellId(entry)
-        if not spellId or not charinfowatchers.watchListHas('CURE', watchScope, spellId, targetId) then
+        local watchScope = charinfowatchers.phaseToScope(targethit)
+        if watchScope and watchScope ~= 'GRPAGG' then
+            local spellId = spellutils.GetSpellId(entry)
+            local onWatch = spellId and charinfowatchers.watchListHas('CURE', watchScope, spellId, targetId)
+            if onWatch then
+                if targethit == 'tank' then
+                    local id, hit = CureEvalForTarget(spellIndex, context.tank, context.tankid, nil, 'tank', spelltartype, nil, nil)
+                    if id == targetId then return id, hit end
+                    return nil, nil
+                end
+                local id, hit = CureEvalForTarget(spellIndex, botname, targetId, nil, targethit, spelltartype, nil, nil)
+                if id == targetId then return id, hit end
+                return nil, nil
+            end
+            -- Non-peer groupmember merge: Spawn detrimentals when flag is set.
+            if targethit == 'groupmember' and charinfowatchers.hasNonPeerGroupMembers() then
+                local id, hit = CureEvalForTarget(spellIndex, botname, targetId, nil, 'groupmember', spelltartype, nil, nil)
+                if id == targetId then return id, hit end
+            end
             return nil, nil
         end
-        if targethit == 'tank' then
-            local id, hit = CureEvalForTarget(spellIndex, context.tank, context.tankid, nil, 'tank', spelltartype, nil, nil)
-            if id == targetId then return id, hit end
-            return nil, nil
-        end
-        local id, hit = CureEvalForTarget(spellIndex, botname, targetId, nil, targethit, spelltartype, nil, nil)
+
+        local id, hit = CureEvalForTarget(spellIndex, botname, targetId, targethit, targethit, spelltartype, nil, nil)
         if id == targetId then return id, hit end
         return nil, nil
-    end
-
-    local id, hit = CureEvalForTarget(spellIndex, botname, targetId, targethit, targethit, spelltartype, nil, nil)
-    if id == targetId then return id, hit end
-    return nil, nil
+    end)
 end
 
 function botcure.CureCheck(runPriority, phaseOrder, hookName)
@@ -250,14 +218,12 @@ function botcure.CureCheck(runPriority, phaseOrder, hookName)
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
     local count = botconfig.getSpellCount('cure')
     if count <= 0 then return false end
-    local ctx = cureBuildContext()
+    local ctx = tickprof.span('context', function()
+        return cureBuildContext()
+    end)
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
-        afterCast = (hookName == 'doCure') and function(i)
-            local e, c = CureEval(i)
-            return e and c
-        end or nil,
         entryValid = function(i)
             local entry = botconfig.getSpellEntry('cure', i)
             if not entry then return false end
@@ -271,10 +237,14 @@ function botcure.CureCheck(runPriority, phaseOrder, hookName)
     local cursor = spellutils.getResumeCursor(hookName)
     local pcAllowed = pcphasethrottle.allow('cure', cursor)
     local function getTargets(phase, context)
-        return cureGetTargetsForPhase(phase, context, pcAllowed)
+        return tickprof.span('targets', function()
+            return cureGetTargetsForPhase(phase, context, pcAllowed)
+        end)
     end
-    return spellutils.RunPhaseFirstSpellCheck('cure', hookName, phaseOrder, getTargets, getSpellIndices,
-        cureTargetNeedsSpell, ctx, options)
+    return tickprof.span('spellcheck', function()
+        return spellutils.RunPhaseFirstSpellCheck('cure', hookName, phaseOrder, getTargets, getSpellIndices,
+            cureTargetNeedsSpell, ctx, options)
+    end)
 end
 
 function botcure.getHookFn(name)

@@ -9,9 +9,7 @@ local bothooks = require('lib.bothooks')
 local castutils = require('lib.castutils')
 local buffphase = require('lib.buffphase')
 local botmove = require('botmove')
-local pcphasethrottle = require('lib.pcphasethrottle')
 local tickprof = require('lib.tickprof')
-local log = require('lib.log')
 
 local charinfowatchers = require('lib.charinfowatchers')
 
@@ -323,7 +321,19 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range, aeRange, c
         return dur < 20000
     end
 
-    if not charinfowatchers.grpAggShouldCast('BUFF', sid, entry.tarcnt, selfPasses) then
+    local nonPeerNeeds = 0
+    if charinfowatchers.hasNonPeerGroupMembers() then
+        for _, m in ipairs(charinfowatchers.getNonPeerGroupMembers()) do
+            if m.id and m.id > 0
+                and spellutils.EnsureSpawnBuffsPopulated(m.id, 'buff', index, 'groupbuff', nil, nil, nil)
+                and heightAllowsSpawn(entry, m.id)
+                and spellutils.SpawnNeedsBuff(m.id, spell, entry.spellicon) then
+                nonPeerNeeds = nonPeerNeeds + 1
+            end
+        end
+    end
+
+    if not charinfowatchers.grpAggShouldCast('BUFF', sid, entry.tarcnt, selfPasses, nonPeerNeeds) then
         return nil, nil
     end
     local spellEnt = spellutils.GetSpellEntity(entry)
@@ -377,40 +387,19 @@ local function BuffEvalPetById(index, spellid, rangeSq, petId, context, hoist)
 end
 
 local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'offtank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
---- Light-locked passes: self+tank only (all RR phases denied by cooldown/interval).
-local BUFF_PHASE_ORDER_LIGHT = { 'self', 'tank' }
-
 --- Single place for buff context: tank, tankid, class-ordered bots, botcount, buffCount, peerByName.
---- opts.deferRoster: skip full peer roster (light self/tank passes).
-local function buffBuildContext(opts)
+local function buffBuildContext()
     local tank, tankid = spellutils.GetTankInfo(false)
     local count = botconfig.getSpellCount('buff')
-    local ctx = {
+    local bots, peerByName = spellutils.GetBotListOrderedWithPeers()
+    return {
         tank = tank,
         tankid = tankid,
         buffCount = count,
-        bots = nil,
-        botcount = 0,
-        peerByName = nil,
-        rosterDeferred = opts and opts.deferRoster or false,
+        bots = bots or {},
+        botcount = bots and #bots or 0,
+        peerByName = peerByName or {},
     }
-    if not ctx.rosterDeferred then
-        local bots, peerByName = spellutils.GetBotListOrderedWithPeers()
-        ctx.bots = bots or {}
-        ctx.botcount = #ctx.bots
-        ctx.peerByName = peerByName or {}
-    end
-    return ctx
-end
-
-local function buffEnsureRoster(context)
-    if not context or context.bots then return context end
-    local bots, peerByName = spellutils.GetBotListOrderedWithPeers()
-    context.bots = bots or {}
-    context.botcount = #context.bots
-    context.peerByName = peerByName or {}
-    context.rosterDeferred = false
-    return context
 end
 
 local function filterCorpses(targets)
@@ -445,17 +434,29 @@ end
 local function buffGetTargetsForPhase(phase, context, hoist)
     if phase == 'self' then return castutils.getTargetsSelf() end
     if phase == 'tank' or phase == 'offtank' or phase == 'groupmember' or phase == 'pc' then
-        buffEnsureRoster(context)
         local count = botconfig.getSpellCount('buff')
-        return filterCorpses(charinfowatchers.unionTargetsForPhase('buff', phase, count, buffBandHasPhase))
+        local out = filterCorpses(charinfowatchers.unionTargetsForPhase('buff', phase, count, buffBandHasPhase))
+        -- Non-peer group members are invisible to CharInfo watches; merge when flag is set.
+        if phase == 'groupmember' and charinfowatchers.hasNonPeerGroupMembers() then
+            local seen = {}
+            for i = 1, #out do
+                if out[i].id then seen[out[i].id] = true end
+            end
+            for _, m in ipairs(charinfowatchers.getNonPeerGroupMembers()) do
+                if m.id and m.id > 0 and not seen[m.id] then
+                    seen[m.id] = true
+                    out[#out + 1] = { id = m.id, targethit = 'groupmember', name = m.name, nonPeer = true }
+                end
+            end
+            out = filterCorpses(out)
+        end
+        return out
     end
     if phase == 'groupbuff' then
-        buffEnsureRoster(context)
         return castutils.getTargetsGroupCaster('groupbuff')
     end
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then
-        buffEnsureRoster(context)
         return castutils.getTargetsPet(context)
     end
     if phase == 'byname' and context.buffCount then
@@ -483,16 +484,6 @@ local function buffGetTargetsForPhase(phase, context, hoist)
     end
     return {}
 end
-
---- Throttled multi-target buff phases (mirrors pcphasethrottle THROTTLED.buff).
-local BUFF_RR_THROTTLED = {
-    byname = true,
-    groupbuff = true,
-    groupmember = true,
-    pc = true,
-    mypet = true,
-    pet = true,
-}
 
 local function getOrBuildSpellCache(spellIndex, spellCache)
     local cached = spellCache and spellCache[spellIndex]
@@ -583,12 +574,19 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         return nil, nil
     end
 
-    -- Phase target list is a union across spells; require this spell's watchlist (heal already does this).
+    -- Phase target list is a union across spells; require this spell's watchlist for peers.
+    -- Non-peers are never on CharInfo watches; phase handlers decide Spawn need.
     local watchScope = charinfowatchers.phaseToScope(phase)
     if watchScope and watchScope ~= 'GRPAGG' then
         local watchSid = spellutils.GetSpellId(entry) or sid
         if not charinfowatchers.watchListHas('BUFF', watchScope, watchSid, targetId) then
-            return nil, nil
+            local name = mq.TLO.Spawn(targetId).CleanName()
+            if name and resolvePeer(name, context, hoist) then
+                return nil, nil
+            end
+            if phase == 'groupmember' and not charinfowatchers.hasNonPeerGroupMembers() then
+                return nil, nil
+            end
         end
     end
 
@@ -627,8 +625,6 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         return nil, nil
     end
     if phase == 'groupbuff' then
-        buffEnsureRoster(context)
-        if hoist then hoist.peerByName = context.peerByName end
         return BuffEvalGroupBuff(spellIndex, entry, spell, sid, range, aeRange, context, hoist)
     end
     if phase == 'mypet' then
@@ -657,14 +653,18 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         end
         return nil, nil
     end
-    -- groupmember/pc (incl. Group v2 AE on ALL): watchlist + range only.
+    -- groupmember/pc (incl. Group v2 AE on ALL): peers = watchlist + range; non-peers = Spawn path when flagged.
     if phase == 'groupmember' then
         if not BuffClass[spellIndex].groupmember then return nil, nil end
         local grpname = mq.TLO.Spawn(targetId).CleanName()
         local peer = resolvePeer(grpname, context, hoist)
         if peer then
             return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, 'groupmember', peer, context, hoist)
-        elseif IconCheck(spellIndex, targetId, grpname, nil, context, hoist) then
+        end
+        if not charinfowatchers.hasNonPeerGroupMembers() then
+            return nil, nil
+        end
+        if IconCheck(spellIndex, targetId, grpname, nil, context, hoist) then
             if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'groupmember', nil, nil, nil)
                 and heightAllowsSpawn(entry, targetId)
                 and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
@@ -700,12 +700,8 @@ function botbuff.BuffCheck(runPriority)
     end
     local count = botconfig.getSpellCount('buff')
     if count <= 0 then return false end
-    pcphasethrottle.beginBuffPass()
-    local cursor = spellutils.getResumeCursor('doBuff')
-    local resumeThrottled = cursor and cursor.phase and BUFF_RR_THROTTLED[cursor.phase]
-    local deferRoster = pcphasethrottle.buffPassIsLightLocked() and not resumeThrottled
     local ctx = tickprof.span('context', function()
-        return buffBuildContext({ deferRoster = deferRoster })
+        return buffBuildContext()
     end)
     local spellCache = {}
     local entryValidCache = {}
@@ -809,68 +805,18 @@ function botbuff.BuffCheck(runPriority)
         spellFirst = true,
         entryValid = cachedEntryValid,
     }
-    local phaseOrder = BUFF_PHASE_ORDER
-    if deferRoster then
-        phaseOrder = BUFF_PHASE_ORDER_LIGHT
-        pcphasethrottle.markBuffPassLightLocked()
-    end
-    -- Pass-local deny/grant overlay; module cache supplies the real index lists.
-    local indicesByPhase = {}
-    local rrAllowByPhase = {}
     if not next(_buffIndicesByPhase) then
         rebuildBuffIndicesByPhase()
     end
-    local function filterIndicesEntryValid(list)
-        local filtered = {}
-        for _, idx in ipairs(list) do
-            if cachedEntryValid(idx) then
-                filtered[#filtered + 1] = idx
-            end
-        end
-        return filtered
-    end
-    -- Pre-mark empty RR phases so tip-strict can skip before byname asks (phase order ≠ RR order).
-    for _, phase in ipairs(pcphasethrottle.BUFF_RR_ORDER) do
-        local list = filterIndicesEntryValid(_buffIndicesByPhase[phase] or {})
-        if #list == 0 then
-            pcphasethrottle.noteBuffPhaseEmpty(phase)
-        end
-    end
+    local indicesByPhase = {}
     local function getSpellIndices(phase, _target)
         local cached = indicesByPhase[phase]
         if cached then return cached end
         return tickprof.span('indices', function()
-            -- Light / already-granted: deny via allow() without grant work.
-            -- If allow() grants (e.g. resume on this phase during light-lock), fall through for real indices.
-            if BUFF_RR_THROTTLED[phase] and rrAllowByPhase[phase] ~= true
-                and (rrAllowByPhase[phase] == false or pcphasethrottle.buffRrWouldDeny(phase)) then
-                if rrAllowByPhase[phase] == nil then
-                    rrAllowByPhase[phase] = pcphasethrottle.allow('buff', cursor, phase)
-                end
-                if rrAllowByPhase[phase] ~= true then
-                    indicesByPhase[phase] = {}
-                    return indicesByPhase[phase]
-                end
-            end
-            local list = filterIndicesEntryValid(_buffIndicesByPhase[phase] or {})
-            -- Empty after entryValid filter: tip-strict RR may skip this tip.
-            if #list == 0 then
-                if BUFF_RR_THROTTLED[phase] then
-                    pcphasethrottle.noteBuffPhaseEmpty(phase)
-                end
-                indicesByPhase[phase] = list
-                return list
-            end
-            if BUFF_RR_THROTTLED[phase] then
-                local allowed = rrAllowByPhase[phase]
-                if allowed == nil then
-                    allowed = pcphasethrottle.allow('buff', cursor, phase)
-                    rrAllowByPhase[phase] = allowed
-                end
-                if not allowed then
-                    -- Has spells but not tip / denied — do not mark empty.
-                    indicesByPhase[phase] = {}
-                    return indicesByPhase[phase]
+            local list = {}
+            for _, idx in ipairs(_buffIndicesByPhase[phase] or {}) do
+                if cachedEntryValid(idx) then
+                    list[#list + 1] = idx
                 end
             end
             indicesByPhase[phase] = list
@@ -880,39 +826,16 @@ function botbuff.BuffCheck(runPriority)
     local function getTargets(phase, context)
         if phase == 'self' and skipSelfTargets then return {} end
         if phase == 'tank' and skipTankTargets then return {} end
-        if BUFF_RR_THROTTLED[phase] then
-            local allowed = rrAllowByPhase[phase]
-            if allowed == nil then
-                allowed = pcphasethrottle.allow('buff', cursor, phase)
-                rrAllowByPhase[phase] = allowed
-            end
-            if not allowed then return {} end
-            return tickprof.span('targets', function()
-                local targets = buffGetTargetsForPhase(phase, context, hoist)
-                hoist.peerByName = context.peerByName
-                return targets
-            end)
-        end
-        if not pcphasethrottle.allow('buff', cursor, phase) then return {} end
         return tickprof.span('targets', function()
             local targets = buffGetTargetsForPhase(phase, context, hoist)
             hoist.peerByName = context.peerByName
             return targets
         end)
     end
-    local result = tickprof.span('spellcheck', function()
-        return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', phaseOrder, getTargets, getSpellIndices,
+    return tickprof.span('spellcheck', function()
+        return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,
             needsSpell, ctx, options)
     end)
-    if tickprof.IsDebug() and tickprof.IsSpans() then
-        local mode, detail = pcphasethrottle.noteBuffPassEnd()
-        if mode == 'heavy' then
-            log.say('[tick] buff.pass mode=heavy phase=%s', detail)
-        else
-            log.say('[tick] buff.pass mode=light reason=%s', detail)
-        end
-    end
-    return result
 end
 
 --- True when a PC corpse within acleash belongs to a current group member (cleric defers buff for rez focus).

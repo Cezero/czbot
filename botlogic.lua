@@ -422,11 +422,13 @@ function botlogic.StartUp(...)
 end
 
 function botlogic.mainloop()
+    local TICK_TARGET_MS = 100
     while not state.getRunconfig().terminate do
         mq.doevents()
         tankrole.beginTick()
         spellutils.beginTick()
         local tick = tickprof.beginTick()
+        local tickStart = mq.gettime()
         hookregistry.runRunWhenPausedHooks()
         local paused = MasterPause == true
         if not paused then
@@ -434,7 +436,11 @@ function botlogic.mainloop()
         end
         antiafk.tick()
         tickprof.endTick(tick, paused)
-        mq.delay(100)
+        local procMs = mq.gettime() - tickStart
+        local sleepMs = TICK_TARGET_MS - procMs
+        if sleepMs > 0 then
+            mq.delay(sleepMs)
+        end
     end
     czactor.shutdown()
 end

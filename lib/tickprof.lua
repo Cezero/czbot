@@ -219,7 +219,7 @@ function tickprof.endTick(handle, paused)
     local now = mq.gettime()
     local procMs = now - handle.tickStart
     local gapMs = handle.gapMs or 0
-    local expectedGap = _lastProcMs + TICK_MS
+    local expectedGap = math.max(TICK_MS, _lastProcMs)
     local delayed = _lastTickStart ~= nil and gapMs > expectedGap + GAP_SLACK_MS
     local overBudget = procMs > TICK_MS
 

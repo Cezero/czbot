@@ -229,14 +229,80 @@ function M.registerCureWatchers()
 end
 
 --- True if spawnId is in GetWatchList(kind, scope, spellId).
-function M.watchListHas(kind, scope, spellId, spawnId)
-    if not spawnId or spawnId <= 0 or not spellId or not charinfo.GetWatchList then return false end
-    local ids = charinfo.GetWatchList(kind, scope, spellId)
-    if type(ids) ~= 'table' then return false end
-    for _, id in ipairs(ids) do
-        if id == spawnId then return true end
+--- Uses a short-lived cache so repeated membership probes in one tick avoid re-fetch/linear scan.
+local _watchListCache = {} -- key -> { set = {[id]=true}, at = ms }
+local WATCH_LIST_CACHE_MS = 50
+
+local function watchListKey(kind, scope, spellId)
+    return tostring(kind) .. '\0' .. tostring(scope) .. '\0' .. tostring(spellId)
+end
+
+local function watchListIdSet(kind, scope, spellId)
+    if not spellId or not charinfo.GetWatchList then return nil end
+    local key = watchListKey(kind, scope, spellId)
+    local now = mq.gettime()
+    local hit = _watchListCache[key]
+    if hit and (now - hit.at) < WATCH_LIST_CACHE_MS then
+        return hit.set
     end
-    return false
+    local ids = charinfo.GetWatchList(kind, scope, spellId)
+    local set = {}
+    if type(ids) == 'table' then
+        for _, id in ipairs(ids) do
+            if id then set[id] = true end
+        end
+    end
+    _watchListCache[key] = { set = set, at = now }
+    return set
+end
+
+function M.watchListHas(kind, scope, spellId, spawnId)
+    if not spawnId or spawnId <= 0 or not spellId then return false end
+    local set = watchListIdSet(kind, scope, spellId)
+    return set ~= nil and set[spawnId] == true
+end
+
+--- Minute-cached: any group member who is not a CharInfo peer.
+local NONPEER_REFRESH_MS = 60000
+local _nonPeerAt = 0
+local _nonPeerFlag = false
+local _nonPeerMembers = {} -- { { id, name }, ... }
+
+local function refreshNonPeerGroupMembers()
+    local now = mq.gettime()
+    if now - _nonPeerAt < NONPEER_REFRESH_MS and _nonPeerAt > 0 then
+        return
+    end
+    _nonPeerAt = now
+    _nonPeerFlag = false
+    _nonPeerMembers = {}
+    local n = mq.TLO.Group.Members()
+    if not n or n <= 0 then return end
+    for i = 1, n do
+        local member = mq.TLO.Group.Member(i)
+        local name = member and member.Name()
+        if name and name ~= '' and not charinfo.GetInfo(name) then
+            local id = member.ID and member.ID()
+            if id and id > 0 then
+                _nonPeerFlag = true
+                _nonPeerMembers[#_nonPeerMembers + 1] = { id = id, name = name }
+            end
+        end
+    end
+end
+
+--- True when the last refresh found at least one non-peer group member.
+function M.hasNonPeerGroupMembers()
+    refreshNonPeerGroupMembers()
+    return _nonPeerFlag
+end
+
+--- Cached non-peer group members from the last refresh (empty when flag is false).
+--- @return table[] list of { id, name }
+function M.getNonPeerGroupMembers()
+    refreshNonPeerGroupMembers()
+    if not _nonPeerFlag then return {} end
+    return _nonPeerMembers
 end
 
 --- Build target entries from watchlist for a phase.
@@ -310,15 +376,17 @@ function M.unionTargetsForPhase(section, phase, spellCount, bandHasPhaseFn)
     return out
 end
 
---- GRPAGG readiness: peerCount vs tarcnt with self-as-tiebreaker.
-function M.grpAggShouldCast(kind, spellId, tarcnt, selfPassesFn)
+--- GRPAGG readiness: peerCount (+ optional non-peer needs) vs tarcnt with self-as-tiebreaker.
+---@param nonPeerNeeds number|nil extra needy non-peer group members (default 0)
+function M.grpAggShouldCast(kind, spellId, tarcnt, selfPassesFn, nonPeerNeeds)
     local need = tonumber(tarcnt) or 1
     local peerCount = 0
     if charinfo.GetWatchCount then
         peerCount = charinfo.GetWatchCount(kind, 'GRPAGG', spellId) or 0
     end
-    if peerCount >= need then return true end
-    if peerCount == need - 1 then
+    local total = peerCount + (tonumber(nonPeerNeeds) or 0)
+    if total >= need then return true end
+    if total == need - 1 then
         return selfPassesFn and selfPassesFn() == true
     end
     return false

@@ -1,6 +1,6 @@
 # Bot Logic: State and Flow
 
-This section charts the bot's state and decision logic so you can trace how any action is chosen and executed. The main loop lives in `botlogic.lua` (`mainloop()`): it runs until `state.getRunconfig().terminate` is true; each iteration runs hooks then `mq.delay(100)`.
+This section charts the bot's state and decision logic so you can trace how any action is chosen and executed. The main loop lives in `botlogic.lua` (`mainloop()`): it runs until `state.getRunconfig().terminate` is true; each iteration runs hooks then sleeps for `max(0, 100 - procMs)` so the target tick interval is 100ms (no sleep when a tick already took ≥100ms).
 
 ## Requirements
 

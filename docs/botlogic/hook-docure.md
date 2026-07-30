@@ -16,7 +16,7 @@ flowchart TB
     RunPhase --> PhaseLoop[phase order: self tank groupcure groupmember pc]
 ```
 
-CureEvalForTarget checks cure type (poison, disease, curse, corruption, all) against self or peer detrimentals; DistanceCheck and band (tank, groupmember, class) apply. Groupcure uses an AE count check (needCure per member). Spells have curetype (table of strings) and bands (self, tank, groupcure, groupmember, class). Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md). priorityCure uses the same pipeline with phase order { 'priority' } only.
+CureEvalForTarget: self uses Me detrimentals; peers use CharInfo CURE watchlists + DistanceCheck only; non-peer group members (minute-cached `nonPeerGroupMembers` flag) use Spawn detrimentals. Groupcure uses `GetWatchCount` (+ non-peer needs) vs tarcnt. Spells have curetype (table of strings) and bands (self, tank, groupcure, groupmember, class). Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md). priorityCure uses the same pipeline with phase order { 'priority' } only.
 
 ## See also
 
