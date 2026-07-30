@@ -10,7 +10,7 @@ buffphase.GROUPV1_ALLOWED = {
 }
 
 local RUNTIME_PHASE_KEYS = {
-    'self', 'tank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet', 'name', 'petspell',
+    'self', 'tank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet', 'petspell',
 }
 
 function buffphase.getAllowedPhases(entry)

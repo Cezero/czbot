@@ -25,10 +25,13 @@
 ---@field zradius number|nil
 ---@field campRestDistance number|nil distance in units to consider "at camp" for leash and return
 ---@field campRestDistanceSq number|nil precomputed campRestDistance^2 for distance-squared comparisons
+---@field warpThreshold number|nil inter-tick position jump (units) treated as zone reset; <=0 disables
+---@field warpThresholdSq number|nil precomputed warpThreshold^2 for distance-squared comparisons
 ---@field maCampAnchor boolean|nil when true, MobList anchor follows nearby MA; inject ATTACK targets
 ---@field maAnchorLeash number|nil max MA distance for anchor/inject; defaults to acleash
 ---@field spelldb string|nil
 ---@field confirmExit boolean|nil when true, GUI Exit button shows a confirmation dialog (default off)
+---@field buffNonPeerRaid boolean|nil when true, after peer pc buffs, also buff in-zone non-peer raid members (default off)
 ---@field antiAfk boolean|nil when true, open/close a random bag (or inventory) after ~3–4 min true idle (default on)
 
 ---@class ConfigPullSpell
@@ -130,7 +133,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'campAcleash', 'confirmExit', 'antiAfk' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'warpThreshold', 'maCampAnchor', 'maAnchorLeash', 'engageXTargetOnly', 'mezMinLevel', 'charmPetAutoSetup', 'tankAllMobs', 'aeTankIgnoreMezzer', 'campAcleash', 'confirmExit', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
@@ -142,7 +145,7 @@ local subOrder = {
 
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
-    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition', 'buffNames', 'height' },
+    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition', 'height' },
     debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen', 'recastActive' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
@@ -859,6 +862,7 @@ function M.recomputeDerivedSettings()
         s.acleashSq = (s.acleash or 0) * (s.acleash or 0)
         s.followdistanceSq = (s.followdistance or 0) * (s.followdistance or 0)
         s.campRestDistanceSq = (s.campRestDistance or 0) * (s.campRestDistance or 0)
+        s.warpThresholdSq = (s.warpThreshold or 0) * (s.warpThreshold or 0)
     end
     local pull = M.config.pull
     if pull then
@@ -1020,18 +1024,6 @@ local function writeConfigToFile(config, filename)
                         file:flush()
                     end
                     -- omit when empty; readers treat as { 'all' }
-                elseif key == 'buffNames' and type(value) == "table" then
-                    if #value > 0 then
-                        local parts = {}
-                        for _, s in ipairs(value) do
-                            parts[#parts + 1] = '"' .. tostring(s):gsub('\\', '\\\\'):gsub('"', '\\"') .. '"'
-                        end
-                        file:write(indent .. formatKey('buffNames') .. " = { ")
-                        file:write(table.concat(parts, ", "))
-                        file:write(" },\n")
-                        file:flush()
-                    end
-                    -- omit when empty
                 elseif key == 'spellicon' and type(value) == "table" then
                     if #value > 0 then
                         local parts = {}
@@ -1237,7 +1229,8 @@ function M.Load(path)
     for _, section in ipairs({ 'heal', 'buff', 'debuff', 'cure' }) do
         if not M.config[section].spells then M.config[section].spells = {} end
     end
-    -- Normalize precondition to string or nil (no boolean) in all spell entries; spell to string (config may have number e.g. 0)
+    -- Normalize precondition to string or nil (no boolean) in all spell entries; spell to string (config may have number e.g. 0).
+    -- Strip legacy buffNames / byname (replaced by settings.buffNonPeerRaid).
     for _, section in ipairs({ 'heal', 'buff', 'debuff', 'cure' }) do
         for _, entry in ipairs(M.config[section].spells or {}) do
             if type(entry.spell) ~= 'string' then entry.spell = '' end
@@ -1245,6 +1238,22 @@ function M.Load(path)
                 entry.precondition = entry.precondition and nil or 'false'
             elseif type(entry.precondition) == 'string' and (entry.precondition == '' or entry.precondition:match('^%s*$')) then
                 entry.precondition = nil
+            end
+            if section == 'buff' then
+                entry.buffNames = nil
+                if type(entry.bands) == 'table' then
+                    for _, band in ipairs(entry.bands) do
+                        if band and type(band.targetphase) == 'table' then
+                            local out = {}
+                            for _, p in ipairs(band.targetphase) do
+                                if p ~= 'byname' and p ~= 'name' then
+                                    out[#out + 1] = p
+                                end
+                            end
+                            band.targetphase = out
+                        end
+                    end
+                end
             end
         end
     end
@@ -1267,6 +1276,7 @@ function M.Load(path)
     if (M.config.settings.followdistance == nil) then M.config.settings.followdistance = 35 end
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.campRestDistance == nil) then M.config.settings.campRestDistance = 15 end
+    if (M.config.settings.warpThreshold == nil) then M.config.settings.warpThreshold = 600 end
     if M.config.settings.maCampAnchor == nil then M.config.settings.maCampAnchor = true end
     if M.config.settings.engageXTargetOnly == nil then M.config.settings.engageXTargetOnly = false end
     -- Character-wide minimum mez level (0 = disabled; spell MaxLevel still applies above).
@@ -1283,6 +1293,8 @@ function M.Load(path)
     if M.config.settings.campAcleash == nil then M.config.settings.campAcleash = true end
     -- GUI Exit button: show confirmation dialog before terminating (default off).
     if M.config.settings.confirmExit == nil then M.config.settings.confirmExit = false end
+    -- After peer pc buffs, also buff in-zone non-peer raid members via spawn buff cache (default off).
+    if M.config.settings.buffNonPeerRaid == nil then M.config.settings.buffNonPeerRaid = false end
     -- Anti-AFK: open/close a random bag (or inventory) after ~3–4 min continuous true idle (default on).
     if M.config.settings.antiAfk == nil then M.config.settings.antiAfk = true end
     if (M.config.settings.TankName == nil) then M.config.settings.TankName = "automatic" end

@@ -338,6 +338,7 @@ local function _registerBuiltinHooks()
         if newZone and newZone ~= '' and rc.zonename ~= newZone then
             botevents.OnZoneChange()
         end
+        botevents.checkWarp()
     end)
 
     hookregistry.registerHookFn('commonLoadTick', function(hookName)

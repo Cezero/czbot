@@ -43,7 +43,7 @@ Phase order and target types are per section. See [Spell targeting and bands](..
 | heal | corpse, self, groupheal, tank, groupmember, pc, mypet, pet, xtgt |
 | debuff | charm, notmatar, matar, named |
 | cure | self, tank, groupcure, groupmember, pc (priority cure uses a different order) |
-| buff | self, byname, tank, groupbuff, groupmember, pc, mypet, pet |
+| buff | self, tank, groupbuff, groupmember, pc, (nonpeerraid when buffNonPeerRaid), mypet, pet |
 
 ---
 

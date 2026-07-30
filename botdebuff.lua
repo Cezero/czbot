@@ -17,6 +17,8 @@ local botdebuff = {}
 local DebuffBands = {}
 local _hasCharmSpell = false
 local _hasNotmatarBand = false
+--- Module-level spell meta (id/range/dur/maxlvl/ae) cleared on debuff config reload.
+local _debuffSpellMeta = {}
 local bardtwist = require('lib.bardtwist')
 local botmelee = require('botmelee')
 local targeting = require('lib.targeting')
@@ -49,6 +51,8 @@ local function normalizeDebuffEntry(entry)
 end
 
 function botdebuff.LoadDebuffConfig()
+    _debuffSpellMeta = {}
+    spellutils.ClearMezNukeSpellCache()
     castutils.LoadSpellSectionConfig('debuff', {
         defaultEntry = defaultDebuffEntry,
         bandsKey = 'debuff',
@@ -58,12 +62,51 @@ function botdebuff.LoadDebuffConfig()
     _hasCharmSpell = false
     _hasNotmatarBand = false
     local count = botconfig.getSpellCount('debuff')
+    local myconfig = botconfig.config
     for i = 1, count do
         local entry = botconfig.getSpellEntry('debuff', i)
         if entry and entry.enabled ~= false then
             if spellutils.IsCharmSpell(entry) then _hasCharmSpell = true end
             local db = DebuffBands[i]
             if db and db.notmatar then _hasNotmatarBand = true end
+            local spell, spellrange, spelltartype = spellutils.GetSpellInfo(entry)
+            if spell then
+                local gem = entry.gem
+                local meta = {
+                    spell = spell,
+                    spellrange = spellrange,
+                    spelltartype = spelltartype,
+                }
+                if gem == 'ability' then
+                    meta.myrange = 20
+                    meta.myrangeSq = 400
+                    _debuffSpellMeta[i] = meta
+                elseif gem ~= 'script' then
+                    local spellEntity = spellutils.GetSpellEntity(entry)
+                    if spellEntity then
+                        meta.spellid = spellEntity.ID()
+                        meta.spellmaxlvl = spellEntity.MaxLevel()
+                        meta.myrange = spellEntity.MyRange()
+                        if spellrange == 0 and spelltartype == 'PB AE' then
+                            meta.spellrange = spellEntity.AERange()
+                        end
+                        meta.spelldur = tonumber(spellEntity.MyDuration.TotalSeconds()) or 0
+                        if spellEntity.Category() == 'Pet' then
+                            meta.myrange = myconfig.settings.acleash
+                        end
+                        if spellutils.IsTargetedAESpell(entry) then
+                            local ar = spellEntity.AERange()
+                            if ar and ar > 0 then
+                                meta.aeRange = ar
+                                meta.minCastDist = ar + 2
+                                meta.minCastDistSq = meta.minCastDist * meta.minCastDist
+                            end
+                        end
+                        meta.myrangeSq = meta.myrange and (meta.myrange * meta.myrange) or nil
+                        _debuffSpellMeta[i] = meta
+                    end
+                end
+            end
         end
     end
 end
@@ -113,14 +156,49 @@ local function debuffMatarSpawnForTarget(chosenTargetId, ctx)
 end
 
 local function DebuffEvalBuildContext(index, shared)
-    local myconfig = botconfig.config
     local entry = botconfig.getSpellEntry('debuff', index)
     if not entry then return nil end
-    local spell, spellrange, spelltartype, spellid = spellutils.GetSpellInfo(entry)
+    local meta = _debuffSpellMeta[index]
+    local spell, spellrange, spellId, spellMaxLvl, myrange, spelldur, minCastDistSq, aeRange, minCastDist
+    if meta and meta.spell then
+        spell = meta.spell
+        spellrange = meta.spellrange
+        spellId = meta.spellid
+        spellMaxLvl = meta.spellmaxlvl
+        myrange = meta.myrange
+        spelldur = meta.spelldur
+        aeRange = meta.aeRange
+        minCastDist = meta.minCastDist
+        minCastDistSq = meta.minCastDistSq
+    else
+        local spelltartype
+        spell, spellrange, spelltartype = spellutils.GetSpellInfo(entry)
+        if not spell then return nil end
+        local gem = entry.gem
+        if gem ~= 'ability' and gem ~= 'script' then
+            local spellEntity = spellutils.GetSpellEntity(entry)
+            if not spellEntity then return nil end
+            spellId = spellEntity.ID()
+            spellMaxLvl = spellEntity.MaxLevel()
+            myrange = spellEntity.MyRange()
+            if spellrange == 0 and spelltartype == 'PB AE' then
+                spellrange = spellEntity.AERange()
+            end
+            spelldur = tonumber(spellEntity.MyDuration.TotalSeconds()) or 0
+            if spellEntity.Category() == 'Pet' then myrange = botconfig.config.settings.acleash end
+            if spellutils.IsTargetedAESpell(entry) then
+                local ar = spellEntity.AERange()
+                if ar and ar > 0 then
+                    aeRange = ar
+                    minCastDist = aeRange + 2
+                    minCastDistSq = minCastDist * minCastDist
+                end
+            end
+        end
+        if gem == 'ability' then myrange = 20 end
+    end
     if not spell then return nil end
     local gem = entry.gem
-    local spellId, spellMaxLvl, myrange, spelldur, minCastDistSq, aeRange, minCastDist = nil, nil, nil, nil, nil, nil,
-        nil
     -- Prefer pass-local MA/MT from DebuffCheck; fall back to Assist/Tank TLOs.
     local assistid, maTargetId, maTargetHp, maTargetLvl
     local tankid, mtTargetId, mtTargetHp, mtTargetLvl
@@ -143,28 +221,7 @@ local function DebuffEvalBuildContext(index, shared)
         if maTargetId == 0 then maTargetId = nil end
         maTargetLvl = maTargetId and mq.TLO.Spawn(maTargetId).Level()
     end
-    if gem ~= 'ability' and gem ~= 'script' then
-        local spellEntity = spellutils.GetSpellEntity(entry)
-        if not spellEntity then return nil end
-        spellId = spellEntity.ID()
-        spellMaxLvl = spellEntity.MaxLevel()
-        myrange = spellEntity.MyRange()
-        if spellrange == 0 and spelltartype == 'PB AE' then
-            spellrange = spellEntity.AERange()
-        end
-        spelldur = tonumber(spellEntity.MyDuration.TotalSeconds()) or 0 -- MyDuration() ALWAYS has TotalSeconds() we don't need to check for nil
-        if spellEntity.Category() == 'Pet' then myrange = myconfig.settings.acleash end
-        if spellutils.IsTargetedAESpell(entry) then
-            local ar = spellEntity.AERange()
-            if ar and ar > 0 then
-                aeRange = ar
-                minCastDist = aeRange + 2
-                minCastDistSq = minCastDist * minCastDist
-            end
-        end
-    end
-    if gem == 'ability' then myrange = 20 end
-    local myrangeSq = myrange and (myrange * myrange) or nil
+    local myrangeSq = (meta and meta.myrangeSq) or (myrange and (myrange * myrange) or nil)
     local db = DebuffBands[index]
     local mobMin = db and db.mobMin or 0
     local mobMax = db and db.mobMax or 100
@@ -612,55 +669,48 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     if targethit == 'matar' then
         if not debuffGemReady(context, spellIndex, entry) then return nil, nil end
         if not onlyMTDebuffAllowed(entry) then return nil, nil end
-        local function acceptIfNeeded()
-            local need = matarNeedCached(context, spellIndex, targetId, function()
-                local id = DebuffEvalMatar(spellIndex, ctx)
-                if id == targetId then return true end
-                -- Burn-only on MA target (no matar flag on band).
-                if db and db.burn and not db.matar and not db.notmatar and not db.named and state.IsBurnActive() then
-                    local chosenTargetId = getMatarChosenTargetId(entry, ctx)
-                    if chosenTargetId == targetId and castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax }) then
-                        local spawn = debuffMatarSpawnForTarget(targetId, ctx)
-                        if spawn and DebuffSpawnNeedsSpell(entry, ctx, spawn, 'matar') then
-                            return true
-                        end
-                    end
-                end
-                return false
-            end)
-            if not need then return nil, nil end
-            if castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax })
-                and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(targetId)) then
-                return targetId, 'matar'
-            end
+        -- DebuffList-first: skip full EvalMatar when we already track a long-enough duration.
+        if not entry.recastActive and ctx.spellid
+            and spellstates.HasDebuffLongerThan(targetId, ctx.spellid, spellutils.GetDebuffRefreshThresholdMs()) then
             return nil, nil
         end
-        return acceptIfNeeded()
+        local need = matarNeedCached(context, spellIndex, targetId, function()
+            local id = DebuffEvalMatar(spellIndex, ctx)
+            if id == targetId then return true end
+            -- Burn-only on MA target (no matar flag on band).
+            if db and db.burn and not db.matar and not db.notmatar and not db.named and state.IsBurnActive() then
+                local chosenTargetId = getMatarChosenTargetId(entry, ctx)
+                if chosenTargetId == targetId and castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax }) then
+                    local spawn = debuffMatarSpawnForTarget(targetId, ctx)
+                    if spawn and DebuffSpawnNeedsSpell(entry, ctx, spawn, 'matar') then
+                        return true
+                    end
+                end
+            end
+            return false
+        end)
+        if need then return targetId, 'matar' end
+        return nil, nil
     end
     if targethit == 'named' then
         if not debuffGemReady(context, spellIndex, entry) then return nil, nil end
         if not onlyMTDebuffAllowed(entry) then return nil, nil end
+        if not entry.recastActive and ctx.spellid
+            and spellstates.HasDebuffLongerThan(targetId, ctx.spellid, spellutils.GetDebuffRefreshThresholdMs()) then
+            return nil, nil
+        end
         local need = matarNeedCached(context, spellIndex, targetId, function()
             local id = DebuffEvalNamedMatar(spellIndex, ctx)
             return id == targetId
         end)
-        if not need then return nil, nil end
-        if castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax })
-            and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(targetId)) then
-            return targetId, 'matar'
-        end
+        if need then return targetId, 'matar' end
         return nil, nil
     end
     if targethit == 'notmatar' then
         if not db or not db.notmatar then return nil, nil end
         local cache = context.notmatarNeedCache and context.notmatarNeedCache[spellIndex]
         if cache and cache[targetId] ~= nil then
-            if not cache[targetId] then return nil, nil end
-            -- Discovery already ran SpawnNeedsDebuff; cheap HP/alive only.
-            if castutils.hpEvalSpawn(targetId, { min = db.mobMin, max = db.mobMax })
-                and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(targetId)) then
-                return targetId, 'notmatar'
-            end
+            if cache[targetId] then return targetId, 'notmatar' end
             return nil, nil
         end
         for _, v in ipairs(ctx.mobList) do

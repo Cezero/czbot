@@ -1746,10 +1746,18 @@ function spellutils.GetSpellDurationSec(entry)
 end
 
 -- Returns true if the debuff entry is a nuke (no duration / direct damage). Used for rotation and flavor filtering.
+-- Cached by gem+spell (same pattern as IsHoT).
+local _isNukeSpellCache = {}
+
 function spellutils.IsNukeSpell(entry)
     if not entry or not entry.spell then return false end
     if entry.gem == 'disc' or entry.gem == 'ability' then return false end
-    return spellutils.GetSpellDurationSec(entry) == 0
+    local key = tostring(entry.gem or '') .. '\0' .. tostring(entry.spell)
+    local cached = _isNukeSpellCache[key]
+    if cached ~= nil then return cached end
+    local isNuke = spellutils.GetSpellDurationSec(entry) == 0
+    _isNukeSpellCache[key] = isNuke
+    return isNuke
 end
 
 -- MQ Spell.ResistType() -> normalized flavor string. Returns nil if unknown or no entity.
@@ -1805,13 +1813,30 @@ function spellutils.IsCharmSpell(entry)
 end
 
 -- Returns true if the spell is a mez (Enthrall subcategory). Used for GUI label and level checks.
+-- Cached by gem+spell (same pattern as IsHoT).
+local _isMezSpellCache = {}
+
 function spellutils.IsMezSpell(entry)
     if not entry or not entry.spell then return false end
+    local key = tostring(entry.gem or '') .. '\0' .. tostring(entry.spell)
+    local cached = _isMezSpellCache[key]
+    if cached ~= nil then return cached end
     local e = spellutils.GetSpellEntity(entry)
-    if not e then return false end
+    if not e then
+        _isMezSpellCache[key] = false
+        return false
+    end
     local sub = e.Subcategory and e.Subcategory() or e.Subcategory
     if type(sub) == 'function' then sub = sub(e) end
-    return sub and type(sub) == 'string' and sub == 'Enthrall'
+    local isMez = sub and type(sub) == 'string' and sub == 'Enthrall' and true or false
+    _isMezSpellCache[key] = isMez
+    return isMez
+end
+
+--- Clear mez/nuke caches (call from LoadDebuffConfig when spell list changes).
+function spellutils.ClearMezNukeSpellCache()
+    _isMezSpellCache = {}
+    _isNukeSpellCache = {}
 end
 
 -- Returns true if the spell is targeted AE (radius around target) with AERange > 0.
@@ -3316,6 +3341,11 @@ function spellutils.CheckGemReadiness(sub, index, entry)
             if not rc.spellNotInBook then rc.spellNotInBook = {} end
             if not rc.spellNotInBook[sub] then rc.spellNotInBook[sub] = {} end
             rc.spellNotInBook[sub][index] = true
+            return false
+        end
+        -- Already in the configured gem: require SpellReady (skip idle needs when on CD).
+        -- Not memmed yet: allow through so CastSpell can memorize.
+        if spellMemmedInConfiguredGemSlot(entry) and not spellReadyByName(spell) then
             return false
         end
     elseif gem == 'item' then

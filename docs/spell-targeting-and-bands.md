@@ -108,11 +108,11 @@ Buff spells choose a target in a fixed order. Bands use **targetphase** (priorit
 From `BuffEval` in the code, the order is:
 
 1. **self** — Yourself (including auto-detected pet summon when you have no pet).
-2. **byname** — Specific **non-peer** characters whose names appear in **validtargets** when **byname** is in targetphase (CharInfo peers named here are ignored).
-3. **tank** — Main Tank (can be non-bot when explicitly named; only out-of-group non-bot we buff). Non-peer buff state from Spawn after targeting (BuffsPopulated). When this bot is the main tank, that target is this bot, so a buff with only **tank** in targetphase is cast on self without needing **self** in the band.
-4. **groupbuff** — Group AE buff (**Group v1** or **Group v2** on your EQ group). Count includes self; cast on self when count ≥ **tarcnt**. Group v1: no retarget. Group v2: retarget to self.
-5. **groupmember** — In-group only (single-target); includes non-bot group members. Non-peer need from Spawn (BuffsPopulated).
-6. **pc** — All peers by class (CharInfo **ALL** watchlist), including **Group v2** AE: cast on watchlisted peers; AE covers their group and peers leave the watchlist when buffed. Config token **bots** is accepted and treated as **pc**.
+2. **tank** — Main Tank (can be non-bot when explicitly named; only out-of-group non-bot we buff). Non-peer buff state from Spawn after targeting (BuffsPopulated). When this bot is the main tank, that target is this bot, so a buff with only **tank** in targetphase is cast on self without needing **self** in the band.
+3. **groupbuff** — Group AE buff (**Group v1** or **Group v2** on your EQ group). Count includes self; cast on self when count ≥ **tarcnt**. Group v1: no retarget. Group v2: retarget to self.
+4. **groupmember** — In-group only (single-target); includes non-bot group members. Non-peer need from Spawn (BuffsPopulated).
+5. **pc** — All peers by class (CharInfo **ALL** watchlist), including **Group v2** AE: cast on watchlisted peers; AE covers their group and peers leave the watchlist when buffed. Config token **bots** is accepted and treated as **pc**.
+6. **non-peer raid** — Only when Advanced **buffNonPeerRaid** is on and the minute-cached in-zone non-peer raid list is non-empty. Runs after peer **pc**; uses the same **pc**-band spells, class-filters first, then a spawn-buff duration cache (idle refresh ≤1/min). Peers are not included here.
 7. **mypet** — Your pet.
 8. **pet** — Other peers’ pets.
 
@@ -120,7 +120,7 @@ For **BRD**, only **self** is tried after the initial self check (no tank/groupb
 
 ### Bands
 
-Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**, **byname**. (**petspell** is deprecated: spell-type flag only, not a phase; pet summon is auto-detected.) validtargets: class shorts or **all** (for **groupmember** and **pc**); or character names (for **byname**). Spell-level **inCombat**, **combatOnly** (non-bard), and **inIdle** (Bard only) control when the spell can run / which twist list it is in; do not put **cbt** or **idle** in targetphase. **tarcnt** optional for **groupbuff** (includes self). GUI filters phases by MQ TargetType: Group v1 hides **pc**; Group v2 shows only **groupbuff** and **pc**; other spells hide **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
+Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc**, **mypet**, **pet**. (**petspell** is deprecated: spell-type flag only, not a phase; pet summon is auto-detected.) validtargets: class shorts or **all** (for **groupmember** and **pc**). Spell-level **inCombat**, **combatOnly** (non-bard), and **inIdle** (Bard only) control when the spell can run / which twist list it is in; do not put **cbt** or **idle** in targetphase. **tarcnt** optional for **groupbuff** (includes self). GUI filters phases by MQ TargetType: Group v1 hides **pc**; Group v2 shows only **groupbuff** and **pc**; other spells hide **groupbuff**. See [Buffing configuration](buffing-configuration.md) for the full list and examples.
 
 ---
 

@@ -5,7 +5,7 @@
 
 ## Logic
 
-Runs the phase-first spell check for the **buff** section. Phase order: self, byname, tank, groupbuff, groupmember, pc, mypet, pet.
+Runs the phase-first spell check for the **buff** section. Phase order: self, tank, groupbuff, groupmember, pc, (optional nonpeerraid), mypet, pet.
 
 **Guards:** doBuff is skipped when travel mode is on, when near the **primary bind point** (bind stealth; see [Safety and stealth](../safety-and-stealth.md)), when `dobuff` is off or there is no buff config, or when the bot is a **cleric** in a group and a **group member** has a PC corpse within **acleash**—so clerics focus on heal/rez for downed groupmates. Nearby corpses that are not group members (or any corpses when not grouped) do not defer buffing. **Buffs remain skipped during travel even when `/cz attack` is active** (only melee/heal/cure/debuff are temporarily enabled). Bards do not start idle twist near bind.
 
@@ -15,10 +15,10 @@ flowchart TB
     Guards -->|Yes| End[return]
     Guards -->|No| BuffCheck[BuffCheck runPriority]
     BuffCheck --> RunPhase[RunPhaseFirstSpellCheck buff BUFF_PHASE_ORDER]
-    RunPhase --> PhaseLoop[phase order: self byname tank groupbuff groupmember pc mypet pet]
+    RunPhase --> PhaseLoop[phase order: self tank groupbuff groupmember pc nonpeerraid mypet pet]
 ```
 
-BuffCheck calls RunPhaseFirstSpellCheck with buff-specific getTargetsForPhase and targetNeedsSpell. Spell-level **entryValid** gating (before per-target checks) applies **inCombat** and **combatOnly** (non-bard) so some buffs run only when idle, only when mobs are in camp, or both; see [Buffing configuration](../buffing-configuration.md). **Combat context** for this gating is not only `MobList` within acleash: it also includes an alive **engageTargetId**, **melee** run state, or `Me.Combat()` (e.g. chasing a fleeing mob outside camp with camp acleash off). After doMelee resolves engage, `mergeEngageTargetIntoMobList` keeps `MobList` in sync for the same tick. Bands control which phases each spell uses via **targetphase** (self, tank, groupbuff, groupmember, pc, mypet, pet, byname). Pet summon spells are auto-detected (Category Pet or SPA 33/103) and only cast when the bot has no pet. Peer phases use CharInfo watchlists (membership includes FreeBuffSlots; Lua adds range only); **byname** is non-peers only via Spawn; self/pet use Me/Spawn checks. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md).
+BuffCheck calls RunPhaseFirstSpellCheck with buff-specific getTargetsForPhase and targetNeedsSpell. Spell-level **entryValid** gating (before per-target checks) applies **inCombat** and **combatOnly** (non-bard) so some buffs run only when idle, only when mobs are in camp, or both; see [Buffing configuration](../buffing-configuration.md). **Combat context** for this gating is not only `MobList` within acleash: it also includes an alive **engageTargetId**, **melee** run state, or `Me.Combat()` (e.g. chasing a fleeing mob outside camp with camp acleash off). After doMelee resolves engage, `mergeEngageTargetIntoMobList` keeps `MobList` in sync for the same tick. Bands control which phases each spell uses via **targetphase** (self, tank, groupbuff, groupmember, pc, mypet, pet). Pet summon spells are auto-detected (Category Pet or SPA 33/103) and only cast when the bot has no pet. Peer phases use CharInfo watchlists (membership includes FreeBuffSlots; Lua adds range only). When **buffNonPeerRaid** is on, a segregated **nonpeerraid** phase after **pc** buffs in-zone non-peer raid members via a minute-cached roster and spawn-buff duration cache (idle refresh only). Self/pet use Me/Spawn checks. Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md).
 
 ## See also
 

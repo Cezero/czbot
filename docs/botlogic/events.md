@@ -7,8 +7,11 @@ The bot subscribes to MQ (game) events in `botevents.BindEvents()`. Handlers run
 ```mermaid
 flowchart TB
     subgraph zone [Zone]
-        EZ1["You have entered..."] --> OnZoneChange
-        EZ2["LOADING, PLEASE WAIT"] --> OnZoneChange
+        EZ1["You have entered..."] -->|"force=false"| OnZoneChange
+        EZ2["LOADING, PLEASE WAIT"] -->|"force=true"| OnZoneChange
+        Warp["zoneCheck warp detector"] --> OnWarpDetected
+        OnZoneChange --> DelayOnZone
+        OnWarpDetected --> DelayOnZone
     end
     subgraph death [Death / hover]
         Slain1["You have been slain..."] --> Event_Slain
@@ -50,21 +53,26 @@ Additional events are registered by **follow** in `registerEvents()` (group/raid
 
 ## OnZoneChange (and DelayOnZone)
 
-Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()` and the new name is non-empty) and by MQ zone events ("You have entered", "LOADING, PLEASE WAIT").
+Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()` and the new name is non-empty) and by MQ zone events ("You have entered", "LOADING, PLEASE WAIT"). Large inter-tick position jumps call **OnWarpDetected** (same **DelayOnZone**, no settle delay).
 
-Those chat patterns can also match non-zone text. **OnZoneChange** only runs **DelayOnZone** when `Zone.ShortName()` is non-empty and differs from the stored `zonename` (checked before and after the 1s wait). Same-zone matches are ignored so pull/camp are not cleared.
+- **"You have entered"** and the short-name poll call `OnZoneChange(false)`. Those patterns can match without a real zone change, so **DelayOnZone** runs only when `Zone.ShortName()` is non-empty and differs from the stored `zonename` (checked before and after the 1s wait).
+- **"LOADING, PLEASE WAIT."** calls `OnZoneChange(true)`. Same-zone LOADING still runs **DelayOnZone** after the 1s settle delay so camp / engage are cleared (avoids nav back to the pre-load camp).
+- **Warp** (`botevents.checkWarp` from zoneCheck): if position moves more than **settings.warpThreshold** (default 600; `<= 0` disables) between ticks, **OnWarpDetected** runs **DelayOnZone('warp')** immediately.
 
-1. If short name is already equal to `zonename`, return immediately.
+**OnZoneChange** steps:
+
+1. If not force and short name is already equal to `zonename`, return immediately.
 2. Sets `statusMessage = 'Zone change, waiting...'`, delay 1s.
-3. Re-check short name; if still empty or unchanged, clear status and return (no reset).
-4. **DelayOnZone()**:
-    - Calls **ResetCombatSession('zone')** (clear run state, engage target, MobList, stick/attack/target, debuff tracking).
+3. If not force: re-check short name; if still empty or unchanged, clear status and return (no reset).
+4. **DelayOnZone(reason)** (`zone` / `loading` / `warp`):
+    - Calls **ResetCombatSession(reason)** (clear run state, engage target, MobList, stick/attack/target, debuff tracking).
     - Sets `zonename` to current zone short name.
-    - Clears camp: `makecamp` and `campstatus = false`.
+    - Clears camp when camp was on: `makecamp` and `campstatus = false`.
     - Turns off `dopull` via `botpull.DisablePull('zone')`.
     - Runs mobfilter for exclude and priority (zone).
     - Resets `MountCastFailed`.
     - If follow or travel mode is active: **follow.ResumeAfterZone()** — clears stale `followid`, keeps `followname`/`travelMode`, resets `stucktimer`, stops follow movement state, disables pull for follow, refreshes travel bard twist when applicable, and calls **FollowCall** when mesh and leader spawn are available.
+    - Reseats the warp position sample so the next tick does not double-fire.
 5. Clears `statusMessage`.
 
 See [Run state machine](run-state-machine.md) and [hook AddSpawnCheck](hook-addspawncheck.md) (MobList is rebuilt each tick from current zone/camp).

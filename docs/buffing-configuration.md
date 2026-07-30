@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **buffing** behavior: which 
 ## Overview
 
 - **Master switch:** Buffing runs only when **`settings.dobuff`** is `true`. Default is `false`.
-- **Evaluation order:** The buff loop evaluates **phases** in order (see [Buff bands](#buff-bands)): self → byname → tank → groupbuff → groupmember → pc → mypet → pet. Within each phase it is **spell-first**: for each buff that has that phase, cast it on every needy target before moving to the next buff (see [Spell targeting and bands](spell-targeting-and-bands.md)). **pc** = all peers (any character known via charinfo), not limited to group members. **groupmember** = in-group only (including non-bot group members, via Group TLO). **byname** = named **non-peer** PCs only (peers in that list are ignored). The only out-of-group non-bot PC we buff via tank phase is the **explicitly configured tank** (TankName).
+- **Evaluation order:** The buff loop evaluates **phases** in order (see [Buff bands](#buff-bands)): self → tank → groupbuff → groupmember → pc → (optional non-peer raid) → mypet → pet. Within each phase it is **spell-first**: for each buff that has that phase, cast it on every needy target before moving to the next buff (see [Spell targeting and bands](spell-targeting-and-bands.md)). **pc** = all peers (any character known via charinfo), not limited to group members. **groupmember** = in-group only (including non-bot group members, via Group TLO). When **`settings.buffNonPeerRaid`** is on, after the peer **pc** phase finishes the bot may also buff in-zone raid members who are not CharInfo peers (class-filtered, spawn-buff cache). The only out-of-group non-bot PC we buff via tank phase is the **explicitly configured tank** (TankName).
 - **When buffs run:** By default, buffs are allowed when there are no mobs in camp and the bot is not in an active combat context (no alive engage target, not in melee run state, not `Me.Combat()`). Spell-level **inCombat** controls whether a buff can be cast when mobs are in camp or otherwise engaged: when `true`, the buff runs in both idle and combat; when `false` or unset, the buff runs only when idle. Spell-level **combatOnly** (non-bard) means the buff is **only** considered when mobs are in camp — not while idle — which implies combat allowance for the auto buff loop; use it for very short self buffs (e.g. Yaulp) so the bot does not refresh them every few seconds out of combat. **Bards** use **inCombat** / **inIdle** with twist instead; **combatOnly** is ignored for BRD (see [Bard configuration](bard-configuration.md)).
 - **Self-target buffs (MQ TargetType Self):** During a cast, the bot does **not** interrupt solely because **StacksTarget** is false (refresh casts can still report “won’t stack” in MQ). Other mid-cast rules (e.g. buff already present with long duration left) still apply.
 
@@ -18,6 +18,7 @@ This document explains how to configure the bot’s **buffing** behavior: which 
 | Option | Default | Purpose |
 |--------|--------|---------|
 | **dobuff** | `false` | Boolean. Enables or disables the buff loop. |
+| **buffNonPeerRaid** | `false` | Boolean. Advanced tab. When on, after peer **pc** buffing finishes, also buff in-zone raid members who are not CharInfo peers (same **pc** class filters / preconditions). Roster and spawn-buff durations are cached while idle (at most once a minute). Peers continue to use CharInfo watches. |
 
 ### Buff section
 
@@ -43,13 +44,12 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 
 Bands use **targetphase** (priority stages) and **validtargets** (classes or `all`). No min/max for buffs.
 
-- **targetphase** tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc** (other PCs by class), **mypet**, **pet**, **byname**. Do **not** put **cbt** or **idle** in targetphase — use spell-level **inCombat** and **inIdle** (Bard only) instead. **bots** in config is accepted for backward compatibility and treated as **pc**.
-- **validtargets**: Class shorts (e.g. `war`, `clr`, …) or `all`. Restricts which classes get the buff for **groupmember** and **pc** phases. Absent = all classes.
+- **targetphase** tokens: **self**, **tank**, **groupbuff**, **groupmember**, **pc** (other PCs by class), **mypet**, **pet**. Do **not** put **cbt** or **idle** in targetphase — use spell-level **inCombat** and **inIdle** (Bard only) instead. **bots** in config is accepted for backward compatibility and treated as **pc**. Legacy **byname** / **buffNames** are ignored on load (replaced by **buffNonPeerRaid**).
+- **validtargets**: Class shorts (e.g. `war`, `clr`, …) or `all`. Restricts which classes get the buff for **groupmember** and **pc** phases (including non-peer raid members when **buffNonPeerRaid** is on). Absent = all classes.
 - **Pet summon:** Pet summon spells are **auto-detected** (spell Category Pet or SPA 33/103). For a summon, add a buff entry with **self** in targetphase; the bot only casts it when it has no pet. The token **petspell** in targetphase is deprecated (not a phase); if present it still sets the pet-summon flag for backward compatibility. See [Pets configuration](pets-configuration.md).
-- **name** — Buff specific **non-peer** characters by name (list names in **validtargets** / **buffNames** with **byname** in targetphase). CharInfo peers named here are ignored — use **tank** / **groupmember** / **pc** for peers.
 - **groupbuff** — Group AE buff (MQ **TargetType Group v1** or **Group v2**). Counts your EQ group members in AE range who need the buff (peers from charinfo, non-peers from Spawn when BuffsPopulated), **including yourself**. When the count is at least **tarcnt** (default 1), the bot casts on self. **Group v1** casts without retargeting (no friendly target required). **Group v2** retargets to self (v2 requires a group anchor). See [Group AE buffs (v1 vs v2)](#group-ae-buffs-v1-vs-v2) below.
 - **groupmember** — Single-target buffs only for characters in the bot’s (EQ) group; includes non-bot group members. For non-peers, buff state comes only from **Spawn** after targeting (Spawn.BuffsPopulated must be true). Add **pc** in targetphase to also buff peers outside the group (evaluated after groupmember). Not used for Group v1/v2 AE spells (GUI hides it for those).
-- **pc** — All networked peers by class (from validtargets), any group — including **Group v2** AE buffs. Cast on each watchlisted peer in range (CharInfo watch covers need/Stacks/FreeBuffSlots); after one successful Group v2 cast, CharInfo drops other group members from the watchlist when the buff lands. Not available for **Group v1** AE (GUI hides **pc**). See [Group AE buffs (v1 vs v2)](#group-ae-buffs-v1-vs-v2).
+- **pc** — All networked peers by class (from validtargets), any group — including **Group v2** AE buffs. Cast on each watchlisted peer in range (CharInfo watch covers need/Stacks/FreeBuffSlots); after one successful Group v2 cast, CharInfo drops other group members from the watchlist when the buff lands. Not available for **Group v1** AE (GUI hides **pc**). When **buffNonPeerRaid** is on, a segregated post-**pc** pass also considers in-zone non-peer raid members via a spawn-buff duration cache (class filter first). See [Group AE buffs (v1 vs v2)](#group-ae-buffs-v1-vs-v2).
 - **tank** — Can be a non-bot when explicitly named in config (TankName). Buff need for non-peers is only known from the **Spawn** TLO after you have targeted that spawn long enough for **Spawn.BuffsPopulated** to be true (same as mobs). When we have buff data we only cast if they need it; when out-of-group and we don’t have data we cast in range (best-effort). When this bot is the main tank, the tank phase has a single target (this bot), so you do not need **self** in targetphase for the MT to receive a tank-only buff.
 
 **Evaluation order (priority)**
@@ -57,11 +57,11 @@ Bands use **targetphase** (priority stages) and **validtargets** (classes or `al
 The bot evaluates buff targets in a **fixed, literal order**. The list below is the actual priority:
 
 1. **self** (including auto-detected pet summon when no pet)
-2. **byname**
-3. **tank**
-4. **groupbuff** (group AE)
-5. **groupmember** (in-group only)
-6. **pc** (all peers)
+2. **tank**
+3. **groupbuff** (group AE)
+4. **groupmember** (in-group only)
+5. **pc** (all peers)
+6. **non-peer raid** (only when **buffNonPeerRaid** is on and the cached non-peer raid list is non-empty; same spells as **pc**)
 7. **mypet**
 8. **pet**
 

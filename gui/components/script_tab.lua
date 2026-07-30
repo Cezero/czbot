@@ -1,7 +1,7 @@
--- Advanced tab: Confirm before Exit, MA Anchor / ma_list / mt_list, and a type-aware editor for
--- the raw config.script table. Each leaf is rendered with a control matched to its Lua type -- a
--- checkbox for booleans, an Enter-to-commit numeric field for numbers, and a text field for strings
--- -- so edits PRESERVE the value's type. The previous editor pushed every value through
+-- Advanced tab: Confirm before Exit, Warp Threshold, MA Anchor / ma_list / mt_list, and a type-aware
+-- editor for the raw config.script table. Each leaf is rendered with a control matched to its Lua
+-- type -- a checkbox for booleans, an Enter-to-commit numeric field for numbers, and a text field for
+-- strings -- so edits PRESERVE the value's type. The previous editor pushed every value through
 -- tostring/tonumber, which silently turned the string "123" into a number and "true" into a
 -- boolean. Numbers/strings commit on Enter (no per-keystroke file writes); booleans commit on click.
 
@@ -185,6 +185,32 @@ function M.draw()
     end
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip('When enabled, the Exit button asks for confirmation before stopping CZBot.')
+    end
+    ImGui.Spacing()
+    local nonPeerOn = (botconfig.config.settings.buffNonPeerRaid == true)
+    local nonPeerVal, nonPeerPressed = ImGui.Checkbox('Buff non-peer raid members##buff_nonpeer_raid', nonPeerOn)
+    if nonPeerPressed then
+        botconfig.config.settings.buffNonPeerRaid = nonPeerVal
+        botconfig.ApplyAndPersist()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip(
+            'When on, after peer All-chars buffing finishes, also buff in-zone raid members who are not CharInfo peers. Roster and spawn buffs are cached (idle, at most once a minute). Peers still use watches.')
+    end
+    ImGui.Spacing()
+    ImGui.TextColored(WHITE, '%s', 'Warp Threshold: ')
+    ImGui.SameLine(0, 2)
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local warpVal = botconfig.config.settings.warpThreshold or 600
+    local warpNew, warpCh = inputs.boundedInt('advanced_warp_threshold', warpVal, 0, 100000, 50,
+        '##advanced_warp_threshold')
+    if warpCh then
+        botconfig.config.settings.warpThreshold = warpNew
+        runConfigLoaders()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip(
+            'Inter-tick position jump (units) treated as a zone reset (clear camp/engage). 0 disables.')
     end
     ImGui.Spacing()
     ImGui.Separator()

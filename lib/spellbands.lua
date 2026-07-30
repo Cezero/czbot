@@ -89,7 +89,6 @@ function spellbands.applyBands(section, entry, index)
             local targetPhase = band.targetphase
             if type(targetPhase) == 'table' then
                 local validTgts = band.validtargets
-                local hasByname = false
                 for _, p in ipairs(targetPhase) do
                     if type(p) == 'string' and p ~= '' then
                         if p == 'petspell' then
@@ -98,9 +97,10 @@ function spellbands.applyBands(section, entry, index)
                             rt.inCombat = true -- legacy; entry.inCombat overrides after loop
                         elseif p == 'idle' then
                             rt.inIdle = true -- legacy; entry.inIdle overrides after loop
+                        elseif p == 'byname' or p == 'name' then
+                            -- legacy buffNames/byname removed; ignore
                         else
                             rt[p] = true
-                            if p == 'byname' then hasByname = true; rt.name = true end
                             if p == 'bots' then rt.pc = true end -- backward compat: bots and pc same for buff/cure
                         end
                     end
@@ -111,7 +111,6 @@ function spellbands.applyBands(section, entry, index)
                             local lc = c:lower()
                             if c == 'all' then classesAll = true
                             elseif CLASS_TOKENS[lc] then classesSet[lc] = true; rt[lc] = true
-                            elseif hasByname then rt[c] = true
                             end
                         end
                     end

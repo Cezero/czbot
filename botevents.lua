@@ -15,12 +15,23 @@ local tankrole = require('lib.tankrole')
 local rolelists = require('lib.rolelists')
 local log = require('lib.log')
 local common_sync = require('lib.common_sync')
+local utils = require('lib.utils')
 
 local botevents = {}
 
 local SIT_AFTER_HIT_MS = 3000
 local MOBPROB_THROTTLE_MS = 3000
 local _zoneChangePending = false
+local _lastPosX, _lastPosY, _lastPosZ = nil, nil, nil
+
+local function reseatLastPos()
+    local x, y, z = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+    if x and y and z then
+        _lastPosX, _lastPosY, _lastPosZ = x, y, z
+    else
+        _lastPosX, _lastPosY, _lastPosZ = nil, nil, nil
+    end
+end
 
 local function mobProbReason(line)
     if not line then return 'unknown' end
@@ -52,9 +63,10 @@ function botevents.ResetCombatSession(reason)
     combat.ResetCombatState({ clearTarget = true, clearPet = true })
 end
 
--- Internal: reset zone-specific variables. Used by OnZoneChange only.
-local function DelayOnZone()
-    botevents.ResetCombatSession('zone')
+-- Internal: reset zone-specific variables. Used by OnZoneChange / OnWarpDetected.
+---@param reason string|nil e.g. zone, loading, warp
+local function DelayOnZone(reason)
+    botevents.ResetCombatSession(reason or 'zone')
     local rc = state.getRunconfig()
     local zonename = mq.TLO.Zone.ShortName()
     if zonename then rc.zonename = zonename end
@@ -68,17 +80,23 @@ local function DelayOnZone()
     rolelists.loadFromCommon()
     MountCastFailed = false
     follow.ResumeAfterZone()
+    reseatLastPos()
 end
 
 -- Single entry point for zone change: used by zoneCheck hook and MQ zone events.
--- Chat can match "You have entered" / LOADING without a real zone change; only reset when
+-- Without force: "You have entered" can match without a real zone change; only reset when
 -- Zone.ShortName() actually differs from the stored zonename.
-function botevents.OnZoneChange()
+-- With force=true (LOADING): always apply DelayOnZone after the settle delay.
+---@param force boolean|nil when true, skip short-name mismatch guards (LOADING path)
+function botevents.OnZoneChange(force)
+    if force ~= true then force = false end
     if _zoneChangePending then return end
     local rc = state.getRunconfig()
     local newZone = mq.TLO.Zone.ShortName()
-    if newZone and newZone ~= '' and rc.zonename == newZone then
-        return
+    if not force then
+        if newZone and newZone ~= '' and rc.zonename == newZone then
+            return
+        end
     end
     _zoneChangePending = true
     local prevZone = rc.zonename
@@ -86,15 +104,54 @@ function botevents.OnZoneChange()
     rc.statusMessage = 'Zone change, waiting...'
     mq.delay(1000)
     newZone = mq.TLO.Zone.ShortName()
-    if not newZone or newZone == '' or rc.zonename == newZone then
-        rc.statusMessage = ''
-        _zoneChangePending = false
-        return
+    if not force then
+        if not newZone or newZone == '' or rc.zonename == newZone then
+            rc.statusMessage = ''
+            _zoneChangePending = false
+            return
+        end
+        log.say('Zone change %s -> %s', tostring(prevZone or '?'), newZone)
+        DelayOnZone('zone')
+    else
+        log.say('Zone reset (loading)%s', (newZone and newZone ~= '') and (' in ' .. newZone) or '')
+        DelayOnZone('loading')
     end
-    log.say('Zone change %s -> %s', tostring(prevZone or '?'), newZone)
-    DelayOnZone()
     rc.statusMessage = ''
     _zoneChangePending = false
+end
+
+--- Immediate zone-like reset for large inter-tick position jumps (no settle delay).
+function botevents.OnWarpDetected()
+    if _zoneChangePending then return end
+    _zoneChangePending = true
+    DelayOnZone('warp')
+    _zoneChangePending = false
+end
+
+--- Sample position each tick; if moved more than settings.warpThreshold, treat as zone reset.
+--- Call from zoneCheck. Disabled when warpThreshold <= 0.
+function botevents.checkWarp()
+    if _zoneChangePending then return end
+    local settings = botconfig.config.settings
+    local threshold = settings and settings.warpThreshold
+    if not threshold or threshold <= 0 then
+        _lastPosX, _lastPosY, _lastPosZ = nil, nil, nil
+        return
+    end
+    local newZone = mq.TLO.Zone.ShortName()
+    if not newZone or newZone == '' then return end
+    local x, y, z = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+    if not x or not y or not z then return end
+    if _lastPosX and _lastPosY and _lastPosZ then
+        local thresholdSq = settings.warpThresholdSq or (threshold * threshold)
+        local distSq = utils.getDistanceSquared3D(_lastPosX, _lastPosY, _lastPosZ, x, y, z)
+        if distSq and distSq > thresholdSq then
+            log.say('Warp detected (%.0f units)', math.sqrt(distSq))
+            botevents.OnWarpDetected()
+            return
+        end
+    end
+    _lastPosX, _lastPosY, _lastPosZ = x, y, z
 end
 
 function botevents.Event_Slain()
@@ -279,8 +336,8 @@ function botevents.BindEvents()
     mq.event('Slain1', "#*#You have been slain by#*#", botevents.Event_Slain)
     mq.event('Slain2', "#*#Returning to Bind Location#*#", botevents.Event_Slain)
     mq.event('Slain3', "You died.", botevents.Event_Slain)
-    mq.event('DelayOnZone1', "#*#You have entered#*#", botevents.OnZoneChange)
-    mq.event('DelayOnZone2', "#*#LOADING, PLEASE WAIT.#*#", botevents.OnZoneChange)
+    mq.event('DelayOnZone1', "#*#You have entered#*#", function() botevents.OnZoneChange(false) end)
+    mq.event('DelayOnZone2', "#*#LOADING, PLEASE WAIT.#*#", function() botevents.OnZoneChange(true) end)
     mq.event('CastRst1', "Your target resisted the#*#", botevents.Event_CastRst)
     mq.event('CastRst2', "#*#resisted your#*#!#*#", botevents.Event_CastRst)
     mq.event('CastRst3', "#*#avoided your#*#!#*#", botevents.Event_CastRst)

@@ -12,6 +12,7 @@ local botmove = require('botmove')
 local tickprof = require('lib.tickprof')
 
 local charinfowatchers = require('lib.charinfowatchers')
+local nonpeerraidbuff = require('lib.nonpeerraidbuff')
 
 local botbuff = {}
 local BuffClass = {}
@@ -386,9 +387,9 @@ local function BuffEvalPetById(index, spellid, rangeSq, petId, context, hoist)
     return nil, nil
 end
 
-local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'offtank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
-local BUFF_PHASE_ORDER_LOCAL = { 'self', 'byname', 'mypet' }
-local BUFF_PHASE_ORDER_LOCAL_LIST = { 'self', 'byname', 'tank', 'offtank', 'mypet' }
+local BUFF_PHASE_ORDER = { 'self', 'tank', 'offtank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
+local BUFF_PHASE_ORDER_LOCAL = { 'self', 'mypet' }
+local BUFF_PHASE_ORDER_LOCAL_LIST = { 'self', 'tank', 'offtank', 'mypet' }
 --- Single place for buff context: tank, tankid, buffCount. Peer roster not preloaded (PET watches + GetInfo on demand).
 local function buffBuildContext()
     local tank, tankid = spellutils.GetTankInfo(false)
@@ -415,16 +416,7 @@ local function filterCorpses(targets)
     return out
 end
 
-local function buffHasNameList(spellIndex)
-    local entry = botconfig.getSpellEntry('buff', spellIndex)
-    return entry and type(entry.buffNames) == 'table' and #entry.buffNames > 0 or false
-end
-
 local function buffBandHasPhase(spellIndex, phase)
-    if phase == 'byname' then
-        if buffHasNameList(spellIndex) then return true end
-        return BuffClass[spellIndex] and BuffClass[spellIndex].name and true or false
-    end
     if phase == 'pet' or phase == 'mypet' then
         local meta = _buffSpellMeta[spellIndex]
         if meta and meta.isGroupAE then return false end
@@ -436,20 +428,57 @@ local function buffPhaseOrderForPass()
     local listIds = charinfowatchers.spellIdsForPhases('buff', { 'tank', 'offtank' }, buffBandHasPhase)
     local otherIds = charinfowatchers.spellIdsForPhases(
         'buff', { 'groupbuff', 'groupmember', 'pc', 'pet' }, buffBandHasPhase)
+    local hasNonPeerRaid = botconfig.config.settings.buffNonPeerRaid == true and nonpeerraidbuff.hasMembers()
     local hasList = charinfowatchers.anyWatchNonEmpty('BUFF', { 'LIST' }, listIds)
     local hasOther = charinfowatchers.anyWatchNonEmpty(
         'BUFF', { 'INGROUP', 'ALL', 'GRPAGG', 'PET' }, otherIds)
         or charinfowatchers.hasNonPeerGroupMembers()
-    if hasOther then return BUFF_PHASE_ORDER end
-    if hasList then return BUFF_PHASE_ORDER_LOCAL_LIST end
-    return BUFF_PHASE_ORDER_LOCAL
+        or hasNonPeerRaid
+    local order
+    if hasOther then
+        order = BUFF_PHASE_ORDER
+    elseif hasList then
+        order = BUFF_PHASE_ORDER_LOCAL_LIST
+    else
+        order = BUFF_PHASE_ORDER_LOCAL
+    end
+    if not hasNonPeerRaid then return order end
+    local out = {}
+    local inserted = false
+    for i = 1, #order do
+        out[#out + 1] = order[i]
+        if order[i] == 'pc' then
+            out[#out + 1] = 'nonpeerraid'
+            inserted = true
+        end
+    end
+    if not inserted then
+        out[#out + 1] = 'nonpeerraid'
+    end
+    return out
 end
 
 local function buffGetTargetsForPhase(phase, context, hoist)
     if phase == 'self' then return castutils.getTargetsSelf() end
+    if phase == 'nonpeerraid' then
+        local out = {}
+        for _, m in ipairs(nonpeerraidbuff.getMembers()) do
+            if m.id and m.id > 0 then
+                out[#out + 1] = {
+                    id = m.id,
+                    name = m.name,
+                    class = m.class,
+                    targethit = 'pc',
+                    nonPeerRaid = true,
+                }
+            end
+        end
+        return filterCorpses(out)
+    end
     if phase == 'tank' or phase == 'offtank' or phase == 'groupmember' or phase == 'pc' then
         local count = botconfig.getSpellCount('buff')
-        local out = filterCorpses(charinfowatchers.unionTargetsForPhase('buff', phase, count, buffBandHasPhase))
+        -- CharInfo watches already exclude corpses; skip Spawn.Type filter on watch unions.
+        local out = charinfowatchers.unionTargetsForPhase('buff', phase, count, buffBandHasPhase)
         -- Non-peer group members are invisible to CharInfo watches; merge when flag is set.
         if phase == 'groupmember' and charinfowatchers.hasNonPeerGroupMembers() then
             local seen = {}
@@ -472,30 +501,7 @@ local function buffGetTargetsForPhase(phase, context, hoist)
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then
         local count = botconfig.getSpellCount('buff')
-        return filterCorpses(charinfowatchers.unionTargetsForPhase('buff', phase, count, buffBandHasPhase))
-    end
-    if phase == 'byname' and context.buffCount then
-        if context.bynameTargets then return context.bynameTargets end
-        local out = {}
-        local seen = {}
-        local function addByName(name)
-            local n = type(name) == 'string' and (name:match('^%s*(.-)%s*$') or '') or ''
-            if n == '' or seen[n] then return end
-            seen[n] = true
-            -- byname is non-peers only; ignore CharInfo peers.
-            if resolvePeer(n, context, hoist) then return end
-            local botid = mq.TLO.Spawn('pc =' .. n).ID()
-            if botid and botid > 0 then out[#out + 1] = { id = botid, targethit = 'byname', name = n } end
-        end
-        for idx = 1, context.buffCount do
-            local entry = botconfig.getSpellEntry('buff', idx)
-            if entry and type(entry.buffNames) == 'table' then
-                for _, name in ipairs(entry.buffNames) do addByName(name) end
-            end
-        end
-        local filtered = filterCorpses(out)
-        context.bynameTargets = filtered
-        return filtered
+        return charinfowatchers.unionTargetsForPhase('buff', phase, count, buffBandHasPhase)
     end
     return {}
 end
@@ -563,6 +569,21 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
     if not bc then return nil, nil end
     phase = phase or targethit
     local myclass = hoist and hoist.myclass or mq.TLO.Me.Class.ShortName()
+
+    if phase == 'nonpeerraid' then
+        local member
+        for _, m in ipairs(nonpeerraidbuff.getMembers()) do
+            if m.id == targetId then
+                member = m
+                break
+            end
+        end
+        if not member then return nil, nil end
+        local cached = getOrBuildSpellCache(spellIndex, spellCache)
+        if not cached then return nil, nil end
+        return nonpeerraidbuff.needsBuff(
+            spellIndex, targetId, member, cached.entry, cached.spell, cached.sid, cached.rangeSq, bc)
+    end
 
     -- BuffSkip fast-path for self only (peers use CharInfo watchlists).
     local preMeta = (spellCache and spellCache[spellIndex]) or _buffSpellMeta[spellIndex]
@@ -663,22 +684,6 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         end
         return nil, nil
     end
-    if phase == 'byname' then
-        local name = mq.TLO.Spawn(targetId).CleanName()
-        if not name then return nil, nil end
-        -- Non-peer Spawn path only (peers in buffNames are ignored at target collection).
-        if resolvePeer(name, context, hoist) then return nil, nil end
-        if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'byname', nil, nil, nil)
-            and heightAllowsSpawn(entry, targetId)
-            and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
-            local sp = mq.TLO.Spawn(targetId)
-            local dSq = sp and utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
-            if not rangeSq or (dSq and dSq <= rangeSq) then
-                return targetId, 'byname'
-            end
-        end
-        return nil, nil
-    end
     -- groupmember/pc (incl. Group v2 AE on ALL): peers = watchlist + range; non-peers = Spawn path when flagged.
     if phase == 'groupmember' then
         if not BuffClass[spellIndex].groupmember then return nil, nil end
@@ -726,6 +731,10 @@ function botbuff.BuffCheck(runPriority)
     end
     local count = botconfig.getSpellCount('buff')
     if count <= 0 then return false end
+    if myconfig.settings.buffNonPeerRaid == true then
+        nonpeerraidbuff.beginBuffPass()
+        nonpeerraidbuff.maybeRefreshRoster()
+    end
     local ctx = tickprof.span('context', function()
         return buffBuildContext()
     end)
@@ -831,16 +840,33 @@ function botbuff.BuffCheck(runPriority)
         spellFirst = true,
         entryValid = cachedEntryValid,
     }
+    if myconfig.settings.buffNonPeerRaid == true then
+        options.afterCast = function(spellIndex, targetId, _targethit)
+            if not targetId or not spellIndex then return end
+            local isNonPeer = false
+            for _, m in ipairs(nonpeerraidbuff.getMembers()) do
+                if m.id == targetId then
+                    isNonPeer = true
+                    break
+                end
+            end
+            if not isNonPeer then return end
+            local meta = spellCache[spellIndex] or getOrBuildSpellCache(spellIndex, spellCache)
+            local sid = meta and meta.sid
+            if sid then nonpeerraidbuff.noteCast(targetId, sid) end
+        end
+    end
     if not next(_buffIndicesByPhase) then
         rebuildBuffIndicesByPhase()
     end
     local indicesByPhase = {}
     local function getSpellIndices(phase, _target)
+        local indexPhase = (phase == 'nonpeerraid') and 'pc' or phase
         local cached = indicesByPhase[phase]
         if cached then return cached end
         return tickprof.span('indices', function()
             local list = {}
-            for _, idx in ipairs(_buffIndicesByPhase[phase] or {}) do
+            for _, idx in ipairs(_buffIndicesByPhase[indexPhase] or {}) do
                 if cachedEntryValid(idx) then
                     list[#list + 1] = idx
                 end

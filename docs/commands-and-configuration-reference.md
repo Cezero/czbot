@@ -77,7 +77,7 @@ These affect runtime only (not saved to the config file). They reset when the bo
 
 **GUI Lists tab** (`/czshow` → Lists): edit per-zone **exclude**, **priority**, and **charm** lists for the current zone, and the global **no combat zones** list. See [Safety and stealth](safety-and-stealth.md) for no-combat zone controls (Add current zone, Enabled checkbox, Remove).
 
-**GUI Advanced tab** (`/czshow` → Advanced): edit global **ma_list**, **mt_list**, and **ot_list** (MA/MT automatic fallback and offtank watcher names), and per-char **MA anchor** / **MA leash** settings. See [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
+**GUI Advanced tab** (`/czshow` → Advanced): edit global **ma_list**, **mt_list**, and **ot_list** (MA/MT automatic fallback and offtank watcher names), per-char **MA anchor** / **MA leash** settings, and **Buff non-peer raid members** (`settings.buffNonPeerRaid`). See [Automatic MA/MT Selection](automatic-ma-mt-selection.md) and [Buffing configuration](buffing-configuration.md).
 
 ### Combat and roles
 
@@ -200,6 +200,7 @@ return StoredConfig
 | **domelee**        | `false`       | Enable melee/engage.                                                                                                    |
 | **doheal**         | `false`       | Enable heal loop.                                                                                                       |
 | **dobuff**         | `false`       | Enable buff loop.                                                                                                       |
+| **buffNonPeerRaid** | `false`      | After peer pc buffs, also buff in-zone non-peer raid members (Advanced tab). See [Buffing configuration](buffing-configuration.md). |
 | **dodebuff**       | `false`       | Enable debuff loop.                                                                                                     |
 | **docure**         | `false`       | Enable cure loop.                                                                                                       |
 | **dopull**         | `false`       | Enable pull loop.                                                                                                       |
