@@ -166,6 +166,8 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 **Roam buff timing:** When **dobuff** is on, one buff check cycle runs after the mob bubble clears and before the bot picks the next nav target. Buff checks are skipped while status shows **Roaming to...** (active roam nav).
 
+**FTE (makecamp):** In-camp FTE uses the short combat block and **2s recheck** only — **fteLockoutSec** does **not** apply to camp MobList / MA-MT engage. Outside-camp pull targets get **fteLockoutSec** for pull selection; if that mob later enters camp, the bot arms the 2s combat recheck (pull lockout remains for pulling only).
+
 **FTE (roam):** Encounter-locked mobs are marked unpullable for **fteLockoutSec** (default 120 seconds). The short 2s combat FTE block does **not** apply — the mob is excluded from **# Mobs** and melee engage for the full lockout. Roam nav stops and the bot picks another pull target on the next tick.
 
 **FTE (hunter):** Encounter-locked pull targets are marked unpullable for **fteLockoutSec** (default 120 seconds) and the bot moves to the next target. The in-camp 2s FTE recheck loop does **not** run during hunter pull states.
@@ -190,7 +192,7 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 
 ## FTE / already engaged
 
-If the bot sees that the pull target is already engaged by someone else (another player or pet), it abandons that target. At pull start the bot queues up to **backupCandidates** targets (default 3, closest by path). On FTE lock, EngageCheck, below-100% HP, or no-aggro timeout it tries the next queued target **without returning to camp** first. When the queue is exhausted, **camp** mode returns to camp; **hunter** mode clears pull state and picks anew; **roam** repicks on the next `tickRoamNav` tick (mob marked unpullable). Failed targets are marked unpullable for **fteLockoutSec** (default 120 seconds; FTE list). **Hunter** pull states skip the in-camp 2s FTE recheck loop.
+If the bot sees that the pull target is already engaged by someone else (another player or pet), it abandons that target. At pull start the bot queues up to **backupCandidates** targets (default 3, closest by path). On FTE lock, EngageCheck, below-100% HP, or no-aggro timeout it tries the next queued target **without returning to camp** first. When the queue is exhausted, **camp** mode returns to camp; **hunter** mode clears pull state and picks anew; **roam** repicks on the next `tickRoamNav` tick (mob marked unpullable). Failed **pull** targets are marked unpullable for **fteLockoutSec** (default 120 seconds; FTE list) — that window skips pull selection, not makecamp in-camp engage (which uses the 2s combat FTE recheck). **Hunter** pull states skip the in-camp 2s FTE recheck loop. **Roam** excludes unpullable mobs from **# Mobs** / melee for the full lockout.
 
 ---
 

@@ -356,7 +356,8 @@ local function isEngageableMobListSpawn(spawn)
     local rc = state.getRunconfig()
     local sid = spawn.ID()
     if sid and charm.isCharmSkipped(sid, rc) then return false end
-    if sid and spawnutils.isPullUnpullable(sid, rc) then return false end
+    -- Pull.fteLockoutSec excludes from engage only in roam (makecamp uses combat FTE).
+    if sid and spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(sid, rc) then return false end
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isSpawnWithinCampPin(spawn, rc) then return false end
     local tfNum = tonumber(myconfig.settings.TargetFilter) or 0
     if tfNum == 2 then return true end

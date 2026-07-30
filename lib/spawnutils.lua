@@ -351,8 +351,13 @@ function spawnutils.recordFTE(rc, spawnId, opts)
         entry.combatBlockedUntil = now + combatBlockMsForStrikes(entry.strikes)
         entry.nextCombatRecheckAt = now + COMBAT_FTE_RECHECK_MS
     end
+    -- Makecamp in-camp: combat 2s recheck only. Pull.fteLockoutSec is for outside / pull targets.
     if opts.pull then
-        entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
+        local inCampWithMakeCamp = rc.campstatus == true
+            and spawnutils.isSpawnInCampRadiusById(spawnId, rc)
+        if not inCampWithMakeCamp then
+            entry.pullUnpullableUntil = now + pullUnpullableMs(rc)
+        end
     end
 end
 
@@ -550,7 +555,8 @@ local function filterSpawnForCamp(spawn, rc, opts)
     if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
     if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc, opts.excludeSet) then return false end
-    if sid and spawnutils.isPullUnpullable(sid, rc) then return false end
+    -- Pull.fteLockoutSec excludes from camp MobList only in roam (makecamp uses combat FTE).
+    if sid and spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(sid, rc) then return false end
     local tfNum = opts.tfNum
     if tfNum == nil then
         tfNum = botconfig.config.settings.TargetFilter or 0
@@ -916,6 +922,16 @@ function spawnutils.tickCombatFTERechecks(rc)
     if not rc.FTEList then return end
     local now = mq.gettime()
     for spawnId, entry in pairs(rc.FTEList) do
+        -- Makecamp: pull-locked mob that entered camp → arm 2s combat recheck (not the 120s engage lock).
+        if rc.campstatus == true
+            and not spawnutils.isMobilePullMode(rc)
+            and entry.pullUnpullableUntil and now < entry.pullUnpullableUntil
+            and spawnutils.isSpawnInCampRadiusById(spawnId, rc)
+            and not entry.nextCombatRecheckAt
+        then
+            entry.combatBlockedUntil = now + COMBAT_FTE_INITIAL_BLOCK_MS
+            entry.nextCombatRecheckAt = now
+        end
         if spawnutils.isRoamPullMode(rc) and entry.pullUnpullableUntil and now < entry.pullUnpullableUntil then
             entry.nextCombatRecheckAt = nil
             entry.combatBlockedUntil = nil

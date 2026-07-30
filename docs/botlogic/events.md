@@ -99,12 +99,16 @@ Target is Encounter Locked (FTE) to someone else.
 
 - Resolves **NPC spawn id** only (ignores PC/self target; falls back to `engageTargetId` or `pullAPTargetID` when the chat event fires while targeted on yourself).
 - Echoes message; increments `FTECount` if it was 0.
-- Records `FTEList[spawnId]` via `spawnutils.recordFTE`: short **combat** block (2s + escalation), **in-camp recheck** every 2s, and **pull unpullable** for `pull.fteLockoutSec` (default 120s) for all bots (not only when `dopull` is on). Camp **MobList** excludes unpullable spawns.
+- Records `FTEList[spawnId]` via `spawnutils.recordFTE` (`pull` only when `dopull` and not a probe recheck):
+  - **Makecamp, in camp:** short **combat** block (2s + escalation) and **in-camp recheck** every 2s — no `pull.fteLockoutSec`.
+  - **Makecamp, outside camp (pull target):** `pullUnpullableUntil` for `pull.fteLockoutSec` (default 120s); combat fields may also be set. When that mob later enters camp, `tickCombatFTERechecks` arms the 2s combat recheck (pull lockout remains for pull selection only).
+  - **Roam:** `pullUnpullableUntil` only (no combat recheck).
+  - **Hunter:** pull-unpullable window; no in-camp recheck during hunter pull states.
 - Clears `engageTargetId` when it matches the FTE spawn.
-- Runs: `/mqtarget myself`, `/attack off`, `/stopcast`, `/nav stop`, `/stick off`.
+- Runs: `/mqtarget clear`, `/attack off`, `/stopcast`, `/nav stop`, `/stick off`.
 - If `dopull` is true: `botpull.AbortPullForFTE` → `abortPullSoftFailure` (tries next `pullCandidateIds` entry before camp return in standard camp mode).
 
-**Camp list** (`AddSpawnCheck` / `buildCampMobList`) excludes spawns while `combatBlockedUntil` is active and while `pullUnpullableUntil` is active; `tickCombatFTERechecks` re-targets in-camp entries every 2s and clears the combat block when no new FTE message arrives.
+**Camp list** (`AddSpawnCheck` / `buildCampMobList`) excludes spawns while `combatBlockedUntil` is active. `pullUnpullableUntil` excludes from the camp list / melee engage **only in roam**; under makecamp, camp engage uses the combat FTE path. `tickCombatFTERechecks` re-targets in-camp entries every 2s and clears the combat block when no new FTE message arrives.
 
 **Pull list** uses `pullUnpullableUntil` only (`pull.fteLockoutSec`, default 120s), not the combat block — so a false in-camp FTE does not block pull selection for the full combat window.
 
