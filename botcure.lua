@@ -71,8 +71,12 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
             local curetype = key and (peer[key] or nil) or nil
             if string.lower(v) == 'all' and detrimentals and detrimentals > 0 then
                 if targethit == 'tank' then return botid, 'tank' end
-                if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, 'groupmember'
+                if targethit == 'offtank' and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, 'offtank'
+                end
+                -- groupmember/pc: CharInfo watchlist already filtered by class.
+                if (targethit == 'groupmember' or targethit == 'pc') and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, targethit
                 end
                 if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
                     return botid, botclass
@@ -82,8 +86,11 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
                 if targethit == 'tank' and mq.TLO.Spawn(botid).Type() == 'PC' and spellutils.DistanceCheck('cure', index, botid) then
                     return botid, 'tank'
                 end
-                if targethit == 'groupmember' and spellutils.DistanceCheck('cure', index, botid) then
-                    return botid, 'groupmember'
+                if targethit == 'offtank' and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, 'offtank'
+                end
+                if (targethit == 'groupmember' or targethit == 'pc') and spellutils.DistanceCheck('cure', index, botid) then
+                    return botid, targethit
                 end
                 if targethit == botclass and cureindex[botclass] and spellutils.DistanceCheck('cure', index, botid) then
                     return botid, botclass
@@ -99,7 +106,8 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
         local needCure = spellutils.SpawnDetrimentalsForCure(botid, typelist)
         if needCure and spellutils.DistanceCheck('cure', index, botid) then
             if targethit == 'tank' then return botid, 'tank' end
-            if targethit == 'groupmember' then return botid, 'groupmember' end
+            if targethit == 'offtank' then return botid, 'offtank' end
+            if targethit == 'groupmember' or targethit == 'pc' then return botid, targethit end
         end
     end
     return nil, nil

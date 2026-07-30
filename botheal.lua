@@ -1019,34 +1019,23 @@ function botheal.HealCheck(runPriority)
             return nil, nil
         end
         if th then
-            local classesForPhase = (phase == 'groupmember' and th.groupmember_classes) or (phase == 'pc' and th.pc_classes)
-            local classOk
-            if classesForPhase == nil then
-                classOk = function() return true end
-            else
-                classOk = function(cls)
-                    if not cls then return false end
-                    local c = cls:lower()
-                    if classesForPhase == 'all' then return true end
-                    return classesForPhase and classesForPhase[c] == true
-                end
-            end
+            -- Watchlist membership already applied CharInfo class filters; skip Lua classOk.
             local name = context.peerNameById and context.peerNameById[targetId]
             local spellId = spellutils.GetSpellId(spellCtx.entry)
             if phase == 'pc' and th.pc then
                 if not name then return nil, nil end
                 if not charinfowatchers.watchListHas('HEAL', 'ALL', spellId, targetId) then return nil, nil end
                 local snap = ensureHealSnap(context, targetId, name)
-                if peerNeedsHealFromSnap(snap, th.pc, spellCtx.spellrangeSq, classOk, targethit) then
-                    return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
+                if peerNeedsHealFromSnap(snap, th.pc, spellCtx.spellrangeSq, nil, nil) then
+                    return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'pc')
                 end
                 return nil, nil
             end
             if phase == 'groupmember' and th.groupmember then
                 if not charinfowatchers.watchListHas('HEAL', 'INGROUP', spellId, targetId) then return nil, nil end
                 local snap = ensureHealSnap(context, targetId, name)
-                if peerNeedsHealFromSnap(snap, th.groupmember, spellCtx.spellrangeSq, classOk, targethit) then
-                    return rejectIfAlreadyHoT(spellCtx.entry, targetId, targethit)
+                if peerNeedsHealFromSnap(snap, th.groupmember, spellCtx.spellrangeSq, nil, nil) then
+                    return rejectIfAlreadyHoT(spellCtx.entry, targetId, 'groupmember')
                 end
                 return nil, nil
             end
