@@ -222,7 +222,7 @@ function M.draw()
 
     ImGui.SameLine()
     ImGui.Text('FTE lockout (sec)')
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('Seconds to skip a pull target after FTE lock or already-engaged (below 100% HP).') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Seconds to skip a pull target after FTE lock or already-engaged (below 100%% HP).') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local fteSec = pull.fteLockoutSec or 120
