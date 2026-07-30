@@ -1032,6 +1032,21 @@ local function writeConfigToFile(config, filename)
                         file:flush()
                     end
                     -- omit when empty
+                elseif key == 'spellicon' and type(value) == "table" then
+                    if #value > 0 then
+                        local parts = {}
+                        for _, id in ipairs(value) do
+                            local n = tonumber(id)
+                            if n and n > 0 then parts[#parts + 1] = tostring(n) end
+                        end
+                        if #parts > 0 then
+                            file:write(indent .. formatKey('spellicon') .. " = { ")
+                            file:write(table.concat(parts, ", "))
+                            file:write(" },\n")
+                            file:flush()
+                        end
+                    end
+                    -- omit when empty; readers treat as no equivalents
                 elseif type(value) == "table" then
                     print("detected a corrupted value for:", key, " = ", value)
                     print("setting ", key, " to nil, please check your config")
