@@ -9,14 +9,14 @@ local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
 local name_list = require('gui.widgets.name_list')
 
+local charinfowatchers = require('lib.charinfowatchers')
+
 local M = {}
 
 local NUMERIC_INPUT_WIDTH = 80
 local SPELICON_INPUT_WIDTH = 220
 
--- Per-spell-entry editable buffer for `spellicon`.
--- We display canonical spell name for the stored numeric spell ID, but we let the user input either
--- a spell ID or a spell name (validated and converted back to numeric spell ID).
+-- Per-spell-entry editable buffer for adding to `spellicon` list.
 local spelliconTextState = {}
 
 local function resolveSpelliconName(spellicon)
@@ -25,6 +25,11 @@ local function resolveSpelliconName(spellicon)
     local name = mq.TLO.Spell(sid).Name()
     if type(name) == 'string' and name ~= '' then return name end
     return tostring(sid)
+end
+
+local function ensureSpelliconList(entry)
+    entry.spellicon = charinfowatchers.normalizeSpelliconList(entry.spellicon)
+    return entry.spellicon
 end
 
 local PRIMARY_OPTIONS = {
@@ -41,7 +46,7 @@ local TARGETPHASE_OPTIONS_BUFF = {
     { key = 'self',        label = 'Self',     tooltip = 'Buff self.' },
     { key = 'tank',        label = 'Tank',     tooltip = 'Buff tank (main assist).' },
     { key = 'groupmember', label = 'Group',     tooltip = 'Buff your group members (class filter below).' },
-    { key = 'pc',          label = 'All chars', tooltip = 'Single-target: buff networked characters in range (any group), class-filtered below.' },
+    { key = 'pc',          label = 'All chars', tooltip = 'Single-target or Group v2 AE: buff networked characters from the CharInfo ALL watchlist (any group), class-filtered at register time.' },
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Buff your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Buff other group pets.' },
     { key = 'groupbuff',   label = 'Grp Buff', tooltip = 'Group v1 AE: cast on self (no target) when enough of your group need the buff. tarcnt includes self.' },
@@ -50,7 +55,7 @@ local TARGETPHASE_OPTIONS_BUFF = {
 local TARGETPHASE_GROUPV2_PC = {
     key = 'pc',
     label = 'All chars',
-    tooltip = 'Group v2 remote: cast on one networked peer per group to AE their group. Uses tarcnt and class filter; one anchor per group (raid recommended for multi-group dedup).',
+    tooltip = 'Group v2 AE: cast on CharInfo ALL-watchlist peers; AE covers their group and they leave the watchlist when buffed.',
 }
 
 local TARGETPHASE_GROUPV2_GROUPBUFF = {
@@ -119,49 +124,50 @@ local function runConfigLoaders()
 end
 
 local function buffCustomSection(entry, idPrefix, onChanged)
-    -- spellicon row: input a spell ID or spell name (validated => stored as numeric spell ID)
-    ImGui.Text('Check buff')
+    -- spellicon list: equivalent buff IDs for "already has buff" detection
+    ImGui.Text('Equivalent buffs')
     if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Spell ID used to detect whether the target already has this buff. Input can be a spell name or a numeric spell ID. Empty/0 disables.')
+        ImGui.SetTooltip(
+            'Spell IDs treated as the same buff for skip/refresh. Add by name or ID. Empty list = only the buff spell itself.')
     end
-    ImGui.SameLine()
-    ImGui.SetNextItemWidth(SPELICON_INPUT_WIDTH)
-
+    local icons = ensureSpelliconList(entry)
+    for i = #icons, 1, -1 do
+        local sid = icons[i]
+        ImGui.Text(('  %s'):format(resolveSpelliconName(sid)))
+        ImGui.SameLine()
+        if ImGui.SmallButton(('Remove##%s_icon_%d'):format(idPrefix, i)) then
+            table.remove(icons, i)
+            entry.spellicon = icons
+            if onChanged then onChanged() end
+        end
+    end
     if not spelliconTextState[idPrefix] then
-        spelliconTextState[idPrefix] = { buf = '', lastSpellicon = nil, error = nil }
+        spelliconTextState[idPrefix] = { buf = '', error = nil }
     end
     local s = spelliconTextState[idPrefix]
-
-    local current = entry.spellicon or 0
-    if s.lastSpellicon ~= current then
-        s.buf = resolveSpelliconName(current)
-        s.lastSpellicon = current
-        s.error = nil
-    end
-
+    ImGui.SetNextItemWidth(SPELICON_INPUT_WIDTH)
     local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
     local flags = (ImGuiInputTextFlags.EnterReturnsTrue) or 0
-    local newBuf, changed = ImGui.InputText('##' .. idPrefix .. '_spellicon', s.buf or '', flags)
+    local newBuf, changed = ImGui.InputText('##'..idPrefix..'_spellicon_add', s.buf or '', flags)
     if changed and newBuf ~= nil then
         local trimmed = (newBuf:match('^%s*(.-)%s*$') or '')
         s.buf = newBuf
-        local candidate = tonumber(trimmed) or trimmed
-
-        if trimmed == '' or trimmed == '0' then
-            entry.spellicon = 0
-            s.lastSpellicon = 0
-            s.error = nil
-            s.buf = ''
-            if onChanged then onChanged() end
-        else
+        if trimmed ~= '' and trimmed ~= '0' then
+            local candidate = tonumber(trimmed) or trimmed
             local resolved = mq.TLO.Spell(candidate).ID()
             local sidNum = tonumber(resolved)
             if sidNum and sidNum > 0 then
-                entry.spellicon = sidNum
-                s.lastSpellicon = sidNum
+                local found = false
+                for _, id in ipairs(icons) do
+                    if id == sidNum then found = true break end
+                end
+                if not found then
+                    icons[#icons + 1] = sidNum
+                    entry.spellicon = icons
+                    if onChanged then onChanged() end
+                end
+                s.buf = ''
                 s.error = nil
-                s.buf = resolveSpelliconName(sidNum) -- always display canonical name
-                if onChanged then onChanged() end
             else
                 s.error = 'Invalid spell ID/name'
             end
@@ -170,11 +176,33 @@ local function buffCustomSection(entry, idPrefix, onChanged)
         ImGui.SetTooltip(s.error)
     end
     ImGui.Spacing()
+    if spellutils.IsShrinkSpell(entry) then
+        ImGui.Text('Height')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(
+                'Cast when target Height exceeds this value (SPA 89 shrink). Peers use CharInfo Height; self uses Me.Height. Typical: 2.4–2.5.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+        local h = tonumber(entry.height)
+        if h == nil or h <= 0 then h = 2.4 end
+        local newH, hCh = ImGui.InputFloat('##' .. idPrefix .. '_height', h, 0.1, 0.5, '%.2f')
+        if hCh and newH ~= nil then
+            local n = tonumber(newH)
+            if n and n > 0 then
+                entry.height = n
+            else
+                entry.height = nil
+            end
+            if onChanged then onChanged() end
+        end
+        ImGui.Spacing()
+    end
     if isGroupAEBuffEntry(entry) then
         ImGui.Text('Target count')
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip(
-                'Minimum group members in AE range (including yourself for Grp Buff) that must need this buff before casting. Remote All chars uses the same count for the anchor peer\'s group.')
+                'Minimum group members needing this buff before casting Grp Buff on self (tarcnt includes yourself). Peer All-chars targeting uses the CharInfo watchlist.')
         end
         ImGui.SameLine()
         ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)

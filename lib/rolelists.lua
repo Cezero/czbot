@@ -1,4 +1,4 @@
--- Global MA/MT fallback lists (cz_common.ma_list, cz_common.mt_list).
+-- Global MA/MT/OT fallback lists (cz_common.ma_list, mt_list, ot_list).
 
 local botconfig = require('lib.config')
 local state = require('lib.state')
@@ -8,6 +8,7 @@ local chchain = require('lib.chchain')
 local rolelists = {}
 
 local _chListGen = 0
+local _otListGen = 0
 
 local LIST_CONFIG = {
     ma = {
@@ -18,6 +19,10 @@ local LIST_CONFIG = {
         commonKey = 'mt_list',
         runconfigKey = 'MtList',
     },
+    ot = {
+        commonKey = 'ot_list',
+        runconfigKey = 'OtList',
+    },
     ch = {
         commonKey = 'ch_healers',
         runconfigKey = 'ChHealers',
@@ -26,6 +31,10 @@ local LIST_CONFIG = {
 
 function rolelists.getChListGen()
     return _chListGen
+end
+
+function rolelists.getOtListGen()
+    return _otListGen
 end
 
 local function saveList(listType, replace)
@@ -50,10 +59,16 @@ function rolelists.loadFromCommon()
     end
     auto_ma_mt.bumpMaListGen()
     auto_ma_mt.bumpMtListGen()
+    _otListGen = _otListGen + 1
     auto_ma_mt.refreshRoleClaimEligibility()
     _chListGen = _chListGen + 1
-    -- Healers list may have changed; re-apply persisted CH participate flag.
     chchain.applyFromSettings()
+    local ok, cw = pcall(require, 'lib.charinfowatchers')
+    if ok and cw then
+        cw.registerHealWatchers()
+        cw.registerBuffWatchers()
+        cw.registerCureWatchers()
+    end
 end
 
 function rolelists.getMaList()
@@ -62,6 +77,10 @@ end
 
 function rolelists.getMtList()
     return state.getRunconfig().MtList or {}
+end
+
+function rolelists.getOtList()
+    return state.getRunconfig().OtList or {}
 end
 
 function rolelists.getChHealers()
@@ -82,6 +101,20 @@ function rolelists.process(listType, command)
     elseif listType == 'mt' then
         auto_ma_mt.bumpMtListGen()
         auto_ma_mt.refreshRoleClaimEligibility()
+        local ok, cw = pcall(require, 'lib.charinfowatchers')
+        if ok and cw then
+            cw.registerHealWatchers()
+            cw.registerBuffWatchers()
+            cw.registerCureWatchers()
+        end
+    elseif listType == 'ot' then
+        _otListGen = _otListGen + 1
+        local ok, cw = pcall(require, 'lib.charinfowatchers')
+        if ok and cw then
+            cw.registerHealWatchers()
+            cw.registerBuffWatchers()
+            cw.registerCureWatchers()
+        end
     elseif listType == 'ch' then
         _chListGen = _chListGen + 1
         chchain.applyFromSettings()

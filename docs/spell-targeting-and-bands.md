@@ -108,11 +108,11 @@ Buff spells choose a target in a fixed order. Bands use **targetphase** (priorit
 From `BuffEval` in the code, the order is:
 
 1. **self** — Yourself (including auto-detected pet summon when you have no pet).
-2. **byname** — Specific characters whose names appear in **validtargets** when **byname** is in targetphase.
+2. **byname** — Specific **non-peer** characters whose names appear in **validtargets** when **byname** is in targetphase (CharInfo peers named here are ignored).
 3. **tank** — Main Tank (can be non-bot when explicitly named; only out-of-group non-bot we buff). Non-peer buff state from Spawn after targeting (BuffsPopulated). When this bot is the main tank, that target is this bot, so a buff with only **tank** in targetphase is cast on self without needing **self** in the band.
 4. **groupbuff** — Group AE buff (**Group v1** or **Group v2** on your EQ group). Count includes self; cast on self when count ≥ **tarcnt**. Group v1: no retarget. Group v2: retarget to self.
 5. **groupmember** — In-group only (single-target); includes non-bot group members. Non-peer need from Spawn (BuffsPopulated).
-6. **pc** — Single-target: all peers by class. **Group v2 AE only**: one anchor peer per remote group (see [Buffing configuration](buffing-configuration.md#group-ae-buffs-v1-vs-v2)). Config token **bots** is accepted and treated as **pc**.
+6. **pc** — All peers by class (CharInfo **ALL** watchlist), including **Group v2** AE: cast on watchlisted peers; AE covers their group and peers leave the watchlist when buffed. Config token **bots** is accepted and treated as **pc**.
 7. **mypet** — Your pet.
 8. **pet** — Other peers’ pets.
 

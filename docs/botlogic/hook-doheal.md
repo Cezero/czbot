@@ -30,7 +30,7 @@ flowchart TB
     ManaPass --> End
 ```
 
-HealCheck builds context (tank, bots, spell ranges, etc.) and calls `RunPhaseFirstSpellCheck` as needed:
+HealCheck builds context (tank, bots, spell ranges, etc.) and calls `RunPhaseFirstSpellCheck` as needed. Peer HP targeting uses CharInfo HEAL watchlists (Lua adds range only); non-peer group members are merged only when the minute-cached `nonPeerGroupMembers` flag is set.
 
 1. **Safe rez corpse pass** — only when combat rez is **not** deferred: **corpse** phase with HP spells (rez) first.
 2. **HP hold** — if eligible corpses remain on the safe-rez path (not combat-deferred), the heal hook returns without running living HP phases (retries corpse next tick).

@@ -8,7 +8,7 @@ local GAP_SLACK_MS = 50
 local LOG_THROTTLE_MS = 1000
 local HOOK_SLOW_MS = 5
 local SUMMARY_INTERVAL_MS = 10000
-local SPAN_HOOK_MS = 50
+local SPAN_HOOK_MS = 30
 local SPAN_SHOW_MS = 5
 local SPAN_ALERT_MS = 100
 
@@ -219,7 +219,7 @@ function tickprof.endTick(handle, paused)
     local now = mq.gettime()
     local procMs = now - handle.tickStart
     local gapMs = handle.gapMs or 0
-    local expectedGap = _lastProcMs + TICK_MS
+    local expectedGap = math.max(TICK_MS, _lastProcMs)
     local delayed = _lastTickStart ~= nil and gapMs > expectedGap + GAP_SLACK_MS
     local overBudget = procMs > TICK_MS
 

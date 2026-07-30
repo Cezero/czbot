@@ -95,7 +95,7 @@ buff = {
         },
       },
       spellicon = 0,
-      precondition = "return (mq.TLO.Spawn(EvalID).Height() or 0) > 2.4",
+      height = 2.4,
     },
     {
       gem = 8,

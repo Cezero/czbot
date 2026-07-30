@@ -45,7 +45,7 @@ local CASTING_LIB_SUCCESS_RESULTS = {
 }
 --- When buff remaining time on target is below this (ms), do not interrupt with "buff already present" (allow refresh cast to complete). Should match botbuff's refresh window (e.g. 24s for self).
 --- Observation cache arms nextCheckAt for min(remaining - this, 30s) so charinfo is not re-read every tick.
-local BUFF_REFRESH_THRESHOLD_MS = 24000
+local BUFF_REFRESH_THRESHOLD_MS = 20000
 --- When a debuff returns CAST_TAKEHOLD (blocked by another spell), skip that debuff on this spawn for this many ms.
 local BLOCKED_SKIP_MS = 300000
 
@@ -413,6 +413,22 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
             return false
         end
     end
+    -- DebuffList-first: skip Spawn buff-slot walks when we already track a long-enough duration.
+    local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
+    local durationSec = tonumber(ctx.spelldur) or 0
+    if durationSec <= 0 and entry.gem == 'disc' then
+        durationSec = spellutils.GetSpellDurationSec(entry)
+    end
+    if durationSec > 0 and spawnId and ctx.spellid and not entry.recastActive then
+        if spellstates.HasDebuffLongerThan(spawnId, ctx.spellid, debuffRefreshThresholdMs) then
+            if isMez and phase == 'notmatar' and not spellutils.SpawnMezActive(spawnId) then
+                spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
+                spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
+            else
+                return mezSkip('debuff still active')
+            end
+        end
+    end
     local tarstacks = spellutils.SpellStacksSpawn(entry, spawn.ID())
     if (type(gem) == 'number' or gem == 'alt' or gem == 'disc' or gem == 'item') and not tarstacks then
         if phase == 'notmatar' and isMez then
@@ -424,15 +440,9 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
             return false
         end
     end
-    local debuffRefreshThresholdMs = spellutils.GetDebuffRefreshThresholdMs()
-    local durationSec = tonumber(ctx.spelldur) or 0
-    if durationSec <= 0 and entry.gem == 'disc' then
-        durationSec = spellutils.GetSpellDurationSec(entry)
-    end
     if durationSec > 0 and spawn.ID() and ctx.spellid and not entry.recastActive then
-        local trackedActive = spellstates.HasDebuffLongerThan(spawn.ID(), ctx.spellid, debuffRefreshThresholdMs)
         local onTargetActive = spellutils.SpawnHasDebuffSpellId(ctx.spellid, spawn.ID(), debuffRefreshThresholdMs)
-        if trackedActive or onTargetActive then
+        if onTargetActive then
             if isMez and phase == 'notmatar' and spawnId and not spellutils.SpawnMezActive(spawnId) then
                 spellstates.ClearDebuffOnSpawn(spawnId, ctx.spellid)
                 spellutils.DbgMezTrace('cleared expired mez tracking on id %s', spawnId)
@@ -788,7 +798,7 @@ function spellutils.PeerGetPetBuffDuration(peerInfo, spellid)
 end
 
 -- Buff observation cache: (peerName, spellId) → { present, durationMs, observedAt, nextCheckAt }.
--- Cap between charinfo re-reads at ~30s; refresh window remains BUFF_REFRESH_THRESHOLD_MS (24s).
+-- Cap between charinfo re-reads at ~30s; refresh window remains BUFF_REFRESH_THRESHOLD_MS (20s).
 local BUFF_SKIP_LONG_MS = 30000
 local BUFF_SKIP_PRESENT_MS = 30000
 local BUFF_OBS_JITTER_MS = 500
@@ -959,8 +969,12 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
         if dur == nil then return false end
         if dur >= BUFF_REFRESH_THRESHOLD_MS then
             spellutils.BuffSkipObserveDuration(peerKey, spellid, dur)
-            if entry.spellicon and entry.spellicon ~= 0 then
-                spellutils.BuffSkipObserveDuration(peerKey, entry.spellicon, dur)
+            if entry.spellicon then
+                local icons = type(entry.spellicon) == 'table' and entry.spellicon
+                    or ((entry.spellicon ~= 0) and { entry.spellicon } or {})
+                for _, iconId in ipairs(icons) do
+                    spellutils.BuffSkipObserveDuration(peerKey, iconId, dur)
+                end
             end
             return true
         end
@@ -1021,25 +1035,24 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
     end
     if not peerName or peerName == '' then return false end
     local peer = charinfo.GetInfo(peerName)
-    if not peer then
-        -- Non-peer: use Target buffs when already populated (precast targeted them).
-        if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
-            local buffid = mq.TLO.Target.Buff(entry.spell).ID()
-            local buffdur = mq.TLO.Target.Buff(entry.spell).Duration() or 0
-            if buffid and buffid == spellid and buffdur >= BUFF_REFRESH_THRESHOLD_MS then
-                spellutils.BuffSkipObserveDuration(peerName, spellid, buffdur)
-                return true
-            end
+    if peer then
+        -- Watcher peers: trust live watchlist (need/slots/stacks). Leave peer-pet path above alone.
+        local cw = require('lib.charinfowatchers')
+        local scope = cw.phaseToScope(targethit)
+        if scope and scope ~= 'GRPAGG' then
+            return not cw.watchListHas('BUFF', scope, spellid, EvalID)
         end
         return false
     end
-    local dur = spellutils.PeerGetBuffDuration(peer, spellid)
-    if dur ~= nil then return abortFromDuration(peerName, dur) end
-    if spellutils.PeerHasBuff(peer, spellid) then
-        spellutils.BuffSkipObservePresent(peerName, spellid)
-        return true
+    -- Non-peer: use Target buffs when already populated (precast targeted them).
+    if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
+        local buffid = mq.TLO.Target.Buff(entry.spell).ID()
+        local buffdur = mq.TLO.Target.Buff(entry.spell).Duration() or 0
+        if buffid and buffid == spellid and buffdur >= BUFF_REFRESH_THRESHOLD_MS then
+            spellutils.BuffSkipObserveDuration(peerName, spellid, buffdur)
+            return true
+        end
     end
-    spellutils.BuffSkipClear(peerName, spellid)
     return false
 end
 
@@ -1057,18 +1070,12 @@ function spellutils.PeerHasPetBuff(peerInfo, spellid)
 end
 
 -- Returns true if the spawn already has this heal spell (buff or shortbuff). Used for HoT spells (autodetected via IsHoTSpell)
--- to avoid recasting HoTs. Covers self and peer PCs; non-peers are treated as not having the spell (no targeting).
+-- to avoid recasting HoTs on self. Peer heal phases use CharInfo heal watches (isHot); no PeerHasBuff here.
 function spellutils.TargetHasHealSpell(entry, spawnId)
     if not entry or not entry.spell or not spawnId or spawnId <= 0 then return false end
     local myid = mq.TLO.Me.ID()
     if spawnId == myid or spawnId == 1 then
         return mq.TLO.Me.FindBuff(entry.spell)()
-    end
-    local name = mq.TLO.Spawn(spawnId).Name()
-    local peer = charinfo.GetInfo(name)
-    if peer then
-        local spellid = mq.TLO.Spell(entry.spell).ID()
-        return spellutils.PeerHasBuff(peer, spellid)
     end
     return false
 end
@@ -1084,16 +1091,9 @@ function spellutils.EnsureSpawnBuffsPopulated(spawnId, sub, spellIndex, targethi
         if sp and sp.Type and sp.Type() == 'Corpse' then return false end
     end
     local detail = string.format('id=%s sub=%s', tostring(spawnId), tostring(sub))
-    -- Caster's own buffs: Me.BuffsPopulated() is valid without targeting self; avoid /tar so MT keeps mob targeted.
+    -- Local character buffs are always available; never /tar or wait on Me.
     if spawnId == mq.TLO.Me.ID() then
-        if mq.TLO.Me.BuffsPopulated() then return true end
-        state.getRunconfig().statusMessage = string.format('Waiting for target buffs (id %s)', spawnId)
-        tickprof.span('EnsureBuffs.self_wait', function()
-            mq.delay(1000, function() return mq.TLO.Me.BuffsPopulated() == true end)
-        end, detail)
-        local ok = mq.TLO.Me.BuffsPopulated()
-        if not ok then state.getRunconfig().statusMessage = '' end
-        return ok
+        return true
     end
     if mq.TLO.Target.ID() == spawnId then
         local sp = mq.TLO.Spawn(spawnId)
@@ -1120,24 +1120,43 @@ function spellutils.SpawnNeedsBuff(spawnId, spellName, spellicon)
     local sp = mq.TLO.Spawn(spawnId)
     if not sp or not sp.ID() or sp.ID() == 0 then return false end
     if not sp.BuffsPopulated or not sp.BuffsPopulated() then return false end
-    -- MQ2 `Buff(spellName)` can return a different buff on partial-name matches.
-    -- Only treat it as "has this buff" when the matched buff's spell id equals the configured spell id.
     local spellid
     do
         local ok, id = pcall(function() return mq.TLO.Spell(spellName).ID() end)
         spellid = ok and id or nil
     end
 
-    local buff = sp.Buff(spellName)
-    local hasAnyBuffMatchByName = buff and buff() or false
-    if not hasAnyBuffMatchByName then return true end
-    if not spellid then
-        -- Can't resolve spell id: preserve legacy behavior (presence by name means we consider it "already buffed").
+    local function hasMatchingBuff(checkId, checkName)
+        if checkName and checkName ~= '' then
+            local buff = sp.Buff(checkName)
+            if buff and buff() then
+                local matchedBuffId = buff.ID() or nil
+                if not checkId then return true end
+                if matchedBuffId == checkId then return true end
+            end
+        end
+        if checkId and checkId > 0 then
+            local maxSlots = (sp.MaxBuffSlots and sp.MaxBuffSlots()) or 40
+            for i = 1, maxSlots do
+                local b = sp.Buff(i)
+                if b and b() and b.ID and b.ID() == checkId then return true end
+            end
+        end
         return false
     end
 
-    local matchedBuffId = buff.ID() or nil
-    return matchedBuffId ~= spellid
+    if hasMatchingBuff(spellid, spellName) then return false end
+
+    local icons = type(spellicon) == 'table' and spellicon
+        or ((spellicon and spellicon ~= 0) and { spellicon } or {})
+    for _, iconId in ipairs(icons) do
+        local n = tonumber(iconId)
+        if n and n > 0 then
+            local iconName = mq.TLO.Spell(n).Name()
+            if hasMatchingBuff(n, iconName) then return false end
+        end
+    end
+    return true
 end
 
 -- Spawn: does this spawn have a matching detrimental? Same as buffs: only valid after targeting
@@ -1179,8 +1198,10 @@ end
 -- Self: does my own buff list contain a matching curable counter? Mirrors SpawnDetrimentalsForCure
 -- but walks Me.Buff(i) (always populated for self; no targeting needed). Used for self-cure, since
 -- Me has no lowercase poison/disease/curse/corruption member.
-function spellutils.MeDetrimentalsForCure(cureTypeList)
-    if not cureTypeList or type(cureTypeList) ~= 'table' then return false end
+-- Optional once-per-CureCheck cache via setMeDetrimentalsCureCache / clearMeDetrimentalsCureCache.
+local _meDetCureCache = nil
+
+function spellutils.buildMeDetrimentalsCureCache()
     local maxSlots = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
     local countPoison, countDisease, countCurse, countCorruption = 0, 0, 0, 0
     local hasCurable = false
@@ -1197,14 +1218,34 @@ function spellutils.MeDetrimentalsForCure(cureTypeList)
             end
         end
     end
-    if not hasCurable then return false end
+    return {
+        hasCurable = hasCurable,
+        poison = countPoison,
+        disease = countDisease,
+        curse = countCurse,
+        corruption = countCorruption,
+    }
+end
+
+function spellutils.setMeDetrimentalsCureCache(cache)
+    _meDetCureCache = cache
+end
+
+function spellutils.clearMeDetrimentalsCureCache()
+    _meDetCureCache = nil
+end
+
+function spellutils.MeDetrimentalsForCure(cureTypeList)
+    if not cureTypeList or type(cureTypeList) ~= 'table' then return false end
+    local counts = _meDetCureCache or spellutils.buildMeDetrimentalsCureCache()
+    if not counts.hasCurable then return false end
     for _, v in ipairs(cureTypeList) do
         local vlower = string.lower(tostring(v))
         if vlower == 'all' then return true end
-        if vlower == 'poison' and countPoison > 0 then return true end
-        if vlower == 'disease' and countDisease > 0 then return true end
-        if vlower == 'curse' and countCurse > 0 then return true end
-        if vlower == 'corruption' and countCorruption > 0 then return true end
+        if vlower == 'poison' and counts.poison > 0 then return true end
+        if vlower == 'disease' and counts.disease > 0 then return true end
+        if vlower == 'curse' and counts.curse > 0 then return true end
+        if vlower == 'corruption' and counts.corruption > 0 then return true end
     end
     return false
 end
@@ -1883,6 +1924,8 @@ function spellutils.IsSnareSpell(entry) return entryHasSPA(entry, 3) end
 function spellutils.IsSlowSpell(entry) return entryHasSPA(entry, 11) end
 function spellutils.IsFearSpell(entry) return entryHasSPA(entry, 23) end
 function spellutils.IsRootSpell(entry) return entryHasSPA(entry, 99) end
+-- SPA 89 = Height (shrink / model size). MacroQuest SPA_HEIGHT.
+function spellutils.IsShrinkSpell(entry) return entryHasSPA(entry, 89) end
 
 -- For a slow/snare/root/fear debuff, the spawn-effect category to auto-skip when already present, plus
 -- a short label for the GUI. Returns (categoryTag, label) or nil. Single primary classification (root
@@ -2222,8 +2265,12 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     local spellid = mq.TLO.Spell(spell).ID()
     if sub == 'buff' and EvalID and spellid then
         spellutils.BuffSkipClearForCast(EvalID, spellid)
-        if entry.spellicon and entry.spellicon ~= 0 then
-            spellutils.BuffSkipClearForCast(EvalID, entry.spellicon)
+        if entry.spellicon then
+            local icons = type(entry.spellicon) == 'table' and entry.spellicon
+                or ((entry.spellicon ~= 0) and { entry.spellicon } or {})
+            for _, iconId in ipairs(icons) do
+                spellutils.BuffSkipClearForCast(EvalID, iconId)
+            end
         end
     end
     if not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib and SpellResisted then
@@ -2471,8 +2518,22 @@ function spellutils.handleSpellCheckReentry(sub, options)
     if not spellutils.IsMemorizing() and rc.CurSpell and rc.CurSpell.phase == 'casting' and rc.CurSpell.sub == 'heal' and rc.CurSpell.target and mq.TLO.Target.ID() == rc.CurSpell.target then
         local entry = botconfig.getSpellEntry('heal', rc.CurSpell.spell)
         if entry then
-            spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target,
-                rc.CurSpell.target, entry)
+            local cw = require('lib.charinfowatchers')
+            local scope = cw.interruptScopeForTargethit(rc.CurSpell.targethit)
+            local peerWatcher = scope and scope ~= 'GRPAGG' and rc.CurSpell.targethit ~= 'self'
+                and rc.CurSpell.targethit ~= 'corpse' and rc.CurSpell.targethit ~= 'mypet'
+                and rc.CurSpell.targethit ~= 'pet' and rc.CurSpell.targethit ~= 'xtgt'
+            if peerWatcher then
+                local spellid = spellutils.GetSpellId(entry)
+                if spellid and not cw.watchListHas('HEAL', scope, spellid, rc.CurSpell.target) then
+                    spellutils.interruptActiveCast(rc)
+                    spellutils.clearCastingStateOrResume()
+                    return false
+                end
+            else
+                spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target,
+                    rc.CurSpell.target, entry)
+            end
             if not rc.CurSpell.phase then
                 return false
             end
@@ -2756,10 +2817,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     if options.spellFirst then
         for phaseIdx = startPhaseIdx, #phaseOrder do
             local phase = phaseOrder[phaseIdx]
-            local spellIndices = getSpellIndicesFn(phase, nil)
-            if spellIndices and #spellIndices > 0 then
-                local targets = getTargetsFn(phase, context)
-                if targets and #targets > 0 then
+            local targets = getTargetsFn(phase, context)
+            if targets and #targets > 0 then
+                local spellIndices = getSpellIndicesFn(phase, nil)
+                if spellIndices and #spellIndices > 0 then
                     local spellPosStart = 1
                     if phaseIdx == startPhaseIdx then
                         for i, idx in ipairs(spellIndices) do
@@ -2805,10 +2866,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     else
         for phaseIdx = startPhaseIdx, #phaseOrder do
             local phase = phaseOrder[phaseIdx]
-            local spellIndicesProbe = getSpellIndicesFn(phase, nil)
-            if spellIndicesProbe and #spellIndicesProbe > 0 then
-                local targets = getTargetsFn(phase, context)
-                if targets and #targets > 0 then
+            local targets = getTargetsFn(phase, context)
+            if targets and #targets > 0 then
+                local spellIndicesProbe = getSpellIndicesFn(phase, nil)
+                if spellIndicesProbe and #spellIndicesProbe > 0 then
                     local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
                     for targetIdx = targetStart, #targets do
                         local target = targets[targetIdx]
@@ -3099,11 +3160,53 @@ function spellutils.InterruptCheck()
     if not criteria then return false end
     if not target or not spell or not criteria or not sub then return false end
 
-    -- Group v1/v2 heal: re-check evalGroupAECount mid-cast; interrupt if band/tarcnt no longer satisfied.
-    if sub == 'heal' and criteria == 'groupheal' and entry and spellutils.IsGroupV1OrV2HealEntry(entry) then
-        local botheal = require('botheal')
-        local gid, _ghit = botheal.EvalGroupHealIfNeeded(spell)
-        if not gid then
+    local charinfowatchers = require('lib.charinfowatchers')
+    local kind = charinfowatchers.sectionToKind(sub)
+    local scope = charinfowatchers.interruptScopeForTargethit(criteria)
+
+    -- Group AE: re-check GRPAGG readiness mid-cast.
+    if kind and (criteria == 'groupheal' or criteria == 'groupbuff' or criteria == 'groupcure') then
+        if scope == 'GRPAGG' then
+            local botheal = (sub == 'heal') and require('botheal') or nil
+            local stillOk
+            if sub == 'heal' and botheal and botheal.EvalGroupHealIfNeeded then
+                local gid = botheal.EvalGroupHealIfNeeded(spell)
+                stillOk = gid ~= nil
+            elseif sub == 'buff' or sub == 'cure' then
+                -- Self-tiebreaker re-eval via grpAggShouldCast with a simple self check deferred to modules.
+                stillOk = charinfowatchers.grpAggShouldCast(kind, spellid, entry.tarcnt, function()
+                    if sub == 'cure' then
+                        local ct = entry.curetype
+                        if type(ct) == 'table' then
+                            for _, t in ipairs(ct) do
+                                local u = type(t) == 'string' and t:lower() or ''
+                                if u == 'all' or u == 'poison' and (mq.TLO.Me.Poisoned() or false) then return true end
+                                if u == 'disease' and (mq.TLO.Me.Diseased() or false) then return true end
+                                if u == 'curse' and (mq.TLO.Me.Cursed() or false) then return true end
+                                if u == 'corruption' and (mq.TLO.Me.Corrupted() or false) then return true end
+                            end
+                        end
+                        return false
+                    end
+                    -- buff group AE: treat self as needing if Me doesn't have spell
+                    local present = mq.TLO.Me.Buff(spellname)() or mq.TLO.Me.Song(spellname)()
+                    if not present then return true end
+                    local dur = mq.TLO.Me.Buff(spellname).Duration() or mq.TLO.Me.Song(spellname).Duration() or 0
+                    return dur < 20000
+                end)
+            end
+            if stillOk == false then
+                spellutils.interruptActiveCast(rc)
+                spellutils.clearCastingStateOrResume()
+                return
+            end
+        end
+    end
+
+    -- Peer watcher targets: interrupt when spawn leaves GetWatchList for this spell.
+    if kind and scope and scope ~= 'GRPAGG' and target and target ~= mq.TLO.Me.ID() then
+        if not charinfowatchers.watchListHas(kind, scope, spellid, target) then
+            log.say('Interrupting %s, target left watchlist', spellname)
             spellutils.interruptActiveCast(rc)
             spellutils.clearCastingStateOrResume()
             return
@@ -3113,8 +3216,10 @@ function spellutils.InterruptCheck()
     if not mq.TLO.Target.ID() or mq.TLO.Target.ID() == 0 then return false end
     local targetSpawn = mq.TLO.Target
 
-    -- Heal threshold must run even when Cast.Status() contains 'M' (e.g. HoT channeling), so we clear when target is above band.
-    if sub == 'heal' then
+    -- Heal threshold for self / non-watcher phases only.
+    local peerWatcherHeal = (sub == 'heal' and scope and scope ~= 'GRPAGG' and criteria ~= 'self' and criteria ~= 'corpse'
+        and criteria ~= 'mypet' and criteria ~= 'pet' and criteria ~= 'xtgt')
+    if sub == 'heal' and not peerWatcherHeal then
         spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
     end
     if spellutils.IsMemorizing() then return false end
@@ -3126,7 +3231,9 @@ function spellutils.InterruptCheck()
         mq.cmd('/squelch /mqtarget clear')
         spellutils.clearCastingStateOrResume()
     end
-    spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
+    if sub == 'heal' and not peerWatcherHeal then
+        spellutils.InterruptCheckHealThreshold(rc, sub, criteria, spell, targetSpawn, target, entry)
+    end
     if sub == 'debuff' then
         spellutils.InterruptCheckDontStack(entry, target, spellname)
     end

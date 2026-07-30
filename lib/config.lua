@@ -142,7 +142,7 @@ local subOrder = {
 
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
-    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition', 'buffNames' },
+    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition', 'buffNames', 'height' },
     debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen', 'recastActive' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
@@ -165,7 +165,7 @@ end
 -- Canonical default spell entry per section. getDefaultSpellEntry returns a copy so callers do not mutate.
 local defaultSpellEntries = {
     heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, inCombat = false, bands = { { targetphase = { 'self', 'tank', 'groupmember' }, validtargets = { 'all' }, min = 0, max = 60 } }, healResource = 'hp', precondition = nil },
-    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, combatOnly = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = 0, precondition = nil },
+    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, combatOnly = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = {}, precondition = nil, height = nil },
     debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'matar', 'notmatar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, stopWhen = nil, onlyMT = false },
     cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = { 'all' }, enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
@@ -234,7 +234,7 @@ local _pendingMutators = nil
 
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
-local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
+local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ot_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
 
 local function commonFilePath()
     return mq.configDir .. '/' .. COMMON_FILENAME
@@ -1032,6 +1032,21 @@ local function writeConfigToFile(config, filename)
                         file:flush()
                     end
                     -- omit when empty
+                elseif key == 'spellicon' and type(value) == "table" then
+                    if #value > 0 then
+                        local parts = {}
+                        for _, id in ipairs(value) do
+                            local n = tonumber(id)
+                            if n and n > 0 then parts[#parts + 1] = tostring(n) end
+                        end
+                        if #parts > 0 then
+                            file:write(indent .. formatKey('spellicon') .. " = { ")
+                            file:write(table.concat(parts, ", "))
+                            file:write(" },\n")
+                            file:flush()
+                        end
+                    end
+                    -- omit when empty; readers treat as no equivalents
                 elseif type(value) == "table" then
                     print("detected a corrupted value for:", key, " = ", value)
                     print("setting ", key, " to nil, please check your config")

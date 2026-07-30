@@ -196,6 +196,7 @@ function M.draw()
     ImGui.Spacing()
     drawRoleListSection('ma', 'MaList', 'Main Assist fallback list (ma_list)')
     drawRoleListSection('mt', 'MtList', 'Main Tank fallback list (mt_list)')
+    drawRoleListSection('ot', 'OtList', 'Offtank watch list (ot_list)')
 
     ImGui.Spacing()
     ImGui.Separator()

@@ -7,6 +7,7 @@
 ---@field lastResolvedAssistName string|nil session-only tracker for MA identity changes
 ---@field MaList table cz_common ma_list mirror
 ---@field MtList table cz_common mt_list mirror
+---@field OtList table cz_common ot_list mirror
 ---@field maEligible boolean|nil true when Me.Name is on MaList (list membership; EQ primary may still claim)
 ---@field mtEligible boolean|nil true when Me.Name is on MtList (list membership; raid MT requires this)
 ---@field allMezzedEngageId number|nil spawn id locked while entire camp is mezzed (shortest remaining mez)
@@ -281,6 +282,7 @@ function M.resetRunconfig()
         CharmList = {},
         MaList = {},
         MtList = {},
+        OtList = {},
         maEligible = false,
         mtEligible = false,
         MobList = {},
