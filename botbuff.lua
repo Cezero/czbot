@@ -387,18 +387,19 @@ local function BuffEvalPetById(index, spellid, rangeSq, petId, context, hoist)
 end
 
 local BUFF_PHASE_ORDER = { 'self', 'byname', 'tank', 'offtank', 'groupbuff', 'groupmember', 'pc', 'mypet', 'pet' }
---- Single place for buff context: tank, tankid, class-ordered bots, botcount, buffCount, peerByName.
+local BUFF_PHASE_ORDER_LOCAL = { 'self', 'byname', 'mypet' }
+local BUFF_PHASE_ORDER_LOCAL_LIST = { 'self', 'byname', 'tank', 'offtank', 'mypet' }
+--- Single place for buff context: tank, tankid, buffCount. Peer roster not preloaded (PET watches + GetInfo on demand).
 local function buffBuildContext()
     local tank, tankid = spellutils.GetTankInfo(false)
     local count = botconfig.getSpellCount('buff')
-    local bots, peerByName = spellutils.GetBotListOrderedWithPeers()
     return {
         tank = tank,
         tankid = tankid,
         buffCount = count,
-        bots = bots or {},
-        botcount = bots and #bots or 0,
-        peerByName = peerByName or {},
+        bots = {},
+        botcount = 0,
+        peerByName = {},
     }
 end
 
@@ -431,6 +432,19 @@ local function buffBandHasPhase(spellIndex, phase)
     return castutils.bandHasPhaseSimple(BuffClass, spellIndex, phase)
 end
 
+local function buffPhaseOrderForPass()
+    local listIds = charinfowatchers.spellIdsForPhases('buff', { 'tank', 'offtank' }, buffBandHasPhase)
+    local otherIds = charinfowatchers.spellIdsForPhases(
+        'buff', { 'groupbuff', 'groupmember', 'pc', 'pet' }, buffBandHasPhase)
+    local hasList = charinfowatchers.anyWatchNonEmpty('BUFF', { 'LIST' }, listIds)
+    local hasOther = charinfowatchers.anyWatchNonEmpty(
+        'BUFF', { 'INGROUP', 'ALL', 'GRPAGG', 'PET' }, otherIds)
+        or charinfowatchers.hasNonPeerGroupMembers()
+    if hasOther then return BUFF_PHASE_ORDER end
+    if hasList then return BUFF_PHASE_ORDER_LOCAL_LIST end
+    return BUFF_PHASE_ORDER_LOCAL
+end
+
 local function buffGetTargetsForPhase(phase, context, hoist)
     if phase == 'self' then return castutils.getTargetsSelf() end
     if phase == 'tank' or phase == 'offtank' or phase == 'groupmember' or phase == 'pc' then
@@ -457,7 +471,8 @@ local function buffGetTargetsForPhase(phase, context, hoist)
     end
     if phase == 'mypet' then return castutils.getTargetsMypet() end
     if phase == 'pet' then
-        return castutils.getTargetsPet(context)
+        local count = botconfig.getSpellCount('buff')
+        return filterCorpses(charinfowatchers.unionTargetsForPhase('buff', phase, count, buffBandHasPhase))
     end
     if phase == 'byname' and context.buffCount then
         if context.bynameTargets then return context.bynameTargets end
@@ -635,7 +650,18 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
     end
     if phase == 'pet' then
         if cached.isGroupAE then return nil, nil end
-        return BuffEvalPetById(spellIndex, sid, rangeSq, targetId, context, hoist)
+        if not BuffClass[spellIndex].pet then return nil, nil end
+        local watchSid = spellutils.GetSpellId(entry) or sid
+        if not charinfowatchers.watchListHas('BUFF', 'PET', watchSid, targetId) then
+            return nil, nil
+        end
+        local petSpawn = mq.TLO.Spawn(targetId)
+        if not petSpawn or not petSpawn.ID() or petSpawn.ID() == 0 then return nil, nil end
+        local petdistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), petSpawn.X(), petSpawn.Y())
+        if rangeSq and petdistSq and petdistSq <= rangeSq then
+            return targetId, 'pet'
+        end
+        return nil, nil
     end
     if phase == 'byname' then
         local name = mq.TLO.Spawn(targetId).CleanName()
@@ -833,7 +859,7 @@ function botbuff.BuffCheck(runPriority)
         end)
     end
     return tickprof.span('spellcheck', function()
-        return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', BUFF_PHASE_ORDER, getTargets, getSpellIndices,
+        return spellutils.RunPhaseFirstSpellCheck('buff', 'doBuff', buffPhaseOrderForPass(), getTargets, getSpellIndices,
             needsSpell, ctx, options)
     end)
 end

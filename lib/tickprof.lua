@@ -8,7 +8,7 @@ local GAP_SLACK_MS = 50
 local LOG_THROTTLE_MS = 1000
 local HOOK_SLOW_MS = 5
 local SUMMARY_INTERVAL_MS = 10000
-local SPAN_HOOK_MS = 50
+local SPAN_HOOK_MS = 30
 local SPAN_SHOW_MS = 5
 local SPAN_ALERT_MS = 100
 

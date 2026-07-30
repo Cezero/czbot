@@ -1188,8 +1188,10 @@ end
 -- Self: does my own buff list contain a matching curable counter? Mirrors SpawnDetrimentalsForCure
 -- but walks Me.Buff(i) (always populated for self; no targeting needed). Used for self-cure, since
 -- Me has no lowercase poison/disease/curse/corruption member.
-function spellutils.MeDetrimentalsForCure(cureTypeList)
-    if not cureTypeList or type(cureTypeList) ~= 'table' then return false end
+-- Optional once-per-CureCheck cache via setMeDetrimentalsCureCache / clearMeDetrimentalsCureCache.
+local _meDetCureCache = nil
+
+function spellutils.buildMeDetrimentalsCureCache()
     local maxSlots = (mq.TLO.Me.MaxBuffSlots and mq.TLO.Me.MaxBuffSlots()) or 40
     local countPoison, countDisease, countCurse, countCorruption = 0, 0, 0, 0
     local hasCurable = false
@@ -1206,14 +1208,34 @@ function spellutils.MeDetrimentalsForCure(cureTypeList)
             end
         end
     end
-    if not hasCurable then return false end
+    return {
+        hasCurable = hasCurable,
+        poison = countPoison,
+        disease = countDisease,
+        curse = countCurse,
+        corruption = countCorruption,
+    }
+end
+
+function spellutils.setMeDetrimentalsCureCache(cache)
+    _meDetCureCache = cache
+end
+
+function spellutils.clearMeDetrimentalsCureCache()
+    _meDetCureCache = nil
+end
+
+function spellutils.MeDetrimentalsForCure(cureTypeList)
+    if not cureTypeList or type(cureTypeList) ~= 'table' then return false end
+    local counts = _meDetCureCache or spellutils.buildMeDetrimentalsCureCache()
+    if not counts.hasCurable then return false end
     for _, v in ipairs(cureTypeList) do
         local vlower = string.lower(tostring(v))
         if vlower == 'all' then return true end
-        if vlower == 'poison' and countPoison > 0 then return true end
-        if vlower == 'disease' and countDisease > 0 then return true end
-        if vlower == 'curse' and countCurse > 0 then return true end
-        if vlower == 'corruption' and countCorruption > 0 then return true end
+        if vlower == 'poison' and counts.poison > 0 then return true end
+        if vlower == 'disease' and counts.disease > 0 then return true end
+        if vlower == 'curse' and counts.curse > 0 then return true end
+        if vlower == 'corruption' and counts.corruption > 0 then return true end
     end
     return false
 end
@@ -2785,10 +2807,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     if options.spellFirst then
         for phaseIdx = startPhaseIdx, #phaseOrder do
             local phase = phaseOrder[phaseIdx]
-            local spellIndices = getSpellIndicesFn(phase, nil)
-            if spellIndices and #spellIndices > 0 then
-                local targets = getTargetsFn(phase, context)
-                if targets and #targets > 0 then
+            local targets = getTargetsFn(phase, context)
+            if targets and #targets > 0 then
+                local spellIndices = getSpellIndicesFn(phase, nil)
+                if spellIndices and #spellIndices > 0 then
                     local spellPosStart = 1
                     if phaseIdx == startPhaseIdx then
                         for i, idx in ipairs(spellIndices) do
@@ -2834,10 +2856,10 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     else
         for phaseIdx = startPhaseIdx, #phaseOrder do
             local phase = phaseOrder[phaseIdx]
-            local spellIndicesProbe = getSpellIndicesFn(phase, nil)
-            if spellIndicesProbe and #spellIndicesProbe > 0 then
-                local targets = getTargetsFn(phase, context)
-                if targets and #targets > 0 then
+            local targets = getTargetsFn(phase, context)
+            if targets and #targets > 0 then
+                local spellIndicesProbe = getSpellIndicesFn(phase, nil)
+                if spellIndicesProbe and #spellIndicesProbe > 0 then
                     local targetStart = (phaseIdx == startPhaseIdx) and startTargetIdx or 1
                     for targetIdx = targetStart, #targets do
                         local target = targets[targetIdx]

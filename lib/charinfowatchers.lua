@@ -17,6 +17,7 @@ local PHASE_TO_SCOPE = {
     groupbuff = 'GRPAGG',
     groupcure = 'GRPAGG',
     pc = 'ALL',
+    pet = 'PET',
 }
 
 local KIND_BY_SECTION = {
@@ -173,7 +174,7 @@ function M.registerBuffWatchers()
                             classes = (scope == 'LIST') and {} or classes,
                             names = (scope == 'LIST') and listNames or nil,
                             equivIds = equivIds,
-                            height = height,
+                            height = (scope == 'PET') and 0 or height,
                         })
                     end)
                 end
@@ -394,6 +395,42 @@ end
 
 function M.interruptScopeForTargethit(targethit)
     return PHASE_TO_SCOPE[targethit]
+end
+
+--- True if any GetWatchCount for the given kind/scopes/spellIds is > 0.
+function M.anyWatchNonEmpty(kind, scopes, spellIds)
+    if not charinfo.GetWatchCount or not kind or type(scopes) ~= 'table' or type(spellIds) ~= 'table' then
+        return false
+    end
+    for _, scope in ipairs(scopes) do
+        for _, spellId in ipairs(spellIds) do
+            if spellId and (charinfo.GetWatchCount(kind, scope, spellId) or 0) > 0 then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+--- Collect spell IDs for a section where bandHasPhaseFn(i, phase) is true for any of phases.
+function M.spellIdsForPhases(section, phases, bandHasPhaseFn)
+    local count = botconfig.getSpellCount(section)
+    local seen = {}
+    local out = {}
+    for i = 1, count do
+        for _, phase in ipairs(phases) do
+            if bandHasPhaseFn(i, phase) then
+                local entry = botconfig.getSpellEntry(section, i)
+                local spellId = spellIdForEntry(entry)
+                if spellId and not seen[spellId] then
+                    seen[spellId] = true
+                    out[#out + 1] = spellId
+                end
+                break
+            end
+        end
+    end
+    return out
 end
 
 function M.spellIdForEntry(entry)

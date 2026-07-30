@@ -107,6 +107,8 @@ end
 
 local CURE_PHASE_ORDER = { 'self', 'tank', 'offtank', 'groupcure', 'groupmember', 'pc' }
 local CURE_PHASE_ORDER_PRIORITY = { 'priority' }
+local CURE_PHASE_ORDER_LOCAL = { 'self' }
+local CURE_PHASE_ORDER_LOCAL_LIST = { 'self', 'tank', 'offtank' }
 
 --- Tank only — peer targets come from CharInfo watch unions.
 local function cureBuildContext()
@@ -116,6 +118,22 @@ end
 
 local function cureBandHasPhase(spellIndex, phase)
     return CureClass[spellIndex] and CureClass[spellIndex][phase] and true or false
+end
+
+local function curePhaseOrderForPass(requested)
+    if requested and requested ~= CURE_PHASE_ORDER then
+        return requested
+    end
+    local listIds = charinfowatchers.spellIdsForPhases('cure', { 'tank', 'offtank' }, cureBandHasPhase)
+    local otherIds = charinfowatchers.spellIdsForPhases(
+        'cure', { 'groupcure', 'groupmember', 'pc' }, cureBandHasPhase)
+    local hasList = charinfowatchers.anyWatchNonEmpty('CURE', { 'LIST' }, listIds)
+    local hasOther = charinfowatchers.anyWatchNonEmpty(
+        'CURE', { 'INGROUP', 'ALL', 'GRPAGG' }, otherIds)
+        or charinfowatchers.hasNonPeerGroupMembers()
+    if hasOther then return CURE_PHASE_ORDER end
+    if hasList then return CURE_PHASE_ORDER_LOCAL_LIST end
+    return CURE_PHASE_ORDER_LOCAL
 end
 
 local function cureGetTargetsForPhase(phase, context, pcAllowed)
@@ -212,7 +230,7 @@ local function cureTargetNeedsSpell(spellIndex, targetId, targethit, context)
 end
 
 function botcure.CureCheck(runPriority, phaseOrder, hookName)
-    phaseOrder = phaseOrder or CURE_PHASE_ORDER
+    phaseOrder = curePhaseOrderForPass(phaseOrder)
     hookName = hookName or 'doCure'
     local myconfig = botconfig.config
     if state.getRunconfig().SpellTimer > mq.gettime() then return false end
@@ -221,6 +239,7 @@ function botcure.CureCheck(runPriority, phaseOrder, hookName)
     local ctx = tickprof.span('context', function()
         return cureBuildContext()
     end)
+    spellutils.setMeDetrimentalsCureCache(spellutils.buildMeDetrimentalsCureCache())
     local options = {
         skipInterruptForBRD = true,
         runPriority = runPriority,
@@ -241,10 +260,12 @@ function botcure.CureCheck(runPriority, phaseOrder, hookName)
             return cureGetTargetsForPhase(phase, context, pcAllowed)
         end)
     end
-    return tickprof.span('spellcheck', function()
+    local result = tickprof.span('spellcheck', function()
         return spellutils.RunPhaseFirstSpellCheck('cure', hookName, phaseOrder, getTargets, getSpellIndices,
             cureTargetNeedsSpell, ctx, options)
     end)
+    spellutils.clearMeDetrimentalsCureCache()
+    return result
 end
 
 function botcure.getHookFn(name)
