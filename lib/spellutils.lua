@@ -989,6 +989,11 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
         return false
     end
 
+    -- Group AE: peers may still need the AE even when the self/anchor already has the buff.
+    if spellutils.IsGroupAEBuffEntry(entry) and targethit == 'groupbuff' then
+        return false
+    end
+
     if EvalID == meId or targethit == 'self' then
         local present = mq.TLO.Me.Buff(entry.spell)() or mq.TLO.Me.Song(entry.spell)()
         if not present then
@@ -1723,7 +1728,8 @@ function spellutils.IsGroupAEBuffEntry(entry)
     return tt == 'Group v1' or tt == 'Group v2'
 end
 
--- Group AE buff: pre-cast already validated group need; anchor/self may still show the buff mid-cast.
+-- Group AE buff: group need was already validated; anchor/self may still show the buff
+-- (pre-cast revalidate via buffNeedRevalidateAbort, or mid-cast interrupt checks).
 function spellutils.ShouldSkipBuffInterruptForGroupAE(entry, criteria, target)
     if not entry or not spellutils.IsGroupAEBuffEntry(entry) then return false end
     if criteria == 'groupbuff' then return true end
