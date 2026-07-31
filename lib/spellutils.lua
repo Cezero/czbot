@@ -564,7 +564,7 @@ function spellutils.ImmuneCheck(Sub, ID, EvalID)
     -- recastActive (e.g. SK threat-snare) keeps casting even on an immune mob: the cast still generates
     -- aggro, so don't block it on the immune list (other spells on the same mob are still blocked).
     if entry.recastActive then return true end
-    local spell = mq.TLO.Spell(entry.spell)()
+    local spell = spellutils.GetResolvedSpellName(entry) or entry.spell
     local zone = mq.TLO.Zone.ShortName()
     local targetname = mq.TLO.Spawn(EvalID).CleanName()
     local t = immune.get()
@@ -576,7 +576,7 @@ local IMMUNE_GEM_SECTIONS = { 'debuff', 'buff', 'cure' }
 
 local function spellNameFromEntry(entry)
     if not entry or not entry.spell or entry.spell == '' then return nil end
-    return mq.TLO.Spell(entry.spell)() or entry.spell
+    return spellutils.GetResolvedSpellName(entry) or entry.spell
 end
 
 --- Config entry whose spell ID matches (enabled entries with spell name).
@@ -587,7 +587,7 @@ function spellutils.findConfigEntryBySpellId(spellId)
         for i = 1, cnt do
             local entry = botconfig.getSpellEntry(section, i)
             if entry and entry.enabled ~= false and entry.spell and entry.spell ~= '' then
-                local id = mq.TLO.Spell(entry.spell).ID()
+                local id = spellutils.GetSpellId(entry)
                 if id and id == spellId then
                     return section, i, entry
                 end
@@ -631,7 +631,7 @@ function spellutils.resolveImmuneSpellContext()
             ctx.sub = cur.sub
             ctx.index = cur.spell
             ctx.spellName = spellNameFromEntry(entry)
-            if entry.spell then ctx.spellId = mq.TLO.Spell(entry.spell).ID() end
+            if entry.spell then ctx.spellId = spellutils.GetSpellId(entry) end
             if ctx.spellName then return ctx end
         end
     end
@@ -662,7 +662,7 @@ function spellutils.resolveImmuneSpellContext()
                 ctx.sub = section
                 ctx.index = index
                 ctx.spellName = spellNameFromEntry(entry)
-                if entry.spell then ctx.spellId = mq.TLO.Spell(entry.spell).ID() end
+                if entry.spell then ctx.spellId = spellutils.GetSpellId(entry) end
                 ctx.fromTwistOnceGem = true
                 if ctx.spellName then return ctx end
             end
@@ -967,8 +967,9 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
     if not index or not EvalID then return false end
     local entry = botconfig.getSpellEntry('buff', index)
     if not entry or not entry.spell then return false end
-    local spellid = mq.TLO.Spell(entry.spell).ID()
+    local spellid = spellutils.GetSpellId(entry)
     if not spellid or spellid == 0 then return false end
+    local spellName = spellutils.GetResolvedSpellName(entry) or entry.spell
     local meId = mq.TLO.Me.ID()
     local selfKey = mq.TLO.Me.Name() or '__self__'
 
@@ -995,14 +996,14 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
     end
 
     if EvalID == meId or targethit == 'self' then
-        local present = mq.TLO.Me.Buff(entry.spell)() or mq.TLO.Me.Song(entry.spell)()
+        local present = mq.TLO.Me.Buff(spellName)() or mq.TLO.Me.Song(spellName)()
         if not present then
             spellutils.BuffSkipClear(selfKey, spellid)
             return false
         end
-        local dur = mq.TLO.Me.Buff(entry.spell).Duration()
-        if dur == nil and mq.TLO.Me.Song(entry.spell).Duration then
-            dur = mq.TLO.Me.Song(entry.spell).Duration()
+        local dur = mq.TLO.Me.Buff(spellName).Duration()
+        if dur == nil and mq.TLO.Me.Song(spellName).Duration then
+            dur = mq.TLO.Me.Song(spellName).Duration()
         end
         if dur ~= nil then return abortFromDuration(selfKey, dur) end
         spellutils.BuffSkipObservePresent(selfKey, spellid)
@@ -1011,7 +1012,7 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
 
     if targethit == 'mypet' or (mq.TLO.Me.Pet.ID() and EvalID == mq.TLO.Me.Pet.ID()) then
         local petKey = selfKey .. '#pet'
-        if mq.TLO.Me.Pet.Buff(entry.spell)() then
+        if mq.TLO.Me.Pet.Buff(spellName)() then
             spellutils.BuffSkipObservePresent(petKey, spellid)
             return true
         end
@@ -1058,8 +1059,8 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
     end
     -- Non-peer: use Target buffs when already populated (precast targeted them).
     if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.BuffsPopulated() then
-        local buffid = mq.TLO.Target.Buff(entry.spell).ID()
-        local buffdur = mq.TLO.Target.Buff(entry.spell).Duration() or 0
+        local buffid = mq.TLO.Target.Buff(spellName).ID()
+        local buffdur = mq.TLO.Target.Buff(spellName).Duration() or 0
         if buffid and buffid == spellid and buffdur >= BUFF_REFRESH_THRESHOLD_MS then
             spellutils.BuffSkipObserveDuration(peerName, spellid, buffdur)
             return true
@@ -1087,7 +1088,8 @@ function spellutils.TargetHasHealSpell(entry, spawnId)
     if not entry or not entry.spell or not spawnId or spawnId <= 0 then return false end
     local myid = mq.TLO.Me.ID()
     if spawnId == myid or spawnId == 1 then
-        return mq.TLO.Me.FindBuff(entry.spell)()
+        local spellName = spellutils.GetResolvedSpellName(entry) or entry.spell
+        return mq.TLO.Me.FindBuff(spellName)()
     end
     return false
 end
@@ -2302,8 +2304,7 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
     local rc = state.getRunconfig()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return end
-    local spell = string.lower(entry.spell or '')
-    local spellid = mq.TLO.Spell(spell).ID()
+    local spellid = spellutils.GetSpellId(entry)
     if sub == 'buff' and EvalID and spellid then
         spellutils.BuffSkipClearForCast(EvalID, spellid)
         if entry.spellicon then
@@ -2332,7 +2333,7 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
             if EvalID then
                 buffPresent = spawnHasDebuffSpell(resolvedName, EvalID)
                     or spawnHasDebuffSpell(entry.spell, EvalID)
-                local sid = spellutils.GetSpellId(entry)
+                local sid = spellid or spellutils.GetSpellId(entry)
                 if sid and not buffPresent then
                     buffPresent = spellutils.SpawnHasDebuffSpellId(sid, EvalID, 0)
                 end
