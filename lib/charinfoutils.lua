@@ -133,16 +133,10 @@ local function leaderContextFromCharinfoPeer(name, peer)
         return ctx
     end
 
+    -- Zone shortname alone is not enough: during zoning, charinfo can publish
+    -- new-zone X/Y/Z while shortname still matches the bot's zone. Require a
+    -- live PC spawn before sameZone; keep charinfo coords via merge.
     local ctx = baseContextFromCharinfo(name, peer)
-    if zoneMatch == true and ctx.x and ctx.y and ctx.z then
-        ctx.sameZone = true
-        return ctx
-    end
-    if zoneMatch == true and ctx.distance ~= nil then
-        ctx.sameZone = true
-        return ctx
-    end
-
     local spawnCtx = leaderContextFromSpawn(name)
     if spawnCtx then
         return mergeCharinfoWithSpawn(ctx, spawnCtx)
