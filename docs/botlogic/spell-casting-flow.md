@@ -4,7 +4,7 @@ Heal, buff, debuff, and cure hooks share the same casting pipeline in `lib/spell
 
 ## RunPhaseFirstSpellCheck
 
-The phase-first loop decides *what* to cast by iterating phases in order. **Heal / debuff / cure:** for each phase, targets then spells (first matching spell on that target). **Buff** (`options.spellFirst`): for each phase, spells then targets (finish one buff across all needy targets before the next buff). One cast per successful match; the loop resumes (or the bot is busy until the cast finishes).
+The phase-first loop decides *what* to cast by iterating phases in order. **Heal / debuff / cure:** for each phase, targets then spells (first matching spell on that target). **Buff** (`options.spellFirst`): for each phase, spells then targets — finish one buff across all needy targets (recast until nobody in the phase still needs it, e.g. Shrink until Height clears) before the next buff. One cast per successful match; the loop resumes (or the bot is busy until the cast finishes).
 
 ```mermaid
 flowchart TB
@@ -14,12 +14,12 @@ flowchart TB
     Cursor --> Loop[For each phase in phaseOrder]
     Loop --> SpellFirst{spellFirst?}
     SpellFirst -->|buff| SLoop[For each spell]
-    SLoop --> TLoopBuff[For each target]
+    SLoop --> TLoopBuff[Sweep targets until none need this spell]
     TLoopBuff --> CheckBuff[checkIfTargetNeedsSpells single spell]
     CheckBuff --> MatchBuff{needs and CastSpell?}
     MatchBuff -->|cast started| Done[return]
     MatchBuff -->|cast blocked| Park[park resume on spell/target]
-    MatchBuff -->|no need| NextBuff[Next target/spell/phase]
+    MatchBuff -->|no need| NextBuff[Next target; re-sweep or next spell]
     SpellFirst -->|heal/debuff/cure| TLoop[For each target]
     TLoop --> Spells[getSpellIndicesForPhase phase]
     Spells --> Check[checkIfTargetNeedsSpells: beforeCast, immuneCheck, PreCondCheck]
@@ -34,7 +34,7 @@ flowchart TB
 
 - **handleSpellCheckReentry(sub, options):** If we are already in a cast (CurSpell phase = cast_complete_pending_resist, casting, precast_wait_move, precast), it either waits, runs InterruptCheck, or completes the cast and calls clearCastingStateOrResume; returns true so the phase loop does not run.
 - **getResumeCursor(hookName):** If runState is `{hookName}_resume`, returns the payload (phase, targetIndex, spellIndex) so the loop can resume from that phase/target/spell after a cast completed.
-- **spellcheckResume:** When starting a cast, the hook passes `{ hook = hookName, phase, targetIndex, spellIndex }`. When the cast ends, clearCastingStateOrResume sets runState to `hookName_resume` with that payload so the next time the hook runs it continues from the same place. For buff spell-first, resume `targetIndex` is advanced past the recipient; a cast failure (e.g. gem cooling) parks resume on the same spell/target so later buffs are not tried yet.
+- **spellcheckResume:** When starting a cast, the hook passes `{ hook = hookName, phase, targetIndex, spellIndex }`. When the cast ends, clearCastingStateOrResume sets runState to `hookName_resume` with that payload so the next time the hook runs it continues from the same place. For buff spell-first, resume stays on the same `targetIndex` so multi-cast can finish that recipient before moving on; a cast failure (e.g. gem cooling) parks resume on the same spell/target so later buffs are not tried yet. After a full target sweep with no remaining need, the loop advances to the next spell index (with a safety cap on re-sweeps).
 
 Phase order and target types are per section. See [Spell targeting and bands](../spell-targeting-and-bands.md) for band semantics.
 

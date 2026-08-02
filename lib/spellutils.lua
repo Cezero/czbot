@@ -2778,8 +2778,12 @@ function spellutils.checkIfTargetNeedsSpells(sub, spellIndices, targetId, target
     return nil
 end
 
+--- Max target-list re-sweeps per spell index while exhausting need (e.g. multi-cast Shrink).
+local SPELL_FIRST_EXHAUST_MAX_SWEEPS = 32
+
 --- Thin phase-first orchestrator. phaseOrder = ordered list of phase names; getTargetsFn(phase, context) returns list of { id, targethit }; getSpellIndicesFn(phase) returns list of indices; targetNeedsSpellFn(spellIndex, targetId, targethit, context) returns EvalID, targethit or nil.
 --- options.spellFirst: when true, within each phase iterate spell indices before targets (buff only).
+--- spellFirst exhausts each spell index (recast until no phase target still needs it) before the next index.
 function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTargetsFn, getSpellIndicesFn,
                                             targetNeedsSpellFn, context, options)
     options = options or {}
@@ -2865,48 +2869,73 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
     if options.spellFirst then
         for phaseIdx = startPhaseIdx, #phaseOrder do
             local phase = phaseOrder[phaseIdx]
-            local targets = getTargetsFn(phase, context)
-            if targets and #targets > 0 then
-                local spellIndices = getSpellIndicesFn(phase, nil)
-                if spellIndices and #spellIndices > 0 then
-                    local spellPosStart = 1
-                    if phaseIdx == startPhaseIdx then
-                        for i, idx in ipairs(spellIndices) do
-                            if idx >= startSpellIdx then
-                                spellPosStart = i
-                                break
-                            end
+            local spellIndices = getSpellIndicesFn(phase, nil)
+            if spellIndices and #spellIndices > 0 then
+                local spellPosStart = 1
+                if phaseIdx == startPhaseIdx then
+                    for i, idx in ipairs(spellIndices) do
+                        if idx >= startSpellIdx then
+                            spellPosStart = i
+                            break
                         end
                     end
-                    for si = spellPosStart, #spellIndices do
-                        local spellIndex = spellIndices[si]
-                        local targetStart = (phaseIdx == startPhaseIdx and si == spellPosStart) and startTargetIdx or 1
+                end
+                for si = spellPosStart, #spellIndices do
+                    local spellIndex = spellIndices[si]
+                    local targetStart = (phaseIdx == startPhaseIdx and si == spellPosStart) and startTargetIdx or 1
+                    local exhausted = false
+                    for _sweep = 1, SPELL_FIRST_EXHAUST_MAX_SWEEPS do
+                        local targets = getTargetsFn(phase, context)
+                        if not targets or #targets == 0 then
+                            exhausted = true
+                            break
+                        end
+                        local anyNeeded = false
                         for targetIdx = targetStart, #targets do
                             local target = targets[targetIdx]
                             if target and target.id then
                                 local spellIndexOut, EvalID, targethit = spellutils.checkIfTargetNeedsSpells(sub,
                                     { spellIndex }, target.id, target.targethit, context, options, targetNeedsSpellFn,
                                     phase)
-                                -- Advance resume past recipient so next tick continues the buff sweep.
-                                local started, blocked = tryCastMatch(phase, targetIdx, spellIndexOut, EvalID, targethit,
-                                    targetIdx + 1)
-                                if started then
-                                    return false
-                                end
-                                -- Gem/busy/SpellCheck fail: park on this spell+target; do not fall through to next spell.
-                                if blocked then
-                                    if not options.noResume and spellIndexOut then
-                                        state.setRunState(state.RESUME_BY_HOOK[hookName], {
-                                            hook = hookName,
-                                            phase = phase,
-                                            targetIndex = targetIdx,
-                                            spellIndex = spellIndexOut,
-                                        })
+                                if spellIndexOut then
+                                    anyNeeded = true
+                                    -- Stay on same recipient so multi-cast (e.g. Shrink) finishes before next target.
+                                    local started, blocked = tryCastMatch(phase, targetIdx, spellIndexOut, EvalID,
+                                        targethit, targetIdx)
+                                    if started then
+                                        return false
                                     end
-                                    return false
+                                    -- Gem/busy/SpellCheck fail: park on this spell+target; do not fall through.
+                                    if blocked then
+                                        if not options.noResume and spellIndexOut then
+                                            state.setRunState(state.RESUME_BY_HOOK[hookName], {
+                                                hook = hookName,
+                                                phase = phase,
+                                                targetIndex = targetIdx,
+                                                spellIndex = spellIndexOut,
+                                            })
+                                        end
+                                        return false
+                                    end
                                 end
                             end
                         end
+                        -- Mid-list resume may have skipped earlier recipients still needing this spell.
+                        local resumedMidList = targetStart > 1
+                        targetStart = 1
+                        if not anyNeeded then
+                            if resumedMidList then
+                                -- Rescan from start before treating this spell index as done.
+                            else
+                                exhausted = true
+                                break
+                            end
+                        end
+                    end
+                    if not exhausted then
+                        -- Safety cap: move on rather than spin if need never clears.
+                        spellutils.BuffLog('spell-first exhaust cap phase=%s spellIndex=%s', tostring(phase),
+                            tostring(spellIndex))
                     end
                 end
             end
