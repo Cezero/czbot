@@ -553,21 +553,24 @@ end
 
 -- True when we are not in a pull state and chain-pull conditions say we should start a pull (and canStartPull passes).
 -- Only run canStartPull (and thus set pullHealerManaWait) when we might actually pull; when mob in camp and no chain pull, skip so status stays correct.
+-- chainpullcnt 0 disables chain pull (both count and HP). Live config is read each tick, so GUI/setvar changes apply immediately.
 local function shouldStartPull(rc)
     if state.getRunState() == state.STATES.pulling then return false end
     local mobCount = state.getMobCount()
     local engageId = rc.engageTargetId
+    local chainCnt = myconfig.pull.chainpullcnt or 0
+    local chainHp = myconfig.pull.chainpullhp or 0
 
     local wantToPull = false
     if mobCount > 0 and not engageId then
         wantToPull = false
     elseif mobCount == 0 and not engageId then
         wantToPull = true
-    elseif mobCount < (myconfig.pull.chainpullcnt or 0) then
+    elseif chainCnt > 0 and mobCount < chainCnt then
         wantToPull = true
-    elseif (mobCount <= myconfig.pull.chainpullcnt or myconfig.pull.chainpullcnt == 0) and engageId and mq.TLO.Spawn(engageId).PctHPs() then
-        local tempcnt = myconfig.pull.chainpullcnt == 0 and 1 or myconfig.pull.chainpullcnt
-        if tonumber(mq.TLO.Spawn(engageId).PctHPs()) <= myconfig.pull.chainpullhp and mobCount <= tempcnt then
+    elseif chainCnt > 0 and chainHp > 0 and mobCount <= chainCnt and engageId then
+        local pct = tonumber(mq.TLO.Spawn(engageId).PctHPs())
+        if pct and pct <= chainHp then
             wantToPull = true
         end
     end
@@ -946,11 +949,15 @@ local function isQueueEntryViable(spawnId, rc)
     return true
 end
 
---- Active pull target, queued backups, and already-tried candidates for this outing.
+--- Active pull target, queued backups, already-tried candidates, camp engage target, and
+--- XTarget hostiles present when the outing started (chain-pull camp mobs).
 --- Proximity add-abort must ignore these; only unknown nearby aggressives are adds.
 local function isKnownPullOutingSpawn(spawnId, rc)
     if not spawnId or spawnId <= 0 then return false end
     if spawnId == rc.pullAPTargetID then return true end
+    if spawnId == rc.engageTargetId then return true end
+    local xtAtStart = rc.pullXTargetIdsAtStart
+    if xtAtStart and xtAtStart[spawnId] then return true end
     local queue = rc.pullCandidateIds
     if queue then
         for _, qid in ipairs(queue) do
@@ -1120,11 +1127,19 @@ local function tickNavigating(rc, spawn)
         end
     end
 
-    -- Add-abort: HP dropped (we took damage) — unless our own pull target is already on XTarget, in
-    -- which case the damage is from the tagged pull target. Let the XTarget transition block above
-    -- turn that into a return-to-camp instead of misclassifying our successful tag as an add.
+    -- Add-abort: HP dropped (we took damage) — unless our own pull target is already on XTarget
+    -- (tagged pull) or pre-existing XTarget hostiles remain (chain-pull camp fight hitting us).
+    -- Fresh adds still abort via the XTarget delta check above / proximity Aggressive check below.
+    local xtAtStartHasHostiles = false
+    for id, _ in pairs(xtAtStart) do
+        if currentXt[id] then
+            xtAtStartHasHostiles = true
+            break
+        end
+    end
     if rc.pullNavStartHP and mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() < rc.pullNavStartHP
-        and not isSpawnOnXTarget(rc.pullAPTargetID) then
+        and not isSpawnOnXTarget(rc.pullAPTargetID)
+        and not xtAtStartHasHostiles then
         abortNavDuringPull(myconfig.pull.hunter and 'Add aggro / took damage, aborting hunt.' or 'Add aggro / took damage, returning to camp.')
         return
     end

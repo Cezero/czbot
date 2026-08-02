@@ -161,7 +161,7 @@ function M.draw()
     if cphCh then pull.chainpullhp = cphNew; runConfigLoaders() end
     ImGui.SameLine()
     ImGui.Text('Count')
-    if ImGui.IsItemHovered() then ImGui.SetTooltip('Allow chain-pulling when mob count is at or below this value.') end
+    if ImGui.IsItemHovered() then ImGui.SetTooltip('Allow chain-pulling when mob count is at or below this value. 0 disables chain pull (takes effect immediately).') end
     ImGui.SameLine()
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
     local cpc = pull.chainpullcnt or 0
