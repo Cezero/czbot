@@ -2095,11 +2095,19 @@ end
 -- Mirrors GetTankInfo but resolves from AssistName (and does not depend on MT).
 -- Optional assistpct updates the last-target cache when MA is actively assisting.
 -- Optional assistNameOverride uses that PC instead of configured AssistName.
--- Returns fromCache (5th value) when the target came from lastAssistTargetId (MA dead/hover).
+-- Returns fromCache (5th value) when the target came from lastAssistTargetId (MA dead/hover/no MA).
 function spellutils.GetAssistInfo(includeTarget, assistpct, assistNameOverride)
     local assistName = assistNameOverride or tankrole.GetAssistTargetName()
     if not assistName or assistName == '' then
-        state.getRunconfig().lastResolvedAssistName = nil
+        local rc = state.getRunconfig()
+        rc.lastResolvedAssistName = nil
+        if not includeTarget then return nil, nil, nil, nil end
+        -- No MA resolved (e.g. automatic + empty/unavailable ma_list): stay on last target.
+        clearLastAssistTargetIfDead(rc)
+        local cached = rc.lastAssistTargetId
+        if cached and utils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
+            return nil, nil, cached, mq.TLO.Spawn(cached).PctHPs(), true
+        end
         return nil, nil, nil, nil
     end
 

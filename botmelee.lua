@@ -872,7 +872,8 @@ function botmelee.retargetAndEngageAfterNotmatar(excludeId)
         else
             resolved = nil
         end
-    elseif assistName and assistName ~= '' then
+    else
+        -- Assist name or no MA: GetAssistInfo falls back to lastAssistTargetId.
         resolved = resolveMeleeAssistTarget(assistName, assistpct)
         if not usable(resolved) then resolved = nil end
         if resolved then via = 'assist' end
@@ -929,11 +930,14 @@ function botmelee.AdvCombat()
         id = resolveMaBotTarget(rc)
     elseif rc.attackCommandEngage and rc.engageTargetId then
         id = rc.engageTargetId
-    elseif myconfig.melee.offtank and assistName and mainTankName then
+    elseif myconfig.melee.offtank and mainTankName then
+        -- OT even with no MA: GetAssistInfo supplies lastAssistTargetId for primary.
         id = resolveOfftankTarget(assistName, mainTankName, assistpct)
-    elseif tankrole.AmIMainTank() and assistName and not tankrole.AmIMainAssist() then
+    elseif tankrole.AmIMainTank() and not tankrole.AmIMainAssist() then
+        -- MT follower: follow cached MA target when no live MA remains.
         id = resolveMtFollowTarget()
-    elseif assistName then
+    else
+        -- DPS assist, or no MA: GetAssistInfo falls back to lastAssistTargetId.
         id = resolveMeleeAssistTarget(assistName, assistpct)
     end
     if id and charm.isCharmSkipped(id, rc) then id = nil end
