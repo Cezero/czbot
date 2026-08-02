@@ -2368,6 +2368,12 @@ function spellutils.OnCastComplete(index, EvalID, targethit, sub)
         elseif not rc.CurSpell.resisted and EvalID then
             spellstates.IncrementConcussionCounter(EvalID)
         end
+        -- Class-agnostic: after notmatar, resume MA/assist melee when domelee (bard twist-once uses its own finish path).
+        if targethit == 'notmatar' and not rc.bardTwistOnceWait then
+            if botconfig.config.settings.domelee or state.isTravelAttackOverriding() then
+                require('botmelee').retargetAndEngageAfterNotmatar(EvalID)
+            end
+        end
     end
     if rc.MissedNote then rc.MissedNote = false end
 end

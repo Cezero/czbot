@@ -1,5 +1,6 @@
 -- Combat state reset: stick off, attack off, optional pet back, optional target clear.
 -- Used by botmelee, botmove, and botpull to avoid duplicated logic.
+-- Keep free of charm/spellutils/botmelee so botmove can require this without cycles.
 
 local mq = require('mq')
 local state = require('lib.state')

@@ -252,6 +252,14 @@ function spawnutils.shouldChaseOutsideCamp(rc)
     return spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id))
 end
 
+--- True when id is the MA or MT primary target (offtank should not sticky-preserve these as "adds").
+function spawnutils.isOfftankPrimaryTarget(id, maTarId, mtTarId)
+    if not id then return false end
+    if maTarId and id == maTarId then return true end
+    if mtTarId and id == mtTarId then return true end
+    return false
+end
+
 --- True when an alive engageTargetId should not be cleared just because it left MobList.
 function spawnutils.shouldPreserveStickyEngage(rc)
     rc = rc or state.getRunconfig()
@@ -269,20 +277,23 @@ function spawnutils.shouldPreserveStickyEngage(rc)
     end
     if botconfig.config.melee.offtank and not tankrole.AmIMainAssist() then
         local spellutils = require('lib.spellutils')
-        local botmelee = require('botmelee')
         local _, _, maTarId = spellutils.GetAssistInfo(true)
         local _, _, mtTarId = spellutils.GetTankInfo(true)
         if maTarId == 0 then maTarId = nil end
         if mtTarId == 0 then mtTarId = nil end
-        if not botmelee.isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId) then
+        if not spawnutils.isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId) then
             return true
         end
     end
     local assistName = tankrole.GetAssistTargetName()
     if assistName and assistName ~= '' and not tankrole.AmIMainAssist() then
-        local czactor = require('lib.czactor')
-        local actorTar = czactor.getMaEngagedSpawnId(assistName)
-        if actorTar and actorTar == rc.engageTargetId then return true end
+        local eng = rc.MaActorEngaged
+        if eng and eng.spawnId and eng.spawnId == rc.engageTargetId then
+            local maName = eng.maName
+            if maName and maName:lower() == assistName:lower() then
+                return true
+            end
+        end
     end
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == rc.engageTargetId then return true end

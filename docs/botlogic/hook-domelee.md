@@ -44,6 +44,7 @@ flowchart TB
 - **Separate MT (resolveMtFollowTarget):** Follow MA immediately (no assistpct). **`mtSticky`:** keep `engageTargetId` once set (within camp pin when leash on); otherwise switch with MA.
 - **Offtank (resolveOfftankTarget):** If MT and MA same target, pick Nth add; else MA target. Sticks on engaged add or MA off-target until it dies (no assistpct fallback to main mob).
 - **DPS (resolveMeleeAssistTarget):** Sync to MA at **assistpct** (and MobList/acleash when leash on). **`ma_engaged`** does not bypass these gates; it is awareness/fallback identity for mez/notmatar only.
+- **notmatar suspend/resume (all `domelee` classes):** While a notmatar debuff is in progress (`CurSpell` debuff/`notmatar`, or BRD `bardTwistOnceWait`), doMelee skips AdvCombat so melee does not steal Target mid-cast. On completion, **`retargetAndEngageAfterNotmatar`** resolves the MA/assist kill target with normal role gates (no camp freepick) and re-engages when those gates pass.
 - **engageTarget / disengageCombat:** `disengageCombat` is a no-op when not melee-engaged (`state.isMeleeEngaged`); stick off, attack off, pet back, clear engage state when engaged and camp/target resolution says disengage.
 
 Non-MT/MA: minmana gate — only run AdvCombat if minmana is 0 or current mana above minmana.

@@ -151,9 +151,9 @@ For **BRD**, **notmatar** debuffs (mez or any add-only debuff) do **not** use a 
 
 1. Turns attack off and targets the add.
 2. Runs **combat** twist as the “restore” list, then `/twist once <gem>` for the debuff song.
-3. Waits for the cast to finish (MQ2Twist sings once then auto-resumes combat twist).
+3. Waits for the cast to finish (MQ2Twist sings once then auto-resumes combat twist). `doMelee` is suspended while the twist-once wait is active so melee does not steal Target mid-song.
 4. Updates debuff state and optionally sets a **re-apply timer** (see below).
-5. Re-targets the MA.
+5. Re-targets the MA/assist kill target via the shared **`retargetAndEngageAfterNotmatar`** path (same as other `domelee` classes after notmatar).
 
 **Twist-once matar** debuffs use the same twist-once flow (steps 2–4) but do not turn attack off and do not re-target the MA afterward. See [matar debuffs](#matar-debuffs-ma-target) above.
 
@@ -169,8 +169,7 @@ The re-apply timer is set **whenever** a twist-once wait ends (when the bot stop
 
 ## Mez and melee
 
-When mezzing a **notmatar** (an add), the bot turns attack off, targets the add, and uses the twist-once flow. After the cast it re-targets the MA and re-engages melee on the MA target when **assistpct** is met (including when the add is still alive but mez failed or the mob is immune). assistpct gating is unchanged: the bard does not stick while the MA target is above **melee.assistpct**.
-
+When mezzing a **notmatar** (an add), the bot turns attack off, targets the add, and uses the twist-once flow. After the cast it re-targets the MA and re-engages melee on the MA target when normal assist/MA gates pass (**assistpct**, MobList/acleash when leash on) — including when the add is still alive but mez failed or the mob is immune. There is no bard-only camp freepick: if the MA is out of zone or the kill target is above **melee.assistpct**, the bard waits like other DPS.
 ---
 
 ## Debuff completion

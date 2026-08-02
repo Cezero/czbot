@@ -1,6 +1,7 @@
 ﻿local mq = require('mq')
 local botconfig = require('lib.config')
 local combat = require('lib.combat')
+local engage = require('lib.engage')
 local state = require('lib.state')
 local bothooks = require('lib.bothooks')
 local targeting = require('lib.targeting')
@@ -13,13 +14,12 @@ local charm = require('lib.charm')
 local spellstates = require('lib.spellstates')
 local spellutils = require('lib.spellutils')
 local protectcasters = require('lib.protectcasters')
+local czactor = require('lib.czactor')
 local log = require('lib.log')
 local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
 local botmelee = {}
 
-local _mobprobGraceEngageId = nil
-local DEFAULT_MOBPROB_ENGAGE_GRACE_MS = 1000
 local _lastEngageStickCmd = nil
 local _engageLosBlocked = false
 local _engageLosLastLogTime = 0
@@ -39,28 +39,14 @@ end
 function botmelee.LoadMeleeConfig()
 end
 
-local function getMobprobEngageGraceMs()
-    local ms = tonumber(myconfig.melee and myconfig.melee.mobprobEngageGraceMs)
-    if ms == nil then return DEFAULT_MOBPROB_ENGAGE_GRACE_MS end
-    if ms < 0 then return 0 end
-    return ms
-end
-
---- Suppress MobProb /nav briefly after acquiring a new engage target (avoids early swing LoS/range spam).
+--- Suppress MobProb /nav briefly after acquiring a new engage target.
 ---@param engageId number|nil
 function botmelee.armMobprobEngageGrace(engageId)
-    if state.getRunconfig().domobprob ~= true then return end
-    if not engageId or engageId <= 0 then return end
-    local graceMs = getMobprobEngageGraceMs()
-    if graceMs <= 0 then return end
-    if engageId == _mobprobGraceEngageId then return end
-    _mobprobGraceEngageId = engageId
-    state.getRunconfig().mobprobEngageGraceUntil = mq.gettime() + graceMs
+    engage.armMobprobEngageGrace(engageId)
 end
 
 function botmelee.clearMobprobEngageGrace()
-    _mobprobGraceEngageId = nil
-    state.getRunconfig().mobprobEngageGraceUntil = 0
+    engage.clearMobprobEngageGrace()
 end
 
 --- Apply /cz attack engagement state (command issuer or peer receive).
@@ -68,23 +54,11 @@ end
 ---@return boolean success
 ---@return string|nil mobName
 function botmelee.applyAttackCommandEngage(spawnId)
-    if not spawnId or spawnId <= 0 then return false, nil end
-    local sp = mq.TLO.Spawn(spawnId)
-    if not sp or not sp.ID() or sp.ID() == 0 then return false, nil end
-    if utils.isProtectedSpawn(sp) then return false, nil end
-    if not spawnutils.isAliveEngageSpawn(sp) then return false, nil end
-    local rc = state.getRunconfig()
-    if charm.isCharmSkipped(spawnId, rc) then return false, nil end
-    charm.releaseCharmTarget(spawnId, rc)
-    local prevEngageId = rc.engageTargetId
-    local isNewEngage = not prevEngageId or prevEngageId ~= spawnId
-    rc.engageTargetId = spawnId
-    rc.attackCommandEngage = true
-    if isNewEngage then
-        botmove.onFollowEngagementStarted(rc)
+    local ok, mobName, isNewEngage = engage.applyAttackCommandEngage(spawnId)
+    if ok and isNewEngage then
+        botmove.onFollowEngagementStarted(state.getRunconfig())
     end
-    botmelee.armMobprobEngageGrace(spawnId)
-    return true, sp.CleanName() or tostring(spawnId)
+    return ok, mobName
 end
 
 botconfig.RegisterConfigLoader(function() if botconfig.config.settings.domelee then botmelee.LoadMeleeConfig() end end)
@@ -376,14 +350,11 @@ local function hasAliveEngageTarget(rc)
 end
 
 local function isOfftankPrimaryTarget(id, maTarId, mtTarId)
-    if not id then return false end
-    if maTarId and id == maTarId then return true end
-    if mtTarId and id == mtTarId then return true end
-    return false
+    return spawnutils.isOfftankPrimaryTarget(id, maTarId, mtTarId)
 end
 
 function botmelee.isOfftankPrimaryTarget(id, maTarId, mtTarId)
-    return isOfftankPrimaryTarget(id, maTarId, mtTarId)
+    return spawnutils.isOfftankPrimaryTarget(id, maTarId, mtTarId)
 end
 
 --- True when this bot is an offtank with a live melee engage (add or MA split-target).
@@ -405,7 +376,6 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     end
     local samePrimary = (not maTarId or not mtTarId or mtTarId == maTarId)
     if samePrimary then
-        local czactor = require('lib.czactor')
         local actarid = czactor.pickOfftankAdd(rc.MobList, maTarId, mtTarId)
         if actarid then
             if actarid ~= mq.TLO.Target.ID() then
@@ -496,46 +466,6 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
     local hp = maTarHp or mq.TLO.Spawn(maTarId).PctHPs()
     if isAssistTargetEngageable(maTarId, rc, assistName, hp, assistpct) then
         return maTarId
-    end
-    return nil
-end
-
---- BRD fallback when resolveMeleeAssistTarget returns nil but camp still has mobs.
---- excludeId: optional spawn to skip (e.g. mez add) in keepId / MobList selection.
-local function resolveBardCampEngageTarget(rc, assistName, assistpct, excludeId)
-    local function skipId(sid)
-        return excludeId and sid == excludeId
-    end
-    if assistName and assistName ~= '' then
-        local id = resolveMeleeAssistTarget(assistName, assistpct)
-        if id and not skipId(id) then return id end
-        local czactor = require('lib.czactor')
-        local actorId = czactor.getMaEngagedSpawnId(assistName)
-        if actorId and actorId > 0 and not skipId(actorId)
-            and isAssistTargetEngageable(actorId, rc, assistName, nil, assistpct) then
-            return actorId
-        end
-    end
-    local keepId = rc.engageTargetId
-    if keepId and keepId > 0 and not skipId(keepId) and not charm.isCharmSkipped(keepId, rc) then
-        local sp = mq.TLO.Spawn(keepId)
-        if spawnutils.isAliveEngageSpawn(sp) and spawnutils.isNpcEngageTarget(sp)
-            and botmelee.matarTargetPassesAssistEngageGate(keepId, rc) then
-            return keepId
-        end
-    end
-    for _, v in ipairs(rc.MobList or {}) do
-        local sid = v.ID and v.ID()
-        if sid and not skipId(sid) and not charm.isCharmSkipped(sid, rc) and spawnutils.isNpcEngageTarget(v)
-            and botmelee.matarTargetPassesAssistEngageGate(sid, rc) then
-            return sid
-        end
-    end
-    for _, v in ipairs(rc.MobList or {}) do
-        local sid = v.ID and v.ID()
-        if sid and not skipId(sid) and not charm.isCharmSkipped(sid, rc) and spawnutils.isNpcEngageTarget(v) then
-            return sid
-        end
     end
     return nil
 end
@@ -748,10 +678,10 @@ function botmelee.disengageCombat(reason)
     _engageLosEngageId = nil
     botmelee.clearMobprobEngageGrace()
     if tankrole.AmIMainAssist() and shouldBroadcastMaDisengage(reason, engageId) then
-        require('lib.czactor').publishMaDisengage(reason or 'disengage')
+        czactor.publishMaDisengage(reason or 'disengage')
     end
     if myconfig.melee.offtank and engageId then
-        require('lib.czactor').publishOtRelease(engageId, reason or 'disengage')
+        czactor.publishOtRelease(engageId, reason or 'disengage')
     end
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
@@ -904,34 +834,53 @@ local function engageTarget()
     end
 end
 
---- Resolve MA/camp engage target after bard notmatar mez, then stick/attack via engageTarget.
---- excludeId: mez spawn to skip in MobList fallback (nil = no exclude).
-function botmelee.retargetAndEngageAfterBardMez(excludeId)
+--- After notmatar (any class): resolve back to MA/assist target with normal gates, then stick/attack.
+--- excludeId: the add that was just debuffed — never resume on it; do not freepick camp adds.
+function botmelee.retargetAndEngageAfterNotmatar(excludeId)
     local rc = state.getRunconfig()
+    if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
+        return nil
+    end
+    if excludeId and rc.engageTargetId == excludeId then
+        rc.engageTargetId = nil
+    end
+    if excludeId and rc.lastAssistTargetId == excludeId then
+        rc.lastAssistTargetId = nil
+    end
+    if excludeId and mq.TLO.Target.ID() == excludeId then
+        mq.cmd('/squelch /mqtarget clear')
+    end
+
     local assistpct = (myconfig.melee and myconfig.melee.assistpct) or 99
     local assistName = tankrole.GetAssistTargetName()
     local resolved = nil
     local via = 'none'
-    local gateOk = false
-    local maHp = nil
-    local _, _, maTargetId = spellutils.GetAssistInfo(true, assistpct)
-    if maTargetId and maTargetId ~= 0 and maTargetId ~= excludeId then
-        gateOk = botmelee.matarTargetPassesAssistEngageGate(maTargetId, rc)
-        if gateOk then
-            resolved = maTargetId
-            via = 'ma_assist'
-        else
-            maHp = mq.TLO.Spawn(maTargetId).PctHPs()
+
+    local function usable(id)
+        return id and id > 0 and id ~= excludeId
+    end
+
+    if tankrole.AmIMainAssist()
+        or (spawnutils.isRoamPullMode(rc) and (not assistName or assistName == '')) then
+        resolved = resolveMaBotTarget(rc)
+        if resolved == excludeId then
+            rc.engageTargetId = nil
+            resolved = resolveMaBotTarget(rc)
         end
+        if usable(resolved) then
+            via = 'ma'
+        else
+            resolved = nil
+        end
+    elseif assistName and assistName ~= '' then
+        resolved = resolveMeleeAssistTarget(assistName, assistpct)
+        if not usable(resolved) then resolved = nil end
+        if resolved then via = 'assist' end
     end
-    if not resolved then
-        resolved = resolveBardCampEngageTarget(rc, assistName, assistpct, excludeId)
-        if resolved then via = 'camp_fallback' end
-    end
+
     spellutils.MezLog(
-        'post-mez resolve: via=%s maId=%s gate=%s assistpct=%s maHp=%s excludeId=%s resolved=%s',
-        via, tostring(maTargetId), tostring(gateOk), tostring(assistpct), tostring(maHp),
-        tostring(excludeId), tostring(resolved))
+        'post-notmatar resolve: via=%s excludeId=%s resolved=%s assistpct=%s',
+        via, tostring(excludeId), tostring(resolved), tostring(assistpct))
     if not resolved then
         return nil
     end
@@ -941,7 +890,7 @@ function botmelee.retargetAndEngageAfterBardMez(excludeId)
     engageTarget()
     local stickTarget = mq.TLO.Stick.StickTarget and mq.TLO.Stick.StickTarget() or nil
     spellutils.MezLog(
-        'post-mez engage outcome: engageId=%s targetId=%s Combat=%s Stick=%s StickTarget=%s',
+        'post-notmatar engage: engageId=%s targetId=%s Combat=%s Stick=%s StickTarget=%s',
         tostring(rc.engageTargetId), tostring(mq.TLO.Target.ID()),
         tostring(mq.TLO.Me.Combat() and true or false),
         tostring(mq.TLO.Stick.Active() and true or false),
@@ -1016,37 +965,26 @@ function botmelee.AdvCombat()
             end
         end
         if tankrole.AmIMainAssist() then
-            local czactor = require('lib.czactor')
             -- One ma_engaged per new spawn id; peers resolve ongoing target via Charinfo.
             if isNewEngage then
                 czactor.publishMaEngaged(rc.engageTargetId, name)
             end
         end
         engageTarget()
-    elseif mq.TLO.Me.Class.ShortName() == 'BRD' and rc.MobList[1] then
-        local resolved = resolveBardCampEngageTarget(rc, assistName, assistpct)
-        if resolved then
-            engageBranch = 'brd_fallback'
-            rc.engageTargetId = resolved
-            engageTarget()
-        else
-            local keepId = rc.engageTargetId
-            if keepId and botmelee.matarTargetPassesAssistEngageGate(keepId, rc) then
-                engageBranch = 'brd_keep'
-                engageTarget()
-            elseif keepId and not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(keepId)) then
-                rc.engageTargetId = nil
-            end
-        end
     else
-        disengageCombat('no_engage_target')
+        -- doMelee sets runState=melee before AdvCombat; isMeleeEngaged is then always true.
+        -- Only full-disengage when there is real combat to release — otherwise quietly clear idle melee.
+        if rc.engageTargetId or rc.attackCommandEngage or rc.allMezzedEngageId
+            or mq.TLO.Me.Combat() or mq.TLO.Stick.Active() or mq.TLO.Me.Pet.Aggressive() then
+            disengageCombat('no_engage_target')
+        elseif state.getRunState() == state.STATES.melee then
+            state.clearRunState()
+        end
     end
-    if spellutils.IsMezDebug() and mq.TLO.Me.Class.ShortName() == 'BRD'
-        and rc.MobList[1] and not mq.TLO.Me.Combat() and not mq.TLO.Stick.Active() then
-        local campResolved = resolveBardCampEngageTarget(rc, assistName, assistpct)
+    if spellutils.IsMezDebug() and rc.MobList[1] and not mq.TLO.Me.Combat() and not mq.TLO.Stick.Active() then
         spellutils.DbgMezTrace(
-            'AdvCombat idle: assistId=%s campResolved=%s engageId=%s branch=%s',
-            tostring(id), tostring(campResolved), tostring(rc.engageTargetId), engageBranch)
+            'AdvCombat idle: assistId=%s engageId=%s branch=%s',
+            tostring(id), tostring(rc.engageTargetId), engageBranch)
     end
     if rc.engageTargetId then
         spawnutils.mergeEngageTargetIntoMobList(rc)
@@ -1091,11 +1029,17 @@ function botmelee.getHookFn(name)
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             local rc = state.getRunconfig()
             if rc.followCatchUp then return end
-            if rc.bardTwistOnceWait and mq.TLO.Me.Class.ShortName() == 'BRD' then
+            -- Suspend melee engage while notmatar is in progress (any class): twist-once wait or CurSpell.
+            local cs = rc.CurSpell
+            local notmatarBusy = (rc.bardTwistOnceWait ~= nil)
+                or (cs and cs.sub == 'debuff' and cs.targethit == 'notmatar'
+                    and cs.phase and cs.phase ~= '' )
+            if notmatarBusy and (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
                 local w = rc.bardTwistOnceWait
                 spellutils.DbgMezTrace(
-                    'doMelee skipped: bardTwistOnceWait evalId=%s engageId=%s',
-                    tostring(w and w.EvalID), tostring(rc.engageTargetId))
+                    'doMelee skipped: notmatar in progress evalId=%s engageId=%s phase=%s',
+                    tostring((w and w.EvalID) or (cs and cs.target)), tostring(rc.engageTargetId),
+                    tostring((cs and cs.phase) or (w and 'twist_once') or '?'))
                 return
             end
             -- Pulling intentionally operates outside camp pin; disengage here fights botpull stick/nav.
@@ -1148,7 +1092,5 @@ function botmelee.getHookFn(name)
     end
     return nil
 end
-
-botmelee.resolveBardCampEngageTarget = resolveBardCampEngageTarget
 
 return botmelee

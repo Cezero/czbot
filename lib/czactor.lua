@@ -10,6 +10,9 @@ local czactor_dispatch = require('lib.czactor_dispatch')
 local auto_ma_mt = require('lib.auto_ma_mt')
 local tankrole = require('lib.tankrole')
 local tickprof = require('lib.tickprof')
+local engage = require('lib.engage')
+local botmove = require('botmove')
+local spawnutils = require('lib.spawnutils')
 
 local czactor = {}
 
@@ -537,7 +540,7 @@ local function isAliveEngageSpawnId(spawnId)
     if not spawnId or spawnId <= 0 then return false end
     local sp = mq.TLO.Spawn(spawnId)
     if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() == 'Corpse' then return false end
-    return require('lib.spawnutils').isAliveEngageSpawn(sp)
+    return spawnutils.isAliveEngageSpawn(sp)
 end
 
 local function applyMaEngaged(content, sender)
@@ -561,7 +564,7 @@ local function applyMaEngaged(content, sender)
         if rc.attackCommandEngage and rc.engageTargetId ~= spawnId then
             rc.attackCommandEngage = nil
         end
-        require('botmove').onFollowEngagementStarted(rc)
+        botmove.onFollowEngagementStarted(rc)
     end
 end
 
@@ -590,9 +593,11 @@ local function applyAttackEngage(content, sender)
     if not czactor.matchesBroadcastScope(content.scope, issuer) then return end
     local spawnId = content.spawnId
     if not spawnId or spawnId <= 0 then return end
-    local botmelee = require('botmelee')
-    local ok, mobName = botmelee.applyAttackCommandEngage(spawnId)
+    local ok, mobName, isNewEngage = engage.applyAttackCommandEngage(spawnId)
     if ok then
+        if isNewEngage then
+            botmove.onFollowEngagementStarted(state.getRunconfig())
+        end
         log.say('[Attack] engaging %s (%s) from %s', mobName or '?', tostring(spawnId), sender)
     end
 end
@@ -911,7 +916,6 @@ end
 local function handleLeaderCampHere(content)
     if not czactor.matchesBroadcastScope(content.scope, content.leader) then return end
     local follow = require('lib.follow')
-    local botmove = require('botmove')
     local botpull = require('botpull')
     local rc = state.getRunconfig()
     follow.StopFollow('command')
@@ -929,7 +933,7 @@ local function handleLeaderCampHereOff(content)
     if not czactor.matchesBroadcastScope(content.scope, content.leader) then return end
     require('lib.follow').StopFollow('command')
     local rc = state.getRunconfig()
-    if rc.campstatus then require('botmove').MakeCamp('off') end
+    if rc.campstatus then botmove.MakeCamp('off') end
 end
 
 processMessage = function(inbound)
@@ -1032,7 +1036,7 @@ function czactor.tick()
                 local sid = rc.OtMyClaim.spawnId
                 local sp = mq.TLO.Spawn(sid)
                 if not sp or not sp.ID() or sp.ID() == 0 or sp.Type() == 'Corpse'
-                    or not require('lib.spawnutils').isAliveEngageSpawn(sp) then
+                    or not spawnutils.isAliveEngageSpawn(sp) then
                     czactor.publishOtRelease(sid, 'dead')
                 end
             end

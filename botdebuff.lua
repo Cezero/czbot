@@ -772,9 +772,9 @@ local function DebuffOnBeforeCast(i, EvalID, targethit)
     return true
 end
 
---- Re-target MA/camp after bard notmatar mez and restore stick/attack (botmelee owns the path).
-local function retargetMaTargetAfterBardMez(excludeId)
-    return botmelee.retargetAndEngageAfterBardMez(excludeId)
+--- Re-target MA/assist after notmatar and restore stick/attack when domelee (botmelee owns the path).
+local function retargetMaTargetAfterNotmatar(excludeId)
+    return botmelee.retargetAndEngageAfterNotmatar(excludeId)
 end
 
 local function updateBardTwistOnceDebuffState(entry, evalId)
@@ -937,7 +937,7 @@ local function finishBardTwistOnceWait(rc, w, opts)
         rc.lastAssistTargetId = nil
     end
     if w.targethit == 'notmatar' then
-        retargetMaTargetAfterBardMez(w.EvalID)
+        retargetMaTargetAfterNotmatar(w.EvalID)
     end
     -- Only camp-empty ends the fight; mez-target death must not ResetCombatState mid-pull.
     local fightEnded = state.getMobCount() <= 0
@@ -1081,7 +1081,7 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
         local function skipAlreadyMezzed()
             log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
             spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
-            retargetMaTargetAfterBardMez(EvalID)
+            retargetMaTargetAfterNotmatar(EvalID)
             bardtwist.RestoreCombatTwistAfterTwistOnce()
             return true
         end
