@@ -545,6 +545,26 @@ local function debuffGetTargetsForPhase(phase, context)
                     end
                 end
             end
+            if botmelee.isActivelyOfftanking() then
+                local engageId = state.getRunconfig().engageTargetId
+                if engageId and engageId > 0 and engageId ~= maTargetId and engageId ~= mtTargetId
+                    and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(engageId)) then
+                    local already = false
+                    for _, t in ipairs(out) do
+                        if t.id == engageId then already = true break end
+                    end
+                    if not already then
+                        if wantNamed then
+                            local sp = mq.TLO.Spawn(engageId)
+                            if sp and sp.Named() then
+                                out[#out + 1] = { id = engageId, targethit = 'named' }
+                            end
+                        elseif wantMatar then
+                            out[#out + 1] = { id = engageId, targethit = 'matar' }
+                        end
+                    end
+                end
+            end
         end
         if wantNotmatar then
             local seen = {}
@@ -572,14 +592,23 @@ local function debuffGetTargetsForPhase(phase, context)
     local maTargetId = context.maTargetId
     local mtTargetId = context.mtTargetId
     if phase == 'matar' then
-        -- Suspend matar/named entirely when MA has no live target.
-        if not maTargetId or maTargetId <= 0 then return out end
-        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTargetId)) then
-            out[#out + 1] = { id = maTargetId, targethit = 'matar' }
+        -- Suspend matar when MA has no live target (unless this bot is actively offtanking an add).
+        local function addMatarId(id)
+            if not id or id <= 0 then return end
+            for _, t in ipairs(out) do
+                if t.id == id then return end
+            end
+            if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id)) then
+                out[#out + 1] = { id = id, targethit = 'matar' }
+            end
         end
-        if mtTargetId and mtTargetId > 0 and mtTargetId ~= maTargetId
-            and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(mtTargetId)) then
-            out[#out + 1] = { id = mtTargetId, targethit = 'matar' }
+        if maTargetId and maTargetId > 0 then
+            addMatarId(maTargetId)
+            addMatarId(mtTargetId)
+        end
+        -- onlyMT matar needs the OT engage id in the phase list (Eval returns engage, not MA/MT).
+        if botmelee.isActivelyOfftanking() then
+            addMatarId(state.getRunconfig().engageTargetId)
         end
         return out
     end
@@ -618,13 +647,22 @@ local function debuffGetTargetsForPhase(phase, context)
         return out
     end
     if phase == 'named' then
-        -- Suspend named entirely when MA has no target.
-        if not maTargetId or maTargetId <= 0 then return out end
-        local ids = { maTargetId }
-        if mtTargetId and mtTargetId > 0 and mtTargetId ~= maTargetId then ids[#ids + 1] = mtTargetId end
-        for _, id in ipairs(ids) do
+        local function addNamedId(id)
+            if not id or id <= 0 then return end
+            for _, t in ipairs(out) do
+                if t.id == id then return end
+            end
             local sp = mq.TLO.Spawn(id)
-            if sp and sp.ID() == id and sp.Named() then out[#out + 1] = { id = id, targethit = 'named' } end
+            if sp and sp.ID() == id and sp.Named() then
+                out[#out + 1] = { id = id, targethit = 'named' }
+            end
+        end
+        if maTargetId and maTargetId > 0 then
+            addNamedId(maTargetId)
+            addNamedId(mtTargetId)
+        end
+        if botmelee.isActivelyOfftanking() then
+            addNamedId(state.getRunconfig().engageTargetId)
         end
         return out
     end
