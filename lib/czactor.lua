@@ -721,11 +721,34 @@ local function pruneOtClaims(rc)
     end
 end
 
-local function setOtClaim(spawnId, character, ts, zone)
+--- True when challenger beats incumbent (first-claimer wins; equal claimedAt → lower name).
+local function otClaimBeats(challengerAt, challengerName, incumbentAt, incumbentName)
+    challengerAt = challengerAt or 0
+    incumbentAt = incumbentAt or 0
+    if challengerAt < incumbentAt then return true end
+    if challengerAt > incumbentAt then return false end
+    return (challengerName or ''):lower() < (incumbentName or ''):lower()
+end
+
+--- claimedAt is immutable for an owner; ts is last heartbeat for TTL.
+local function setOtClaim(spawnId, character, ts, zone, claimedAt)
     if not spawnId or spawnId <= 0 or not character then return end
     local rc = state.getRunconfig()
     ensureRunconfigFields(rc)
-    rc.OtClaims[spawnId] = { character = character, ts = ts or mq.gettime(), zone = zone or myZone() }
+    local nowTs = ts or mq.gettime()
+    local existing = rc.OtClaims[spawnId]
+    local keepClaimedAt
+    if existing and existing.character == character then
+        keepClaimedAt = existing.claimedAt or claimedAt or existing.ts or nowTs
+    else
+        keepClaimedAt = claimedAt or nowTs
+    end
+    rc.OtClaims[spawnId] = {
+        character = character,
+        ts = nowTs,
+        claimedAt = keepClaimedAt,
+        zone = zone or myZone(),
+    }
 end
 
 local function pruneRezClaims(rc)
@@ -771,13 +794,14 @@ function czactor.publishOtClaim(spawnId, mobName, primaryId)
     if not spawnId or spawnId <= 0 then return end
     local rc = state.getRunconfig()
     local ts = mq.gettime()
-    rc.OtMyClaim = { spawnId = spawnId, ts = ts }
+    rc.OtMyClaim = { spawnId = spawnId, ts = ts, claimedAt = ts }
     czactor.broadcast(envelope('ot_claim', {
         spawnId = spawnId,
         mobName = mobName,
         primaryId = primaryId,
+        claimedAt = ts,
     }))
-    setOtClaim(spawnId, myName(), ts, myZone())
+    setOtClaim(spawnId, myName(), ts, myZone(), ts)
 end
 
 function czactor.publishOtRelease(spawnId, reason)
@@ -786,7 +810,11 @@ function czactor.publishOtRelease(spawnId, reason)
     if rc.OtMyClaim and rc.OtMyClaim.spawnId == spawnId then
         rc.OtMyClaim = nil
     end
-    rc.OtClaims[spawnId] = nil
+    -- Only clear our own table entry (do not wipe a peer who won first-claim).
+    local claim = rc.OtClaims and rc.OtClaims[spawnId]
+    if claim and claim.character == myName() then
+        rc.OtClaims[spawnId] = nil
+    end
     czactor.broadcast(envelope('ot_release', { spawnId = spawnId, reason = reason or 'disengage' }))
 end
 
@@ -798,32 +826,69 @@ function czactor.releaseMyOtClaim(reason)
 end
 
 function czactor.isSpawnClaimedByOther(spawnId)
+    if not spawnId or spawnId <= 0 then return false end
     local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    pruneOtClaims(rc)
     local claim = rc.OtClaims and rc.OtClaims[spawnId]
     if not claim then return false end
     return claim.character ~= myName()
 end
 
-function czactor.canClaimSpawn(spawnId, myTs)
+--- First-claimer wins: cannot steal a live peer claim.
+function czactor.canClaimSpawn(spawnId, _myTs)
     local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    pruneOtClaims(rc)
     local claim = rc.OtClaims and rc.OtClaims[spawnId]
     if not claim then return true end
     if claim.character == myName() then return true end
-    myTs = myTs or mq.gettime()
-    return myTs > (claim.ts or 0)
+    return false
 end
 
-local function handleOtClaimYield(spawnId, otherChar, otherTs)
+--- Yield only when peer claimed first (or equal claimedAt + lower name).
+local function handleOtClaimYield(spawnId, otherChar, otherClaimedAt)
     local rc = state.getRunconfig()
     if not rc.OtMyClaim or rc.OtMyClaim.spawnId ~= spawnId then return end
-    if rc.OtMyClaim.ts and otherTs and otherTs <= rc.OtMyClaim.ts then return end
     if otherChar == myName() then return end
+    local myClaimedAt = rc.OtMyClaim.claimedAt or rc.OtMyClaim.ts or 0
+    if not otClaimBeats(otherClaimedAt, otherChar, myClaimedAt, myName()) then
+        return
+    end
     rc.OtMyClaim = nil
     czactor.publishOtRelease(spawnId, 'yield')
     if rc.engageTargetId == spawnId then
         rc.engageTargetId = nil
         rc.attackCommandEngage = nil
     end
+end
+
+--- Apply inbound ot_claim / ot_heartbeat with first-claimer ownership rules.
+local function applyOtClaimMessage(spawnId, sender, content)
+    local rc = state.getRunconfig()
+    ensureRunconfigFields(rc)
+    pruneOtClaims(rc)
+    local now = mq.gettime()
+    local incomingTs = content.ts or now
+    local incomingClaimedAt = content.claimedAt or content.ts or incomingTs
+    local existing = rc.OtClaims[spawnId]
+
+    if existing and existing.character == sender then
+        setOtClaim(spawnId, sender, incomingTs, content.zone, existing.claimedAt or incomingClaimedAt)
+        return
+    end
+
+    if existing and existing.character ~= sender then
+        local existAt = existing.claimedAt or existing.ts or 0
+        if not otClaimBeats(incomingClaimedAt, sender, existAt, existing.character) then
+            -- Later claimer ignored; if we still think we own it vs existing peer, yield to existing.
+            handleOtClaimYield(spawnId, existing.character, existAt)
+            return
+        end
+    end
+
+    setOtClaim(spawnId, sender, incomingTs, content.zone, incomingClaimedAt)
+    handleOtClaimYield(spawnId, sender, incomingClaimedAt)
 end
 
 function czactor.getActiveOfftanks()
@@ -913,12 +978,14 @@ function czactor.syncOtClaimForEngage(spawnId, mobName, maTarId)
     if rc.OtMyClaim and rc.OtMyClaim.spawnId == spawnId then
         if mq.gettime() >= _nextOtHeartbeatAt then
             _nextOtHeartbeatAt = mq.gettime() + OT_HEARTBEAT_MS + nameJitterMs(myName(), OT_HEARTBEAT_MS)
+            local claimedAt = rc.OtMyClaim.claimedAt or rc.OtMyClaim.ts or mq.gettime()
             czactor.broadcast(envelope('ot_heartbeat', {
                 spawnId = spawnId,
                 mobName = mobName,
                 primaryId = maTarId,
+                claimedAt = claimedAt,
             }))
-            setOtClaim(spawnId, myName(), mq.gettime(), myZone())
+            setOtClaim(spawnId, myName(), mq.gettime(), myZone(), claimedAt)
         end
         return
     end
@@ -994,8 +1061,7 @@ processMessage = function(inbound)
     if id == 'ot_claim' or id == 'ot_heartbeat' then
         local spawnId = content.spawnId
         if spawnId and spawnId > 0 and sender then
-            setOtClaim(spawnId, sender, content.ts, content.zone)
-            handleOtClaimYield(spawnId, sender, content.ts)
+            applyOtClaimMessage(spawnId, sender, content)
         end
         return
     end

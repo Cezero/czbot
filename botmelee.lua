@@ -396,13 +396,14 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     local aliveEngage = hasAliveEngageTarget(rc)
     local isPrimary = aliveEngage and isOfftankPrimaryTarget(engageId, maTarId, mtTarId)
     local mezzedEngage = engageId and spawnutils.isSpawnMezzedById(engageId) or false
-    local stickyOk = aliveEngage and not isPrimary and not mezzedEngage
+    local peerClaimed = engageId and czactor.isSpawnClaimedByOther(engageId) or false
+    local stickyOk = aliveEngage and not isPrimary and not mezzedEngage and not peerClaimed
 
     if stickyOk then
         if _otDebug and _otResolveLastId ~= engageId then
-            otDebugLog('branch=sticky id=%s ma=%s mt=%s claim=%s mezzed=%s primary=%s',
+            otDebugLog('branch=sticky id=%s ma=%s mt=%s claim=%s mezzed=%s primary=%s peerClaimed=%s',
                 tostring(engageId), tostring(maTarId), tostring(mtTarId), tostring(claimId),
-                tostring(mezzedEngage), tostring(isPrimary))
+                tostring(mezzedEngage), tostring(isPrimary), tostring(peerClaimed))
         end
         _otResolveLastId = engageId
         return engageId
@@ -412,9 +413,9 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
         local now = mq.gettime()
         if now >= _otResolveLastStickyRejectLog + OT_DEBUG_THROTTLE_MS then
             _otResolveLastStickyRejectLog = now
-            otDebugLog('sticky_reject engage=%s ma=%s mt=%s claim=%s mezzed=%s primary=%s',
+            otDebugLog('sticky_reject engage=%s ma=%s mt=%s claim=%s mezzed=%s primary=%s peerClaimed=%s',
                 tostring(engageId), tostring(maTarId), tostring(mtTarId), tostring(claimId),
-                tostring(mezzedEngage), tostring(isPrimary))
+                tostring(mezzedEngage), tostring(isPrimary), tostring(peerClaimed))
         end
     end
 

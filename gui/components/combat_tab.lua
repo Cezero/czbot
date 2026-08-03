@@ -47,7 +47,7 @@ function M.draw()
     ImGui.SameLine()
     ImGui.Text('Off Tank')
     if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('This bot is an offtank. Add selection is coordinated with other czbot peers via the Actor channel (last claim wins on conflicts).')
+        ImGui.SetTooltip('This bot is an offtank. Add selection is coordinated with other czbot peers via the Actor channel (first claim wins on conflicts).')
     end
     ImGui.SameLine()
     local otChecked = melee.offtank == true

@@ -28,7 +28,7 @@ The `czbot` mailbox is registered once at macro startup and removed on macro exi
 |----|---------|
 | `ping` | Optional diagnostic broadcast (no unicast reply; liveness from any message) |
 | `pong` | Deprecated (ignored if received from older peers) |
-| `ot_claim` / `ot_release` / `ot_heartbeat` | Off-tank add coordination (last-writer-wins on conflicts) |
+| `ot_claim` / `ot_release` / `ot_heartbeat` | Off-tank add coordination (first-claimer-wins on conflicts) |
 | `rez_claim` | Rez coordination — peer excludes claimed corpse for 60s ([Rez coordination](#rez-coordination)) |
 | `ma_update` | Manual MA override from `/cz assist set <name>` (peers on `automatic` follow until unavailable) |
 | `mt_update` | Manual MT override from `/cz tank set <name>` |
@@ -77,9 +77,9 @@ Publish with `require('lib.czactor').publish('my_message_id', { ... })`. Send an
 Offtanks **always** try to claim a free add first (regardless of whether MT and MA share a target):
 
 1. Builds add candidates from `MobList` (excluding MA/MT targets, charm-skipped mobs, and mezzed spawns).
-2. Skips adds claimed by another peer with a **newer** `ts` (last-writer-wins).
-3. Claims the lowest spawn ID among eligible adds via `ot_claim`.
-4. Releases on disengage, mob death, or when yielding to a newer peer claim.
+2. Skips adds already claimed by another peer (**first-claimer-wins**; live claims are not stolen).
+3. Claims the lowest spawn ID among eligible adds via `ot_claim` (stores immutable `claimedAt`; heartbeats refresh TTL only).
+4. Releases on disengage, mob death, or when yielding to an earlier peer claim (older `claimedAt`, or equal `claimedAt` + lower character name).
 
 When **no free add** remains, the offtank assists the MA target. See [Offtank configuration](offtank-configuration.md).
 

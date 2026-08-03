@@ -287,13 +287,15 @@ function spawnutils.shouldPreserveStickyEngage(rc)
     end
     if botconfig.config.melee.offtank and not tankrole.AmIMainAssist() then
         local spellutils = require('lib.spellutils')
+        local czactor = require('lib.czactor')
         local _, _, maTarId = spellutils.GetAssistInfo(true)
         local _, _, mtTarId = spellutils.GetTankInfo(true)
         if maTarId == 0 then maTarId = nil end
         if mtTarId == 0 then mtTarId = nil end
         local isPrimary = spawnutils.isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId)
         local isMezzed = spawnutils.isSpawnMezzedById(rc.engageTargetId)
-        if not isPrimary and not isMezzed then
+        local peerClaimed = czactor.isSpawnClaimedByOther(rc.engageTargetId)
+        if not isPrimary and not isMezzed and not peerClaimed then
             return true
         end
         local botmeleeMod = package.loaded['botmelee']
@@ -302,10 +304,13 @@ function spawnutils.shouldPreserveStickyEngage(rc)
             local last = rc._otPreserveDebugLastLog or 0
             if now >= last + 500 then
                 rc._otPreserveDebugLastLog = now
-                local reason = isPrimary and 'primary' or (isMezzed and 'mezzed' or 'other')
-                log.say('[OT] preserve=false engage=%s ma=%s mt=%s reason=%s mezzed=%s',
+                local reason = isPrimary and 'primary'
+                    or (isMezzed and 'mezzed')
+                    or (peerClaimed and 'peer_claimed')
+                    or 'other'
+                log.say('[OT] preserve=false engage=%s ma=%s mt=%s reason=%s mezzed=%s peerClaimed=%s',
                     tostring(rc.engageTargetId), tostring(maTarId), tostring(mtTarId),
-                    reason, tostring(isMezzed))
+                    reason, tostring(isMezzed), tostring(peerClaimed))
             end
         end
     end
