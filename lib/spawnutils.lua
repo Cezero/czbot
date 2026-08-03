@@ -291,9 +291,22 @@ function spawnutils.shouldPreserveStickyEngage(rc)
         local _, _, mtTarId = spellutils.GetTankInfo(true)
         if maTarId == 0 then maTarId = nil end
         if mtTarId == 0 then mtTarId = nil end
-        if not spawnutils.isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId)
-            and not spawnutils.isSpawnMezzedById(rc.engageTargetId) then
+        local isPrimary = spawnutils.isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId)
+        local isMezzed = spawnutils.isSpawnMezzedById(rc.engageTargetId)
+        if not isPrimary and not isMezzed then
             return true
+        end
+        local botmeleeMod = package.loaded['botmelee']
+        if botmeleeMod and botmeleeMod.IsOtDebug and botmeleeMod.IsOtDebug() then
+            local now = mq.gettime()
+            local last = rc._otPreserveDebugLastLog or 0
+            if now >= last + 500 then
+                rc._otPreserveDebugLastLog = now
+                local reason = isPrimary and 'primary' or (isMezzed and 'mezzed' or 'other')
+                log.say('[OT] preserve=false engage=%s ma=%s mt=%s reason=%s mezzed=%s',
+                    tostring(rc.engageTargetId), tostring(maTarId), tostring(mtTarId),
+                    reason, tostring(isMezzed))
+            end
         end
     end
     local assistName = tankrole.GetAssistTargetName()

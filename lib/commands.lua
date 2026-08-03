@@ -838,6 +838,19 @@ local function cmd_buffdebug(args)
     log.say('Buff debug logging %s', spellutils.IsBuffDebug() and 'on' or 'off')
 end
 
+local function cmd_otdebug(args)
+    local botmelee = require('botmelee')
+    local mode = args[2] and string.lower(args[2]) or ''
+    if mode == 'on' or mode == 'true' or mode == '1' then
+        botmelee.SetOtDebug(true)
+    elseif mode == 'off' or mode == 'false' or mode == '0' then
+        botmelee.SetOtDebug(false)
+    else
+        botmelee.SetOtDebug(not botmelee.IsOtDebug())
+    end
+    log.say('Offtank debug logging %s', botmelee.IsOtDebug() and 'on' or 'off')
+end
+
 local function cmd_barddebug(args)
     local bardtwist = require('lib.bardtwist')
     local mode = args[2] and string.lower(args[2]) or ''
@@ -1521,6 +1534,7 @@ local handlers = {
     macampanchor = cmd_macampanchor,
     mezdebug = cmd_mezdebug,
     buffdebug = cmd_buffdebug,
+    otdebug = cmd_otdebug,
     barddebug = cmd_barddebug,
     followdebug = cmd_followdebug,
     tickdebug = cmd_tickdebug,

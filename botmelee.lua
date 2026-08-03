@@ -20,6 +20,10 @@ local charinfo = require('plugin.charinfo')
 local myconfig = botconfig.config
 local botmelee = {}
 
+local _otDebug = false
+function botmelee.SetOtDebug(on) _otDebug = (on == true) end
+function botmelee.IsOtDebug() return _otDebug end
+
 local _lastEngageStickCmd = nil
 local _engageLosBlocked = false
 local _engageLosLastLogTime = 0
@@ -357,11 +361,26 @@ function botmelee.isOfftankPrimaryTarget(id, maTarId, mtTarId)
     return spawnutils.isOfftankPrimaryTarget(id, maTarId, mtTarId)
 end
 
---- True when this bot is an offtank with a live melee engage (free add or MA assist).
+--- True when offtank is on a free add (not MA/MT primary). MA-assist fallback is not active OT.
 function botmelee.isActivelyOfftanking()
     if not myconfig.melee.offtank then return false end
     if tankrole.AmIMainAssist() then return false end
-    return hasAliveEngageTarget(state.getRunconfig())
+    local rc = state.getRunconfig()
+    if not hasAliveEngageTarget(rc) then return false end
+    local _, _, maTarId = spellutils.GetAssistInfo(true)
+    if maTarId == 0 then maTarId = nil end
+    local _, _, mtTarId = spellutils.GetTankInfo(true)
+    if mtTarId == 0 then mtTarId = nil end
+    return not isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId)
+end
+
+local _otResolveLastId = nil
+local _otResolveLastStickyRejectLog = 0
+local OT_DEBUG_THROTTLE_MS = 500
+
+local function otDebugLog(fmt, ...)
+    if not _otDebug then return end
+    log.say('[OT] ' .. fmt, ...)
 end
 
 -- Prefer free unmezzed adds; assist MA only when none remain.
@@ -372,11 +391,33 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if maTarId == 0 then maTarId = nil end
     local _, _, mtTarId = spellutils.GetTankInfo(true)
     if mtTarId == 0 then mtTarId = nil end
-    if hasAliveEngageTarget(rc)
-        and not isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId)
-        and not spawnutils.isSpawnMezzedById(rc.engageTargetId) then
-        return rc.engageTargetId
+    local engageId = rc.engageTargetId
+    local claimId = rc.OtMyClaim and rc.OtMyClaim.spawnId or nil
+    local aliveEngage = hasAliveEngageTarget(rc)
+    local isPrimary = aliveEngage and isOfftankPrimaryTarget(engageId, maTarId, mtTarId)
+    local mezzedEngage = engageId and spawnutils.isSpawnMezzedById(engageId) or false
+    local stickyOk = aliveEngage and not isPrimary and not mezzedEngage
+
+    if stickyOk then
+        if _otDebug and _otResolveLastId ~= engageId then
+            otDebugLog('branch=sticky id=%s ma=%s mt=%s claim=%s mezzed=%s primary=%s',
+                tostring(engageId), tostring(maTarId), tostring(mtTarId), tostring(claimId),
+                tostring(mezzedEngage), tostring(isPrimary))
+        end
+        _otResolveLastId = engageId
+        return engageId
     end
+
+    if _otDebug and aliveEngage and not stickyOk then
+        local now = mq.gettime()
+        if now >= _otResolveLastStickyRejectLog + OT_DEBUG_THROTTLE_MS then
+            _otResolveLastStickyRejectLog = now
+            otDebugLog('sticky_reject engage=%s ma=%s mt=%s claim=%s mezzed=%s primary=%s',
+                tostring(engageId), tostring(maTarId), tostring(mtTarId), tostring(claimId),
+                tostring(mezzedEngage), tostring(isPrimary))
+        end
+    end
+
     local actarid = czactor.pickOfftankAdd(rc.MobList, maTarId, mtTarId)
     if actarid then
         if actarid ~= mq.TLO.Target.ID() then
@@ -384,11 +425,29 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
             log.say('\arOff-tanking\ax a \ag%s id %s', mobName, actarid)
         end
         czactor.syncOtClaimForEngage(actarid, mq.TLO.Spawn(actarid).CleanName(), maTarId)
+        if _otDebug and _otResolveLastId ~= actarid then
+            otDebugLog('branch=pickAdd id=%s ma=%s mt=%s claim=%s mezzedEngage=%s',
+                tostring(actarid), tostring(maTarId), tostring(mtTarId), tostring(claimId),
+                tostring(mezzedEngage))
+        end
+        _otResolveLastId = actarid
         return actarid
     end
     if maTarId and maTarId > 0 then
+        if _otDebug and _otResolveLastId ~= maTarId then
+            otDebugLog('branch=maAssist id=%s ma=%s mt=%s claim=%s mezzedEngage=%s pick=nil',
+                tostring(maTarId), tostring(maTarId), tostring(mtTarId), tostring(claimId),
+                tostring(mezzedEngage))
+        end
+        _otResolveLastId = maTarId
         return maTarId
     end
+    if _otDebug and _otResolveLastId ~= nil then
+        otDebugLog('branch=nil ma=%s mt=%s claim=%s engage=%s mezzedEngage=%s',
+            tostring(maTarId), tostring(mtTarId), tostring(claimId), tostring(engageId),
+            tostring(mezzedEngage))
+    end
+    _otResolveLastId = nil
     return nil
 end
 
@@ -963,7 +1022,7 @@ function botmelee.AdvCombat()
             if tankrole.AmIMainTank() and myconfig.melee.mtSticky == true and not myconfig.melee.offtank
                 and not tankrole.AmIMainAssist() then
                 rc.statusMessage = string.format('Tanking %s (%s)', name, rc.engageTargetId)
-            elseif myconfig.melee.offtank then
+            elseif botmelee.isActivelyOfftanking() then
                 rc.statusMessage = string.format('Off-tanking %s (%s)', name, rc.engageTargetId)
             else
                 rc.statusMessage = string.format('Assisting on %s (%s)', name, rc.engageTargetId)

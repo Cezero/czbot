@@ -854,23 +854,54 @@ function czactor.pickOfftankAdd(mobList, maTarId, mtTarId)
     ensureRunconfigFields(rc)
     pruneOtClaims(rc)
     local charm = require('lib.charm')
-    local spawnutils = require('lib.spawnutils')
+    local otDebug = false
+    local botmeleeMod = package.loaded['botmelee']
+    if botmeleeMod and botmeleeMod.IsOtDebug then otDebug = botmeleeMod.IsOtDebug() end
+
+    local skipped = {}
     local candidates = {}
     for _, v in ipairs(mobList or {}) do
         local id = v.ID and v.ID() or v
         if id and id > 0 then
-            if id ~= maTarId and id ~= mtTarId
-                and not charm.isCharmSkipped(id, rc)
-                and not spawnutils.isSpawnMezzedById(id) then
+            if id == maTarId or id == mtTarId then
+                if otDebug then skipped[#skipped + 1] = string.format('%s:primary', id) end
+            elseif charm.isCharmSkipped(id, rc) then
+                if otDebug then skipped[#skipped + 1] = string.format('%s:charm', id) end
+            elseif spawnutils.isSpawnMezzedById(id) then
+                if otDebug then skipped[#skipped + 1] = string.format('%s:mezzed', id) end
+            else
                 candidates[#candidates + 1] = id
             end
         end
     end
     table.sort(candidates)
     local now = mq.gettime()
+    local claimedSkip = {}
     for _, id in ipairs(candidates) do
         if czactor.canClaimSpawn(id, now) then
+            if otDebug then
+                local prev = rc._otPickDebugLast
+                if prev ~= id then
+                    rc._otPickDebugLast = id
+                    rc._otPickDebugLastLog = now
+                    log.say('[OT] pickAdd pick=%s cands=[%s] skipped=[%s]',
+                        tostring(id), table.concat(candidates, ','), table.concat(skipped, ','))
+                end
+            end
             return id
+        elseif otDebug then
+            claimedSkip[#claimedSkip + 1] = tostring(id)
+        end
+    end
+    if otDebug then
+        local prev = rc._otPickDebugLast
+        local lastLog = rc._otPickDebugLastLog or 0
+        if prev ~= false or now >= lastLog + 500 then
+            rc._otPickDebugLast = false
+            rc._otPickDebugLastLog = now
+            local claimNote = (#claimedSkip > 0) and (';claimed=' .. table.concat(claimedSkip, ',')) or ''
+            log.say('[OT] pickAdd pick=nil cands=[%s] skipped=[%s] %s',
+                table.concat(candidates, ','), table.concat(skipped, ','), claimNote)
         end
     end
     return nil
