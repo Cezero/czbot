@@ -854,11 +854,14 @@ function czactor.pickOfftankAdd(mobList, maTarId, mtTarId)
     ensureRunconfigFields(rc)
     pruneOtClaims(rc)
     local charm = require('lib.charm')
+    local spawnutils = require('lib.spawnutils')
     local candidates = {}
     for _, v in ipairs(mobList or {}) do
         local id = v.ID and v.ID() or v
         if id and id > 0 then
-            if id ~= maTarId and id ~= mtTarId and not charm.isCharmSkipped(id, rc) then
+            if id ~= maTarId and id ~= mtTarId
+                and not charm.isCharmSkipped(id, rc)
+                and not spawnutils.isSpawnMezzedById(id) then
                 candidates[#candidates + 1] = id
             end
         end

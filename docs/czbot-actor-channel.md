@@ -74,14 +74,14 @@ Publish with `require('lib.czactor').publish('my_message_id', { ... })`. Send an
 
 ## Off-tank add selection
 
-When MT and MA are on the **same** mob, each offtank:
+Offtanks **always** try to claim a free add first (regardless of whether MT and MA share a target):
 
-1. Builds add candidates from `MobList` (excluding MA/MT targets and charm-skipped mobs).
+1. Builds add candidates from `MobList` (excluding MA/MT targets, charm-skipped mobs, and mezzed spawns).
 2. Skips adds claimed by another peer with a **newer** `ts` (last-writer-wins).
 3. Claims the lowest spawn ID among eligible adds via `ot_claim`.
 4. Releases on disengage, mob death, or when yielding to a newer peer claim.
 
-When MT and MA are on **different** mobs, the offtank still tanks the MA target (unchanged). See [Offtank configuration](offtank-configuration.md).
+When **no free add** remains, the offtank assists the MA target. See [Offtank configuration](offtank-configuration.md).
 
 ## MA engage coordination
 

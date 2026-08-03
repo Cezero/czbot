@@ -1,13 +1,13 @@
 # Offtank Configuration
 
-This document explains how to configure a bot as an **offtank**: picking an add when the MT and MA are on the same mob, or tanking the MA's target when they are on different mobs. For MT/MA/Puller roles, see [Tank and Assist Roles](tank-and-assist-roles.md).
+This document explains how to configure a bot as an **offtank**: claiming a free unmezzed add when one exists, or assisting the MA when every camp mob is already taken by MA/MT (or other offtanks). For MT/MA/Puller roles, see [Tank and Assist Roles](tank-and-assist-roles.md).
 
 ## Overview
 
-- **AssistName (MA)** must be set so the offtank knows whose target to follow or tank.
-- When **MT target == MA target** (same mob), offtanks **coordinate adds via the [CZBot Actor channel](czbot-actor-channel.md)** (`ot_claim` / last-writer-wins). Each OT claims an unclaimed add; if all adds are claimed, the OT idles.
-- When **MT target != MA target** (different mobs), the offtank **tanks the MA's target** (sets engage target to the MA's target and uses agro/taunt).
-- Once engaged on an add or on the MA's off-target mob, the offtank **sticks on that target until it dies** (no `assistpct` gate; does not snap back to the main mob).
+- **AssistName (MA)** must be set so the offtank knows whose target to assist when no free add remains.
+- Offtanks **always prefer a free add**: an unmezzed MobList spawn that is not the MA target, not the MT target, not charm-skipped, and not claimed by another OT via the [CZBot Actor channel](czbot-actor-channel.md) (`ot_claim` / last-writer-wins).
+- When **no free add** remains (e.g. one mob total, or MT on one and MA on another with nothing left), the offtank **assists the MA's target**.
+- Once engaged on a free add, the offtank **sticks on that target until it dies or becomes mezzed/primary** (no `assistpct` gate). Mezzed engages are dropped so the OT can re-pick a free unmezzed add.
 - **`onlyMT` debuffs** (e.g. Taunt with **When MT Only** checked) cast on the off-tank's current engage target while actively off-tanking — not on the main tank's mob.
 
 ---
@@ -40,16 +40,16 @@ This document explains how to configure a bot as an **offtank**: picking an add 
 ## Offtank decision
 
 ```mermaid
-flowchart LR
-    A[MT target vs MA target] --> B{Same mob?}
-    B -->|Yes| C[Pick unclaimed add via Actor]
-    B -->|No| D[Tank MA target]
-    C --> E[engageTargetId = add]
-    D --> F[engageTargetId = MA target, agro/taunt]
+flowchart TD
+    Sticky{Alive sticky engage that is still free?}
+    Sticky -->|Yes| Keep[Keep engageTargetId]
+    Sticky -->|No| PickAdd[Pick unclaimed unmezzed add via Actor]
+    PickAdd -->|Found| Claim[engageTargetId = add]
+    PickAdd -->|None| MaAssist[engageTargetId = MA target]
 ```
 
-- **Same mob:** Offtanks publish **`ot_claim`** for an add; conflicts resolve **last-writer-wins** (newer timestamp keeps the add; loser re-picks or idles).
-- **Different mobs:** Offtank **tanks the MA's target** (engage target = MA target; bot uses stick/agro/taunt) and **sticks until it dies**.
+- **Free add:** Offtanks publish **`ot_claim`**; conflicts resolve **last-writer-wins** (newer timestamp keeps the add; loser re-picks or assists MA).
+- **No free add:** Offtank **assists the MA's target** (engage target = MA target; bot uses stick/agro/taunt).
 
 ---
 
@@ -63,5 +63,5 @@ flowchart LR
 
 ## Scenarios
 
-- **Offtank bot:** Set **offtank** to `true` (config or `/cz offtank on`) and set **AssistName** to the Main Assist. If MT and MA are on the same mob, this bot claims an add via the Actor channel. If MT and MA are on different mobs, this bot tanks the MA's target.
+- **Offtank bot:** Set **offtank** to `true` (config or `/cz offtank on`) and set **AssistName** to the Main Assist. With three unmezzed camp mobs where MT and MA each hold one, this bot claims the third. With only MA/MT targets left (no free add), it assists the MA.
 - For more role scenarios (human MA, bot MT, automatic mode), see [Tank and Assist Roles — Scenarios](tank-and-assist-roles.md#scenarios-plain-english).

@@ -357,13 +357,14 @@ function botmelee.isOfftankPrimaryTarget(id, maTarId, mtTarId)
     return spawnutils.isOfftankPrimaryTarget(id, maTarId, mtTarId)
 end
 
---- True when this bot is an offtank with a live melee engage (add or MA split-target).
+--- True when this bot is an offtank with a live melee engage (free add or MA assist).
 function botmelee.isActivelyOfftanking()
     if not myconfig.melee.offtank then return false end
     if tankrole.AmIMainAssist() then return false end
     return hasAliveEngageTarget(state.getRunconfig())
 end
 
+-- Prefer free unmezzed adds; assist MA only when none remain.
 local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if not mainTankName or mainTankName == '' then return nil end
     local rc = state.getRunconfig()
@@ -371,21 +372,21 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
     if maTarId == 0 then maTarId = nil end
     local _, _, mtTarId = spellutils.GetTankInfo(true)
     if mtTarId == 0 then mtTarId = nil end
-    if hasAliveEngageTarget(rc) and not isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId) then
+    if hasAliveEngageTarget(rc)
+        and not isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId)
+        and not spawnutils.isSpawnMezzedById(rc.engageTargetId) then
         return rc.engageTargetId
     end
-    local samePrimary = (not maTarId or not mtTarId or mtTarId == maTarId)
-    if samePrimary then
-        local actarid = czactor.pickOfftankAdd(rc.MobList, maTarId, mtTarId)
-        if actarid then
-            if actarid ~= mq.TLO.Target.ID() then
-                local mobName = mq.TLO.Spawn(actarid).CleanName() or tostring(actarid)
-                log.say('\arOff-tanking\ax a \ag%s id %s', mobName, actarid)
-            end
-            czactor.syncOtClaimForEngage(actarid, mq.TLO.Spawn(actarid).CleanName(), maTarId)
-            return actarid
+    local actarid = czactor.pickOfftankAdd(rc.MobList, maTarId, mtTarId)
+    if actarid then
+        if actarid ~= mq.TLO.Target.ID() then
+            local mobName = mq.TLO.Spawn(actarid).CleanName() or tostring(actarid)
+            log.say('\arOff-tanking\ax a \ag%s id %s', mobName, actarid)
         end
-    elseif maTarId and maTarId > 0 then
+        czactor.syncOtClaimForEngage(actarid, mq.TLO.Spawn(actarid).CleanName(), maTarId)
+        return actarid
+    end
+    if maTarId and maTarId > 0 then
         return maTarId
     end
     return nil

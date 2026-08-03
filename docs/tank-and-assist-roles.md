@@ -13,7 +13,7 @@ This document explains how to configure **Main Tank (MT)**, **Main Assist (MA)**
 - **Puller**  
   Set in the game (group window). When this bot is the **MA**, it prefers the **Puller's target** when choosing which mob to engage from the camp list (e.g. the mob the puller is bringing in).
 
-Heals always go to the MT. DPS follows the MA at **assist-at %**. Separate MT follows the MA **immediately**. When MT and MA are different, offtank logic depends on whether they are on the same mob or not (see Offtank below).
+Heals always go to the MT. DPS follows the MA at **assist-at %**. Separate MT follows the MA **immediately**. Offtank always prefers a free unmezzed add; it assists the MA only when none remain (see Offtank below).
 
 If **AssistName** is unset, it falls back to **TankName** — the MT bot becomes the effective MA and runs MA picker logic.
 
@@ -87,12 +87,12 @@ flowchart TB
 ## Offtank Decision (Mermaid)
 
 ```mermaid
-flowchart LR
-    A[MT target vs MA target] --> B{Same mob?}
-    B -->|Yes| C[Pick an add]
-    B -->|No| D[Tank MA target]
-    C --> E[engageTargetId = add]
-    D --> F[engageTargetId = MA target, agro/taunt]
+flowchart TD
+    Sticky{Alive sticky engage that is still free?}
+    Sticky -->|Yes| Keep[Keep engageTargetId]
+    Sticky -->|No| PickAdd[Pick free unmezzed add]
+    PickAdd -->|Found| Claim[engageTargetId = add]
+    PickAdd -->|None| MaAssist[engageTargetId = MA target]
 ```
 
 ---

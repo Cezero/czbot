@@ -260,6 +260,16 @@ function spawnutils.isOfftankPrimaryTarget(id, maTarId, mtTarId)
     return false
 end
 
+--- Lightweight mez check for offtank free-add filtering (no retarget).
+function spawnutils.isSpawnMezzedById(id)
+    if not id or id <= 0 then return false end
+    local ok, mezzed = pcall(function()
+        local sp = mq.TLO.Spawn(id)
+        return sp and sp.Mezzed and sp.Mezzed()
+    end)
+    return ok and mezzed == true
+end
+
 --- True when an alive engageTargetId should not be cleared just because it left MobList.
 function spawnutils.shouldPreserveStickyEngage(rc)
     rc = rc or state.getRunconfig()
@@ -281,7 +291,8 @@ function spawnutils.shouldPreserveStickyEngage(rc)
         local _, _, mtTarId = spellutils.GetTankInfo(true)
         if maTarId == 0 then maTarId = nil end
         if mtTarId == 0 then mtTarId = nil end
-        if not spawnutils.isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId) then
+        if not spawnutils.isOfftankPrimaryTarget(rc.engageTargetId, maTarId, mtTarId)
+            and not spawnutils.isSpawnMezzedById(rc.engageTargetId) then
             return true
         end
     end
