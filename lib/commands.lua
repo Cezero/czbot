@@ -552,6 +552,7 @@ local function cmd_abort(args)
         if mq.TLO.Target.ID() then mq.cmd('/squelch /mqtarget clear') end
         if rc.engageTargetId then rc.engageTargetId = nil end
         rc.attackCommandEngage = nil
+        czactor.clearAttackPublishLatch()
         if botconfig.config.settings.domelee then
             botconfig.config.settings.domelee = false
             rc.meleeAbort = true
@@ -640,12 +641,17 @@ local function cmd_attack(args)
         return
     end
     local botmelee = require('botmelee')
+    local rc = state.getRunconfig()
+    -- Peer (or prior) latch already holds this spawn — lock locally if needed, do not republish.
+    local alreadyLatched = rc.attackCommandEngage and rc.engageTargetId == KillTarget
     local ok, mobName = botmelee.applyAttackCommandEngage(KillTarget)
     if not ok then
         log.say('\ar Cannot engage target\ax')
         return
     end
-    czactor.publishAttackEngage(KillTarget, mobName, assistName)
+    if not alreadyLatched then
+        czactor.publishAttackEngage(KillTarget, mobName, assistName)
+    end
     local msg = log.fmt('\arEngaging\ax \ay%s\ax now', mobName or mq.TLO.Spawn(KillTarget).CleanName())
     if overrideName then
         msg = msg .. string.format(' \at(assist: %s)\ax', overrideName)

@@ -76,6 +76,7 @@ local _nextPingAt = 0
 local _nextOtHeartbeatAt = 0
 local _nextClaimPruneAt = 0
 local _lastMaEngagedSpawnId = nil
+local _lastAttackSpawnId = nil
 local MA_DISENGAGE_TRANSIENT_REASONS = {
     no_engage_target = true,
     engage_not_allowed = true,
@@ -563,6 +564,7 @@ local function applyMaEngaged(content, sender)
         -- Drop /cz attack latch so peers can follow MA retargets (mtSticky/OT sticky still apply in resolvers).
         if rc.attackCommandEngage and rc.engageTargetId ~= spawnId then
             rc.attackCommandEngage = nil
+            czactor.clearAttackPublishLatch()
         end
         botmove.onFollowEngagementStarted(rc)
     end
@@ -593,12 +595,12 @@ local function applyAttackEngage(content, sender)
     if not czactor.matchesBroadcastScope(content.scope, issuer) then return end
     local spawnId = content.spawnId
     if not spawnId or spawnId <= 0 then return end
-    local ok, mobName, isNewEngage = engage.applyAttackCommandEngage(spawnId)
-    if ok then
-        if isNewEngage then
-            botmove.onFollowEngagementStarted(state.getRunconfig())
-        end
-        log.say('[Attack] engaging %s (%s) from %s', mobName or '?', tostring(spawnId), sender)
+    local rc = state.getRunconfig()
+    -- Already locked on this spawn from a prior /cz attack — stay silent, no re-apply.
+    if rc.attackCommandEngage and rc.engageTargetId == spawnId then return end
+    local ok, _, isNewEngage = engage.applyAttackCommandEngage(spawnId)
+    if ok and isNewEngage then
+        botmove.onFollowEngagementStarted(rc)
     end
 end
 
@@ -622,10 +624,17 @@ function czactor.publishMaDisengage(reason)
     })
 end
 
+--- Allow a later /cz attack on the same spawn to publish again after disengage/abort/death.
+function czactor.clearAttackPublishLatch()
+    _lastAttackSpawnId = nil
+end
+
 function czactor.publishAttackEngage(spawnId, mobName, assistName)
     if not spawnId or spawnId <= 0 then return end
+    if _lastAttackSpawnId == spawnId then return end
     local issuer = myName()
     if not issuer or issuer == '' then return end
+    _lastAttackSpawnId = spawnId
     czactor.publish('attack', {
         spawnId = spawnId,
         mobName = mobName,

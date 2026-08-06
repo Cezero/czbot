@@ -111,7 +111,7 @@ When the **Main Assist** bot sets an engage target, it broadcasts a single **`ma
 
 ## Group attack
 
-When any peer runs **`/cz attack`**, it resolves the assist’s **live** Target (not sticky `ma_engaged`) and broadcasts **`attack`** with that NPC spawn ID. In-scope peers (same group/raid, same zone) set `attackCommandEngage` and engage immediately, bypassing **`melee.assistpct`**.
+When any peer runs **`/cz attack`**, it resolves the assist’s **live** Target (not sticky `ma_engaged`) and broadcasts **`attack`** with that NPC spawn ID (`scope` = raid if the issuer is raided, else group; same-zone only). In-scope peers **silently** set `attackCommandEngage` and `engageTargetId` to that spawn and engage immediately, bypassing **`melee.assistpct`**. The issuer is the only chat announcer (`Engaging … now`); peers do not log engage. Prefer running **`/cz attack` on one box** — it already broadcasts (do not `/dgga`/`/bcaa` it).
 
 | Field | Purpose |
 |-------|---------|
@@ -122,7 +122,7 @@ When any peer runs **`/cz attack`**, it resolves the assist’s **live** Target 
 | `assistName` | Optional: assist name used to resolve the target |
 | `zone` | Sender zone (receivers accept only same-zone senders) |
 
-Unlike **`ma_engaged`**, which is awareness/fallback identity (and follow/latch side effects) without forcing DPS melee, **`attack`** forces immediate engagement on all receivers (same as local `/cz attack`).
+Unlike **`ma_engaged`**, which is awareness/fallback identity (and follow/latch side effects) without forcing DPS melee, **`attack`** forces immediate engagement on all receivers (same as local `/cz attack`). Same-spawn republish is latched until disengage/abort/death so peers stay locked without engage re-fire chatter.
 
 ## Rez coordination
 

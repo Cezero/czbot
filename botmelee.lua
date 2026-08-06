@@ -748,6 +748,7 @@ function botmelee.disengageCombat(reason)
     rc.attackCommandEngage = nil
     rc.allMezzedEngageId = nil
     rc.followCatchUp = false
+    czactor.clearAttackPublishLatch()
     if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
     combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
     if state.getRunState() == state.STATES.melee then state.clearRunState() end
@@ -1130,6 +1131,7 @@ function botmelee.getHookFn(name)
                 local rc = state.getRunconfig()
                 rc.engageTargetId = nil
                 rc.attackCommandEngage = nil
+                czactor.clearAttackPublishLatch()
                 if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
                 return
             end

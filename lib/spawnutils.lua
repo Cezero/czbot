@@ -752,6 +752,8 @@ function spawnutils.validateAcmTarget(rc)
         if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(rc.engageTargetId), rc) then
             rc.engageTargetId = nil
             rc.attackCommandEngage = nil
+            local cz = package.loaded['lib.czactor']
+            if cz and cz.clearAttackPublishLatch then cz.clearAttackPublishLatch() end
             syncEngageStatusMessage(rc)
             if state.getRunState() == state.STATES.melee then state.clearRunState() end
         end

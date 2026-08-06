@@ -119,6 +119,8 @@ function utils.enforceBindStealth()
     local rc = state.getRunconfig()
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
+    local cz = package.loaded['lib.czactor']
+    if cz and cz.clearAttackPublishLatch then cz.clearAttackPublishLatch() end
     combat.ResetCombatState({ clearTarget = true, clearPet = true })
 end
 
