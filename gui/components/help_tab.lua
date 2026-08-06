@@ -94,7 +94,7 @@ local GROUPS = {
         { "/cz buffdebug on|off", "Log why a buff is or isn't cast on a target." },
         { "/cz otdebug on|off", "Log offtank resolve/pick/sticky decisions (Mezzed readings, branch changes)." },
         { "/cz followdebug on|off", "Log follow leash/nav decisions (~1/s). Enable on one stuck bot." },
-        { "/cz tickdebug on|off", "Log tick gap/processing time; per-hook breakdown when proc exceeds 100ms." },
+        { "/cz tickdebug on|off", "Log tick gap/processing time; per-hook breakdown when proc exceeds 250ms." },
         { "/cz tickdebug spans on|off", "Nested sub-step timing for slow hooks (doHeal/doBuff/doCure/czactor/AddSpawnCheck)." },
         { "/cz echo <section.key>", "Print the current value of a config path (e.g. heal.interruptlevel)." },
     } },

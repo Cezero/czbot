@@ -423,7 +423,7 @@ function botlogic.StartUp(...)
 end
 
 function botlogic.mainloop()
-    local TICK_TARGET_MS = 100
+    local TICK_TARGET_MS = 250
     while not state.getRunconfig().terminate do
         mq.doevents()
         tankrole.beginTick()

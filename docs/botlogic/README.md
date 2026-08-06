@@ -1,6 +1,6 @@
 # Bot Logic: State and Flow
 
-This section charts the bot's state and decision logic so you can trace how any action is chosen and executed. The main loop lives in `botlogic.lua` (`mainloop()`): it runs until `state.getRunconfig().terminate` is true; each iteration runs hooks then sleeps for `max(0, 100 - procMs)` so the target tick interval is 100ms (no sleep when a tick already took ≥100ms).
+This section charts the bot's state and decision logic so you can trace how any action is chosen and executed. The main loop lives in `botlogic.lua` (`mainloop()`): it runs until `state.getRunconfig().terminate` is true; each iteration runs hooks then sleeps for `max(0, 250 - procMs)` so the target tick interval is 250ms (no sleep when a tick already took ≥250ms).
 
 ## Requirements
 
@@ -17,7 +17,7 @@ flowchart LR
         B -->|No| C[runNormalHooks]
         B -->|Yes| D[antiafk.tick]
         C --> D
-        D --> E[delay 100ms]
+        D --> E[delay 250ms]
     end
 ```
 

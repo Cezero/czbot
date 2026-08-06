@@ -3,7 +3,7 @@
 local mq = require('mq')
 local log = require('lib.log')
 
-local TICK_MS = 100
+local TICK_MS = 250
 local GAP_SLACK_MS = 50
 local LOG_THROTTLE_MS = 1000
 local HOOK_SLOW_MS = 5
