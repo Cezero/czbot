@@ -19,6 +19,7 @@ local _followDebug = false
 local _wasFeared = false
 local fearReturn = { x = nil, y = nil, z = nil }
 local FEAR_RETURN_DEADLINE_MS = 5000
+local FEAR_RETURN_MAX_MS = 15000
 
 function botmove.SetFollowDebug(on)
     _followDebug = on and true or false
@@ -1044,9 +1045,11 @@ local function onFearEnd()
     end
     doNavToFearReturn()
     if state.canStartBusyState(state.STATES.fear_return) then
+        local now = mq.gettime()
         state.setRunState(state.STATES.fear_return, {
             phase = 'returning',
-            deadline = mq.gettime() + FEAR_RETURN_DEADLINE_MS,
+            deadline = now + FEAR_RETURN_DEADLINE_MS,
+            maxDeadline = now + FEAR_RETURN_MAX_MS,
             priority = bothooks.getPriority('doMiscTimer'),
         })
     end
@@ -1082,6 +1085,10 @@ function botmove.TickFearReturn()
         return
     end
     local now = mq.gettime()
+    if p.maxDeadline and now >= p.maxDeadline then
+        finishFearReturn()
+        return
+    end
     if p.deadline and now >= p.deadline then
         if not mq.TLO.Navigation.Active() then
             doNavToFearReturn()

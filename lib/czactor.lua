@@ -79,7 +79,6 @@ local _lastMaEngagedSpawnId = nil
 local _lastAttackSpawnId = nil
 local MA_DISENGAGE_TRANSIENT_REASONS = {
     no_engage_target = true,
-    engage_not_allowed = true,
     beyond_follow_distance = true,
     outside_camp_pin = true,
     moblist_empty = true,

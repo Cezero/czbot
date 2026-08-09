@@ -537,10 +537,25 @@ function spawnutils.filterSpawnExcludeAndPullFTE(spawn, rc, excludeSet)
     return true
 end
 
+--- True when spawn looks like a PC-owned pet/warder (including NPCs mis-typed as pets).
+local function isPcOwnedPetOrWarder(spawn)
+    if not spawn or not spawn.ID or not spawn.ID() or spawn.ID() == 0 then return false end
+    local masterType = spawn.Master and spawn.Master.Type and spawn.Master.Type()
+    if masterType == 'PC' then return true end
+    local name = spawn.CleanName and spawn.CleanName() or spawn.Name and spawn.Name()
+    if not name or name == '' then return false end
+    local lower = string.lower(name)
+    -- EQ uses backtick or apostrophe: "Foo`s warder", "Foo's pet"
+    if lower:match("`s warder$") or lower:match("'s warder$") then return true end
+    if lower:match("`s pet$") or lower:match("'s pet$") then return true end
+    return false
+end
+
 local function isCampNpcSpawn(spawn)
     local spawnType = spawn and spawn.Type()
     if not spawnType or spawnType == '' then return false end
-    return spawnType == 'NPC' or (spawnType == 'Pet' and spawn.Master.Type() ~= 'PC')
+    if isPcOwnedPetOrWarder(spawn) then return false end
+    return spawnType == 'NPC' or spawnType == 'Pet'
 end
 
 local function filterSpawnTargetFilter(spawn, targetFilterNum)
@@ -564,11 +579,12 @@ function spawnutils.isAliveEngageSpawn(spawn)
     return utils.isAliveEngageSpawn(spawn)
 end
 
---- True when spawn is a valid melee engage target (NPC or non-PC pet; excludes self/PC).
+--- True when spawn is a valid melee engage target (NPC or non-PC pet; excludes PC pets/warders).
 function spawnutils.isNpcEngageTarget(spawn)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
+    if isPcOwnedPetOrWarder(spawn) then return false end
     local t = spawn.Type()
-    return t == 'NPC' or (t == 'Pet' and spawn.Master.Type() ~= 'PC')
+    return t == 'NPC' or t == 'Pet'
 end
 
 --- True when melee may engage spawn (normal NPC rules, or /cz attack override on a PC pet).

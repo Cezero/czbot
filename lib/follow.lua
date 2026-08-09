@@ -52,6 +52,7 @@ function follow.StartFollow(name)
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
     rc.lastAssistTargetId = nil
+    rc.MaActorEngaged = nil
     combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
     local campSet = rc.campstatus or (rc.makecamp and (rc.makecamp.x or rc.makecamp.y or rc.makecamp.z))
     if campSet then botmove.MakeCamp('off') end

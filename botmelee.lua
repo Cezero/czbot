@@ -32,6 +32,7 @@ local ENGAGE_LOS_LOG_INTERVAL_MS = 3000
 local MA_DISENGAGE_BROADCAST_REASONS = {
     command = true,
     protected_spawn = true,
+    engage_not_allowed = true,
 }
 
 local function shouldBroadcastMaDisengage(reason, engageId)
@@ -595,11 +596,14 @@ local function selectMATarget()
     local rc = state.getRunconfig()
     if rc.maAdoptSelectedTarget then
         rc.maAdoptSelectedTarget = nil
-        local curId = mq.TLO.Target.ID()
-        if isValidMaSelectedTarget(curId, rc) then
-            rc.allMezzedEngageId = nil
-            if rc.attackCommandEngage then rc.attackCommandEngage = nil end
-            return curId
+        -- Startup/unpause: only adopt when auto-attack is already on and target is a valid NPC.
+        if mq.TLO.Me.Combat() then
+            local curId = mq.TLO.Target.ID()
+            if isValidMaSelectedTarget(curId, rc) then
+                rc.allMezzedEngageId = nil
+                if rc.attackCommandEngage then rc.attackCommandEngage = nil end
+                return curId
+            end
         end
     end
     local adopted = adoptMaClientTargetIfValid(rc)
@@ -1072,8 +1076,8 @@ function botmelee.AdvCombat()
             end
         end
         if tankrole.AmIMainAssist() then
-            -- One ma_engaged per new spawn id; peers resolve ongoing target via Charinfo.
-            if isNewEngage then
+            -- One ma_engaged per new spawn id; only after engage is allowed so peers are not left sticky on rejects.
+            if isNewEngage and spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(rc.engageTargetId), rc) then
                 czactor.publishMaEngaged(rc.engageTargetId, name)
             end
         end
@@ -1185,11 +1189,11 @@ function botmelee.getHookFn(name)
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local chaseEngage = spawnutils.shouldChaseOutsideCamp(rc)
             if not rc.MobList[1] and not chaseEngage then
-                -- Keep /cz attack latch or camp sticky engage across transient empty MobList (MA promote / anchor swap).
+                -- Keep /cz attack latch or sticky engage across transient empty MobList
+                -- (fear/banish OOR, MA promote / anchor swap). Do not broadcast ma_disengage here.
                 local keepEngage = (rc.attackCommandEngage and rc.engageTargetId
                         and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)))
                     or spawnutils.shouldPreserveStickyEngage(rc)
-                    or (hasAliveEngageTarget(rc) and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc))
                 if not keepEngage then
                     disengageCombat('moblist_empty')
                     return
