@@ -86,7 +86,19 @@ See [Corpse dragging](../corpse-dragging.md) for configuration.
 
 ## Camp return
 
-runState **camp_return** is set by `botmove.MakeCamp('return')` (doLeashResetCombat, doNavToCamp, setRunState camp_return with 5s deadline). Cleared in **CharState**: when not moving or deadline passed, clearRunState. **MakeCampLeashCheck** (doMovementCheck) can trigger return when campstatus and no engageTargetId and over leash (distance or LOS): doLeashResetCombat then MakeCamp('return').
+runState **camp_return** is set by `botmove.MakeCamp('return')` (doLeashResetCombat, doNavToCamp, setRunState camp_return with 5s deadline). Cleared by **TickCampReturn** when at camp (or deadline re-issues nav). **MakeCampLeashCheck** (doMovementCheck) can trigger return when campstatus and no engageTargetId and over leash (distance or LOS): doLeashResetCombat then MakeCamp('return').
+
+---
+
+## Fear return
+
+runState **fear_return** is driven by **botmove.TickFearReturn** (every doMovementCheck call, unthrottled):
+
+- **Rising edge** (`Me.Feared` false→true): save current XYZ, stick/attack/nav off, keep `engageTargetId`, set `phase=feared`.
+- **Falling edge** (true→false): `/nav locxyz` to saved point, set `phase=returning` (5s nav deadline, re-issue like camp return).
+- **Early abort (domelee only):** while returning, if **settings.domelee** (or travel-attack override) and live `engageTargetId` is within **settings.acleash** of the player, stop nav and clear busy so normal melee resumes. With **domelee** off, always continue to the saved pre-fear XYZ.
+- **Arrive:** clear when within **campRestDistance** of the saved XYZ.
+- Camp leash and follow catch-up are skipped while `fear_return` is active. **doMelee** returns early for this state (does not clear engage sticky).
 
 ---
 
@@ -105,9 +117,9 @@ StartReturnToFollowAfterEngage does: stick off, attack off, target self, FollowC
 
 ## See also
 
-- [Run state machine](run-state-machine.md) — pulling, dragging, camp_return, engage_return_follow, unstuck
+- [Run state machine](run-state-machine.md) — pulling, dragging, camp_return, fear_return, engage_return_follow, unstuck
 - [hook-dopull](hook-dopull.md) — When StartPull is called
 - [hook-domisctimer](hook-domisctimer.md) — DragCheck
-- [hook-domovementcheck](hook-domovementcheck.md) — FollowAndStuckCheck, MakeCampLeashCheck
+- [hook-domovementcheck](hook-domovementcheck.md) — TickFearReturn, FollowAndStuckCheck, MakeCampLeashCheck
 - [hook-domelee](hook-domelee.md) — TickReturnToFollowAfterEngage, StartReturnToFollowAfterEngage
 - [Corpse dragging](../corpse-dragging.md)

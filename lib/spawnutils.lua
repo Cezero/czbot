@@ -319,9 +319,16 @@ function spawnutils.shouldPreserveStickyEngage(rc)
         local eng = rc.MaActorEngaged
         if eng and eng.spawnId and eng.spawnId == rc.engageTargetId then
             local maName = eng.maName
-            if maName and maName:lower() == assistName:lower() then
+            -- Match current Assist, or keep through automatic promote while spawn is still the engage.
+            if maName and (maName:lower() == assistName:lower()
+                or spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc)) then
                 return true
             end
+        end
+        -- Assist-name changed on promote: preserve when engage matches lastAssist cache or camp pin.
+        if rc.lastAssistTargetId == rc.engageTargetId
+            and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
+            return true
         end
     end
     for _, v in ipairs(rc.MobList or {}) do

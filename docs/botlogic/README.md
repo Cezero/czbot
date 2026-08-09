@@ -47,6 +47,7 @@ Busy states (from `lib/state.lua`):
 | casting | spellutils (heal/buff/debuff/cure) |
 | dragging | botmove (DragCheck) |
 | camp_return | botmove (MakeCamp return) |
+| fear_return | botmove (Me.Feared edge-detect) |
 | engage_return_follow | botmove (MT return to follow) |
 | unstuck | botmove (UnStuck) |
 | chchain | chchain (Complete Heal chain) |

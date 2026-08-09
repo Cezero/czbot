@@ -16,6 +16,9 @@ local CorpseID = nil
 local carryCorpseID = nil
 local lastFollowResolveFailTime = 0
 local _followDebug = false
+local _wasFeared = false
+local fearReturn = { x = nil, y = nil, z = nil }
+local FEAR_RETURN_DEADLINE_MS = 5000
 
 function botmove.SetFollowDebug(on)
     _followDebug = on and true or false
@@ -902,6 +905,7 @@ end
 
 -- Follow nav + stuck detection and unstuck state machine. Called from doMovementCheck (runWhenBusy).
 function botmove.FollowAndStuckCheck()
+    if state.getRunState() == state.STATES.fear_return then return end
     botmove.TickReturnToFollowAfterEngage()
     botmove.TickUnstuck()
     local rc = state.getRunconfig()
@@ -954,6 +958,145 @@ function botmove.TickCampReturn()
     end
 end
 
+local function isMeFeared()
+    local ok, b = pcall(function()
+        local m = mq.TLO.Me.Feared
+        return m and m()
+    end)
+    if not ok or not b then return false end
+    if type(b) == 'boolean' then return b end
+    if type(b) == 'string' then return b ~= '' end
+    return true
+end
+
+local function clearFearReturnCoords()
+    fearReturn.x, fearReturn.y, fearReturn.z = nil, nil, nil
+end
+
+local function withinAcleashOfEngage(rc)
+    local engageId = rc and rc.engageTargetId
+    if not engageId then return false end
+    local spawn = mq.TLO.Spawn(engageId)
+    if not spawnutils.isNpcEngageTarget(spawn) then return false end
+    local acleashSq = myconfig.settings.acleashSq
+    if not acleashSq then return false end
+    local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
+    return distSq ~= nil and distSq <= acleashSq
+end
+
+--- Melee-only: abort fear-return nav when within acleash of engage so doMelee can re-stick.
+--- Casters (domelee off) always finish nav to the saved pre-fear XYZ.
+local function canEarlyAbortFearReturnToEngage(rc)
+    if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
+        return false
+    end
+    return withinAcleashOfEngage(rc)
+end
+
+local function fearReturnGoalReached()
+    if not fearReturn.x or not fearReturn.y then return false end
+    local closeSq = myconfig.settings.campRestDistanceSq
+    if not closeSq then return false end
+    local distSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), fearReturn.x, fearReturn.y)
+    return distSq ~= nil and distSq <= closeSq
+end
+
+local function doNavToFearReturn()
+    if not fearReturn.x or not fearReturn.y or not fearReturn.z then return end
+    mq.cmdf('/nav locxyz %s %s %s log=off', fearReturn.x, fearReturn.y, fearReturn.z)
+end
+
+local function finishFearReturn()
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    clearFearReturnCoords()
+    if state.getRunState() == state.STATES.fear_return then
+        state.clearRunState()
+    end
+end
+
+local function onFearStart()
+    local x, y, z = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
+    if x and y and z then
+        fearReturn.x, fearReturn.y, fearReturn.z = x, y, z
+    end
+    if mq.TLO.Stick.Active() then mq.cmd('/stick off') end
+    if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    if state.canStartBusyState(state.STATES.fear_return) then
+        state.setRunState(state.STATES.fear_return, {
+            phase = 'feared',
+            priority = bothooks.getPriority('doMiscTimer'),
+        })
+    end
+end
+
+local function onFearEnd()
+    if not fearReturn.x or not fearReturn.y or not fearReturn.z then
+        if state.getRunState() == state.STATES.fear_return then
+            state.clearRunState()
+        end
+        return
+    end
+    local rc = state.getRunconfig()
+    if canEarlyAbortFearReturnToEngage(rc) then
+        finishFearReturn()
+        return
+    end
+    doNavToFearReturn()
+    if state.canStartBusyState(state.STATES.fear_return) then
+        state.setRunState(state.STATES.fear_return, {
+            phase = 'returning',
+            deadline = mq.gettime() + FEAR_RETURN_DEADLINE_MS,
+            priority = bothooks.getPriority('doMiscTimer'),
+        })
+    end
+end
+
+--- Me.Feared edge-detect + return-to-pre-fear nav. Call every mainloop tick (unthrottled).
+function botmove.TickFearReturn()
+    local feared = isMeFeared()
+    if feared and not _wasFeared then
+        onFearStart()
+    elseif not feared and _wasFeared then
+        onFearEnd()
+    end
+    _wasFeared = feared
+
+    if state.getRunState() ~= state.STATES.fear_return then return end
+    local p = state.getRunStatePayload()
+    if not p then
+        state.clearRunState()
+        return
+    end
+    if p.phase == 'feared' then return end
+    if p.phase ~= 'returning' then return end
+
+    local rc = state.getRunconfig()
+    if canEarlyAbortFearReturnToEngage(rc) then
+        finishFearReturn()
+        return
+    end
+    if fearReturnGoalReached() then
+        clearFearReturnCoords()
+        state.clearRunState()
+        return
+    end
+    local now = mq.gettime()
+    if p.deadline and now >= p.deadline then
+        if not mq.TLO.Navigation.Active() then
+            doNavToFearReturn()
+        end
+        p.deadline = now + FEAR_RETURN_DEADLINE_MS
+        state.setRunState(state.STATES.fear_return, p)
+    end
+end
+
+--- Drop saved fear coords and edge state (death/zone/warp). Does not clear unrelated runState.
+function botmove.ClearFearReturn()
+    clearFearReturnCoords()
+    _wasFeared = false
+end
+
 -- Camp return and leash. Called from doMovementCheck (runWhenBusy).
 function botmove.MakeCampLeashCheck()
     local rc = state.getRunconfig()
@@ -962,6 +1105,7 @@ function botmove.MakeCampLeashCheck()
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.Casting.ID() then return end
     if state.getRunState() == state.STATES.pulling then return end
     if state.getRunState() == state.STATES.camp_return then return end
+    if state.getRunState() == state.STATES.fear_return then return end
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isPlayerWithinCampPin(rc) then
         botmove.MakeCamp('return')
         return

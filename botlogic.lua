@@ -312,10 +312,13 @@ local function _miscDrag()
     botmove.DragCheck()
 end
 
--- Movement only: camp return and follow. Runs in runWhenBusy pass so pure casters get camp/follow even when stuck in casting. Throttled 1s.
+-- Movement only: fear return (every tick), camp return and follow (throttled 1s).
+-- Runs in runWhenBusy pass so pure casters get camp/follow even when stuck in casting.
 local function _runDoMovementCheck()
     local rc = state.getRunconfig()
     if rc.doChchain and rc.chainActive then return end
+    -- Fear edge-detect must run every mainloop pass (~250ms), not the 1s camp/follow throttle.
+    botmove.TickFearReturn()
     if _movementLastRun > mq.gettime() then return end
     botmove.TickCampReturn()
     botmove.FollowAndStuckCheck()

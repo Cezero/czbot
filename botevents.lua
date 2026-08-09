@@ -60,6 +60,7 @@ function botevents.ResetCombatSession(reason)
     if APTarget then APTarget = nil end
     if rawget(_G, 'KillTarget') then _G.KillTarget = nil end
     require('botmelee').clearMobprobEngageGrace()
+    require('botmove').ClearFearReturn()
     combat.ResetCombatState({ clearTarget = true, clearPet = true })
 end
 

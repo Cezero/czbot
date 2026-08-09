@@ -5,13 +5,13 @@ The bot's main loop behavior is driven by `runState` (a **number**) and optional
 ## Numeric enum (state.STATES)
 
 - **runState** is always a number. **state.getRunState()** returns a number; **state.setRunState(stateNum, payload)** accepts a number only.
-- **Fixed states (1..12):** idle = 1, dead = 2, pulling = 3, raid_mechanic = 4, casting = 5, melee = 6, camp_return = 7, engage_return_follow = 8, unstuck = 9, dragging = 10, chchain = 11, sumcorpse_pending = 12.
+- **Fixed states (1..13):** idle = 1, dead = 2, pulling = 3, raid_mechanic = 4, casting = 5, melee = 6, camp_return = 7, engage_return_follow = 8, unstuck = 9, dragging = 10, chchain = 11, sumcorpse_pending = 12, fear_return = 13.
 - **Resume states (1000+):** resume_doHeal = 1001, resume_doDebuff = 1002, resume_doBuff = 1003, resume_doCure = 1004, resume_priorityCure = 1005. **state >= 1000** means resume. Use **state.RESUME_BY_HOOK[hookName]** to get the resume state number when setting from spellutils (e.g. `state.setRunState(state.RESUME_BY_HOOK[p.spellcheckResume.hook], payload)`).
 - **Display:** **state.getRunStateName()** returns a string for the current state (from a numeric→name map only; no string comparison of state).
 
 ## BUSY_STATES (gate the main loop)
 
-When `runState` is one of the fixed busy state numbers, `state.isBusy()` is true and only hooks with `hook.priority <= payload.priority` run: pulling, raid_mechanic, casting, dragging, camp_return, engage_return_follow, unstuck, chchain.
+When `runState` is one of the fixed busy state numbers, `state.isBusy()` is true and only hooks with `hook.priority <= payload.priority` run: pulling, raid_mechanic, casting, dragging, camp_return, engage_return_follow, unstuck, chchain, fear_return.
 
 **Resume states** (runState >= 1000) are **not** busy; they do not gate the loop. They only supply a resume cursor for `RunPhaseFirstSpellCheck`.
 
@@ -44,7 +44,9 @@ stateDiagram-v2
     idle --> dragging: botmove startDrag
     dragging --> idle: botmove tickDragging done
     idle --> camp_return: botmove MakeCamp return
-    camp_return --> idle: CharState not moving or deadline
+    camp_return --> idle: TickCampReturn at camp
+    idle --> fear_return: Me.Feared rising edge
+    fear_return --> idle: TickFearReturn at loc or melee engage acleash
     idle --> engage_return_follow: botmove StartReturnToFollowAfterEngage
     engage_return_follow --> idle: botmove TickReturnToFollowAfterEngage
     idle --> unstuck: botmove UnStuck
@@ -67,7 +69,8 @@ Note: `melee` is not a busy state; it does not restrict which hooks run. It carr
 | raid_mechanic | Yes | botraid.RaidCheck true | botraid.RaidCheck false | priority (doRaid) |
 | casting | Yes | spellutils.CastSpell | clearCastingStateOrResume | priority, spellcheckResume |
 | dragging | Yes | botmove startDrag | botmove tickDragging | priority, corpseID, phase |
-| camp_return | Yes | botmove MakeCamp return | CharState (not moving or deadline) | priority, deadline |
+| camp_return | Yes | botmove MakeCamp return | TickCampReturn (at camp / deadline) | priority, deadline |
+| fear_return | Yes | botmove TickFearReturn (Me.Feared edge) | TickFearReturn (at pre-fear loc; or domelee + engage within acleash) | priority, phase, deadline |
 | engage_return_follow | Yes | botmove StartReturnToFollowAfterEngage | botmove TickReturnToFollowAfterEngage | priority, phase, deadline |
 | unstuck | Yes | botmove UnStuck (PathExists, wiggle) | tickUnstuckPhase | priority, phase, deadline, followid, stuckdistance |
 | chchain | Yes | slot schedule while chainActive | chchainTick (slot fire, cast poll, pre-land cancel) | priority, tank, castStart, cancelled |
@@ -89,7 +92,7 @@ Before setting any busy state, call **state.canStartBusyState(stateNum)** with a
 - **idle / melee / resume (>= 1000)** — Any activity may start.
 - **pulling** — Not allowed if currently casting or Me.Casting()/CastTimeLeft > 0.
 - **casting** — Not allowed if already in another busy state (same-activity re-entry is allowed).
-- **camp_return, engage_return_follow** — Allowed even over casting (so stuck casters can return to camp / follow).
+- **camp_return, engage_return_follow, fear_return** — Allowed even over casting (so stuck casters can return to camp / follow / pre-fear loc).
 - **unstuck, dragging, chchain, raid_mechanic** — Not allowed over casting (only same-activity or from idle/melee/resume state).
 
 ## See also

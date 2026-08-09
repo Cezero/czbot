@@ -8,7 +8,7 @@ This document explains how to configure **Main Tank (MT)**, **Main Assist (MA)**
   The character who receives **heals** (healers prioritize this person). MT bots **never pick** camp mobs. When MA and MT are different bots, the MT follows the MA's target immediately (ignores assist-at %). **`mtSticky`** makes a separate MT bot keep its current target once engaged; it is **ignored** when the same bot is both MA and MT.
 
 - **Main Assist (MA)**  
-  The character who **selects targets** from the mob list and whose target DPS/offtank follow. The MA bot picks from MobList (named first, puller priority, sticky mid-fight with named override). Selecting a different valid NPC mid-fight adopts that spawn and broadcasts a one-shot **`ma_engaged`** for that spawn ID; peers follow the live target via Charinfo. **`/cz attack`** engages the MA's **live** Target **immediately** (not a sticky cache) and keeps that engagement until the target dies, the MA retargets, you run `/cz abort`, turn off domelee, or issue another `/cz attack`.
+  The character who **selects targets** from the mob list and whose target DPS/offtank follow. The MA bot picks from MobList (named first, puller priority, sticky mid-fight with named override). Selecting a different valid NPC mid-fight adopts that spawn and broadcasts a one-shot **`ma_engaged`** for that spawn ID; peers follow the live target via Charinfo. **`/cz attack`** engages the MA's **live** Target **immediately** (not a sticky cache), seeds **`lastAssistTargetId`**, and keeps that engagement until the target dies, the MA retargets, you run `/cz abort`, turn off domelee, or issue another `/cz attack`. On automatic MA promote, the new MA inherits the kill target from cache / prior **`ma_engaged`** and self-engages without a manual click.
 
 - **Puller**  
   Set in the game (group window). When this bot is the **MA**, it prefers the **Puller's target** when choosing which mob to engage from the camp list (e.g. the mob the puller is bringing in).
@@ -117,6 +117,15 @@ flowchart TD
 ### Automatic mode
 
 Set **`TankName`** and/or **`AssistName`** to **`"automatic"`** (the default for `TankName`). CZBot reads EQ group/raid roles and falls back to ordered lists in **`cz_common.lua`**. Full resolution order, availability rules, list editing, and **`maAnchorLeash`** are documented in [Automatic MA/MT Selection](automatic-ma-mt-selection.md).
+
+### MA death / list promote (engage continuity)
+
+When the MA dies (or automatic promote walks **`ma_list`** / **`mt_list`**):
+
+- **`/cz attack`** seeds **`lastAssistTargetId`** as well as the force latch, so peers can keep the spawn even when engaged above **`assistpct`**.
+- Assist-name changes do **not** wipe an alive **`lastAssistTargetId`**. Peers use that cache when the new MA has no NPC target yet.
+- DPS keep a live camp-pin **`engageTargetId`** as a sticky fallback (same idea as separate-MT sticky).
+- The newly promoted **MA** inherits the kill target from **`lastAssistTargetId`** / prior **`MaActorEngaged.spawnId`** and self-engages without requiring a manual Target click. Pure MT-only bots (not also MA) still follow MA rather than freepicking.
 
 ---
 

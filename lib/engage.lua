@@ -57,6 +57,8 @@ function engage.applyAttackCommandEngage(spawnId)
     local isNewEngage = not prevEngageId or prevEngageId ~= spawnId
     rc.engageTargetId = spawnId
     rc.attackCommandEngage = true
+    -- Seed assist cache so MA death / promote can keep the same spawn even above assistpct.
+    rc.lastAssistTargetId = spawnId
     engage.armMobprobEngageGrace(spawnId)
     return true, sp.CleanName() or tostring(spawnId), isNewEngage
 end

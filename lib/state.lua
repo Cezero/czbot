@@ -133,7 +133,7 @@
 local M = {}
 
 -- runState is always a number. No string state support; no string comparisons; no regex.
--- Fixed states 1..11; resume states 1000+ (state >= 1000 means resume).
+-- Fixed states 1..13; resume states 1000+ (state >= 1000 means resume).
 -- See RESUME_BY_HOOK for setting resume from spellutils (hook name -> state number).
 
 M.STATES = {
@@ -149,6 +149,7 @@ M.STATES = {
     dragging = 10,
     chchain = 11,
     sumcorpse_pending = 12,
+    fear_return = 13,
     resume_doHeal = 1001,
     resume_doDebuff = 1002,
     resume_doBuff = 1003,
@@ -173,6 +174,7 @@ local BUSY_STATE_NUMS = {
     [M.STATES.engage_return_follow] = true,
     [M.STATES.unstuck] = true,
     [M.STATES.chchain] = true,
+    [M.STATES.fear_return] = true,
 }
 
 local ALLOWED_STATE_NUMS = {}
@@ -193,6 +195,7 @@ local STATE_NUM_TO_NAME = {
     [10] = 'dragging',
     [11] = 'chchain',
     [12] = 'sumcorpse_pending',
+    [13] = 'fear_return',
     [1001] = 'doHeal_resume',
     [1002] = 'doDebuff_resume',
     [1003] = 'doBuff_resume',
@@ -237,7 +240,8 @@ function M.canStartBusyState(stateNum)
         return true
     end
 
-    if stateNum == M.STATES.camp_return or stateNum == M.STATES.engage_return_follow then
+    if stateNum == M.STATES.camp_return or stateNum == M.STATES.engage_return_follow
+        or stateNum == M.STATES.fear_return then
         return true
     end
 

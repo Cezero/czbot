@@ -586,6 +586,10 @@ local function applyMaDisengage(content, sender)
         end
     end
     clearMaActorEngaged(state.getRunconfig(), sender)
+    -- Intentional MA release (not transient empty-target flaps): drop assist cache on peers.
+    if not MA_DISENGAGE_TRANSIENT_REASONS[reason] then
+        state.getRunconfig().lastAssistTargetId = nil
+    end
 end
 
 local function applyAttackEngage(content, sender)

@@ -93,6 +93,7 @@ local STATE_NUM_TO_LABEL = {
     [state.STATES.dead] = 'Dead',
     [state.STATES.pulling] = 'Pulling',
     [state.STATES.camp_return] = 'Returning to camp',
+    [state.STATES.fear_return] = 'Returning from fear',
     [state.STATES.melee] = 'Melee',
     [state.STATES.engage_return_follow] = 'Returning to follow',
     [state.STATES.chchain] = 'CH chain',

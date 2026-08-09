@@ -2095,7 +2095,8 @@ end
 -- Mirrors GetTankInfo but resolves from AssistName (and does not depend on MT).
 -- Optional assistpct updates the last-target cache when MA is actively assisting.
 -- Optional assistNameOverride uses that PC instead of configured AssistName.
--- Returns fromCache (5th value) when the target came from lastAssistTargetId (MA dead/hover/no MA).
+-- Returns fromCache (5th value) when the target came from lastAssistTargetId
+-- (MA dead/hover/no MA, or live MA with no NPC target yet — promote handoff).
 function spellutils.GetAssistInfo(includeTarget, assistpct, assistNameOverride)
     local assistName = assistNameOverride or tankrole.GetAssistTargetName()
     if not assistName or assistName == '' then
@@ -2119,8 +2120,9 @@ function spellutils.GetAssistInfo(includeTarget, assistpct, assistNameOverride)
     if not includeTarget then return assistName, assistid, nil, nil end
 
     local rc = state.getRunconfig()
+    -- Keep lastAssistTargetId across automatic MA promote when the cached spawn is still alive.
     if rc.lastResolvedAssistName ~= assistName then
-        rc.lastAssistTargetId = nil
+        clearLastAssistTargetIfDead(rc)
         rc.lastResolvedAssistName = assistName
     end
     clearLastAssistTargetIfDead(rc)
@@ -2163,8 +2165,9 @@ function spellutils.GetAssistInfo(includeTarget, assistpct, assistNameOverride)
         end
     end
 
+    -- Use cache when MA is dead/hover OR new live MA has no NPC target yet (promote handoff).
     local fromCache = false
-    if unavailable and (not assistar or assistar == 0) then
+    if (not assistar or assistar == 0) then
         local cached = rc.lastAssistTargetId
         if cached and utils.isAliveEngageSpawn(mq.TLO.Spawn(cached)) then
             assistar = cached

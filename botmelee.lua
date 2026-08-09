@@ -168,10 +168,17 @@ local function tryRogueEvade()
     return true
 end
 
--- When I am MT and my target is a PC: clear combat state.
+-- When I am MT and my target is a PC: clear combat stick/attack, but keep a valid NPC engage
+-- sticky so MA+MT promote does not wipe the kill target while Target is on a corpse/raid mate.
 local function clearTankCombatState()
     local rc = state.getRunconfig()
-    rc.engageTargetId = nil
+    local engageId = rc.engageTargetId
+    local keepEngage = engageId and engageId > 0
+        and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId))
+        and not charm.isCharmSkipped(engageId, rc)
+    if not keepEngage then
+        rc.engageTargetId = nil
+    end
     rc.allMezzedEngageId = nil
     combat.ResetCombatState()
 end
@@ -514,19 +521,21 @@ end
 local function resolveMeleeAssistTarget(assistName, assistpct)
     local rc = state.getRunconfig()
     local _, _, maTarId, maTarHp, fromCache = spellutils.GetAssistInfo(true, assistpct)
-    if not maTarId or maTarId <= 0 then return nil end
-    if charm.isCharmSkipped(maTarId, rc) then return nil end
-
-    if fromCache then
-        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then
-            return maTarId
+    if maTarId and maTarId > 0 and not charm.isCharmSkipped(maTarId, rc) then
+        if fromCache then
+            if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then
+                return maTarId
+            end
+        else
+            local hp = maTarHp or mq.TLO.Spawn(maTarId).PctHPs()
+            if isAssistTargetEngageable(maTarId, rc, assistName, hp, assistpct) then
+                return maTarId
+            end
         end
-        return nil
     end
-
-    local hp = maTarHp or mq.TLO.Spawn(maTarId).PctHPs()
-    if isAssistTargetEngageable(maTarId, rc, assistName, hp, assistpct) then
-        return maTarId
+    -- Keep current camp engage across MA death / promote hiccups (MT-style sticky).
+    if hasAliveEngageTarget(rc) and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
+        return rc.engageTargetId
     end
     return nil
 end
@@ -670,6 +679,22 @@ local function selectMATarget()
     return selectEngageTargetFromLosList(losList, engageId)
 end
 
+-- After automatic MA promote: inherit kill target from cache/prior MA actor engage.
+-- Ignores MaActorEngaged.maName so a previous MA's spawnId can hand off.
+local function seedMaPromoteTarget(rc)
+    local candidates = { rc.lastAssistTargetId }
+    local eng = rc.MaActorEngaged
+    if eng and eng.spawnId then
+        candidates[#candidates + 1] = eng.spawnId
+    end
+    for _, id in ipairs(candidates) do
+        if isValidMaSelectedTarget(id, rc) then
+            return id
+        end
+    end
+    return nil
+end
+
 local function resolveMaBotTarget(rc)
     -- Always allow one-shot unpause adopt and mid-fight client Target adopt.
     if rc.maAdoptSelectedTarget then
@@ -682,6 +707,14 @@ local function resolveMaBotTarget(rc)
         and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(rc.engageTargetId))
         and not charm.isCharmSkipped(rc.engageTargetId, rc) then
         return rc.engageTargetId
+    end
+    -- Promote handoff: fill sticky engage so selectMATarget does not depend on LoS freepick alone.
+    if not hasAliveEngageTarget(rc) then
+        local seeded = seedMaPromoteTarget(rc)
+        if seeded then
+            rc.engageTargetId = seeded
+            rc.lastAssistTargetId = seeded
+        end
     end
     return selectMATarget()
 end
@@ -748,6 +781,10 @@ function botmelee.disengageCombat(reason)
     rc.attackCommandEngage = nil
     rc.allMezzedEngageId = nil
     rc.followCatchUp = false
+    -- Intentional release: drop assist cache so peers do not re-stick via promote handoff path.
+    if reason == 'command' or reason == 'protected_spawn' then
+        rc.lastAssistTargetId = nil
+    end
     czactor.clearAttackPublishLatch()
     if state.getRunState() ~= state.STATES.casting then rc.statusMessage = '' end
     combat.ResetCombatState({ clearTarget = mq.TLO.Me.Combat() })
@@ -964,6 +1001,10 @@ end
 -- Resolve engageTargetId from role (MA picker / MT follower / OT / DPS), then engage or disengage.
 function botmelee.AdvCombat()
     local rc = state.getRunconfig()
+    -- Local MA must not defer melee while catching up to a (possibly dead) follow leader.
+    if tankrole.AmIMainAssist() then
+        rc.followCatchUp = false
+    end
     if rc.followCatchUp then return end
     local assistName = tankrole.GetAssistTargetName()
     local mainTankName = tankrole.GetMainTankName()
@@ -1094,6 +1135,9 @@ function botmelee.getHookFn(name)
             end
             if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
             local rc = state.getRunconfig()
+            if tankrole.AmIMainAssist() then
+                rc.followCatchUp = false
+            end
             if rc.followCatchUp then return end
             -- Suspend melee engage while notmatar is in progress (any class): twist-once wait or CurSpell.
             local cs = rc.CurSpell
@@ -1110,14 +1154,17 @@ function botmelee.getHookFn(name)
             end
             -- Pulling intentionally operates outside camp pin; disengage here fights botpull stick/nav.
             if state.getRunState() == state.STATES.pulling then return end
+            -- Feared / returning to pre-fear loc: keep engage sticky, do not stick/attack/nav fight.
+            if state.getRunState() == state.STATES.fear_return then return end
             if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
                 disengageCombat('beyond_follow_distance')
                 return
             end
             if not spawnutils.isPlayerWithinCampPin(rc) then
                 disengageCombat('outside_camp_pin')
-                -- Allow camp-return /nav to finish; stopping it here causes resume stutter outside the pin.
-                if state.getRunState() ~= state.STATES.camp_return then
+                -- Allow camp-return / fear-return /nav to finish; stopping it here causes resume stutter outside the pin.
+                local rs = state.getRunState()
+                if rs ~= state.STATES.camp_return and rs ~= state.STATES.fear_return then
                     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
                 end
                 return
@@ -1138,8 +1185,15 @@ function botmelee.getHookFn(name)
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
             local chaseEngage = spawnutils.shouldChaseOutsideCamp(rc)
             if not rc.MobList[1] and not chaseEngage then
-                disengageCombat('moblist_empty')
-                return
+                -- Keep /cz attack latch or camp sticky engage across transient empty MobList (MA promote / anchor swap).
+                local keepEngage = (rc.attackCommandEngage and rc.engageTargetId
+                        and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)))
+                    or spawnutils.shouldPreserveStickyEngage(rc)
+                    or (hasAliveEngageTarget(rc) and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc))
+                if not keepEngage then
+                    disengageCombat('moblist_empty')
+                    return
+                end
             end
             tryRogueEvade()
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
