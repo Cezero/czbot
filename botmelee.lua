@@ -1160,11 +1160,13 @@ function botmelee.getHookFn(name)
             if state.getRunState() == state.STATES.pulling then return end
             -- Feared / returning to pre-fear loc: keep engage sticky, do not stick/attack/nav fight.
             if state.getRunState() == state.STATES.fear_return then return end
-            if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc) then
+            local attackLatch = spawnutils.isAttackCommandLatchActive(rc)
+            if botmove.isBeyondFollowDistance() and not spawnutils.shouldChaseOutsideCamp(rc)
+                and not attackLatch then
                 disengageCombat('beyond_follow_distance')
                 return
             end
-            if not spawnutils.isPlayerWithinCampPin(rc) then
+            if not spawnutils.isPlayerWithinCampPin(rc) and not attackLatch then
                 disengageCombat('outside_camp_pin')
                 -- Allow camp-return / fear-return /nav to finish; stopping it here causes resume stutter outside the pin.
                 local rs = state.getRunState()
@@ -1187,12 +1189,11 @@ function botmelee.getHookFn(name)
                 return
             end
             if utils.isNonCombatZone(mq.TLO.Zone.ShortName()) then return end
-            local chaseEngage = spawnutils.shouldChaseOutsideCamp(rc)
+            local chaseEngage = spawnutils.shouldChaseOutsideCamp(rc) or attackLatch
             if not rc.MobList[1] and not chaseEngage then
                 -- Keep /cz attack latch or sticky engage across transient empty MobList
                 -- (fear/banish OOR, MA promote / anchor swap). Do not broadcast ma_disengage here.
-                local keepEngage = (rc.attackCommandEngage and rc.engageTargetId
-                        and spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(rc.engageTargetId)))
+                local keepEngage = spawnutils.isAttackCommandLatchActive(rc)
                     or spawnutils.shouldPreserveStickyEngage(rc)
                 if not keepEngage then
                     disengageCombat('moblist_empty')

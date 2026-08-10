@@ -30,6 +30,9 @@ local COMBAT_FTE_INITIAL_BLOCK_MS = 2000
 local COMBAT_FTE_STRIKE_BLOCK_EXTRA_MS = 5000
 local FTE_STRIKE_DEBOUNCE_MS = 2000
 local FTE_RECHECK_TARGET_DELAY_MS = 300
+--- /cz attack latch: ignore camp/follow leash clears while engage spawn is within this 2D distance.
+local ATTACK_COMMAND_CHASE_DIST = 500
+local ATTACK_COMMAND_CHASE_DIST_SQ = ATTACK_COMMAND_CHASE_DIST * ATTACK_COMMAND_CHASE_DIST
 
 local function spawnInArea(spawn, x, y, z, radius2DSq, radiusZ)
     if not spawn or not x or not y then return false end
@@ -252,6 +255,37 @@ function spawnutils.shouldChaseOutsideCamp(rc)
     return spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(id))
 end
 
+--- True when /cz attack latch is active: engageTargetId alive and within ATTACK_COMMAND_CHASE_DIST of player.
+function spawnutils.isAttackCommandLatchActive(rc)
+    rc = rc or state.getRunconfig()
+    if not rc.attackCommandEngage then return false end
+    local id = rc.engageTargetId
+    if not id or id <= 0 then return false end
+    local spawn = mq.TLO.Spawn(id)
+    if not spawnutils.isAliveEngageSpawn(spawn) then return false end
+    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+    local sx, sy = spawn.X(), spawn.Y()
+    if not meX or not meY or not sx or not sy then return false end
+    local distSq = utils.getDistanceSquared2D(meX, meY, sx, sy)
+    return distSq ~= nil and distSq <= ATTACK_COMMAND_CHASE_DIST_SQ
+end
+
+--- True when there is no usable live Main Assist (empty name, missing, dead, or hovering).
+local function isLiveAssistUnavailable()
+    local tankrole = require('lib.tankrole')
+    local assistName = tankrole.GetAssistTargetName()
+    if not assistName or assistName == '' then return true end
+    local charinfo = require('plugin.charinfo')
+    local info = charinfo.GetInfo(assistName)
+    local assistid = info and info.ID or nil
+    if not assistid or assistid == 0 then
+        assistid = mq.TLO.Spawn('pc =' .. assistName).ID()
+    end
+    if not assistid or assistid == 0 then return true end
+    local spawn = mq.TLO.Spawn(assistid)
+    return spawn.Dead() or spawn.Hovering()
+end
+
 --- True when id is the MA or MT primary target (offtank should not sticky-preserve these as "adds").
 function spawnutils.isOfftankPrimaryTarget(id, maTarId, mtTarId)
     if not id then return false end
@@ -315,6 +349,11 @@ function spawnutils.shouldPreserveStickyEngage(rc)
         end
     end
     local assistName = tankrole.GetAssistTargetName()
+    if not tankrole.AmIMainAssist() and rc.lastAssistTargetId == rc.engageTargetId
+        and isLiveAssistUnavailable() then
+        -- No usable live MA (none resolved, dead, or hovering): keep kill via lastAssist.
+        return true
+    end
     if assistName and assistName ~= '' and not tankrole.AmIMainAssist() then
         local eng = rc.MaActorEngaged
         if eng and eng.spawnId and eng.spawnId == rc.engageTargetId then
@@ -587,15 +626,20 @@ function spawnutils.isNpcEngageTarget(spawn)
     return t == 'NPC' or t == 'Pet'
 end
 
---- True when melee may engage spawn (normal NPC rules, or /cz attack override on a PC pet).
+--- True when melee may engage spawn (normal NPC rules, /cz attack latch within chase dist,
+--- or lastAssist kill-target chase when no live MA).
 function spawnutils.isEngageAllowedSpawn(spawn, rc)
     rc = rc or state.getRunconfig()
     if not spawn or not spawn.ID() or spawn.ID() == 0 then return false end
     local sid = spawn.ID()
-    if rc.attackCommandEngage and rc.engageTargetId == sid and spawnutils.isAliveEngageSpawn(spawn) then
+    if rc.attackCommandEngage and rc.engageTargetId == sid
+        and spawnutils.isAttackCommandLatchActive(rc) then
         return true
     end
     if not spawnutils.isNpcEngageTarget(spawn) then return false end
+    if rc.lastAssistTargetId == sid and isLiveAssistUnavailable() then
+        return true
+    end
     return spawnutils.isSpawnWithinCampPin(spawn, rc)
 end
 

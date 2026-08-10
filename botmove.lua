@@ -565,9 +565,14 @@ local function doLeashResetCombat()
         local bardtwist = require('lib.bardtwist')
         bardtwist.StopTwist()
     end
+    -- Keep lastAssist so dead-MA bots can reseed after camp return.
+    -- Keep /cz attack latch engage while spawn is alive within chase distance.
+    if spawnutils.isAttackCommandLatchActive(rc) then
+        combat.ResetCombatState()
+        return
+    end
     rc.engageTargetId = nil
     rc.attackCommandEngage = nil
-    rc.lastAssistTargetId = nil
     combat.ResetCombatState()
 end
 
@@ -1113,6 +1118,8 @@ function botmove.MakeCampLeashCheck()
     if state.getRunState() == state.STATES.pulling then return end
     if state.getRunState() == state.STATES.camp_return then return end
     if state.getRunState() == state.STATES.fear_return then return end
+    -- /cz attack latch within chase dist: do not yank back to camp / wipe engage.
+    if spawnutils.isAttackCommandLatchActive(rc) then return end
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isPlayerWithinCampPin(rc) then
         botmove.MakeCamp('return')
         return
