@@ -96,7 +96,8 @@ runState **fear_return** is driven by **botmove.TickFearReturn** (every doMoveme
 
 - **Rising edge** (`Me.Feared` false→true): save current XYZ, stick/attack/nav off, keep `engageTargetId`, set `phase=feared`.
 - **Falling edge** (true→false): `/nav locxyz` to saved point, set `phase=returning` (5s nav deadline, re-issue like camp return).
-- **Early abort (domelee only):** while returning, if **settings.domelee** (or travel-attack override) and live `engageTargetId` is within **settings.acleash** of the player, stop nav and clear busy so normal melee resumes. With **domelee** off, always continue to the saved pre-fear XYZ.
+- **Early abort (domelee):** while returning, if **settings.domelee** (or travel-attack override) and live `engageTargetId` is within **settings.acleash** of the player, stop nav and clear busy so normal melee resumes.
+- **Early abort (non-melee):** while returning with **domelee** off, if heal/debuff/cure `CastSpell` finds an in-range castable action, `TryAbortFearReturnForCast` stops nav and clears busy so casting can start. Otherwise continue to the saved pre-fear XYZ.
 - **Arrive:** clear when within **campRestDistance** of the saved XYZ.
 - Camp leash and follow catch-up are skipped while `fear_return` is active. **doMelee** returns early for this state (does not clear engage sticky).
 

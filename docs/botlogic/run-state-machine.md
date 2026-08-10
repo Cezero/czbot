@@ -46,7 +46,7 @@ stateDiagram-v2
     idle --> camp_return: botmove MakeCamp return
     camp_return --> idle: TickCampReturn at camp
     idle --> fear_return: Me.Feared rising edge
-    fear_return --> idle: TickFearReturn at loc or melee engage acleash
+    fear_return --> idle: TickFearReturn at loc / melee acleash / caster castable
     idle --> engage_return_follow: botmove StartReturnToFollowAfterEngage
     engage_return_follow --> idle: botmove TickReturnToFollowAfterEngage
     idle --> unstuck: botmove UnStuck
@@ -70,7 +70,7 @@ Note: `melee` is not a busy state; it does not restrict which hooks run. It carr
 | casting | Yes | spellutils.CastSpell | clearCastingStateOrResume | priority, spellcheckResume |
 | dragging | Yes | botmove startDrag | botmove tickDragging | priority, corpseID, phase |
 | camp_return | Yes | botmove MakeCamp return | TickCampReturn (at camp / deadline) | priority, deadline |
-| fear_return | Yes | botmove TickFearReturn (Me.Feared edge) | TickFearReturn (at pre-fear loc; or domelee + engage within acleash) | priority, phase, deadline |
+| fear_return | Yes | botmove TickFearReturn (Me.Feared edge) | TickFearReturn (at pre-fear loc; or domelee + engage within acleash; or non-melee heal/debuff/cure CastSpell via TryAbortFearReturnForCast) | priority, phase, deadline |
 | engage_return_follow | Yes | botmove StartReturnToFollowAfterEngage | botmove TickReturnToFollowAfterEngage | priority, phase, deadline |
 | unstuck | Yes | botmove UnStuck (PathExists, wiggle) | tickUnstuckPhase | priority, phase, deadline, followid, stuckdistance |
 | chchain | Yes | slot schedule while chainActive | chchainTick (slot fire, cast poll, pre-land cancel) | priority, tank, castStart, cancelled |

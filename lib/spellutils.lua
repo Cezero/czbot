@@ -3542,6 +3542,8 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     end
     local resuming = (rc.CurSpell and rc.CurSpell.phase and rc.CurSpell.spell == index and rc.CurSpell.sub == sub)
     if not resuming then
+        -- Non-melee fear return: stop nav when a heal/debuff/cure is castable so casting can start.
+        botmove.TryAbortFearReturnForCast(sub)
         if not state.canStartBusyState(state.STATES.casting) then mezBlocked('busy state'); return false end
         if not spellutils.SpellCheck(sub, index) then mezBlocked('SpellCheck'); return false end
         if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then mezBlocked('CastTimeLeft'); return false end

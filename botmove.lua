@@ -991,7 +991,6 @@ local function withinAcleashOfEngage(rc)
 end
 
 --- Melee-only: abort fear-return nav when within acleash of engage so doMelee can re-stick.
---- Casters (domelee off) always finish nav to the saved pre-fear XYZ.
 local function canEarlyAbortFearReturnToEngage(rc)
     if not (myconfig.settings.domelee or state.isTravelAttackOverriding()) then
         return false
@@ -1018,6 +1017,20 @@ local function finishFearReturn()
     if state.getRunState() == state.STATES.fear_return then
         state.clearRunState()
     end
+end
+
+--- Non-melee: abort fear-return nav when a heal/debuff/cure is ready to cast so CastSpell can start.
+--- Melee keeps acleash-of-engage early abort instead.
+---@param sub string|nil Spell subsystem ('heal', 'debuff', 'cure', ...)
+---@return boolean True if fear return was aborted
+function botmove.TryAbortFearReturnForCast(sub)
+    if sub ~= 'heal' and sub ~= 'debuff' and sub ~= 'cure' then return false end
+    if myconfig.settings.domelee or state.isTravelAttackOverriding() then return false end
+    if state.getRunState() ~= state.STATES.fear_return then return false end
+    local p = state.getRunStatePayload()
+    if not p or p.phase ~= 'returning' then return false end
+    finishFearReturn()
+    return true
 end
 
 local function onFearStart()
