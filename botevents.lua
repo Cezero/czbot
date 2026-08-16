@@ -129,12 +129,11 @@ function botevents.OnWarpDetected()
     _zoneChangePending = false
 end
 
---- Sample position each tick; if moved more than settings.warpThreshold, treat as zone reset.
+--- Sample position each tick; if moved more than cz_common.warpThreshold, treat as zone reset.
 --- Call from zoneCheck. Disabled when warpThreshold <= 0.
 function botevents.checkWarp()
     if _zoneChangePending then return end
-    local settings = botconfig.config.settings
-    local threshold = settings and settings.warpThreshold
+    local threshold = botconfig.getWarpThreshold()
     if not threshold or threshold <= 0 then
         _lastPosX, _lastPosY, _lastPosZ = nil, nil, nil
         return
@@ -144,7 +143,7 @@ function botevents.checkWarp()
     local x, y, z = mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z()
     if not x or not y or not z then return end
     if _lastPosX and _lastPosY and _lastPosZ then
-        local thresholdSq = settings.warpThresholdSq or (threshold * threshold)
+        local thresholdSq = threshold * threshold
         local distSq = utils.getDistanceSquared3D(_lastPosX, _lastPosY, _lastPosZ, x, y, z)
         if distSq and distSq > thresholdSq then
             log.say('Warp detected (%.0f units)', math.sqrt(distSq))

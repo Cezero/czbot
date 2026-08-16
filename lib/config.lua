@@ -25,8 +25,6 @@
 ---@field zradius number|nil
 ---@field campRestDistance number|nil distance in units to consider "at camp" for leash and return
 ---@field campRestDistanceSq number|nil precomputed campRestDistance^2 for distance-squared comparisons
----@field warpThreshold number|nil inter-tick position jump (units) treated as zone reset; <=0 disables
----@field warpThresholdSq number|nil precomputed warpThreshold^2 for distance-squared comparisons
 ---@field maCampAnchor boolean|nil when true, MobList anchor follows nearby MA; inject ATTACK targets
 ---@field maAnchorLeash number|nil max MA distance for anchor/inject; defaults to acleash
 ---@field spelldb string|nil
@@ -125,6 +123,8 @@ M._commonLoadLastAttemptMs = 0
 M._guiDirty = false
 M._suppressCommonSyncBroadcast = false
 
+local DEFAULT_WARP_THRESHOLD = 600
+
 -- Consider (con) color names and name-to-index map for pull filtering and UI. Indices 1-7.
 M.ConColors = { "Grey", "Green", "Light Blue", "Blue", "White", "Yellow", "Red" }
 M.ConColorsNameToId = {}
@@ -133,7 +133,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'warpThreshold', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'buffNonPeerRaid', 'antiAfk' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
@@ -223,6 +223,30 @@ local EMPTY_COMMON = {}
 
 function M.getCommon()
     return M._common or M._commonLastGood or EMPTY_COMMON
+end
+
+--- Inter-tick 3D jump (units) treated as a zone reset. Stored in cz_common.warpThreshold; <=0 disables.
+function M.getWarpThreshold()
+    local v = tonumber(M.getCommon().warpThreshold)
+    if v == nil then return DEFAULT_WARP_THRESHOLD end
+    return v
+end
+
+function M.setWarpThreshold(value)
+    value = tonumber(value)
+    if value == nil then value = DEFAULT_WARP_THRESHOLD end
+    if value < 0 then value = 0 end
+    M.mutateCommon(function(common)
+        common.warpThreshold = value
+    end)
+end
+
+local function seedWarpThresholdIfMissing()
+    local common = M._common
+    if type(common) ~= 'table' then return false end
+    if tonumber(common.warpThreshold) ~= nil then return false end
+    common.warpThreshold = DEFAULT_WARP_THRESHOLD
+    return true
 end
 
 local COMMON_FILENAME = 'cz_common.lua'
@@ -632,6 +656,7 @@ function M.initCommonAtStartup()
         M._common = {}
         local nocombatzones = require('lib.nocombatzones')
         nocombatzones.seedDefaultsIfEmpty()
+        seedWarpThresholdIfMissing()
         setCommonCache(M._common)
         M.saveCommon()
         markCommonLoadSuccess()
@@ -643,7 +668,8 @@ function M.initCommonAtStartup()
         local migrated = migrateOldCommonToZones(M._common) or migrateCzimmuneIntoZones(M._common)
         local nocombatzones = require('lib.nocombatzones')
         local seeded = nocombatzones.seedDefaultsIfEmpty()
-        if migrated or seeded then
+        local warpSeeded = seedWarpThresholdIfMissing()
+        if migrated or seeded or warpSeeded then
             M.saveCommon()
         end
         markCommonLoadSuccess()
@@ -862,7 +888,6 @@ function M.recomputeDerivedSettings()
         s.acleashSq = (s.acleash or 0) * (s.acleash or 0)
         s.followdistanceSq = (s.followdistance or 0) * (s.followdistance or 0)
         s.campRestDistanceSq = (s.campRestDistance or 0) * (s.campRestDistance or 0)
-        s.warpThresholdSq = (s.warpThreshold or 0) * (s.warpThreshold or 0)
     end
     local pull = M.config.pull
     if pull then
@@ -1276,7 +1301,9 @@ function M.Load(path)
     if (M.config.settings.followdistance == nil) then M.config.settings.followdistance = 35 end
     if (M.config.settings.zradius == nil) then M.config.settings.zradius = 75 end
     if (M.config.settings.campRestDistance == nil) then M.config.settings.campRestDistance = 15 end
-    if (M.config.settings.warpThreshold == nil) then M.config.settings.warpThreshold = 600 end
+    -- Warp threshold lives in cz_common.warpThreshold (shared); drop leftover character copies.
+    M.config.settings.warpThreshold = nil
+    M.config.settings.warpThresholdSq = nil
     if M.config.settings.maCampAnchor == nil then M.config.settings.maCampAnchor = true end
     -- Character-wide minimum mez level (0 = disabled; spell MaxLevel still applies above).
     if M.config.settings.mezMinLevel == nil then M.config.settings.mezMinLevel = 0 end

@@ -57,7 +57,7 @@ Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()` and the new 
 
 - **"You have entered"** and the short-name poll call `OnZoneChange(false)`. Those patterns can match without a real zone change, so **DelayOnZone** runs only when `Zone.ShortName()` is non-empty and differs from the stored `zonename` (checked before and after the 1s wait).
 - **"LOADING, PLEASE WAIT."** calls `OnZoneChange(true)`. Same-zone LOADING still runs **DelayOnZone** after the 1s settle delay so camp / engage are cleared (avoids nav back to the pre-load camp).
-- **Warp** (`botevents.checkWarp` from zoneCheck): if position moves more than **settings.warpThreshold** (default 600; `<= 0` disables) between ticks, **OnWarpDetected** runs **DelayOnZone('warp')** immediately.
+- **Warp** (`botevents.checkWarp` from zoneCheck): if position moves more than **`cz_common.warpThreshold`** (default 600; `<= 0` disables) between ticks, **OnWarpDetected** runs **DelayOnZone('warp')** immediately. Edit on the Advanced tab; shared across bots.
 
 **OnZoneChange** steps:
 

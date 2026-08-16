@@ -201,16 +201,15 @@ function M.draw()
     ImGui.TextColored(WHITE, '%s', 'Warp Threshold: ')
     ImGui.SameLine(0, 2)
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
-    local warpVal = botconfig.config.settings.warpThreshold or 600
+    local warpVal = botconfig.getWarpThreshold()
     local warpNew, warpCh = inputs.boundedInt('advanced_warp_threshold', warpVal, 0, 100000, 50,
         '##advanced_warp_threshold')
     if warpCh then
-        botconfig.config.settings.warpThreshold = warpNew
-        runConfigLoaders()
+        botconfig.setWarpThreshold(warpNew)
     end
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip(
-            'Inter-tick position jump (units) treated as a zone reset (clear camp/engage). 0 disables.')
+            'Inter-tick position jump (units) treated as a zone reset (clear camp/engage). Stored in cz_common.lua and shared across bots. 0 disables.')
     end
     ImGui.Spacing()
     ImGui.Separator()
