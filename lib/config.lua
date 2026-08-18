@@ -29,6 +29,7 @@
 ---@field maAnchorLeash number|nil max MA distance for anchor/inject; defaults to acleash
 ---@field spelldb string|nil
 ---@field confirmExit boolean|nil when true, GUI Exit button shows a confirmation dialog (default off)
+---@field autoInventory boolean|nil when true, CharState /autoinv cursor items immediately (default off; forage and pre-cast unblock still autoinv)
 ---@field buffNonPeerRaid boolean|nil when true, after peer pc buffs, also buff in-zone non-peer raid members (default off)
 ---@field antiAfk boolean|nil when true, open/close a random bag (or inventory) after ~3–4 min true idle (default on)
 
@@ -133,7 +134,7 @@ for i, v in ipairs(M.ConColors) do M.ConColorsNameToId[v:upper()] = i end
 local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure', 'script' }
 
 local subOrder = {
-    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'buffNonPeerRaid', 'antiAfk' },
+    settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'autoInventory', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
     melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
@@ -1323,6 +1324,8 @@ function M.Load(path)
     if M.config.settings.campAcleash == nil then M.config.settings.campAcleash = true end
     -- GUI Exit button: show confirmation dialog before terminating (default off).
     if M.config.settings.confirmExit == nil then M.config.settings.confirmExit = false end
+    -- CharState: /autoinv any non-junk cursor item with bag space (default off; forage and pre-cast still autoinv).
+    if M.config.settings.autoInventory == nil then M.config.settings.autoInventory = false end
     -- After peer pc buffs, also buff in-zone non-peer raid members via spawn buff cache (default off).
     if M.config.settings.buffNonPeerRaid == nil then M.config.settings.buffNonPeerRaid = false end
     -- Anti-AFK: open/close a random bag (or inventory) after ~3–4 min continuous true idle (default on).

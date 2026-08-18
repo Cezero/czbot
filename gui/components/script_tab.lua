@@ -198,6 +198,17 @@ function M.draw()
             'When on, after peer All-chars buffing finishes, also buff in-zone raid members who are not CharInfo peers. Roster and spawn buffs are cached (idle, at most once a minute). Peers still use watches.')
     end
     ImGui.Spacing()
+    local autoInvOn = (botconfig.config.settings.autoInventory == true)
+    local autoInvVal, autoInvPressed = ImGui.Checkbox('Auto-inventory cursor items##auto_inventory', autoInvOn)
+    if autoInvPressed then
+        botconfig.config.settings.autoInventory = autoInvVal
+        botconfig.ApplyAndPersist()
+    end
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip(
+            'When on, put items on the cursor into bags immediately. Zone junk is still destroyed; full bags still set OutOfSpace. Default off (forage and pre-cast unblock still autoinv).')
+    end
+    ImGui.Spacing()
     ImGui.TextColored(WHITE, '%s', 'Warp Threshold: ')
     ImGui.SameLine(0, 2)
     ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)

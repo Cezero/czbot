@@ -16,6 +16,7 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.doheal** | boolean | `false` | Enable heal loop. |
 | **settings.dobuff** | boolean | `false` | Enable buff loop. |
 | **settings.buffNonPeerRaid** | boolean | `false` | After peer pc buffs, also buff in-zone non-peer raid members (Advanced tab). See [Buffing configuration](buffing-configuration.md). |
+| **settings.autoInventory** | boolean | `false` | When on, put items on the cursor into bags immediately (Advanced tab). Zone junk is still destroyed; full bags still set OutOfSpace. Forage and pre-cast unblock still autoinv when this is off. |
 | **settings.docure** | boolean | `false` | Enable cure loop. |
 | **settings.domelee** | boolean | `false` | Enable melee/engage. |
 | **settings.doraid** | boolean | `false` | Raid mode (zone-specific raid mechanics). See [Raid mode](raid-mode.md). |

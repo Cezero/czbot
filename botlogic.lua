@@ -150,7 +150,7 @@ local function charState_Always()
         rc.forageSawCursor = false
     end
 
-    -- Cursor / inventory: junk destroy (any); OutOfSpace (any); /autoinv only after bot Forage (forageExpectCursor)
+    -- Cursor / inventory: junk destroy (any); OutOfSpace (any); /autoinv after bot Forage or when autoInventory is on
     if mq.TLO.Cursor.ID() then
         local zone = mq.TLO.Zone.ShortName()
         local cursorName = mq.TLO.Cursor.Name()
@@ -161,7 +161,9 @@ local function charState_Always()
                 log.say('I\'m out of inventory space!')
             end
             rc.OutOfSpace = true
-        elseif not rc.OutOfSpace and rc.forageExpectCursor and mq.TLO.Me.FreeInventory() > 0 then
+        elseif not rc.OutOfSpace
+            and (rc.forageExpectCursor or botconfig.config.settings.autoInventory == true)
+            and mq.TLO.Me.FreeInventory() > 0 then
             mq.cmd('/autoinv')
             rc.OutOfSpace = false
         end
