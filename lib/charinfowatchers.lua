@@ -12,6 +12,7 @@ local M = {}
 local PHASE_TO_SCOPE = {
     tank = 'LIST',
     offtank = 'LIST',
+    watched = 'LIST',
     groupmember = 'INGROUP',
     groupheal = 'GRPAGG',
     groupbuff = 'GRPAGG',
@@ -76,6 +77,41 @@ function M.tankOtWatchNames()
     return out
 end
 
+--- MtList ∪ OtList ∪ HealList for HEAL LIST watchers (tank / offtank / watched).
+function M.healListWatchNames()
+    local seen = {}
+    local out = {}
+    local function addList(list)
+        if type(list) ~= 'table' then return end
+        for _, name in ipairs(list) do
+            if type(name) == 'string' and name ~= '' then
+                local key = name:lower()
+                if not seen[key] then
+                    seen[key] = true
+                    out[#out + 1] = name
+                end
+            end
+        end
+    end
+    addList(rolelists.getMtList())
+    addList(rolelists.getOtList())
+    addList(rolelists.getHealList())
+    return out
+end
+
+--- True when heal_list is non-empty and every name has CharInfo (all-bot extra heals).
+function M.healListFullyOnCharInfo()
+    local list = rolelists.getHealList()
+    if type(list) ~= 'table' or #list == 0 then return false end
+    for i = 1, #list do
+        local name = list[i]
+        if type(name) ~= 'string' or name == '' or not charinfo.GetInfo(name) then
+            return false
+        end
+    end
+    return true
+end
+
 local function classesFromValidTargets(validTgts)
     if type(validTgts) ~= 'table' or #validTgts == 0 then
         return {}
@@ -123,7 +159,7 @@ function M.registerHealWatchers()
     if not charinfo.ClearWatchers then return end
     charinfo.ClearWatchers('HEAL')
     local count = botconfig.getSpellCount('heal')
-    local listNames = M.tankOtWatchNames()
+    local listNames = M.healListWatchNames()
     for i = 1, count do
         local entry = botconfig.getSpellEntry('heal', i)
         if entry and entry.enabled ~= false then
@@ -340,6 +376,24 @@ function M.targetsFromWatchList(kind, phase, spellId)
             end
             if id and id > 0 and idSet[id] then
                 out[#out + 1] = { id = id, targethit = 'offtank', name = ot.name }
+            end
+        end
+        return out
+    end
+    if phase == 'watched' then
+        local list = rolelists.getHealList()
+        if type(list) ~= 'table' then return out end
+        for i = 1, #list do
+            local name = list[i]
+            if type(name) == 'string' and name ~= '' then
+                local peer = charinfo.GetInfo(name)
+                local id = peer and peer.ID
+                if (not id or id <= 0) then
+                    id = mq.TLO.Spawn('pc =' .. name).ID()
+                end
+                if id and id > 0 and idSet[id] then
+                    out[#out + 1] = { id = id, targethit = 'watched', name = name }
+                end
             end
         end
         return out

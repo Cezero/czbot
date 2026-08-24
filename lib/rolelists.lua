@@ -1,4 +1,4 @@
--- Global MA/MT/OT fallback lists (cz_common.ma_list, mt_list, ot_list).
+-- Global MA/MT/OT/heal fallback lists (cz_common.ma_list, mt_list, ot_list, heal_list).
 
 local botconfig = require('lib.config')
 local state = require('lib.state')
@@ -22,6 +22,10 @@ local LIST_CONFIG = {
     ot = {
         commonKey = 'ot_list',
         runconfigKey = 'OtList',
+    },
+    heal = {
+        commonKey = 'heal_list',
+        runconfigKey = 'HealList',
     },
     ch = {
         commonKey = 'ch_healers',
@@ -83,6 +87,10 @@ function rolelists.getOtList()
     return state.getRunconfig().OtList or {}
 end
 
+function rolelists.getHealList()
+    return state.getRunconfig().HealList or {}
+end
+
 function rolelists.getChHealers()
     return state.getRunconfig().ChHealers or {}
 end
@@ -114,6 +122,11 @@ function rolelists.process(listType, command)
             cw.registerHealWatchers()
             cw.registerBuffWatchers()
             cw.registerCureWatchers()
+        end
+    elseif listType == 'heal' then
+        local ok, cw = pcall(require, 'lib.charinfowatchers')
+        if ok and cw then
+            cw.registerHealWatchers()
         end
     elseif listType == 'ch' then
         _chListGen = _chListGen + 1

@@ -86,7 +86,7 @@ See [Corpse dragging](../corpse-dragging.md) for configuration.
 
 ## Camp return
 
-runState **camp_return** is set by `botmove.MakeCamp('return')` (doLeashResetCombat, doNavToCamp, setRunState camp_return with 5s deadline). Cleared by **TickCampReturn** when at camp (or deadline re-issues nav). **MakeCampLeashCheck** (doMovementCheck) can trigger return when campstatus and no engageTargetId and over leash (distance or LOS): doLeashResetCombat then MakeCamp('return').
+runState **camp_return** is set by `botmove.MakeCamp('return')` (doLeashResetCombat, doNavToCamp, setRunState camp_return with 5s deadline). Cleared by **TickCampReturn** when at camp (or deadline re-issues nav). **MakeCampLeashCheck** (doMovementCheck) can trigger return when campstatus and no engageTargetId and over leash (distance or LOS): doLeashResetCombat then MakeCamp('return'). After an engage spawn is cleared, rest-distance return waits up to 2s when another MobList spawn is closer than camp (`campReturnAssistWaitUntil`); acleash-pin yank is unchanged.
 
 ---
 

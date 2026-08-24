@@ -8,6 +8,7 @@
 ---@field MaList table cz_common ma_list mirror
 ---@field MtList table cz_common mt_list mirror
 ---@field OtList table cz_common ot_list mirror
+---@field HealList table cz_common heal_list mirror
 ---@field maEligible boolean|nil true when Me.Name is on MaList (list membership; EQ primary may still claim)
 ---@field mtEligible boolean|nil true when Me.Name is on MtList (list membership; raid MT requires this)
 ---@field allMezzedEngageId number|nil spawn id locked while entire camp is mezzed (shortest remaining mez)
@@ -27,6 +28,7 @@
 ---@field campstatus boolean
 ---@field makecamp {x:number|nil, y:number|nil, z:number|nil}
 ---@field doCampAcleash boolean|nil when false and makecamp on, allow chase/assist outside Radius; MobList still uses Radius; session-only, default on
+---@field campReturnAssistWaitUntil number|nil mq.gettime() until which MakeCampLeashCheck waits for a new MA target after a kill
 ---@field charmid number|nil
 ---@field charmSkipIds table|nil spawnId -> true; session charm pets to exclude from engage/mez until dead or /cz attack
 ---@field domelee boolean|nil
@@ -287,6 +289,7 @@ function M.resetRunconfig()
         MaList = {},
         MtList = {},
         OtList = {},
+        HealList = {},
         maEligible = false,
         mtEligible = false,
         MobList = {},
@@ -294,6 +297,7 @@ function M.resetRunconfig()
         campstatus = false,
         makecamp = { x = nil, y = nil, z = nil },
         doCampAcleash = true,
+        campReturnAssistWaitUntil = nil,
         charmid = nil,
         charmSkipIds = {},
         domelee = nil,

@@ -24,14 +24,15 @@ local PRIMARY_OPTIONS = {
 local TARGETPHASE_OPTIONS_HEAL = {
     { key = 'corpse',      label = 'Corpse',   tooltip = 'Resurrect PC corpses.' },
     { key = 'self',        label = 'Self',     tooltip = 'Heal self.' },
-    { key = 'groupheal',   label = 'Grp Heal', tooltip = 'Group AE heals' },
     { key = 'tank',        label = 'Tank',     tooltip = 'Heal main tank.' },
     { key = 'offtank',     label = 'Off-tank', tooltip = 'Heal active off-tanks (peers with a live OT claim on the Actor channel).' },
+    { key = 'watched',     label = 'Watched',  tooltip = 'Heal heal_list names via CharInfo. Use when every extra heal target is on CharInfo (all-bot raid). Mixed raids use XTarget instead.' },
+    { key = 'xtgt',        label = 'XTarget',  tooltip = 'Heal configured XTarget slots (PCs/mercs/pets, never NPCs). Use when not every extra heal target is on CharInfo (mixed raid).' },
+    { key = 'groupheal',   label = 'Grp Heal', tooltip = 'Group AE heals' },
     { key = 'groupmember', label = 'Group',    tooltip = 'Heal group members (class filter below).' },
     { key = 'pc',          label = 'PC',       tooltip = 'Heal other PCs/bots (class filter below).' },
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Heal your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Heal other group pets.' },
-    { key = 'xtgt',        label = 'XTarget',  tooltip = 'Heal extended targets.' },
 }
 
 local function bandHasPhase(entry, phase)

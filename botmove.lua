@@ -531,6 +531,23 @@ local function hasCampSet(rc)
     return rc and rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y and rc.makecamp.z
 end
 
+--- True when an alive MobList spawn is closer to the player than the camp pin.
+local function hasMobCloserThanCamp(rc)
+    if not hasCampSet(rc) then return false end
+    local meX, meY = mq.TLO.Me.X(), mq.TLO.Me.Y()
+    local distToCampSq = utils.getDistanceSquared2D(meX, meY, rc.makecamp.x, rc.makecamp.y)
+    if not distToCampSq then return false end
+    for _, spawn in ipairs(rc.MobList or {}) do
+        if spawnutils.isAliveEngageSpawn(spawn) then
+            local d = utils.getDistanceSquared2D(meX, meY, spawn.X(), spawn.Y())
+            if d and d < distToCampSq then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function isCampDragWorkflowActive()
     if state.getRunState() ~= state.STATES.dragging then return false end
     local p = state.getRunStatePayload()
@@ -538,6 +555,7 @@ local function isCampDragWorkflowActive()
 end
 
 local CAMP_RETURN_DEADLINE_MS = 5000
+local CAMP_RETURN_ASSIST_WAIT_MS = 2000
 
 local function campLeashGoalReached(rc)
     if spawnutils.isCampAcleashEnforced(rc) then
@@ -1137,9 +1155,27 @@ function botmove.MakeCampLeashCheck()
         botmove.MakeCamp('return')
         return
     end
-    if rc.engageTargetId then return end
-    if campDistanceOk(rc) and campLOSOk(rc) then return end
+    if rc.engageTargetId then
+        rc.campReturnAssistWaitUntil = nil
+        return
+    end
+    if campDistanceOk(rc) and campLOSOk(rc) then
+        rc.campReturnAssistWaitUntil = nil
+        return
+    end
+    if rc.campReturnAssistWaitUntil and mq.gettime() < rc.campReturnAssistWaitUntil
+        and hasMobCloserThanCamp(rc) then
+        return
+    end
+    rc.campReturnAssistWaitUntil = nil
     botmove.MakeCamp('return')
+end
+
+--- Arm the post-kill wait so MakeCampLeashCheck can hold camp return for MA retarget.
+function botmove.armCampReturnAssistWait(rc)
+    rc = rc or state.getRunconfig()
+    if not hasCampSet(rc) then return end
+    rc.campReturnAssistWaitUntil = mq.gettime() + CAMP_RETURN_ASSIST_WAIT_MS
 end
 
 function botmove.NavToCamp(opts)

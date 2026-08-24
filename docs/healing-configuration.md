@@ -5,7 +5,7 @@ This document explains how to configure the bot’s **healing** behavior: which 
 ## Overview
 
 - **Master switch:** Healing runs only when **`settings.doheal`** is `true`. Default is `false`.
-- **Heal target:** The heal loop runs **two resource passes** when no cast is in progress. **Pass 1 (HP):** Safe rez (no mobs in camp, or only non-**inCombat** rez spells) runs **corpse in a dedicated sub-pass first**. If eligible corpses remain and rez is allowed on that path, the heal hook **holds** and skips other HP phases until a rez cast starts or corpses clear. When **Allow rez in combat** is active (`inCombat` on a corpse spell) and mobs are in camp, living HP phases run first (self → groupheal → tank → offtank → groupmember → pc → mypet → pet → xtgt) and corpse is tried only if nothing living needs an HP heal (no hold). When no corpses need rez (or all corpse spells are combat-blocked), pass 1 uses only the living HP phases with **healResource** `'hp'` spells. **Pass 2 (Mana):** runs the same non-corpse phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
+- **Heal target:** The heal loop runs **two resource passes** when no cast is in progress. **Pass 1 (HP):** Safe rez (no mobs in camp, or only non-**inCombat** rez spells) runs **corpse in a dedicated sub-pass first**. If eligible corpses remain and rez is allowed on that path, the heal hook **holds** and skips other HP phases until a rez cast starts or corpses clear. When **Allow rez in combat** is active (`inCombat` on a corpse spell) and mobs are in camp, living HP phases run first (self → tank → offtank → watched or xtgt → groupheal → groupmember → pc → mypet → pet) and corpse is tried only if nothing living needs an HP heal (no hold). When no corpses need rez (or all corpse spells are combat-blocked), pass 1 uses only the living HP phases with **healResource** `'hp'` spells. **Pass 2 (Mana):** runs the same non-corpse phase order with only **healResource** `'mana'` spells (e.g. cannibalize), and only when pass 1 found nothing to cast. The **Main Tank** (from TankName) is the resolved tank when the **tank** phase is checked.
 - **Where to configure:** Set **`settings.doheal`** in the `settings` section and all heal options under the **`heal`** section. See [Config file reference](#config-file-reference) below.
 
 ---
@@ -25,7 +25,7 @@ All heal options live under **`config.heal`**. Spell entries are in **`heal.spel
 | Option | Default | Purpose |
 |--------|--------|---------|
 | **interruptlevel** | 0.80 | Used when deciding whether to interrupt a cast (e.g. for a higher-priority heal). Target HP threshold. |
-| **xttargets** | 0 | Comma- or digit-separated extended target slot numbers (e.g. `1,2,3` or `123`) that are valid for heals. When set, spells with band **xtgt** can heal those XTarget slots. |
+| **xttargets** | 0 | Comma-separated XTarget slot numbers (e.g. `"1,2,3"`) that are valid for heals. Set on the **Advanced** tab. Intended for **mixed raids** when **not** every extra heal target is on CharInfo. Spells with band **xtgt** can heal those slots (PCs, mercs, pets; NPCs are ignored). Skipped when **heal_list** is non-empty and every listed name is on CharInfo (the **watched** phase runs instead). |
 
 ### Group AE heals (MQ TargetType Group v1 / Group v2)
 
@@ -54,8 +54,8 @@ Each entry in **`heal.spells`** can have:
 
 Bands define **who** can receive the spell and **at what HP %**. Each band has two distinct concepts:
 
-- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `groupheal`, `tank`, `offtank`, `pc`, `groupmember`, `mypet`, `pet`, `xtgt`. Spell-level **inCombat** (see [Special tokens](#special-tokens-targetphase)) controls whether corpse rez is allowed in combat; do not put `cbt` in targetphase.
-- **validtargets:** Within a phase stage, which target types to consider. For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `validtargets = { 'all' }`. **Corpse**, **tank**, and **self** need no validtargets.
+- **targetphase:** Phase stages at which this spell is considered. Only stage tokens go here: `corpse`, `self`, `tank`, `offtank`, `watched`, `xtgt`, `groupheal`, `pc`, `groupmember`, `mypet`, `pet`. Spell-level **inCombat** (see [Special tokens](#special-tokens-targetphase)) controls whether corpse rez is allowed in combat; do not put `cbt` in targetphase.
+- **validtargets:** Within a phase stage, which target types to consider. For **pc** or **groupmember** phases use class tokens (`war`, `clr`, etc.) or `all`. Absent or empty = treat as `all`. When the config is written, absent validtargets is written as `validtargets = { 'all' }`. **Corpse**, **tank**, **self**, **offtank**, **watched**, and **xtgt** need no validtargets.
 - **min** / **max:** HP % range (0–100). The target’s HP must be in this range to be considered. For corpse-related targets the effective max is 200 (special).
 
 **Phase order**
@@ -68,14 +68,14 @@ The **phase order** is the evaluation order within each pass. The bot runs **pas
 Otherwise pass 1 continues with the living sequence below. Pass 2 uses the same sequence minus corpse (mana heals only). For each phase the bot gets the list of targets and, for **each target**, checks all heal spells of that resource type that include that phase in their bands (in config order). The first spell that the target needs (HP in band, in range) is cast. The living phase order is:
 
 1. **self**
-2. **groupheal** (group AE)
-3. **tank**
-4. **offtank** — peers with a live OT claim on the [Actor channel](czbot-actor-channel.md)
-5. **groupmember** (in-group only)
-6. **pc** (all peers)
-7. **mypet**
-8. **pet** (other pets)
-9. **xtgt** (extended targets)
+2. **tank**
+3. **offtank** — peers with a live OT claim on the [Actor channel](czbot-actor-channel.md)
+4. **watched** or **xtgt** — extra named heals (mutually exclusive; see below)
+5. **groupheal** (group AE) — always after tank / offtank / watched / xtgt
+6. **groupmember** (in-group only)
+7. **pc** (all peers)
+8. **mypet**
+9. **pet** (other pets)
 
 **corpse** (rez) is a separate sub-pass: before the list above for safe rez, or after it for combat rez (**inCombat** + mobs in camp).
 
@@ -87,12 +87,16 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 - **self vs pc:** Add `'self'` in targetphase for self-heals; they are evaluated before tank, groupmember, and pc (see evaluation order above).
 - **tank:** No validtargets needed; main tank by role; `'tank'` alone in targetphase is enough.
 - **offtank:** Targets active off-tank peers (Actor `ot_claim`); no validtargets needed.
+- **watched vs xtgt:** Extra named heals just below tank/OT. Use **one** of these, depending on CharInfo coverage:
+  - **`heal_list` / `watched`** — Use when **every** extra heal target is on CharInfo (all-bot raid). Populate **heal_list** on the Advanced tab (`cz_common.lua`). Spells with **watched** in targetphase heal those names via CharInfo watches. When the list is fully on CharInfo, **xtgt** is skipped.
+  - **`xtgt` / `heal.xttargets`** — Use when **not** all extra heal targets are on CharInfo (mixed raid). Assign those people to XTarget slots and enable the slots on the Advanced tab. Spells with **xtgt** in targetphase heal occupied slots (PCs, mercs, pets; never NPCs). When any **heal_list** name is missing from CharInfo, **watched** is skipped and **xtgt** is used instead. If **heal_list** is empty, **xtgt** still runs when slots are configured.
 - **groupheal vs groupmember:** **groupheal** = group AE heal (count group members in band, cast on group/self). **groupmember** = single-target heals only for characters in the bot’s (EQ) group; if no group member needs a heal, out-of-group PCs are not considered. Add **pc** in targetphase to also heal peers outside the group (evaluated after groupmember in the order above).
 - **Selection:** For each phase within a pass, each target is checked against all heal spells of that resource type that have that phase; first spell (in config order) that the target needs is cast. Within pc/groupmember, targets are in iteration order (not lowest HP). Mana heals (`healResource = 'mana'`) are never considered until the HP pass completes without casting.
 
 **Special tokens (targetphase):**
 - **inCombat** (spell-level, not in targetphase) — When the spell has **corpse** in a band, set **inCombat** `true` on the spell entry to allow rez when there are mobs in the camp list. When `false` or unset, corpse rez is only considered when there are no mobs in camp (safe rez only). With **inCombat** and mobs in camp, combat rez runs **after** all living HP heal phases (no hold). The GUI shows "Allow rez in combat" only when at least one band includes **corpse**.
-- **xtgt** (extended target) — When in targetphase and **heal.xttargets** is set, the spell can target extended target (XTarget) slots; the band’s min/max apply to the XTarget’s HP.
+- **xtgt** (extended target) — When in targetphase and **heal.xttargets** is set, the spell can target those XTarget slots; the band’s min/max apply to the spawn’s HP. **Intended for mixed raids** (not every extra heal target is on CharInfo). NPCs in a slot are ignored. See **watched vs xtgt** above.
+- **watched** — When in targetphase and **heal_list** names are all on CharInfo, the spell heals those names via CharInfo. **Intended for all-bot raids** (every extra heal target is on CharInfo).
 
 **Heal over time (HoT)**
 
@@ -155,4 +159,5 @@ heal = {
 
 - **Corpse rez:** Spells with **corpse** in targetphase can target eligible corpses in range (charinfo peer, group member, raid member, or guild member). Corpses are ordered by class priority (healers first, configurable via **botListClassOrder**); each rezzer picks the first unclaimed corpse and broadcasts **`rez_claim`** on the czactor channel so peers exclude it for 60 seconds. Rez is only considered when the spell’s band allows it and (for non-**inCombat**) no mobs are in the camp list if the band is not combat. Safe rez holds before other HP phases until a rez cast starts or corpses disappear. With **inCombat** and mobs in camp, combat rez runs after living HP heals (no hold).
 - **Interrupt:** **interruptlevel** is used when deciding whether to interrupt the current cast for another heal (e.g. tank drop).
-- **XT targets:** If **xttargets** lists slot numbers, spells with **xtgt** in bands can heal those extended target slots when their HP is in the spell’s band.
+- **XT targets:** If **xttargets** lists slot numbers, spells with **xtgt** in bands can heal those extended target slots (non-NPC) when their HP is in the spell’s band. Use this when extra heal targets are **not** all on CharInfo. When **heal_list** is fully on CharInfo, **watched** is used instead and **xtgt** is skipped.
+- **Watched list:** **heal_list** (Advanced tab / `cz_common.lua`) names extra CharInfo heal targets. Use this when every extra heal target **is** on CharInfo.

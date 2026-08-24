@@ -5,7 +5,7 @@
 
 ## Logic
 
-Runs the phase-first spell check for the **heal** section in two resource passes. **Pass 1 (HP)** runs living HP phases (self, groupheal, tank, offtank, groupmember, pc, mypet, pet, xtgt) and a dedicated **corpse** sub-pass whose position depends on combat rez. **Pass 2 (Mana)** runs the non-corpse phases only.
+Runs the phase-first spell check for the **heal** section in two resource passes. **Pass 1 (HP)** runs living HP phases (self, tank, offtank, watched or xtgt, groupheal, groupmember, pc, mypet, pet) and a dedicated **corpse** sub-pass whose position depends on combat rez. **watched** runs when `heal_list` names are all on CharInfo; **xtgt** runs when they are not (mixed raid) or when `heal_list` is empty and XTarget slots are set. **Pass 2 (Mana)** runs the non-corpse phases only.
 
 ```mermaid
 flowchart TB
@@ -34,7 +34,7 @@ HealCheck builds context (tank, bots, spell ranges, etc.) and calls `RunPhaseFir
 
 1. **Safe rez corpse pass** — only when combat rez is **not** deferred: **corpse** phase with HP spells (rez) first.
 2. **HP hold** — if eligible corpses remain on the safe-rez path (not combat-deferred), the heal hook returns without running living HP phases (retries corpse next tick).
-3. **HP pass** — living phases (self through xtgt) with HP spells.
+3. **HP pass** — living phases (self through pet, with watched or xtgt after offtank and groupheal after those) with HP spells.
 4. **Combat rez corpse pass** — when **inCombat** corpse spell + mobs in camp: **corpse** after living HP if no cast started (no hold).
 5. **Mana pass** — same non-corpse phases with **healResource** `'mana'` spells (e.g. cannibalize); runs only if prior passes did not start a cast.
 

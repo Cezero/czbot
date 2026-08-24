@@ -819,6 +819,12 @@ function spawnutils.validateAcmTarget(rc)
         if not spawnutils.isEngageAllowedSpawn(mq.TLO.Spawn(rc.engageTargetId), rc) then
             rc.engageTargetId = nil
             rc.attackCommandEngage = nil
+            local botmove = package.loaded['botmove']
+            if botmove and botmove.armCampReturnAssistWait then
+                botmove.armCampReturnAssistWait(rc)
+            elseif rc.campstatus and rc.makecamp and rc.makecamp.x and rc.makecamp.y and rc.makecamp.z then
+                rc.campReturnAssistWaitUntil = mq.gettime() + 2000
+            end
             local cz = package.loaded['lib.czactor']
             if cz and cz.clearAttackPublishLatch then cz.clearAttackPublishLatch() end
             syncEngageStatusMessage(rc)

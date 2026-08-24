@@ -95,7 +95,7 @@ Top-level heal options only. **heal.spells** is an array of spell entries; indiv
 | Path | Type | Default | Purpose |
 |------|------|---------|---------|
 | **heal.interruptlevel** | number | 0.80 | Interrupt level for heals. See [Healing configuration](healing-configuration.md). |
-| **heal.xttargets** | number | 0 | Extra heal targets. |
+| **heal.xttargets** | number or comma string | 0 | XTarget slots for extra heals in mixed raids (not all targets on CharInfo). See [Healing configuration](healing-configuration.md). |
 
 ---
 

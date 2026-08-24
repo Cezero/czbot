@@ -82,6 +82,61 @@ local function drawMaAnchorSection()
     ImGui.Spacing()
 end
 
+local function xtSlotSetFromConfig(raw)
+    local set = {}
+    if raw == nil or raw == 0 or raw == '0' or raw == '' then return set end
+    for num in string.gmatch(tostring(raw), "%d+") do
+        local n = tonumber(num)
+        if n and n > 0 then set[n] = true end
+    end
+    return set
+end
+
+local function persistXtSlotSet(set)
+    local heal = botconfig.config.heal
+    if not heal then
+        heal = {}
+        botconfig.config.heal = heal
+    end
+    local slots = {}
+    for i = 1, 40 do
+        if set[i] then slots[#slots + 1] = tostring(i) end
+    end
+    if #slots == 0 then
+        heal.xttargets = 0
+    else
+        heal.xttargets = table.concat(slots, ',')
+    end
+    runConfigLoaders()
+end
+
+local function drawHealXTargetsSection()
+    section.header('Heal XTarget slots')
+    ImGui.TextWrapped(
+        'XTarget heals (xtgt band) are for mixed raids when not every extra heal target is on CharInfo. NPCs in a slot are ignored.')
+    ImGui.Spacing()
+    local heal = botconfig.config.heal
+    if not heal then
+        heal = {}
+        botconfig.config.heal = heal
+    end
+    local selected = xtSlotSetFromConfig(heal.xttargets)
+    local nSlots = mq.TLO.Me.XTargetSlots() or 0
+    if nSlots < 1 then nSlots = 20 end
+    for i = 1, nSlots do
+        if i > 1 then ImGui.SameLine() end
+        local checked = selected[i] == true
+        local val, pressed = ImGui.Checkbox(tostring(i) .. '##advanced_xtslot_' .. i, checked)
+        if pressed then
+            selected[i] = val or nil
+            persistXtSlotSet(selected)
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Heal XTarget slot ' .. i .. ' when a spell has the XTarget (xtgt) band.')
+        end
+    end
+end
+
 local function drawRoleListSection(listType, runconfigKey, label)
     local rc = state.getRunconfig()
     if type(rc[runconfigKey]) ~= 'table' then rc[runconfigKey] = {} end
@@ -226,13 +281,19 @@ function M.draw()
     ImGui.Separator()
     ImGui.Spacing()
 
+    drawHealXTargetsSection()
+    ImGui.Spacing()
+    ImGui.Separator()
+    ImGui.Spacing()
+
     drawMaAnchorSection()
     ImGui.TextWrapped(
-        'Fallback lists are stored in cz_common.lua. After editing lists, run /cz reloadcommon on other bots. Order matters: first alive, in-zone name within MA leash wins when the assigned MA/MT is unavailable.')
+        'Fallback lists are stored in cz_common.lua. After editing lists, run /cz reloadcommon on other bots. Order matters for MA/MT: first alive, in-zone name within MA leash wins when the assigned MA/MT is unavailable. heal_list is for extra heal targets when every name is on CharInfo; mixed raids use Heal XTarget slots instead.')
     ImGui.Spacing()
     drawRoleListSection('ma', 'MaList', 'Main Assist fallback list (ma_list)')
     drawRoleListSection('mt', 'MtList', 'Main Tank fallback list (mt_list)')
     drawRoleListSection('ot', 'OtList', 'Offtank watch list (ot_list)')
+    drawRoleListSection('heal', 'HealList', 'Watched heal list (heal_list)')
 
     ImGui.Spacing()
     ImGui.Separator()

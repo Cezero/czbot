@@ -31,14 +31,16 @@ The heal phase order is:
 
 1. **corpse** (rez) — Eligible corpses in range (charinfo, group, raid, or guild); ordered by class priority; first unclaimed corpse selected via czactor **`rez_claim`** coordination. Safe rez runs corpse before living phases (with hold). Spell-level **inCombat** allows rez in combat; that path runs corpse **after** all living HP phases (no hold).
 2. **self** — Yourself.
-3. **groupheal** (group/AE) — Group heal; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
-4. **tank** — The resolved Main Tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
-5. **offtank** — Peers with a live OT claim ([Actor channel](czbot-actor-channel.md)).
-6. **groupmember** — Only characters in the bot’s (EQ) group (evaluated before pc). For **heal and buff**, the target list excludes self and the configured main tank (they are considered only in the self and tank phases).
-7. **pc** — All peers (in or out of group). **validtargets** (classes or `all`) filter which classes. For **heal and buff**, the target list excludes the configured main tank (tank is considered only in the tank phase).
-8. **mypet** — Your pet.
-9. **pet** — Other peers’ pets.
-10. **xtgt** — Extended target (XTarget) slots when **heal.xttargets** is set.
+3. **tank** — The resolved Main Tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
+4. **offtank** — Peers with a live OT claim ([Actor channel](czbot-actor-channel.md)).
+5. **watched** or **xtgt** — Extra named heals, mutually exclusive:
+   - **watched** (`heal_list`) — Use when **every** extra heal target is on CharInfo (all-bot raid).
+   - **xtgt** (`heal.xttargets`) — Use when **not** all extra heal targets are on CharInfo (mixed raid). Occupied slots; NPCs ignored. If `heal_list` is empty, xtgt still runs when slots are set.
+6. **groupheal** (group/AE) — Group heal after named/XT phases; requires enough group members in the spell’s HP band and in AE range (see **tarcnt** below).
+7. **groupmember** — Only characters in the bot’s (EQ) group (evaluated before pc). For **heal and buff**, the target list excludes self and the configured main tank (they are considered only in the self and tank phases).
+8. **pc** — All peers (in or out of group). **validtargets** (classes or `all`) filter which classes. For **heal and buff**, the target list excludes the configured main tank (tank is considered only in the tank phase).
+9. **mypet** — Your pet.
+10. **pet** — Other peers’ pets.
 
 For a given target within a pass, the first heal spell (in config order) of that resource type that has that phase in its bands and for which the target is in HP band and in range is the one cast. Mana heals are deferred until the HP pass completes without casting.
 
@@ -48,7 +50,7 @@ For a given target within a pass, the first heal spell (in config order) of that
 
 ### Bands
 
-Each band has **targetphase** (phase tokens: corpse, self, groupheal, tank, offtank, pc, groupmember, mypet, pet, xtgt) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; corpse has no validtargets). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry; combat rez runs after living HP heals. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank and self need no validtargets. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
+Each band has **targetphase** (phase tokens: corpse, self, tank, offtank, watched, xtgt, groupheal, pc, groupmember, mypet, pet) and **validtargets** (within-phase types: classes or `all` for pc/groupmember; corpse has no validtargets). Spell-level **inCombat** (not in targetphase) allows corpse rez in combat when set on the spell entry; combat rez runs after living HP heals. **groupmember** restricts single-target heals to characters in the bot’s group; **pc** allows any peer in range. Tank, self, offtank, watched, and xtgt need no validtargets. **watched** (`heal_list`) is for extra heals when every listed name is on CharInfo; **xtgt** is for mixed raids when not all extra targets are on CharInfo. For heal and buff, groupmember-phase targets exclude self and the configured main tank; pc-phase targets exclude the configured main tank (cure is unchanged). Special tokens are described in [Healing configuration](healing-configuration.md).
 
 ---
 

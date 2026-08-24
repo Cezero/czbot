@@ -77,7 +77,7 @@
 ---@class ConfigHeal
 ---@field spells table[]|nil
 ---@field interruptlevel number|nil
----@field xttargets number|nil
+---@field xttargets number|string|nil
 
 ---@class ConfigBuff
 ---@field spells table[]|nil
@@ -262,7 +262,7 @@ local _pendingMutators = nil
 
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
-local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ot_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
+local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ot_list', 'heal_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
 
 local function commonFilePath()
     return mq.configDir .. '/' .. COMMON_FILENAME
