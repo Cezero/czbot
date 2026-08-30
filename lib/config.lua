@@ -73,6 +73,8 @@
 ---@field offtank boolean|nil
 ---@field mtSticky boolean|nil
 ---@field minmana number|nil
+---@field bandolierDps string|nil inventory bandolier name when not Main Tank (blank = no switch)
+---@field bandolierTank string|nil inventory bandolier name when Main Tank (blank = no switch)
 
 ---@class ConfigHeal
 ---@field spells table[]|nil
@@ -136,7 +138,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'autoInventory', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
-    melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana' },
+    melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'bandolierDps', 'bandolierTank' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },

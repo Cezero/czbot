@@ -66,6 +66,28 @@ function M.draw()
         runConfigLoaders()
     end
 
+    local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
+    local bandolierFlags = (ImGuiInputTextFlags.EnterReturnsTrue) or 0
+    ImGui.Text('DPS Bandolier')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Inventory bandolier to activate when this bot is not the Main Tank. Leave blank to never switch for DPS.')
+    end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(180)
+    local dpsBuf = melee.bandolierDps or ''
+    local dpsNew, dpsCh = ImGui.InputText('##combat_bandolierDps', dpsBuf, bandolierFlags)
+    if dpsCh and dpsNew ~= nil then melee.bandolierDps = dpsNew; runConfigLoaders() end
+    ImGui.SameLine()
+    ImGui.Text('Tank Bandolier')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Inventory bandolier to activate when this bot is the Main Tank. Leave blank to never switch for tank.')
+    end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(180)
+    local tankBuf = melee.bandolierTank or ''
+    local tankNew, tankCh = ImGui.InputText('##combat_bandolierTank', tankBuf, bandolierFlags)
+    if tankCh and tankNew ~= nil then melee.bandolierTank = tankNew; runConfigLoaders() end
+
     ImGui.Text('Charm pet setup')
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip('When you charm a mob, automatically set the new charm pet to taunt OFF (so it does not steal aggro from your tank) and send it to attack the current target. Pet buffs/heals still run via the normal loops.')
@@ -113,9 +135,7 @@ function M.draw()
     ImGui.SameLine()
     ImGui.SetNextItemWidth(300)
     local stickBuf = melee.stickcmd or ''
-    local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
-    local flags = (ImGuiInputTextFlags.EnterReturnsTrue) or 0
-    local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, flags)
+    local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, bandolierFlags)
     if stickCh and stickNew ~= nil then melee.stickcmd = stickNew; runConfigLoaders() end
 
     ImGui.Text('Stay behind')

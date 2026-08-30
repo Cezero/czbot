@@ -5,7 +5,7 @@ This document explains how to configure the bot when it is the **Main Tank (MT)*
 ## Overview
 
 - **Tank role and target selection** (who is MT, puller priority, etc.) are configured as in [Tank and Assist Roles](tank-and-assist-roles.md): **TankName**, **AssistName**, and the group window Puller.
-- **Melee/tank behavior** (stick, when to assist, camp distance) is configured in **`settings`** and **`melee`**. When this bot is the MT, it picks which mob to engage from the camp list; when it is DPS or offtank, it follows the MA (see [Offtank configuration](offtank-configuration.md)).
+- **Melee/tank behavior** (stick, when to assist, camp distance) is configured in **`settings`** and **`melee`**. When this bot is the MT, it picks which mob to engage from the camp list; when it is DPS or offtank, it follows the MA (see [Offtank configuration](offtank-configuration.md)). Optional **bandolierDps** / **bandolierTank** names (Combat tab) activate the matching inventory bandolier when MT status changes; leave blank to never switch.
 
 ---
 
@@ -33,6 +33,8 @@ Under **`config.melee`**:
 | **assistpct** | 99 | MA’s target HP % at or below which this bot will sync to the MA’s target (for DPS/MA logic). |
 | **offtank** | `false` | When true, this bot is an offtank (see [Offtank configuration](offtank-configuration.md)). |
 | **minmana** | 0 | Minimum mana % to engage (melee). |
+| **bandolierDps** | *(unset)* | Inventory bandolier to activate when this bot is **not** the Main Tank. Blank or omitted: no switch. Combat tab **DPS Bandolier**. |
+| **bandolierTank** | *(unset)* | Inventory bandolier to activate when this bot **is** the Main Tank. Blank or omitted: no switch. Combat tab **Tank Bandolier**. |
 
 **Example: melee/tank-related config**
 

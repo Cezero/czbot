@@ -85,6 +85,8 @@ Scalar pull options can be set via setvar. **pull.spell** (table: gem, spell, ra
 | **melee.behindAggroPct** | number | 90 | Non-MT with stayBehind: above this PctAggro, stick without positioning token until aggro drops. |
 | **melee.offtank** | boolean | `false` | This bot is an offtank (add selection via Actor channel). |
 | **melee.minmana** | number | 0 | Min mana % to engage. |
+| **melee.bandolierDps** | string | *(unset)* | Bandolier to activate when not Main Tank. Blank: no switch. |
+| **melee.bandolierTank** | string | *(unset)* | Bandolier to activate when Main Tank. Blank: no switch. |
 
 ---
 

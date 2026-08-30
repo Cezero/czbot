@@ -20,6 +20,7 @@ local charm = require('lib.charm')
 local tickprof = require('lib.tickprof')
 local log = require('lib.log')
 local antiafk = require('lib.antiafk')
+local bandolier = require('lib.bandolier')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -441,6 +442,7 @@ function botlogic.mainloop()
             hookregistry.runNormalHooks()
         end
         antiafk.tick()
+        bandolier.tick()
         tickprof.endTick(tick, paused)
         local procMs = mq.gettime() - tickStart
         local sleepMs = TICK_TARGET_MS - procMs
