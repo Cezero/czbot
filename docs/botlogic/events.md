@@ -66,6 +66,7 @@ Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()` and the new 
 3. If not force: re-check short name; if still empty or unchanged, clear status and return (no reset).
 4. **DelayOnZone(reason)** (`zone` / `loading` / `warp`):
     - Calls **ResetCombatSession(reason)** (clear run state, engage target, MobList, stick/attack/target, debuff tracking).
+    - Force `/nav stop`, `/stick off`, and `/attack off` even when `Stick.Active()` is false (teleport often leaves stick hold running).
     - Sets `zonename` to current zone short name.
     - Clears camp when camp was on: `makecamp` and `campstatus = false`.
     - Turns off `dopull` via `botpull.DisablePull('zone')`.

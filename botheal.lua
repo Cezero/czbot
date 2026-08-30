@@ -1095,6 +1095,7 @@ function botheal.HealCheck(runPriority)
     local options = {
         runPriority = runPriority,
         entryValid = cachedEntryValid,
+        noResume = true,
     }
     local cursor = spellutils.getResumeCursor('doHeal')
     local combatRezDeferred = healCombatRezDeferred()

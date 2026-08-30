@@ -2587,14 +2587,14 @@ function spellutils.handleSpellCheckReentry(sub, options)
                 if spellid and not cw.watchListHas('HEAL', scope, spellid, rc.CurSpell.target) then
                     spellutils.interruptActiveCast(rc)
                     spellutils.clearCastingStateOrResume()
-                    return false
+                    return true
                 end
             else
                 spellutils.InterruptCheckHealThreshold(rc, 'heal', rc.CurSpell.targethit, rc.CurSpell.spell, mq.TLO.Target,
                     rc.CurSpell.target, entry)
             end
             if not rc.CurSpell.phase then
-                return false
+                return true
             end
         end
     end
@@ -2612,10 +2612,13 @@ function spellutils.handleSpellCheckReentry(sub, options)
     if rc.CurSpell and rc.CurSpell.phase == 'casting' and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) then
         if castTargetDriftBlocksReentry(rc) then
             spellutils.clearCastingStateOrResume()
-            return false
+            return sub == 'heal'
         end
         if (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') and not spellutils.IsMemorizing() then
             spellutils.InterruptCheck()
+        end
+        if sub == 'heal' and (not rc.CurSpell or not rc.CurSpell.phase) then
+            return true
         end
         local status = casting.status() or ''
         local storedId = casting.storedSpellId() or 0
@@ -2626,7 +2629,7 @@ function spellutils.handleSpellCheckReentry(sub, options)
             log.say('cast lib finished without success (\ar%s\ax) sub=\at%s\ax spellidx=\at%s\ax', castResult,
                 tostring(rc.CurSpell.sub), tostring(rc.CurSpell.spell))
             spellutils.clearCastingStateOrResume()
-            return false
+            return sub == 'heal'
         end
         if complete then
             rc.CurSpell.resisted = (castResult == 'CAST_RESIST')
@@ -2657,10 +2660,13 @@ function spellutils.handleSpellCheckReentry(sub, options)
     if rc.CurSpell and rc.CurSpell.sub and rc.CurSpell.phase == 'casting' and not rc.CurSpell.viaMQ2Cast and not rc.CurSpell.viaCastingLib then
         if castTargetDriftBlocksReentry(rc) then
             spellutils.clearCastingStateOrResume()
-            return false
+            return sub == 'heal'
         end
         if mq.TLO.Me.CastTimeLeft() > 0 and (not skipInterruptForBRD or mq.TLO.Me.Class.ShortName() ~= 'BRD') then
             spellutils.InterruptCheck()
+        end
+        if sub == 'heal' and (not rc.CurSpell or not rc.CurSpell.phase) then
+            return true
         end
         if mq.TLO.Me.CastTimeLeft() > 0 then
             if sub == rc.CurSpell.sub then
@@ -2978,7 +2984,11 @@ function spellutils.RunPhaseFirstSpellCheck(sub, hookName, phaseOrder, getTarget
                                         spellutils.MezLog('no spell passed gates for id=%s (indices tried: %s)', target.id,
                                             table.concat(fromSpellIndices, ','))
                                     end
-                                    if tryCastMatch(phase, targetIdx, spellIndex, EvalID, targethit) then
+                                    local started, blocked = tryCastMatch(phase, targetIdx, spellIndex, EvalID, targethit)
+                                    if started then
+                                        return false
+                                    end
+                                    if blocked and hookName == 'doHeal' then
                                         return false
                                     end
                                 end

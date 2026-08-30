@@ -79,7 +79,7 @@ Otherwise pass 1 continues with the living sequence below. Pass 2 uses the same 
 
 **corpse** (rez) is a separate sub-pass: before the list above for safe rez, or after it for combat rez (**inCombat** + mobs in camp).
 
-If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bot still follows this global phase order within the pass: it does not prefer one phase over another within the same spell. The first phase in the list above that has a valid, in-range target for that spell wins. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
+If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bot still follows this global phase order within the pass: it does not prefer one phase over another within the same spell. The first phase in the list above that has a valid, in-range target for that spell wins. Each new heal evaluation starts at the top of this list (`self`, then `tank`); an interrupt does not continue from the interrupted band. The **Main Tank** is always the resolved tank (see [Tank and Assist Roles](tank-and-assist-roles.md)).
 
 **Heal bands: behavior summary**
 

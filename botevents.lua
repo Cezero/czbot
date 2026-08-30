@@ -68,6 +68,8 @@ end
 ---@param reason string|nil e.g. zone, loading, warp
 local function DelayOnZone(reason)
     botevents.ResetCombatSession(reason or 'zone')
+    -- Stick.Active() is often false after a teleport while MQ2MoveUtils is still on /stick hold.
+    mq.cmd('/squelch /nav stop log=off ; /stick off ; /attack off')
     local rc = state.getRunconfig()
     local zonename = mq.TLO.Zone.ShortName()
     if zonename then rc.zonename = zonename end

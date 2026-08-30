@@ -1,6 +1,6 @@
 # Spell casting flow
 
-Heal, buff, debuff, and cure hooks share the same casting pipeline in `lib/spellutils.lua`: they use **RunPhaseFirstSpellCheck** to pick a cast (heal/debuff/cure: phase → targets → spell; buff: phase → spell → targets), then **CastSpell** to set target, cast, and set `runState = 'casting'`. When the cast finishes (or is interrupted), **clearCastingStateOrResume** either clears state or sets a **hook_resume** state so the same hook continues on the next tick. This page charts that flow.
+Heal, buff, debuff, and cure hooks share the same casting pipeline in `lib/spellutils.lua`: they use **RunPhaseFirstSpellCheck** to pick a cast (heal/debuff/cure: phase → targets → spell; buff: phase → spell → targets), then **CastSpell** to set target, cast, and set `runState = 'casting'`. When the cast finishes (or is interrupted), **clearCastingStateOrResume** either clears state or sets a **hook_resume** state so the same hook continues on the next tick. **Heal** does not use mid-pass resume: each evaluation starts at the top of the living phase order. This page charts that flow.
 
 ## RunPhaseFirstSpellCheck
 
@@ -24,17 +24,19 @@ flowchart TB
     TLoop --> Spells[getSpellIndicesForPhase phase]
     Spells --> Check[checkIfTargetNeedsSpells: beforeCast, immuneCheck, PreCondCheck]
     Check --> Match{spellIndex and EvalID?}
-    Match -->|Yes| Cast[CastSpell with spellcheckResume]
-    Cast --> Done
+    Match -->|Yes| Cast[CastSpell]
+    Cast -->|started| Done
+    Cast -->|heal blocked| HealPark[stop this tick; next tick from top]
     Match -->|No| Next[Next target/spell/phase]
+    HealPark --> Done
     Next --> Loop
     NextBuff --> Loop
     Park --> Done
 ```
 
-- **handleSpellCheckReentry(sub, options):** If we are already in a cast (CurSpell phase = cast_complete_pending_resist, casting, precast_wait_move, precast), it either waits, runs InterruptCheck, or completes the cast and calls clearCastingStateOrResume; returns true so the phase loop does not run.
-- **getResumeCursor(hookName):** If runState is `{hookName}_resume`, returns the payload (phase, targetIndex, spellIndex) so the loop can resume from that phase/target/spell after a cast completed.
-- **spellcheckResume:** When starting a cast, the hook passes `{ hook = hookName, phase, targetIndex, spellIndex }`. When the cast ends, clearCastingStateOrResume sets runState to `hookName_resume` with that payload so the next time the hook runs it continues from the same place. For buff spell-first, resume stays on the same `targetIndex` so multi-cast can finish that recipient before moving on; a cast failure (e.g. gem cooling) parks resume on the same spell/target so later buffs are not tried yet. After a full target sweep with no remaining need, the loop advances to the next spell index (with a safety cap on re-sweeps).
+- **handleSpellCheckReentry(sub, options):** If we are already in a cast (CurSpell phase = cast_complete_pending_resist, casting, precast_wait_move, precast), it either waits, runs InterruptCheck, or completes the cast and calls clearCastingStateOrResume; returns true so the phase loop does not run. For **heal**, a failed or interrupted cast also returns true so the loop does not pick a lower-priority band on the same tick.
+- **getResumeCursor(hookName):** If runState is `{hookName}_resume`, returns the payload (phase, targetIndex, spellIndex) so the loop can resume from that phase/target/spell after a cast completed. HealCheck passes **`noResume`**, so this cursor is not used for new heal picks.
+- **spellcheckResume:** When starting a cast, the hook passes `{ hook = hookName, phase, targetIndex, spellIndex }` unless **`noResume`** is set (heal). When the cast ends, clearCastingStateOrResume sets runState to `hookName_resume` with that payload so the next time the hook runs it continues from the same place. For buff spell-first, resume stays on the same `targetIndex` so multi-cast can finish that recipient before moving on; a cast failure (e.g. gem cooling) parks resume on the same spell/target so later buffs are not tried yet. After a full target sweep with no remaining need, the loop advances to the next spell index (with a safety cap on re-sweeps). For heal, a blocked `CastSpell` (needed but could not start) stops the rest of that tick instead of falling through to groupheal.
 
 Phase order and target types are per section. See [Spell targeting and bands](../spell-targeting-and-bands.md) for band semantics.
 
@@ -130,7 +132,7 @@ Runs when `CurSpell.phase == 'casting'` for both casting-library and legacy path
 - Heal: target HP above interrupt threshold for that band.
 - Buff/debuff: spell already on target (or doesn’t stack); update spellstates and /interrupt.
 
-After /interrupt, clearCastingStateOrResume is called so state and CurSpell are cleared (or resume is set).
+After /interrupt, clearCastingStateOrResume is called so state and CurSpell are cleared (or resume is set). Heal interrupts do not resume mid-pass: the next heal evaluation starts at `self` / `tank`.
 
 ---
 
