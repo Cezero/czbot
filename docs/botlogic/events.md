@@ -65,12 +65,12 @@ Used by the **zoneCheck** hook (when `zonename != Zone.ShortName()` and the new 
 2. Sets `statusMessage = 'Zone change, waiting...'`, delay 1s.
 3. If not force: re-check short name; if still empty or unchanged, clear status and return (no reset).
 4. **DelayOnZone(reason)** (`zone` / `loading` / `warp`):
-    - Calls **ResetCombatSession(reason)** (clear run state, engage target, MobList, stick/attack/target, debuff tracking).
-    - Force `/nav stop`, `/stick off`, and `/attack off` even when `Stick.Active()` is false (teleport often leaves stick hold running).
+    - Calls **ResetCombatSession(reason)** (clear run state, engage target, MobList, **FTEList**, stick/attack/target, debuff tracking).
+    - Force `/nav stop`, `/stick off`, `/attack off`, and `/mqtarget clear` even when `Stick.Active()` is false or `Target.Type()` is not yet NPC (teleport often leaves stick hold running; Type can be empty during zone settle).
     - Sets `zonename` to current zone short name.
     - Clears camp when camp was on: `makecamp` and `campstatus = false`.
     - Turns off `dopull` via `botpull.DisablePull('zone')`.
-    - Runs mobfilter for exclude and priority (zone).
+    - Runs mobfilter for exclude and priority (zone). Skips the in-memory replace when `Zone.ShortName()` is empty so `ExcludeList` is not wiped to `{}`.
     - Resets `MountCastFailed`.
     - If follow or travel mode is active: **follow.ResumeAfterZone()** — clears stale `followid`, keeps `followname`/`travelMode`, resets `stucktimer`, stops follow movement state, disables pull for follow, refreshes travel bard twist when applicable, and calls **FollowCall** when mesh and leader spawn are available.
     - Reseats the warp position sample so the next tick does not double-fire.

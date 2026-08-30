@@ -501,6 +501,7 @@ local function isAssistTargetEngageable(maTarId, rc, _assistName, hp, assistpct)
     local spawn = mq.TLO.Spawn(maTarId)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
     if not spawnutils.isNpcEngageTarget(spawn) then return false end
+    if not spawnutils.filterSpawnExclude(spawn, rc) then return false end
     hp = hp or spawn.PctHPs()
     if not hp or hp > assistpct then return false end
     if not spawnutils.isCampAcleashEnforced(rc) then return true end
@@ -566,6 +567,7 @@ local function isValidMaSelectedTarget(spawnId, rc)
     if not spawnutils.isNpcEngageTarget(spawn) then return false end
     if charm.isCharmSkipped(spawnId, rc) then return false end
     if utils.isProtectedSpawn(spawn) then return false end
+    if not spawnutils.filterSpawnExclude(spawn, rc) then return false end
     -- Always require camp radius (MobList anchor + acleash); OOR manual targets must not adopt.
     if not spawnutils.isSpawnInCampRadiusById(spawnId, rc) then return false end
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isSpawnWithinCampPinById(spawnId, rc) then return false end
@@ -634,10 +636,7 @@ local function selectMATarget()
 
     if mq.TLO.Me.Combat() then
         local curId = mq.TLO.Target.ID()
-        local meId = mq.TLO.Me.ID()
-        if curId and curId > 0 and curId ~= meId and spawnutils.isNpcEngageTarget(mq.TLO.Spawn(curId))
-            and not charm.isCharmSkipped(curId, rc)
-            and spawnutils.isSpawnWithinCampPinById(curId, rc) then
+        if isValidMaSelectedTarget(curId, rc) then
             local curSpawn = mq.TLO.Spawn(curId)
             if curSpawn.Named() then
                 return curId
@@ -1049,6 +1048,11 @@ function botmelee.AdvCombat()
     end
     if id and charm.isCharmSkipped(id, rc) then id = nil end
     if id and utils.isProtectedSpawn(mq.TLO.Spawn(id)) then id = nil end
+    if id and not spawnutils.filterSpawnExclude(mq.TLO.Spawn(id), rc) then
+        local latch = rc.attackCommandEngage and rc.engageTargetId == id
+            and spawnutils.isAttackCommandLatchActive(rc)
+        if not latch then id = nil end
+    end
 
     local engageBranch = 'none'
     if id then

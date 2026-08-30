@@ -47,6 +47,7 @@ local function loadZone(listType)
     local opts = LIST_CONFIG[listType]
     if not opts then return end
     local zone = mq.TLO.Zone.ShortName()
+    if not zone or zone == '' then return end
     local zb = botconfig.getZoneBlock(zone)
     local val = (zb and zb[opts.commonKey]) or {}
     state.getRunconfig()[opts.runconfigKey] = botconfig.copyStringList(val)

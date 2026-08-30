@@ -61,6 +61,7 @@ function botevents.ResetCombatSession(reason)
     if rawget(_G, 'KillTarget') then _G.KillTarget = nil end
     require('botmelee').clearMobprobEngageGrace()
     require('botmove').ClearFearReturn()
+    spawnutils.clearFTE(rc)
     combat.ResetCombatState({ clearTarget = true, clearPet = true })
 end
 
@@ -69,7 +70,7 @@ end
 local function DelayOnZone(reason)
     botevents.ResetCombatSession(reason or 'zone')
     -- Stick.Active() is often false after a teleport while MQ2MoveUtils is still on /stick hold.
-    mq.cmd('/squelch /nav stop log=off ; /stick off ; /attack off')
+    mq.cmd('/squelch /nav stop log=off ; /stick off ; /attack off ; /mqtarget clear')
     local rc = state.getRunconfig()
     local zonename = mq.TLO.Zone.ShortName()
     if zonename then rc.zonename = zonename end

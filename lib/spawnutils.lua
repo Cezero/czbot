@@ -637,6 +637,7 @@ function spawnutils.isEngageAllowedSpawn(spawn, rc)
         return true
     end
     if not spawnutils.isNpcEngageTarget(spawn) then return false end
+    if not spawnutils.filterSpawnExclude(spawn, rc) then return false end
     if rc.lastAssistTargetId == sid and isLiveAssistUnavailable() then
         return true
     end
