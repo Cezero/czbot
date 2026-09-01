@@ -35,6 +35,8 @@ See [hook-dopull](hook-dopull.md) for when doPull decides to call StartPull (cha
 
 When the follow leader is an MQCharinfo peer in the same zone, follow uses charinfo-published coordinates (`peer.Zone.X/Y/Z`) for distance checks and issues `/nav locxyz` instead of `/nav id`. This keeps follow accurate when the local spawn entity stops updating at long range. Non-peer leaders (regular PCs not on charinfo) continue to use spawn-id navigation.
 
+When **`Me.Levitating`** is true, follow does not use nav (no mesh in the air) and does not use charinfo coordinates. It issues `/stick id <followid> uw <followdistance>` against the live leader spawn. Unstuck is skipped while levitating. Combat stick is unchanged (`shouldSuppressFollowNav` still applies). Camp return, pull, and fear return stay on nav.
+
 ---
 
 ## Unstuck (doMovementCheck → FollowAndStuckCheck → TickUnstuck / UnStuck)

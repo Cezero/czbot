@@ -115,10 +115,16 @@ function follow.ResumeAfterZone()
         if spawn and spawn.ID() then
             rc.followid = spawn.ID()
         end
-        local canNav = ctx and ctx.source == 'charinfo' and ctx.sameZone and ctx.alive
-            and ctx.x and ctx.y and ctx.z
-        if canNav or (rc.followid and rc.followid > 0) then
-            botmove.FollowCall()
+        if botmove.isLevitating() then
+            if rc.followid and rc.followid > 0 then
+                botmove.FollowCall()
+            end
+        else
+            local canNav = ctx and ctx.source == 'charinfo' and ctx.sameZone and ctx.alive
+                and ctx.x and ctx.y and ctx.z
+            if canNav or (rc.followid and rc.followid > 0) then
+                botmove.FollowCall()
+            end
         end
     end
 end
