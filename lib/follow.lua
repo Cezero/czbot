@@ -115,7 +115,7 @@ function follow.ResumeAfterZone()
         if spawn and spawn.ID() then
             rc.followid = spawn.ID()
         end
-        if botmove.isLevitating() then
+        if botmove.followUsesLevitationStick(rc) then
             if rc.followid and rc.followid > 0 then
                 botmove.FollowCall()
             end

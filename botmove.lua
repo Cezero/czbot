@@ -39,19 +39,37 @@ local function getFollowLeaderContext(rc)
     return charinfoutils.getLeaderContext(rc.followname)
 end
 
-local function isLevitating()
-    local fn = mq.TLO.Me.Levitating
+local function spawnIsLevitating(spawn)
+    if not spawn then return false end
+    local fn = spawn.Levitating
     if not fn then return false end
     return fn() == true
 end
 
-function botmove.isLevitating()
-    return isLevitating()
+local function isSelfLevitating()
+    return spawnIsLevitating(mq.TLO.Me)
 end
 
---- Airborne follow: no nav mesh underfoot; use spawn + /stick uw.
-local function followUsesLevitationStick()
-    return isLevitating()
+local function isLeaderLevitating(rc)
+    rc = rc or state.getRunconfig()
+    if not rc.followid or rc.followid == 0 then return false end
+    local sp = mq.TLO.Spawn(rc.followid)
+    if not sp or not sp.ID() or sp.ID() == 0 then return false end
+    return spawnIsLevitating(sp)
+end
+
+--- Airborne follow when self or leader is levitating: no mesh in the air.
+local function followUsesLevitationStick(rc)
+    rc = rc or state.getRunconfig()
+    return isSelfLevitating() or isLeaderLevitating(rc)
+end
+
+function botmove.isLevitating()
+    return isSelfLevitating()
+end
+
+function botmove.followUsesLevitationStick(rc)
+    return followUsesLevitationStick(rc)
 end
 
 local function followUsesCharinfoNav(ctx)
@@ -73,7 +91,7 @@ local function followSpawnDistance2D(rc)
 end
 
 local function followLeaderDistance2D(rc, ctx)
-    if followUsesLevitationStick() then
+    if followUsesLevitationStick(rc) then
         return followSpawnDistance2D(rc)
     end
     ctx = ctx or getFollowLeaderContext(rc)
@@ -85,7 +103,7 @@ local function followLeaderDistance2D(rc, ctx)
 end
 
 local function followLeaderDistance3D(rc, ctx)
-    if followUsesLevitationStick() then
+    if followUsesLevitationStick(rc) then
         if rc.followid and rc.followid > 0 then
             return mq.TLO.Spawn(rc.followid).Distance3D()
         end
@@ -228,7 +246,9 @@ local function maybeLogFollowDebug(rc, ctx, action)
     if not _followDebug then return end
     if not hasActiveFollow(rc) then return end
 
-    local lev = followUsesLevitationStick()
+    local lev = followUsesLevitationStick(rc)
+    local selfLev = isSelfLevitating()
+    local leaderLev = isLeaderLevitating(rc)
     local useCharinfo = followUsesCharinfoNav(ctx)
     local path = lev and 'stick' or (useCharinfo and 'charinfo' or 'spawn')
     local d2 = nil
@@ -254,7 +274,7 @@ local function maybeLogFollowDebug(rc, ctx, action)
     local followdist = myconfig.settings.followdistance
 
     log.say(
-        '[follow] leader=%s id=%s path=%s action=%s d2=%s leash=%s shouldCall=%s suppress=%s catchUp=%s maEngage=%s nav=%s lev=%s stick=%s stickId=%s ctx=(%s,%s,%s) spawn=(%s,%s,%s) spawnDist=%s src=%s sameZone=%s',
+        '[follow] leader=%s id=%s path=%s action=%s d2=%s leash=%s shouldCall=%s suppress=%s catchUp=%s maEngage=%s nav=%s lev=%s selfLev=%s leaderLev=%s stick=%s stickId=%s ctx=(%s,%s,%s) spawn=(%s,%s,%s) spawnDist=%s src=%s sameZone=%s',
         tostring(rc.followname or ''),
         tostring(rc.followid or 0),
         path,
@@ -267,6 +287,8 @@ local function maybeLogFollowDebug(rc, ctx, action)
         tostring(maEngage),
         tostring(navActive),
         tostring(lev),
+        tostring(selfLev),
+        tostring(leaderLev),
         tostring(stickActive),
         tostring(stickTargetId() or '-'),
         fmtNum(ctx and ctx.x), fmtNum(ctx and ctx.y), fmtNum(ctx and ctx.z),
@@ -357,7 +379,7 @@ end
 
 local function shouldCallFollow(rc)
     if shouldSuppressFollowNav(rc) then return false end
-    if followUsesLevitationStick() then
+    if followUsesLevitationStick(rc) then
         if not rc.followid or rc.followid == 0 then return false end
         local followid = mq.TLO.Spawn(rc.followid).ID() or 0
         local followtype = mq.TLO.Spawn(rc.followid).Type() or "none"
@@ -922,7 +944,7 @@ function botmove.FollowCall()
     refreshFollowId()
     clearUnstuckIfFollowInactive(rc)
     local ctx = getFollowLeaderContext(rc)
-    local levStick = followUsesLevitationStick()
+    local levStick = followUsesLevitationStick(rc)
     if not followUsesCharinfoNav(ctx) and (not rc.followid or rc.followid == 0) then return false end
     if not rc.stucktimer then rc.stucktimer = 0 end
     if not levStick and rc.stucktimer <= mq.gettime() then botmove.UnStuck() end
@@ -939,8 +961,8 @@ function botmove.FollowCall()
 end
 
 function botmove.UnStuck()
-    if followUsesLevitationStick() then return false end
     local rc = state.getRunconfig()
+    if followUsesLevitationStick(rc) then return false end
     clearUnstuckIfFollowInactive(rc)
     local ctx = getFollowLeaderContext(rc)
     if not followUsesCharinfoNav(ctx) and (not rc.followid or rc.followid == 0) then return false end
@@ -1005,11 +1027,11 @@ end
 
 function botmove.TickUnstuck()
     if state.getRunState() ~= state.STATES.unstuck then return end
-    if followUsesLevitationStick() then
+    local rc = state.getRunconfig()
+    if followUsesLevitationStick(rc) then
         state.clearRunState()
         return
     end
-    local rc = state.getRunconfig()
     local ctx = getFollowLeaderContext(rc)
     if not followUsesCharinfoNav(ctx) and (not rc.followid or rc.followid == 0) then
         state.clearRunState()
@@ -1033,7 +1055,7 @@ function botmove.FollowAndStuckCheck()
     end
     clearUnstuckIfFollowInactive(rc)
     local ctx = getFollowLeaderContext(rc)
-    local levStick = followUsesLevitationStick()
+    local levStick = followUsesLevitationStick(rc)
     if not levStick then
         stopFollowStickIfLeader(rc)
     end
