@@ -322,6 +322,9 @@ function botdebuff.BardMatarDebuffInCombatTwist(spellIndex, maTargetId)
             return false
         end
     end
+    if maTargetId and not spellutils.ImmuneCheck('debuff', spellIndex, maTargetId) then
+        return false
+    end
     return true
 end
 
@@ -1164,6 +1167,7 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
         deadline = mq.gettime() + castTimeMs + 100,
         startedAt = mq.gettime(),
     }
+    spellutils.rememberLastCast('debuff', spellIndex, EvalID, { fromTwistOnceGem = true })
     if not state.canStartBusyState(state.STATES.casting) then
         rc.bardTwistOnceWait = nil
         return false
@@ -1208,11 +1212,12 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
     local prevID = EvalID
     local newEvalID, newTargethit = DebuffEval(spellIndex)
     local adEntry = botconfig.getSpellEntry('debuff', spellIndex)
-    if newEvalID and prevID == newEvalID and adEntry and (adEntry.recast or 0) > 0 and state.getRunconfig().CurSpell and state.getRunconfig().CurSpell.spell == spellIndex and state.getRunconfig().CurSpell.resisted then
-        local newCount = spellstates.IncrementRecastCounter(EvalID, spellIndex)
-        state.getRunconfig().CurSpell = {}
-        if newCount >= adEntry.recast then
-            local rc = state.getRunconfig()
+    local rc = state.getRunconfig()
+    if newEvalID and prevID == newEvalID and adEntry and rc.CurSpell and rc.CurSpell.spell == spellIndex and rc.CurSpell.resisted then
+        spellutils.noteDebuffResist()
+        local newCount = spellstates.GetRecastCounter(EvalID, spellIndex)
+        rc.CurSpell = {}
+        if (adEntry.recast or 0) > 0 and newCount >= adEntry.recast then
             log.say('\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
                 mq.TLO.Spawn(EvalID).CleanName(), adEntry.spell, spellIndex, adEntry.recast)
             local recastduration = 600000 + mq.gettime()

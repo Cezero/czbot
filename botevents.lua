@@ -168,17 +168,17 @@ end
 function botevents.Event_CastRst()
     if state.getRunconfig().CurSpell and (state.getRunconfig().CurSpell.viaMQ2Cast or state.getRunconfig().CurSpell.viaCastingLib) then
         casting.notifyResist()
-        return
+    else
+        SpellResisted = true
     end
-    SpellResisted = true
+    spellutils.noteDebuffResist()
 end
 
 function botevents.Event_CastImm(line)
+    if string.find(line, "(with this spell)") then return false end
     if state.getRunconfig().CurSpell and (state.getRunconfig().CurSpell.viaMQ2Cast or state.getRunconfig().CurSpell.viaCastingLib) then
         casting.notifyImmune()
-        return
     end
-    if string.find(line, "(with this spell)") then return false end
     spellutils.handleTargetImmuneEvent(line)
 end
 
@@ -348,11 +348,11 @@ function botevents.BindEvents()
     mq.event('CastInterrupted', "Your casting has been interrupted#*#", function() casting.notifyResult('CAST_INTERRUPTED') end)
     mq.event('CastTakeHold', "Your spell did not take hold#*#", function() casting.notifyTakeHold() end)
     mq.event('CastImm', "Your target cannot be#*#", botevents.Event_CastImm)
-    mq.event('SlowImm', "Your target is immune to changes in its attack speed", botevents.Event_CastImm)
-    -- "Your target is immune to snare spells." / "... root spells." etc. (mez/charm/slow have their own
-    -- messages above). Records the mob as immune so the bot stops re-casting -- unless the spell is
-    -- recastActive (SK threat-snare), which ImmuneCheck lets through to keep generating hate.
-    mq.event('SpellImm', "Your target is immune to#*#spells#*#", botevents.Event_CastImm)
+    mq.event('SlowImm', "Your target is immune to changes in its attack speed#*#", botevents.Event_CastImm)
+    -- "Your target is immune to snare spells." / "... root spells." / run speed / stun portion, etc.
+    -- Records the mob as immune so the bot stops re-casting -- unless the spell is recastActive
+    -- (SK threat-snare), which ImmuneCheck lets through to keep generating hate.
+    mq.event('SpellImm', "Your target is immune to#*#", botevents.Event_CastImm)
     mq.event('MissedNote', "You miss a note, bringing your#*#", botevents.Event_MissedNote)
     mq.event('CastStn1', "You are stunned#*#", botevents.Event_CastStn)
     mq.event('CastStn2', "You can't cast spells while stunned!#*#", botevents.Event_CastStn)

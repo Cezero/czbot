@@ -29,27 +29,41 @@ function M.add(spell, zone, mobName)
     end)
 end
 
----@param immuneID number|nil spawn ID of immune target
----@param opts table|nil optional { spellName = string } canonical spell name for immune list; else CurSpell.sub/spell
-function M.processList(immuneID, opts)
-    local spell
+local function resolvedSpellForList(opts)
     if opts and opts.spellName and opts.spellName ~= '' then
-        spell = mq.TLO.Spell(opts.spellName)() or opts.spellName
-    else
-        local rc = state.getRunconfig()
-        local cur = rc and rc.CurSpell
-        if cur and cur.sub and cur.spell then
-            local entry = botconfig.getSpellEntry(cur.sub, cur.spell)
-            spell = entry and mq.TLO.Spell(entry.spell)() or nil
+        return mq.TLO.Spell(opts.spellName)() or opts.spellName
+    end
+    local spellutils = require('lib.spellutils')
+    local rc = state.getRunconfig()
+    local cur = rc and rc.CurSpell
+    if cur and cur.sub and cur.spell then
+        local entry = botconfig.getSpellEntry(cur.sub, cur.spell)
+        if entry then
+            return spellutils.GetResolvedSpellName(entry) or entry.spell
         end
     end
+    local snap = spellutils.getLastCastSnapshot and spellutils.getLastCastSnapshot()
+    if snap and snap.spellName and snap.spellName ~= '' then
+        return mq.TLO.Spell(snap.spellName)() or snap.spellName
+    end
+    return nil
+end
+
+---@param immuneID number|nil spawn ID of immune target
+---@param opts table|nil optional { spellName = string, reason = string } canonical spell name for immune list; else CurSpell/last-cast
+function M.processList(immuneID, opts)
+    local spell = resolvedSpellForList(opts)
     local zone = mq.TLO.Zone.ShortName()
     if immuneID and spell and mq.TLO.Spawn(immuneID).ID() and mq.TLO.Spawn(immuneID).Type() ~= 'Corpse' then
         local mobName = mq.TLO.Spawn(immuneID).CleanName()
         local t = M.get()
         if not t[spell] or not t[spell][mobName] then
             M.add(spell, zone, mobName)
-            log.say('%s is \\arIMMUNE\\ax to spell \\ag%s\\ax, adding to the ImmuneList', mobName, spell)
+            if opts and opts.reason == 'resists' then
+                log.say('%s resisted \\ag%s\\ax 3 times in a row, adding to the ImmuneList', mobName, spell)
+            else
+                log.say('%s is \\arIMMUNE\\ax to spell \\ag%s\\ax, adding to the ImmuneList', mobName, spell)
+            end
         end
     end
 end
