@@ -30,21 +30,24 @@ function M.add(spell, zone, mobName)
 end
 
 local function resolvedSpellForList(opts)
+    local spellutils = require('lib.spellutils')
     if opts and opts.spellName and opts.spellName ~= '' then
         return mq.TLO.Spell(opts.spellName)() or opts.spellName
     end
-    local spellutils = require('lib.spellutils')
     local rc = state.getRunconfig()
     local cur = rc and rc.CurSpell
     if cur and cur.sub and cur.spell then
         local entry = botconfig.getSpellEntry(cur.sub, cur.spell)
-        if entry then
+        if spellutils.isImmuneListableDebuff(cur.sub, entry) then
             return spellutils.GetResolvedSpellName(entry) or entry.spell
         end
     end
     local snap = spellutils.getLastCastSnapshot and spellutils.getLastCastSnapshot()
-    if snap and snap.spellName and snap.spellName ~= '' then
-        return mq.TLO.Spell(snap.spellName)() or snap.spellName
+    if snap and snap.sub == 'debuff' and snap.index and snap.spellName and snap.spellName ~= '' then
+        local snapEntry = botconfig.getSpellEntry('debuff', snap.index)
+        if spellutils.isImmuneListableDebuff('debuff', snapEntry) then
+            return mq.TLO.Spell(snap.spellName)() or snap.spellName
+        end
     end
     return nil
 end

@@ -125,7 +125,7 @@ For debuff spells, `lib/casting.lua` retries once (`maxTries = 2`) on retryable 
 
 ## Behavior summary
 
-- **Immune check:** The bot can skip mobs marked immune to the spell (per zone/target in immune data).
+- **Immune check:** The bot skips mobs marked immune to a **debuff spell** (per zone/target in immune data). Heals, buffs, cures, and combat abilities (`gem = ability`) are never written to or skipped from that list.
 - **Before cast (matar):** When casting on the MA target, the bot may set **engageTargetId** to that mob (so melee/pet follow) and send pet attack if **petassist** is on.
 - **Recast:** After **recast** resists on the same spawn, the spell is disabled for that spawn for a duration.
 - **Level:** For some spell types (e.g. Enthrall/mez), the spell’s **MaxLevel** is checked against the mob’s level; over-level mobs are skipped.

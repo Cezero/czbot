@@ -352,6 +352,14 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
     if myrangeSq and distSq and distSq > myrangeSq then
         return mezSkip('out of range')
     end
+    -- Combat abilities: range only. Do not run DebuffList / CC auto-skip (Spell TLO may
+    -- resolve the same name as a duration/CC spell).
+    if gem == 'ability' then
+        if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
+            return mezSkip('not enough mobs in AE range')
+        end
+        return true
+    end
     local spawnLevel = spawn.Level and spawn.Level()
     if phase == 'matar' and spawnId then
         if ctx.maTargetId and spawnId == ctx.maTargetId and ctx.maTargetLvl then
@@ -426,10 +434,10 @@ function spellutils.SpawnNeedsDebuff(entry, ctx, spawn, phase)
         return mezSkip('our mez on spawn')
     end
 
-    -- Ability / duration-0 nuke: skip SpellStacksSpawn and SpawnHasDebuffSpellId.
+    -- Duration-0 nuke: skip SpellStacksSpawn and SpawnHasDebuffSpellId.
     local isNukeNoDuration = spellutils.IsNukeSpell(entry) and not spellutils.IsConcussionSpell(entry)
         and durationSec <= 0 and not entry.dontStack and not entry.stopWhen
-    if gem == 'ability' or isNukeNoDuration then
+    if isNukeNoDuration then
         if ctx.aeRange and ctx.mintar and castutils.CountMobsWithinAERangeOfSpawn(ctx.mobList, spawn.ID(), ctx.aeRange) < ctx.mintar then
             return mezSkip('not enough mobs in AE range')
         end
@@ -561,6 +569,8 @@ end
 function spellutils.ImmuneCheck(Sub, ID, EvalID)
     local entry = botconfig.getSpellEntry(Sub, ID)
     if not entry then return true end
+    -- Combat abilities are not spells; never skip them from the immune list.
+    if entry.gem == 'ability' then return true end
     -- recastActive (e.g. SK threat-snare) keeps casting even on an immune mob: the cast still generates
     -- aggro, so don't block it on the immune list (other spells on the same mob are still blocked).
     if entry.recastActive then return true end
@@ -571,8 +581,14 @@ function spellutils.ImmuneCheck(Sub, ID, EvalID)
     if t[spell] and t[spell][targetname] then return false else return true end
 end
 
-local IMMUNE_CONFIG_SECTIONS = { 'debuff', 'buff', 'cure', 'heal' }
-local IMMUNE_GEM_SECTIONS = { 'debuff', 'buff', 'cure' }
+--- True when this config entry may be written to / skipped via the zone immune list.
+--- Heals, buffs, cures, and gem=ability are never listable.
+function spellutils.isImmuneListableDebuff(sub, entry)
+    return sub == 'debuff' and entry ~= nil and entry.gem ~= 'ability'
+end
+
+local IMMUNE_CONFIG_SECTIONS = { 'debuff' }
+local IMMUNE_GEM_SECTIONS = { 'debuff' }
 local LAST_CAST_SNAPSHOT_TTL_MS = 20000
 local RESIST_NOTE_DEDUP_MS = 2500
 local RESIST_IMMUNE_THRESHOLD = 3
@@ -628,7 +644,7 @@ function spellutils.noteDebuffResist()
         return
     end
     local newCount = spellstates.IncrementRecastCounter(spawnId, index)
-    if entry.recastActive or spellutils.IsNukeSpell(entry) then return end
+    if entry.recastActive or entry.gem == 'ability' or spellutils.IsNukeSpell(entry) then return end
     if newCount >= RESIST_IMMUNE_THRESHOLD then
         immune.processList(spawnId, { spellName = ctx.spellName, reason = 'resists' })
     end
@@ -667,7 +683,7 @@ function spellutils.findConfigEntryByGem(gem)
     return nil, nil, nil
 end
 
---- Resolve spell context for immunity events (debuff CurSpell/snapshot first, then other CurSpell, Me.Casting, twist-once).
+--- Resolve spell context for immunity events (debuff spells only; never heal/buff/cure/ability).
 function spellutils.resolveImmuneSpellContext()
     local rc = state.getRunconfig()
     local cur = rc and rc.CurSpell
@@ -682,7 +698,7 @@ function spellutils.resolveImmuneSpellContext()
     }
 
     local function applyEntry(sub, index, entry, target, flags)
-        if not entry then return false end
+        if not spellutils.isImmuneListableDebuff(sub, entry) then return false end
         ctx.sub = sub
         ctx.index = index
         ctx.spellName = spellNameFromEntry(entry)
@@ -702,19 +718,13 @@ function spellutils.resolveImmuneSpellContext()
     end
 
     local snap = spellutils.getLastCastSnapshot()
-    if snap and snap.sub == 'debuff' and snap.spellName and snap.spellName ~= '' then
-        ctx.sub = snap.sub
-        ctx.index = snap.index
-        ctx.spellName = snap.spellName
-        ctx.spellId = snap.spellId
-        ctx.curSpellTarget = snap.target
-        ctx.fromTwistOnceGem = snap.fromTwistOnceGem
-        ctx.fromLastCastSnapshot = true
-        return ctx
-    end
-
-    if cur and cur.sub and cur.spell and cur.sub ~= 'debuff' then
-        if applyEntry(cur.sub, cur.spell, botconfig.getSpellEntry(cur.sub, cur.spell), cur.target) then
+    if snap and snap.sub == 'debuff' and snap.index and snap.spellName and snap.spellName ~= '' then
+        local snapEntry = botconfig.getSpellEntry('debuff', snap.index)
+        if applyEntry('debuff', snap.index, snapEntry, snap.target, {
+            fromTwistOnceGem = snap.fromTwistOnceGem,
+            fromLastCastSnapshot = true,
+        }) then
+            ctx.spellId = snap.spellId or ctx.spellId
             return ctx
         end
     end
@@ -722,18 +732,12 @@ function spellutils.resolveImmuneSpellContext()
     local castingTlo = mq.TLO.Me.Casting()
     if castingTlo then
         local okId, castId = pcall(function() return castingTlo.ID() end)
-        local okName, castName = pcall(function() return castingTlo.Name() end)
         if okId and castId and castId > 0 then
-            ctx.spellId = castId
             local section, index, entry = spellutils.findConfigEntryBySpellId(castId)
-            if entry then
-                ctx.sub = section
-                ctx.index = index
-                ctx.spellName = spellNameFromEntry(entry)
-            elseif okName and castName and castName ~= '' then
-                ctx.spellName = mq.TLO.Spell(castName)() or castName
+            if applyEntry(section, index, entry, ctx.curSpellTarget) then
+                ctx.spellId = castId
+                return ctx
             end
-            if ctx.spellName then return ctx end
         end
     end
 
@@ -741,13 +745,8 @@ function spellutils.resolveImmuneSpellContext()
         local gem = bardtwist.getLastTwistOnceGem()
         if gem then
             local section, index, entry = spellutils.findConfigEntryByGem(gem)
-            if entry then
-                ctx.sub = section
-                ctx.index = index
-                ctx.spellName = spellNameFromEntry(entry)
-                if entry.spell then ctx.spellId = spellutils.GetSpellId(entry) end
-                ctx.fromTwistOnceGem = true
-                if ctx.spellName then return ctx end
+            if applyEntry(section, index, entry, ctx.curSpellTarget, { fromTwistOnceGem = true }) then
+                return ctx
             end
         end
     end
@@ -756,8 +755,9 @@ function spellutils.resolveImmuneSpellContext()
 end
 
 local function immuneEventMatchesOurCast(ctx)
+    if ctx.sub ~= 'debuff' then return false end
     if ctx.fromTwistOnceGem or ctx.fromLastCastSnapshot then return true end
-    if ctx.sub == 'debuff' and ctx.curSpellTarget and ctx.curSpellTarget > 0 then return true end
+    if ctx.curSpellTarget and ctx.curSpellTarget > 0 then return true end
     local spellId = ctx.spellId
     local storedId = casting.storedSpellId() or 0
     if storedId > 0 and spellId and spellId > 0 then
@@ -768,27 +768,17 @@ local function immuneEventMatchesOurCast(ctx)
         local ok, castId = pcall(function() return castingTlo.ID() end)
         if ok and castId and castId == spellId then return true end
     end
-    if ctx.fromTwistOnceGem or ctx.fromLastCastSnapshot then return true end
-    if ctx.curSpellTarget and ctx.curSpellTarget > 0 then return true end
-    local curtarget = mq.TLO.Target.ID()
-    return curtarget and curtarget > 0
+    return false
 end
 
 --- Handle CastImm / SlowImm (casting-lib and bard twist). Records the cast target, not current Target.
+--- Only listable debuff spells are recorded (never heals/buffs/cures/abilities).
 function spellutils.handleTargetImmuneEvent(_line)
     local ctx = spellutils.resolveImmuneSpellContext()
-    local curtarget = mq.TLO.Target.ID()
-
-    if not ctx.spellName or ctx.spellName == '' then
-        local fallbackId = (ctx.curSpellTarget and ctx.curSpellTarget > 0) and ctx.curSpellTarget or curtarget
-        if fallbackId and fallbackId > 0 then
-            local name = mq.TLO.Spawn(fallbackId).CleanName() or tostring(fallbackId)
-            log.say('\at%s\ax is \arimmune\ax (unknown spell)', name)
-        else
-            log.say('Target is \arimmune\ax (unknown spell)')
-        end
+    if not spellutils.isImmuneListableDebuff(ctx.sub, ctx.index and botconfig.getSpellEntry(ctx.sub, ctx.index)) then
         return
     end
+    if not ctx.spellName or ctx.spellName == '' then return end
 
     local spellId = ctx.spellId
     if not spellId and ctx.spellName then
@@ -803,7 +793,7 @@ function spellutils.handleTargetImmuneEvent(_line)
 
     if not immuneEventMatchesOurCast(ctx) then return end
 
-    local immuneID = (ctx.curSpellTarget and ctx.curSpellTarget > 0) and ctx.curSpellTarget or curtarget
+    local immuneID = ctx.curSpellTarget
     if immuneID and immuneID > 0 then
         immune.processList(immuneID, { spellName = ctx.spellName })
     end
@@ -2057,7 +2047,7 @@ function spellutils.IsShrinkSpell(entry) return entryHasSPA(entry, 89) end
 -- own systems and excluded here. Cached per spell once resolvable (SPAs are immutable per spell).
 local _ccCatCache = {}
 function spellutils.GetCCDebuffCategory(entry)
-    if not entry or not entry.spell then return nil end
+    if not entry or not entry.spell or entry.gem == 'ability' then return nil end
     local key = (entry.gem == 'item' and 'item|' or 'spell|') .. entry.spell
     local c = _ccCatCache[key]
     if c ~= nil then
@@ -2718,7 +2708,10 @@ function spellutils.handleSpellCheckReentry(sub, options)
         if complete then
             rc.CurSpell.resisted = (castResult == 'CAST_RESIST')
             if castResult == 'CAST_IMMUNE' and rc.CurSpell.target then
-                immune.processList(rc.CurSpell.target)
+                local immEntry = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
+                if spellutils.isImmuneListableDebuff(rc.CurSpell.sub, immEntry) then
+                    immune.processList(rc.CurSpell.target)
+                end
             end
             if castResult == 'CAST_TAKEHOLD' and rc.CurSpell.sub == 'debuff' and rc.CurSpell.target then
                 local entry = botconfig.getSpellEntry('debuff', rc.CurSpell.spell)
@@ -3535,6 +3528,7 @@ end
 
 function spellutils.ShouldWaitForMovement(entry)
     if not entry or not entry.spell then return false end
+    if entry.gem == 'ability' or entry.gem == 'disc' then return false end
     local spellname = spellutils.GetResolvedSpellName(entry) or entry.spell
     local spell = string.lower(spellname or '')
     local castTime = mq.TLO.Spell(spell).MyCastTime()
@@ -3782,7 +3776,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if needGemMem then mq.delay(CASTING_MEMORIZE_DELAY_MS) end
         return true
     end
-    spellutils.ExecuteNativeCast(gem, spell, sub, index)
+    spellutils.ExecuteNativeCast(gem, entry.spell, sub, index)
     spellutils.rememberLastCast(sub, index, EvalID)
     if sub == 'debuff' and (gem == 'ability' or gem == 'disc') then
         rc.CurSpell.phase = 'casting'
