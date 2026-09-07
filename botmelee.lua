@@ -799,6 +799,7 @@ local disengageCombat = botmelee.disengageCombat
 -- Stand, attack, and stick to the engage target for final melee positioning. Stops nav first.
 -- Idempotent: only re-issues /stick when the active stick target or command differs.
 local function applyEngageStick(engageTargetId)
+    if spellutils.IsMemorizing() then return end
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
     if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
@@ -1147,6 +1148,8 @@ function botmelee.getHookFn(name)
                 rc.followCatchUp = false
             end
             if rc.followCatchUp then return end
+            -- Standing interrupts gem load; skip engage until mem (cast engine or bard twist remem) finishes.
+            if spellutils.IsMemorizing() then return end
             -- Suspend melee engage while notmatar is in progress (any class): twist-once wait or CurSpell.
             local cs = rc.CurSpell
             local notmatarBusy = (rc.bardTwistOnceWait ~= nil)

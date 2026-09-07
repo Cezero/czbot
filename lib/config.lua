@@ -265,6 +265,18 @@ local _pendingMutators = nil
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
 local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ot_list', 'heal_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
+local PROGRESS_SUFFIX = '_progress'
+local PROGRESS_SUFFIX_LEN = #PROGRESS_SUFFIX
+
+--- Agents of Change uses zonename_progress as a second instance of zonename.
+--- Config keys and raid script lookup use the base name; physical zone identity stays raw.
+function M.canonicalZoneShortName(zone)
+    if type(zone) ~= 'string' or zone == '' then return zone end
+    if zone:lower():sub(-PROGRESS_SUFFIX_LEN) == PROGRESS_SUFFIX then
+        return zone:sub(1, #zone - PROGRESS_SUFFIX_LEN)
+    end
+    return zone
+end
 
 local function commonFilePath()
     return mq.configDir .. '/' .. COMMON_FILENAME
@@ -425,6 +437,105 @@ local function mergeImmune(diskImmune, memImmune)
     return next(out) and out or nil
 end
 
+--- Union-merge two zone blocks as equal sources (progress fold, not disk-vs-mem).
+local function unionMergeZoneBlocks(a, b)
+    if not a then return b end
+    if not b then return a end
+    local out = {}
+    for k, v in pairs(a) do out[k] = v end
+    for k, v in pairs(b) do
+        if out[k] == nil then out[k] = v end
+    end
+    for _, key in ipairs(ZONE_LIST_KEYS) do
+        if a[key] or b[key] then
+            out[key] = M.unionStringList(a[key], b[key])
+        end
+    end
+    for _, key in ipairs(ZONE_BOOL_MAP_KEYS) do
+        if a[key] or b[key] then
+            out[key] = M.unionBoolMap(a[key], b[key])
+        end
+    end
+    if a.immune or b.immune then
+        out.immune = mergeImmune(a.immune, b.immune)
+    end
+    if a.forageDisabled or b.forageDisabled then
+        out.forageDisabled = true
+    elseif a.forageDisabled == false or b.forageDisabled == false then
+        out.forageDisabled = false
+    end
+    return out
+end
+
+local function groupZonesByCanonical(zones)
+    local grouped = {}
+    if type(zones) ~= 'table' then return grouped end
+    for zone, zb in pairs(zones) do
+        local canon = M.canonicalZoneShortName(zone)
+        grouped[canon] = unionMergeZoneBlocks(grouped[canon], zb)
+    end
+    return grouped
+end
+
+local function foldProgressNoCombatZones(list)
+    if type(list) ~= 'table' then return list, false end
+    local out = {}
+    local seen = {}
+    for _, z in ipairs(list) do
+        if z and z ~= '' then
+            local canon = M.canonicalZoneShortName(z)
+            local key = string.lower(canon)
+            if not seen[key] then
+                seen[key] = true
+                out[#out + 1] = canon
+            end
+        end
+    end
+    local changed = #out ~= #list
+    if not changed then
+        for i, z in ipairs(list) do
+            if out[i] ~= z then
+                changed = true
+                break
+            end
+        end
+    end
+    return out, changed
+end
+
+--- Fold zonename_progress zone blocks and noCombatZones entries into the base zonename.
+--- Returns true when common was mutated.
+local function foldProgressZoneKeys(common)
+    if not common then return false end
+    local changed = false
+    if type(common.zones) == 'table' then
+        local grouped = {}
+        for zone, zb in pairs(common.zones) do
+            local canon = M.canonicalZoneShortName(zone)
+            if grouped[canon] ~= nil then
+                grouped[canon] = unionMergeZoneBlocks(grouped[canon], zb)
+                changed = true
+            elseif canon ~= zone then
+                grouped[canon] = zb
+                changed = true
+            else
+                grouped[canon] = zb
+            end
+        end
+        if changed then
+            common.zones = grouped
+        end
+    end
+    if type(common.noCombatZones) == 'table' then
+        local folded, nczChanged = foldProgressNoCombatZones(common.noCombatZones)
+        if nczChanged then
+            common.noCombatZones = folded
+            changed = true
+        end
+    end
+    return changed
+end
+
 local function mergeZoneBlock(diskZb, memZb)
     if not diskZb then return memZb end
     if not memZb then return diskZb end
@@ -476,19 +587,18 @@ function M.mergeCommonTables(disk, mem)
             out[key] = disk[key]
         end
     end
+    if type(out.noCombatZones) == 'table' then
+        out.noCombatZones = foldProgressNoCombatZones(out.noCombatZones)
+    end
     if disk.zones or mem.zones then
         out.zones = {}
+        local diskGrouped = groupZonesByCanonical(disk.zones)
+        local memGrouped = groupZonesByCanonical(mem.zones)
         local allZones = {}
-        if type(disk.zones) == 'table' then
-            for zone in pairs(disk.zones) do allZones[zone] = true end
-        end
-        if type(mem.zones) == 'table' then
-            for zone in pairs(mem.zones) do allZones[zone] = true end
-        end
+        for zone in pairs(diskGrouped) do allZones[zone] = true end
+        for zone in pairs(memGrouped) do allZones[zone] = true end
         for zone in pairs(allZones) do
-            local diskZb = disk.zones and disk.zones[zone] or nil
-            local memZb = mem.zones and mem.zones[zone] or nil
-            out.zones[zone] = mergeZoneBlock(diskZb, memZb)
+            out.zones[zone] = mergeZoneBlock(diskGrouped[zone], memGrouped[zone])
         end
     end
     if disk.raidlist or mem.raidlist then
@@ -555,7 +665,8 @@ function M.unionBoolMap(diskMap, memMap)
     return next(out) and out or nil
 end
 
-local function ensureZoneBlockIn(common, zone)
+function M.ensureZoneBlockIn(common, zone)
+    zone = M.canonicalZoneShortName(zone)
     if not common.zones then common.zones = {} end
     if not common.zones[zone] then common.zones[zone] = {} end
     return common.zones[zone]
@@ -617,6 +728,7 @@ end
 
 --- Return the zone block for zone (read-only); nil if zone or zones missing.
 function M.getZoneBlock(zone)
+    zone = M.canonicalZoneShortName(zone)
     local common = M.getCommon()
     if not common.zones then return nil end
     return common.zones[zone]
@@ -624,10 +736,7 @@ end
 
 --- Return the zone block for zone, creating common.zones and zone entry if needed (for writing).
 function M.ensureZoneBlock(zone)
-    local common = M.getCommon()
-    if not common.zones then common.zones = {} end
-    if not common.zones[zone] then common.zones[zone] = {} end
-    return common.zones[zone]
+    return M.ensureZoneBlockIn(M.getCommon(), zone)
 end
 
 --- Read-only reload from disk. Never writes. Returns true when main or .bak loaded.
@@ -636,6 +745,7 @@ function M.reloadCommonReadOnly()
     local common, err = tryLoadCommonTable(path)
     if common then
         setCommonCache(common)
+        foldProgressZoneKeys(M._common)
         markCommonLoadSuccess()
         return true
     end
@@ -643,6 +753,7 @@ function M.reloadCommonReadOnly()
         local bakCommon = tryLoadCommonTable(commonBakPath())
         if bakCommon then
             setCommonCache(bakCommon)
+            foldProgressZoneKeys(M._common)
             M._commonReloadPending = true
             log.say('Using \agcz_common.lua.bak\ax in memory (main unreadable: %s)', err or 'unknown')
             return true
@@ -669,10 +780,11 @@ function M.initCommonAtStartup()
     if common then
         setCommonCache(common)
         local migrated = migrateOldCommonToZones(M._common) or migrateCzimmuneIntoZones(M._common)
+        local folded = foldProgressZoneKeys(M._common)
         local nocombatzones = require('lib.nocombatzones')
         local seeded = nocombatzones.seedDefaultsIfEmpty()
         local warpSeeded = seedWarpThresholdIfMissing()
-        if migrated or seeded or warpSeeded then
+        if migrated or folded or seeded or warpSeeded then
             M.saveCommon()
         end
         markCommonLoadSuccess()
@@ -682,6 +794,7 @@ function M.initCommonAtStartup()
         local bakCommon = tryLoadCommonTable(commonBakPath())
         if bakCommon then
             setCommonCache(bakCommon)
+            foldProgressZoneKeys(M._common)
             M._commonReloadPending = true
             log.say('Using \agcz_common.lua.bak\ax at startup (main unreadable: %s)', err or 'unknown')
             return
@@ -799,7 +912,7 @@ function M.saveNukeFlavorsToCommon()
     if not zone or zone == '' then return end
     local rc = state.getRunconfig()
     M.mutateCommon(function(common)
-        local zb = ensureZoneBlockIn(common, zone)
+        local zb = M.ensureZoneBlockIn(common, zone)
         zb.nukeFlavors = rc.nukeFlavorsAllowed
         zb.nukeFlavorsAutoDisabled = M.unionBoolMap(zb.nukeFlavorsAutoDisabled, rc.nukeFlavorsAutoDisabled)
     end)
@@ -814,7 +927,7 @@ end
 function M.addZoneJunk(zone, itemName)
     if not zone or zone == '' or not itemName or itemName == '' then return end
     M.mutateCommon(function(common)
-        local zb = ensureZoneBlockIn(common, zone)
+        local zb = M.ensureZoneBlockIn(common, zone)
         zb.junk = M.unionBoolMap(zb.junk, { [itemName] = true })
     end)
 end
@@ -839,7 +952,7 @@ end
 function M.setForageDisabledInZone(zone, disabled)
     if not zone or zone == '' then return end
     M.mutateCommon(function(common)
-        local zb = ensureZoneBlockIn(common, zone)
+        local zb = M.ensureZoneBlockIn(common, zone)
         zb.forageDisabled = disabled and true or false
     end)
 end

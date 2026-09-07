@@ -57,6 +57,21 @@ local function deltaHasKeys(delta)
     return false
 end
 
+local function foldNoCombatZonesList(list)
+    if type(list) ~= 'table' then return list end
+    local folded = {}
+    local seen = {}
+    for _, z in ipairs(list) do
+        local canon = botconfig.canonicalZoneShortName(z)
+        local key = type(canon) == 'string' and string.lower(canon) or ''
+        if key ~= '' and not seen[key] then
+            seen[key] = true
+            folded[#folded + 1] = canon
+        end
+    end
+    return folded
+end
+
 function common_sync.deepCopy(value)
     return deepCopy(value)
 end
@@ -113,11 +128,17 @@ local function deltaCoversDisk(disk, delta)
     disk = disk or {}
 
     for k, v in pairs(delta.top or {}) do
-        if not deepEqual(disk[k], v) then return false end
+        local diskVal = disk[k]
+        if k == 'noCombatZones' then
+            if not deepEqual(foldNoCombatZonesList(diskVal), foldNoCombatZonesList(v)) then return false end
+        elseif not deepEqual(diskVal, v) then
+            return false
+        end
     end
 
     for zone, zdelta in pairs(delta.zones or {}) do
-        local diskZb = disk.zones and disk.zones[zone] or nil
+        local canon = botconfig.canonicalZoneShortName(zone)
+        local diskZb = disk.zones and disk.zones[canon] or nil
         for k, v in pairs(zdelta) do
             if not deepEqual(diskZb and diskZb[k], v) then return false end
         end
@@ -129,13 +150,18 @@ end
 local function applyDeltaToCommon(disk, delta)
     local out = deepCopy(disk or {})
     for k, v in pairs(delta.top or {}) do
-        out[k] = deepCopy(v)
+        if k == 'noCombatZones' and type(v) == 'table' then
+            out[k] = foldNoCombatZonesList(v)
+        else
+            out[k] = deepCopy(v)
+        end
     end
     for zone, zdelta in pairs(delta.zones or {}) do
+        local canon = botconfig.canonicalZoneShortName(zone)
         if not out.zones then out.zones = {} end
-        if not out.zones[zone] then out.zones[zone] = {} end
+        if not out.zones[canon] then out.zones[canon] = {} end
         for k, v in pairs(zdelta) do
-            out.zones[zone][k] = deepCopy(v)
+            out.zones[canon][k] = deepCopy(v)
         end
     end
     return out

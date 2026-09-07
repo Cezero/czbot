@@ -16,7 +16,8 @@ function nocombatzones.getDefaultZones()
 end
 
 local function zoneKey(zone)
-    return zone and string.lower(zone) or ''
+    if not zone or zone == '' then return '' end
+    return string.lower(botconfig.canonicalZoneShortName(zone) or '')
 end
 
 function nocombatzones.zoneInList(zone, list)
@@ -58,6 +59,7 @@ function nocombatzones.isActiveNoCombatZone(zone)
 end
 
 function nocombatzones.addZone(zone)
+    zone = botconfig.canonicalZoneShortName(zone)
     if not zone or zone == '' then return false end
     if nocombatzones.zoneInList(zone, ensureList()) then return false end
     local added = false

@@ -30,11 +30,8 @@ local function saveList(listType, replace)
     if not zone or zone == '' then return end
     local memList = botconfig.copyStringList(state.getRunconfig()[opts.runconfigKey])
     botconfig.mutateCommon(function(common)
-        local zb = common.zones and common.zones[zone]
-        local diskList = zb and zb[opts.commonKey] or {}
-        if not common.zones then common.zones = {} end
-        if not common.zones[zone] then common.zones[zone] = {} end
-        zb = common.zones[zone]
+        local zb = botconfig.ensureZoneBlockIn(common, zone)
+        local diskList = zb[opts.commonKey] or {}
         if replace then
             zb[opts.commonKey] = memList
         else

@@ -2601,9 +2601,9 @@ function spellutils.clearCastingStateOrResume()
     castinterrupt.tickPending()
 end
 
---- True when memorizing a spell into a gem (cast engine).
+--- True when memorizing a spell into a gem (cast engine or bard twist remem).
 function spellutils.IsMemorizing()
-    return casting.isMemorizing()
+    return casting.isMemorizing() or bardtwist.IsTwistMemPending()
 end
 
 --- When resuming a cast, use bothooks priority for spellcheckResume.hook so an earlier hook (e.g. doHeal) does not pass wrong runPriority to another sub's CurSpell (e.g. buff).

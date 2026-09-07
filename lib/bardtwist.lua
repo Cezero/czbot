@@ -340,6 +340,42 @@ end
 
 local TWIST_MEM_WAIT_MS = 10000
 
+local function spellReadyByName(spellName)
+    if not spellName or spellName == '' then return true end
+    local key = string.lower(spellName)
+    local sr = mq.TLO.Me.SpellReady(key)
+    if not sr then return false end
+    local ok, ready = pcall(function() return sr() end)
+    return ok and ready
+end
+
+local function gemHasIntendedSpell(gem, spell)
+    if not gem or not spell then return false end
+    local inGem = mq.TLO.Me.Gem(gem)() or ''
+    return string.lower(inGem) == string.lower(spell)
+end
+
+--- True when pending twist remem finished: gem has spell and SpellReady.
+local function twistMemPendingComplete(p)
+    if not p or not p.gem or not p.spell then return false end
+    return gemHasIntendedSpell(p.gem, p.spell) and spellReadyByName(p.spell)
+end
+
+local function standAfterTwistMem()
+    if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() then
+        mq.cmd('/stand')
+    end
+end
+
+--- Read-only: twist remem in progress (unexpired, gem not ready).
+function bardtwist.IsTwistMemPending()
+    local rc = state.getRunconfig()
+    local p = rc.bardTwistMemPending
+    if not p or not p.gem or not p.spell then return false end
+    if mq.gettime() >= (p.untilMs or 0) then return false end
+    return not twistMemPendingComplete(p)
+end
+
 --- True when safe to /memspell for twist ownership (not casting, not twist-once wait).
 local function safeToMemForTwist()
     local rc = state.getRunconfig()
@@ -349,8 +385,7 @@ local function safeToMemForTwist()
     if mq.TLO.Me.Dead() then return false end
     local p = rc.bardTwistMemPending
     if p and mq.gettime() < (p.untilMs or 0) then
-        local inGem = mq.TLO.Me.Gem(p.gem)() or ''
-        if p.spell and string.lower(inGem) == string.lower(p.spell) then
+        if twistMemPendingComplete(p) then
             rc.bardTwistMemPending = nil
         else
             return false
@@ -382,9 +417,9 @@ local function ensureOwnedGemsMemmed(owned)
     local rc = state.getRunconfig()
     local p = rc.bardTwistMemPending
     if p and p.gem and p.spell then
-        local inGem = mq.TLO.Me.Gem(p.gem)() or ''
-        if string.lower(inGem) == string.lower(p.spell) then
+        if twistMemPendingComplete(p) then
             rc.bardTwistMemPending = nil
+            standAfterTwistMem()
         elseif mq.gettime() < (p.untilMs or 0) then
             return false
         else

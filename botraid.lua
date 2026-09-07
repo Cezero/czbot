@@ -26,7 +26,8 @@ function botraid.RaidCheck()
     local shortname = mq.TLO.Zone.ShortName()
     if shortname ~= current_zone_shortname then
         current_zone_shortname = shortname
-        local ok, mod = pcall(require, 'raid.' .. shortname)
+        local raidName = botconfig.canonicalZoneShortName(shortname) or shortname
+        local ok, mod = pcall(require, 'raid.' .. raidName)
         if ok and mod and type(mod) == 'table' then
             current_zone_module = mod
         else
