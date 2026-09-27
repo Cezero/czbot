@@ -28,6 +28,7 @@ Under **`config.melee`**:
 | Option | Default | Purpose |
 |--------|--------|---------|
 | **stickcmd** | `'hold uw 7'` | Stick command used when engaging (e.g. `hold`, `hold uw 7`, `snaproll`). |
+| **useRanged** | `false` | Combat tab **Use ranged**. Engage with `/autofire` instead of `/attack`. Faces the target; `/autofire` only with line of sight (paths around a blocked shot, does not stick into melee). Backs up on "too close to use a ranged weapon". Turns off and reverts to melee on "You have run out of ammo!". Later: a second toggle to stay close enough to kick (not implemented; this pass does not close to melee). |
 | **stayBehind** | `false` | When on and this bot is **not** the Main Tank, append `behind` (rogue) or `!front` (other classes) to the stick command while engaging. |
 | **behindAggroPct** | 90 | With **stayBehind** on: above this **Me.PctAggro** (level 20+), engage without the positioning token until aggro drops; stick is re-issued when crossing the threshold. |
 | **assistpct** | 99 | MA’s target HP % at or below which this bot will sync to the MA’s target (for DPS/MA logic). |

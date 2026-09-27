@@ -66,6 +66,7 @@
 ---@class ConfigMelee
 ---@field assistpct number|nil
 ---@field stickcmd string|nil
+---@field useRanged boolean|nil engage with /autofire instead of /attack. Faces the target and shoots only with line of sight; does not close to melee. Later: a second toggle to stay close enough to kick (out of scope; this pass must not close to melee).
 ---@field mobprobEngageGraceMs number|nil ms to suppress MobProb /nav after a new engage (default 1000; 0 = off)
 ---@field stayBehind boolean|nil
 ---@field behindAggroPct number|nil
@@ -138,7 +139,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'autoInventory', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
-    melee = { 'assistpct', 'stickcmd', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'bandolierDps', 'bandolierTank' },
+    melee = { 'assistpct', 'stickcmd', 'useRanged', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'offtank', 'mtSticky', 'minmana', 'bandolierDps', 'bandolierTank' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
@@ -1502,7 +1503,7 @@ function M.Load(path)
     M.recomputeDerivedSettings()
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
-        stickcmd = 'hold uw 7', mobprobEngageGraceMs = 1000, stayBehind = false, behindAggroPct = 90, evadePct = 90, offtank = false, mtSticky = false,
+        stickcmd = 'hold uw 7', useRanged = false, mobprobEngageGraceMs = 1000, stayBehind = false, behindAggroPct = 90, evadePct = 90, offtank = false, mtSticky = false,
         minmana = 0, assistpct = 99,
     })
     applySectionDefaults('heal', { interruptlevel = 0.80, xttargets = 0 })

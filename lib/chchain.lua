@@ -142,24 +142,26 @@ local function safeTankHp(name)
     return 0
 end
 
-local function advanceCurtank(rc, index, tankName)
+local function advanceCurtank(rc, index, tankName, force)
     if not rc.doChchain then return false end
     if not index or not tankName or tankName == '' then return false end
     local cur = rc.chchainCurtank or 1
-    if index < cur then return false end
+    if index < cur and not force then return false end
     rc.chchainCurtank = index
     rc.chchainTank = tankName
     return true
 end
 
 --- Local curtank index sync when MT changes (mt_update or automatic resolution). Does not broadcast.
+--- mt_wrap and mt_reset may move the cursor backward; other reasons only move forward.
 function chchain.syncCurtankFromMtName(name, reason)
     if not name or name == '' then return end
     local rc = state.getRunconfig()
     if not rc.doChchain then return end
     local curtank = auto_ma_mt.handleMtOverride(name, reason)
     if curtank and curtank.index and curtank.tank then
-        advanceCurtank(rc, curtank.index, curtank.tank)
+        local force = reason == 'mt_wrap' or reason == 'mt_reset'
+        advanceCurtank(rc, curtank.index, curtank.tank, force)
     end
 end
 
@@ -170,11 +172,12 @@ local function applyCurtank(content, sender)
     local name = content.tank
     if not idx or not name or name == '' then return end
     local prev = rc.chchainCurtank or 1
-    if idx < prev then
+    local wrap = content.wrap == true
+    if idx < prev and not wrap then
         chchain.debug('curtank ignored stale from %s index=%s tank=%s', tostring(sender), tostring(idx), tostring(name))
         return
     end
-    advanceCurtank(rc, idx, name)
+    advanceCurtank(rc, idx, name, wrap)
     chchain.debug('curtank from %s index=%s tank=%s', tostring(sender), tostring(idx), tostring(name))
 end
 
@@ -183,10 +186,20 @@ local function selectHealTank(rc)
     if not list or #list == 0 then return nil end
     local startIdx = rc.chchainCurtank or 1
     local tid, idx, name = auto_ma_mt.firstAliveMtFromIndex(list, startIdx, isTankInCHRange)
+    local wrapped = false
+    if not tid and startIdx > 1 then
+        local wrapTid, wrapIdx, wrapName = auto_ma_mt.firstAliveMtFromIndex(list, 1, isTankInCHRange)
+        if wrapIdx and wrapIdx < startIdx then
+            tid, idx, name = wrapTid, wrapIdx, wrapName
+            wrapped = true
+        end
+    end
     if tid and idx and name then
         local prev = rc.chchainCurtank or 1
-        if advanceCurtank(rc, idx, name) and idx > prev then
-            czactor.publish('chchain_curtank', { index = idx, tank = name })
+        if advanceCurtank(rc, idx, name, wrapped) and idx ~= prev then
+            local payload = { index = idx, tank = name }
+            if wrapped then payload.wrap = true end
+            czactor.publish('chchain_curtank', payload)
         end
         return tid, name
     end

@@ -1,4 +1,4 @@
--- Combat state reset: stick off, attack off, optional pet back, optional target clear.
+-- Combat state reset: stick off, attack off, autofire off, optional pet back, optional target clear.
 -- Used by botmelee, botmove, and botpull to avoid duplicated logic.
 -- Keep free of charm/spellutils/botmelee so botmove can require this without cycles.
 
@@ -19,6 +19,8 @@ function combat.ResetCombatState(opts)
     local clearPet = opts.clearPet ~= false
 
     if mq.TLO.Stick.Active() then mq.cmd('/squelch /stick off') end
+    -- /autofire is a toggle; only issue it when ranged fire is actually on.
+    if mq.TLO.Me.AutoFire() then mq.cmd('/squelch /autofire') end
     if mq.TLO.Me.Combat() then mq.cmd('/squelch /attack off') end
     if clearPet and mq.TLO.Me.Pet.Aggressive() then
         local now = mq.gettime()

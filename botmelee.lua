@@ -169,6 +169,60 @@ local function tryRogueEvade()
     return true
 end
 
+-- Later: a second Combat-tab toggle (stay close enough to kick) will keep the bot inside kick
+-- range while still using /autofire. Out of scope for this pass: ranged mode may path only to
+-- gain line of sight; it does not close to melee (no stick, no moving_closer).
+local RANGED_BACKOFF_MS = 1000
+
+local function useRanged()
+    return myconfig.melee and myconfig.melee.useRanged == true
+end
+
+--- True when the engage attack mode is on: /autofire while useRanged, otherwise melee /attack.
+local function isAttacking()
+    if useRanged() then return mq.TLO.Me.AutoFire() and true or false end
+    return mq.TLO.Me.Combat() and true or false
+end
+
+--- Set attack on or off. /autofire is a toggle, so it is issued only when Me.AutoFire() does not already match.
+local function setAttack(on)
+    if useRanged() then
+        if mq.TLO.Me.Combat() then mq.cmd('/squelch /attack off') end
+        local af = mq.TLO.Me.AutoFire() and true or false
+        if on ~= af then mq.cmd('/squelch /autofire') end
+        return
+    end
+    if mq.TLO.Me.AutoFire() then mq.cmd('/squelch /autofire') end
+    local combatOn = mq.TLO.Me.Combat() and true or false
+    if on and not combatOn then
+        mq.cmd('/squelch /attack on')
+    elseif not on and combatOn then
+        mq.cmd('/squelch /attack off')
+    end
+end
+
+local function rangedBackoffActive()
+    if state.getRunState() ~= state.STATES.melee then return false end
+    local p = state.getRunStatePayload()
+    return p and p.phase == 'ranged_backoff'
+end
+
+local function releaseRangedBackoff()
+    mq.cmd('/squelch /keypress back')
+end
+
+--- Release a finished backoff even when engage is skipped this tick (notmatar, pull, fear).
+local function tickRangedBackoff()
+    if not rangedBackoffActive() then return end
+    local p = state.getRunStatePayload()
+    if p and p.deadline and mq.gettime() < p.deadline then return end
+    releaseRangedBackoff()
+    if state.isDeadOrHover() then return end
+    if state.canStartBusyState(state.STATES.melee) then
+        state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+    end
+end
+
 -- When I am MT and my target is a PC: clear combat stick/attack, but keep a valid NPC engage
 -- sticky so MA+MT promote does not wipe the kill target while Target is on a corpse/raid mate.
 local function clearTankCombatState()
@@ -599,7 +653,8 @@ local function selectMATarget()
     if rc.maAdoptSelectedTarget then
         rc.maAdoptSelectedTarget = nil
         -- Startup/unpause: only adopt when auto-attack is already on and target is a valid NPC.
-        if mq.TLO.Me.Combat() then
+        -- Ranged uses /autofire (Me.AutoFire) instead of Me.Combat.
+        if isAttacking() then
             local curId = mq.TLO.Target.ID()
             if isValidMaSelectedTarget(curId, rc) then
                 rc.allMezzedEngageId = nil
@@ -773,6 +828,7 @@ function botmelee.disengageCombat(reason)
     _engageLosBlocked = false
     _engageLosLastLogTime = 0
     _engageLosEngageId = nil
+    if rangedBackoffActive() then releaseRangedBackoff() end
     botmelee.clearMobprobEngageGrace()
     if tankrole.AmIMainAssist() and shouldBroadcastMaDisengage(reason, engageId) then
         czactor.publishMaDisengage(reason or 'disengage')
@@ -802,6 +858,7 @@ local function applyEngageStick(engageTargetId)
     if spellutils.IsMemorizing() then return end
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
     if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
+    if mq.TLO.Me.AutoFire() then mq.cmd('/squelch /autofire') end
     if not mq.TLO.Me.Combat() then mq.cmd('/squelch /attack on') end
     local stickCmd = getEngageStickCmd()
     local needRestick = false
@@ -849,6 +906,89 @@ local function navToEngageTargetIfBlocked(engageTargetId, context)
     return true
 end
 
+-- Ranged engage: face every tick, /autofire only with line of sight, never stick into melee.
+-- Later: a second toggle (stay close enough to kick) will keep the bot inside kick range while
+-- still using /autofire. Out of scope here — this pass may path only to gain line of sight.
+local function engageRanged(engageTargetId)
+    if spellutils.IsMemorizing() then return end
+
+    if rangedBackoffActive() then
+        local p = state.getRunStatePayload()
+        if p and p.deadline and mq.gettime() < p.deadline then return end
+        releaseRangedBackoff()
+        if state.canStartBusyState(state.STATES.melee) then
+            state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+        end
+    end
+
+    -- LoS blocked: path around (or hold). Do not start /autofire until the shot is clear.
+    if navToEngageTargetIfBlocked(engageTargetId, 'ranged') then
+        setAttack(false)
+        if not mq.TLO.Navigation.Active() then
+            if mq.TLO.Stick.Active() then
+                mq.cmd('/squelch /stick off')
+                _lastEngageStickCmd = nil
+            end
+            if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
+            mq.cmd('/squelch /face fast')
+        end
+        return
+    end
+
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    if mq.TLO.Stick.Active() then
+        mq.cmd('/squelch /stick off')
+        _lastEngageStickCmd = nil
+    end
+    if mq.TLO.Me.Sitting() then mq.cmd('/stand') end
+    mq.cmd('/squelch /face fast')
+    setAttack(true)
+    local p = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
+    if p and p.phase == 'moving_closer' and state.canStartBusyState(state.STATES.melee) then
+        state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+    end
+end
+
+--- Game said the bow is too close. Step back; doMelee resumes /autofire after the backoff if LoS is clear.
+function botmelee.onRangedTooClose()
+    if not useRanged() then return end
+    local targetId = mq.TLO.Target.ID()
+    if not targetId or targetId == 0 then return end
+    if rangedBackoffActive() then
+        local p = state.getRunStatePayload()
+        if p and p.deadline and mq.gettime() < p.deadline then return end
+    end
+    if not state.canStartBusyState(state.STATES.melee) then return end
+    setAttack(false)
+    if mq.TLO.Stick.Active() then
+        mq.cmd('/squelch /stick off')
+        _lastEngageStickCmd = nil
+    end
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    mq.cmd('/squelch /multiline ; /face fast ; /stand ; /keypress back hold')
+    state.setRunState(state.STATES.melee, {
+        phase = 'ranged_backoff',
+        deadline = mq.gettime() + RANGED_BACKOFF_MS,
+        priority = bothooks.getPriority('doMelee'),
+    })
+end
+
+--- "You have run out of ammo!" — drop Use ranged and let the next engage use normal melee.
+function botmelee.onRangedOutOfAmmo()
+    if not useRanged() then return end
+    if not myconfig.melee then myconfig.melee = {} end
+    myconfig.melee.useRanged = false
+    botconfig.ApplyAndPersist()
+    if mq.TLO.Me.AutoFire() then mq.cmd('/squelch /autofire') end
+    if rangedBackoffActive() then
+        releaseRangedBackoff()
+        if state.canStartBusyState(state.STATES.melee) then
+            state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+        end
+    end
+    log.say('Out of ammo. Use ranged off; reverting to melee.')
+end
+
 -- When engageTargetId is set: pet attack, target (blocking TargetAndWait), stand, attack on, stick. Uses melee phase moving_closer.
 local function engageTarget()
     local engageTargetId = state.getRunconfig().engageTargetId
@@ -872,7 +1012,8 @@ local function engageTarget()
         return
     end
 
-    if state.getRunState() == state.STATES.melee then
+    -- Ranged does not close to MaxMeleeTo. A leftover moving_closer phase is ignored while useRanged is on.
+    if not useRanged() and state.getRunState() == state.STATES.melee then
         local p = state.getRunStatePayload()
         if p and p.phase == 'moving_closer' then
             local targetDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Target.X(), mq.TLO.Target.Y())
@@ -914,6 +1055,17 @@ local function engageTarget()
     if mq.TLO.Target.ID() ~= engageTargetId then
         mezExit('target_mismatch want=%s got=%s', tostring(engageTargetId), tostring(mq.TLO.Target.ID()))
         return
+    end
+
+    if useRanged() then
+        engageRanged(engageTargetId)
+        return
+    end
+    if rangedBackoffActive() then
+        releaseRangedBackoff()
+        if state.canStartBusyState(state.STATES.melee) then
+            state.setRunState(state.STATES.melee, { phase = 'idle', priority = bothooks.getPriority('doMelee') })
+        end
     end
 
     -- Blocked by LoS but reachable: pathfind around the obstruction; stick takes over on arrival.
@@ -1091,7 +1243,7 @@ function botmelee.AdvCombat()
         -- doMelee sets runState=melee before AdvCombat; isMeleeEngaged is then always true.
         -- Only full-disengage when there is real combat to release — otherwise quietly clear idle melee.
         if rc.engageTargetId or rc.attackCommandEngage or rc.allMezzedEngageId
-            or mq.TLO.Me.Combat() or mq.TLO.Stick.Active() or mq.TLO.Me.Pet.Aggressive() then
+            or mq.TLO.Me.Combat() or mq.TLO.Me.AutoFire() or mq.TLO.Stick.Active() or mq.TLO.Me.Pet.Aggressive() then
             disengageCombat('no_engage_target')
         elseif state.getRunState() == state.STATES.melee then
             state.clearRunState()
@@ -1134,6 +1286,7 @@ end
 function botmelee.getHookFn(name)
     if name == 'doMelee' then
         return function(hookName)
+            tickRangedBackoff()
             if state.isDeadOrHover() then return end
             if utils.isNearPrimaryBindPoint() then
                 utils.enforceBindStealth()

@@ -31,6 +31,8 @@ flowchart TB
     subgraph combat [Combat / FTE]
         FTELock["Encounter Locked to someone else"] --> Event_FTELocked
         MobProb["target too far / cannot see / can't hit"] --> Event_MobProb
+        RangedTooClose["too close to use a ranged weapon"] --> onRangedTooClose
+        RangedOutOfAmmo["You have run out of ammo!"] --> onRangedOutOfAmmo
     end
     subgraph gm [GM / misc]
         GMCheck["GM detected"] --> Event_GMDetected
@@ -153,7 +155,9 @@ These handlers feed cast outcomes into `lib/casting.lua` for all cast backends. 
 | LinkItem    | Event_LinkItem    | Validates slot/HP filter; echoes item link and /rs                                           |
 | TooSteep    | Event_TooSteep    | Stub                                                                                         |
 | MountFailed | Event_MountFailed | If domount: sets global `MountCastFailed = true`                                             |
-| MobProb     | Event_MobProb     | Off by default (**domobprob** via **/cz mobprob**); ignored while **MasterPause** is on; when on, ignored for `melee.mobprobEngageGraceMs` (default 1s, 0 = off) after a new engage target; throttled 3s (gated invocations silently dropped); if engageTargetId and path length ≤ acleash, /nav to target; arms mobprobtimer on entry |
+| MobProb     | Event_MobProb     | Off by default (**domobprob** via **/cz mobprob**); ignored while **MasterPause** is on; ignored while **melee.useRanged** is on (LoS is handled in doMelee; do not walk into melee). When on, ignored for `melee.mobprobEngageGraceMs` (default 1s, 0 = off) after a new engage target; throttled 3s (gated invocations silently dropped); if engageTargetId and path length ≤ acleash, /nav to target; arms mobprobtimer on entry |
+| RangedTooClose | botmelee.onRangedTooClose | While **melee.useRanged**: stop `/autofire`, face, hold back ~1s, then resume `/autofire` only if line of sight is clear |
+| RangedOutOfAmmo | botmelee.onRangedOutOfAmmo | "You have run out of ammo!": turn **melee.useRanged** off, persist, stop `/autofire`, next engage is normal melee |
 
 ---
 

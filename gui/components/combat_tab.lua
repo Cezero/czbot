@@ -138,6 +138,15 @@ function M.draw()
     local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, bandolierFlags)
     if stickCh and stickNew ~= nil then melee.stickcmd = stickNew; runConfigLoaders() end
 
+    ImGui.Text('Use ranged')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Engage with /autofire instead of /attack. Faces the target and shoots only with line of sight. Does not close to melee; backs up if too close for a ranged weapon. Turns off and returns to melee if you run out of ammo.\nA later option will add staying close enough to kick.')
+    end
+    ImGui.SameLine()
+    local rangedChecked = (melee.useRanged == true)
+    local rgVal, rgPressed = ImGui.Checkbox('##combat_useRanged', rangedChecked)
+    if rgPressed then melee.useRanged = rgVal; runConfigLoaders() end
+
     ImGui.Text('Stay behind')
     if ImGui.IsItemHovered() then
         local stickTok = (mq.TLO.Me.Class.ShortName() == 'ROG') and 'behind' or '!front'

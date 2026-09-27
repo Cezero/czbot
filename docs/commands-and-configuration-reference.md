@@ -247,6 +247,7 @@ See [Pull Configuration and Logic](pull-configuration.md) for the full pull tabl
 | ------------- | ------------- | --------------------------------------------- |
 | **assistpct** | 99            | MA target HP % at or below which to sync.     |
 | **stickcmd**  | `'hold uw 7'` | Stick command when engaging.                  |
+| **useRanged** | `false`       | Engage with `/autofire` instead of `/attack`. Faces the target and shoots only with line of sight. Does not close to melee; backs up if too close for a ranged weapon. Turns off and reverts to melee on "You have run out of ammo!". Later: a second toggle to stay close enough to kick (not implemented). |
 | **stayBehind** | `false`    | Non-MT: append `behind` (rogue) or `!front` (other classes) to stick while engaging. |
 | **behindAggroPct** | 90     | With stayBehind: above this PctAggro, stick without positioning token until aggro drops. |
 | **offtank**   | `false`       | This bot is an offtank (Actor-coordinated add selection). |

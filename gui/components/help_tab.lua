@@ -35,7 +35,7 @@ local GROUPS = {
         { "/cz actor ping|status", "Czbot Actor channel: ping (diagnostic), status (queue depth/drain/drop + traffic)." },
         { "/cz actordebug on|off", "Log ma_update/mt_update send/recv when actordebug is on." },
         { "/cz actordebug queue [on|off]", "Throttled inbound queue enqueue/drain/drop stats (not per-message)." },
-        { "/cz attack [name]", "Engage the MA's live Target now (Actor broadcast to group/raid); bypasses assist-% and XTarget-only. Optional player name." },
+        { "/cz attack [name]", "Engage the MA's live Target now (Actor broadcast to group/raid); bypasses assist-% and XTarget-only. Optional player name. A sticky main tank already on a target ignores a broadcast from someone else, even when that tank is also the main assist." },
         { "/cz disengage", "Release the current combat target. On the MA, also broadcasts ma_disengage to peers. Does not turn off domelee/dodebuff." },
         { "/cz cast <alias>", "Cast a configured spell/ability by its alias." },
     } },

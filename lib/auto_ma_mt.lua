@@ -189,22 +189,63 @@ function auto_ma_mt.topMaCandidateInZone()
     return nil
 end
 
---- Zone-local MT winner: group MainTank (non-raid) then mt_list.
-function auto_ma_mt.topMtCandidateInZone()
-    if not inRaid() then
-        local primary = auto_ma_mt.mtPrimaryTloName()
-        if primary and auto_ma_mt.isCandidateAvailable(primary, false) then
-            return primary, 'primary', 0
+local function mtPrimaryIfAvailable()
+    if inRaid() then return nil end
+    local primary = auto_ma_mt.mtPrimaryTloName()
+    if primary and auto_ma_mt.isCandidateAvailable(primary, false) then
+        return primary
+    end
+    return nil
+end
+
+--- MT candidate at or after minIndex. Index 0 is group MainTank (not used in raid); list names are 1..n.
+--- When minIndex > 0 and nobody from there through the end is available, wraps to index 0.
+---@param minIndex number|nil
+---@return string|nil name
+---@return string|nil source 'primary'|'list'
+---@return number|nil index
+---@return boolean|nil wrapped
+function auto_ma_mt.mtCandidateFromIndex(minIndex)
+    minIndex = tonumber(minIndex) or 0
+    if minIndex < 0 then minIndex = 0 end
+    local list = state.getRunconfig().MtList
+    if type(list) ~= 'table' then list = {} end
+
+    if minIndex <= 0 then
+        local primary = mtPrimaryIfAvailable()
+        if primary then return primary, 'primary', 0, false end
+        for i, name in ipairs(list) do
+            if auto_ma_mt.isCandidateAvailable(name, false) then
+                return name, 'list', i, false
+            end
+        end
+        return nil
+    end
+
+    for i = minIndex, #list do
+        local name = list[i]
+        if auto_ma_mt.isCandidateAvailable(name, false) then
+            return name, 'list', i, false
         end
     end
-    local list = state.getRunconfig().MtList
-    if type(list) ~= 'table' then return nil end
-    for i, name in ipairs(list) do
+
+    local primary = mtPrimaryIfAvailable()
+    if primary then return primary, 'primary', 0, true end
+    local last = minIndex - 1
+    if last > #list then last = #list end
+    for i = 1, last do
+        local name = list[i]
         if auto_ma_mt.isCandidateAvailable(name, false) then
-            return name, 'list', i
+            return name, 'list', i, true
         end
     end
     return nil
+end
+
+--- Zone-local MT winner: group MainTank (non-raid) then mt_list. Same as mtCandidateFromIndex(0).
+function auto_ma_mt.topMtCandidateInZone()
+    local name, source, index = auto_ma_mt.mtCandidateFromIndex(0)
+    return name, source, index
 end
 
 --- True when a manual override entry refers to a live, in-zone holder.

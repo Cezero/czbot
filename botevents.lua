@@ -44,6 +44,13 @@ end
 --- Clear combat session state (engage, mob list, stick/attack). Used on death, rez, and zone change.
 ---@param reason string|nil e.g. death, rez, zone
 function botevents.ResetCombatSession(reason)
+    if reason == 'death' then
+        tankrole.noteLocalMtDeath()
+    end
+    local meleePayload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
+    if meleePayload and meleePayload.phase == 'ranged_backoff' then
+        mq.cmd('/squelch /keypress back')
+    end
     state.clearRunState()
     local rc = state.getRunconfig()
     rc.CurSpell = {}
@@ -69,6 +76,7 @@ end
 ---@param reason string|nil e.g. zone, loading, warp
 local function DelayOnZone(reason)
     botevents.ResetCombatSession(reason or 'zone')
+    tankrole.onZoneChanged()
     -- Stick.Active() is often false after a teleport while MQ2MoveUtils is still on /stick hold.
     mq.cmd('/squelch /nav stop log=off ; /stick off ; /attack off ; /mqtarget clear')
     local rc = state.getRunconfig()
@@ -303,6 +311,8 @@ end
 function botevents.Event_MobProb(line, arg1, arg2)
     local rc = state.getRunconfig()
     if MasterPause == true then return true end
+    -- Ranged engage owns line of sight. Do not /nav in on "too far" or "can't hit from here".
+    if botconfig.config.melee and botconfig.config.melee.useRanged then return true end
     if rc.domobprob ~= true then return true end
     local reason = mobProbReason(line)
     if rc.mobprobEngageGraceUntil and rc.mobprobEngageGraceUntil > mq.gettime() then
@@ -371,6 +381,12 @@ function botevents.BindEvents()
     mq.event('MobProb1', "#*#Your target is too far away,#*#", botevents.Event_MobProb)
     mq.event('MobProb2', "#*#You cannot see your target#*#", botevents.Event_MobProb)
     mq.event('MobProb3', "#*#You can\'t hit them from here#*#", botevents.Event_MobProb)
+    mq.event('RangedTooClose', '#*#too close to use a ranged weapon#*#', function()
+        require('botmelee').onRangedTooClose()
+    end)
+    mq.event('RangedOutOfAmmo', '#*#You have run out of ammo!#*#', function()
+        require('botmelee').onRangedOutOfAmmo()
+    end)
     mq.event('HitYou1', "#*#YOU for #1# point of#*#", botevents.Event_HitYou)
     mq.event('HitYou2', "#*#YOU for #1# points of#*#", botevents.Event_HitYou)
     mq.event('MobCastCompleteHeal', "#*##1# begins casting Complete Heal#*#", botevents.Event_MobBeginsCast)

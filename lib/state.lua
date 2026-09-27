@@ -513,6 +513,7 @@ function M.isCombatContextForBuff(rc)
     end
     if M.getRunState() == M.STATES.melee then return true end
     if mq.TLO.Me.Combat() then return true end
+    if mq.TLO.Me.AutoFire() then return true end
     return false
 end
 
@@ -527,6 +528,7 @@ function M.isMeleeEngaged(rc)
     if M.getRunState() == M.STATES.melee then return true end
     local mq = require('mq')
     if mq.TLO.Me.Combat() then return true end
+    if mq.TLO.Me.AutoFire() then return true end
     if mq.TLO.Stick.Active() then return true end
     if mq.TLO.Me.Pet.Aggressive() then return true end
     return false

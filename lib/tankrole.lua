@@ -4,7 +4,7 @@
 -- "automatic" resolves locally: EQ Group/Raid primary roles, then ma_list/mt_list fallback.
 -- ma_update/mt_update (manual) overrides take precedence until the named PC is unavailable.
 -- Automatic resolution is cached until invalidation or the cached candidate becomes unavailable.
--- A throttled refresh re-resolves every 2s so higher-priority MA/MT can reclaim the role after rez.
+-- A throttled refresh re-resolves every 2s. MA may reclaim after rez. MT moves only forward during a fight.
 
 local mq = require('mq')
 local botconfig = require('lib.config')
@@ -12,6 +12,7 @@ local state = require('lib.state')
 local charinfo = require("plugin.charinfo")
 local charinfoutils = require('lib.charinfoutils')
 local auto_ma_mt = require('lib.auto_ma_mt')
+local utils = require('lib.utils')
 local log = require('lib.log')
 
 local tankrole = {}
@@ -20,7 +21,15 @@ local _maCache = {}
 local _mtCache = {}
 local _leashGen = 0
 local REFRESH_INTERVAL_MS = 2000
+local MT_OOC_RESET_MS = 5000
 local _nextRefreshAt = 0
+-- Forward-only automatic MT cursor. Index 0 allows group MainTank; list names start at 1.
+local _mtFloor = 0
+local _mtListSig = nil
+local _mtLockZone = nil
+local _mtHeldName = nil
+local _mtHeldSource = nil
+local _mtOocSince = nil
 local _tickMemo = {
     assistName = nil,
     tankName = nil,
@@ -239,11 +248,120 @@ local function resolveAutomaticAssistFull()
     return meta
 end
 
----@return table { name: string|nil, source: string|nil, primaryTlo: string|nil, inRaid: boolean }
+local function namesEqual(a, b)
+    if not a or not b then return false end
+    return string.lower(a) == string.lower(b)
+end
+
+local function currentZone()
+    local zone = mq.TLO.Zone.ShortName()
+    if not zone or zone == '' then return nil end
+    return zone
+end
+
+local function clearMtCursor()
+    _mtFloor = 0
+    _mtLockZone = nil
+    _mtOocSince = nil
+    _mtHeldName = nil
+    _mtHeldSource = nil
+end
+
+local function mtListSignature()
+    local list = state.getRunconfig().MtList
+    if type(list) ~= 'table' then return '' end
+    local parts = {}
+    for i, name in ipairs(list) do
+        parts[i] = string.lower(tostring(name or ''))
+    end
+    return table.concat(parts, '\0')
+end
+
+--- Clear the cursor when mt_list order changes. A generation bump with the same names (zone reload) keeps it.
+local function syncMtFloorToListGen()
+    local sig = mtListSignature()
+    if _mtListSig == nil then
+        _mtListSig = sig
+        return
+    end
+    if sig ~= _mtListSig then
+        _mtListSig = sig
+        clearMtCursor()
+    end
+end
+
+local function absentFromMtLockZone()
+    if not _mtLockZone or _mtLockZone == '' then return false end
+    local zone = currentZone()
+    if not zone then return false end
+    return not namesEqual(zone, _mtLockZone)
+end
+
+local function inPrimaryBindZone()
+    if utils.isNearPrimaryBindPoint() then return true end
+    local bindTlo = mq.TLO.Me.ZoneBound
+    local bindZone = bindTlo and bindTlo.ShortName and bindTlo.ShortName()
+    local zone = currentZone()
+    if not bindZone or bindZone == '' or not zone then return false end
+    return namesEqual(bindZone, zone)
+end
+
+local function anyMemberInAttack()
+    local raid = inRaid()
+    local count = raid and (mq.TLO.Raid.Members() or 0) or (mq.TLO.Group.Members() or 0)
+    if count <= 0 then return false end
+    local me = mq.TLO.Me.Name()
+    for i = 1, count do
+        local member = raid and mq.TLO.Raid.Member(i) or mq.TLO.Group.Member(i)
+        local name = member and member.Name and member.Name()
+        if name and name ~= '' and not namesEqual(name, me) then
+            local ctx = charinfoutils.getLeaderContext(name)
+            if ctx and ctx.sameZone and ctx.alive and ctx.inAttack then return true end
+        end
+    end
+    return false
+end
+
+--- True while this fight should keep the forward MT cursor.
+local function mtFightActive()
+    if state.isCombatContextForBuff() then return true end
+    if mq.TLO.Me.CombatState() == 'COMBAT' then return true end
+    return anyMemberInAttack()
+end
+
+local function mtOocResetReady()
+    if absentFromMtLockZone() then return false end
+    if mtFightActive() then
+        _mtOocSince = nil
+        return false
+    end
+    local now = mq.gettime()
+    if not _mtOocSince then
+        _mtOocSince = now
+        return false
+    end
+    return (now - _mtOocSince) >= MT_OOC_RESET_MS
+end
+
+local function rememberMtHold(name, source, index)
+    if not name then return end
+    _mtHeldName = name
+    _mtHeldSource = source
+    if index ~= nil then _mtFloor = index end
+end
+
+local function finishMt(meta)
+    if not meta.name and not meta.source then
+        meta.source = 'none'
+    end
+    return meta
+end
+
+---@return table { name: string|nil, source: string|nil, primaryTlo: string|nil, inRaid: boolean, syncReason: string|nil, wrapped: boolean|nil }
 local function resolveAutomaticTankFull()
     local raid = inRaid()
     local primaryTlo = getMtPrimaryTlo()
-    local meta = { primaryTlo = primaryTlo, inRaid = raid }
+    local meta = { primaryTlo = primaryTlo, inRaid = raid, wrapped = false, syncReason = 'automatic' }
 
     local manual = auto_ma_mt.getManualMtOverrideName()
     if manual then
@@ -252,10 +370,39 @@ local function resolveAutomaticTankFull()
         return meta
     end
 
-    local name, source = auto_ma_mt.topMtCandidateInZone()
+    syncMtFloorToListGen()
+
+    if absentFromMtLockZone() then
+        meta.name = _mtHeldName
+        meta.source = _mtHeldSource or (_mtHeldName and 'list' or nil)
+        return finishMt(meta)
+    end
+
+    if mtOocResetReady() then
+        local hadCursor = _mtFloor > 0 or _mtLockZone ~= nil
+        _mtLockZone = nil
+        _mtOocSince = nil
+        local name, source, index = auto_ma_mt.mtCandidateFromIndex(0)
+        meta.name = name
+        meta.source = source
+        meta.syncReason = hadCursor and 'mt_reset' or 'automatic'
+        if name then
+            rememberMtHold(name, source, index or 0)
+        else
+            _mtFloor = 0
+        end
+        return finishMt(meta)
+    end
+
+    local name, source, index, wrapped = auto_ma_mt.mtCandidateFromIndex(_mtFloor)
     meta.name = name
     meta.source = source
-    return meta
+    meta.wrapped = wrapped == true
+    if meta.wrapped then meta.syncReason = 'mt_wrap' end
+    if name then
+        rememberMtHold(name, source, index)
+    end
+    return finishMt(meta)
 end
 
 local function isCachedMaValid(cache)
@@ -279,7 +426,19 @@ local function isCachedMaValid(cache)
 end
 
 local function isCachedMtValid(cache)
-    if not cache.name or not cache.source then return false end
+    if not cache.source then return false end
+    -- No living candidate. Reuse until the throttled refresh; do not scan the raid every tick.
+    if cache.source == 'none' then
+        if absentFromMtLockZone() then return false end
+        if inRaid() ~= cache.inRaid then return false end
+        if getMtPrimaryTlo() ~= cache.primaryTlo then return false end
+        if auto_ma_mt.getMtListGen() ~= cache.listGen then return false end
+        return true
+    end
+    if not cache.name then return false end
+    if absentFromMtLockZone() and _mtHeldName and namesEqual(cache.name, _mtHeldName) then
+        return true
+    end
     if inRaid() ~= cache.inRaid then return false end
     if getMtPrimaryTlo() ~= cache.primaryTlo then return false end
     if auto_ma_mt.getMtListGen() ~= cache.listGen then return false end
@@ -359,12 +518,13 @@ maybeRefreshAutomaticCache = function()
         local oldSource = _mtCache.source
         local fresh = resolveAutomaticTankFull()
         if fresh.name ~= oldMt or fresh.source ~= oldSource then
-            log.say('MT switched to %s (was %s)', tostring(fresh.name or '(nil)'), tostring(oldMt or '(nil)'))
+            local verb = fresh.wrapped and 'MT wrapped to %s (was %s)' or 'MT switched to %s (was %s)'
+            log.say(verb, tostring(fresh.name or '(nil)'), tostring(oldMt or '(nil)'))
             storeMtCache(fresh)
             if fresh.name and fresh.name ~= oldMt then
                 local chchain = require('lib.chchain')
                 if chchain.syncCurtankFromMtName then
-                    chchain.syncCurtankFromMtName(fresh.name, 'automatic')
+                    chchain.syncCurtankFromMtName(fresh.name, fresh.syncReason or 'automatic')
                 end
             end
         end
@@ -402,7 +562,7 @@ local function resolveAutomaticTankName()
         return _tickMemo.tankName
     end
 
-    if _mtCache.name and isCachedMtValid(_mtCache) then
+    if _mtCache.source and isCachedMtValid(_mtCache) then
         _tickMemo.tankName = _mtCache.name
         _tickMemo.tankResolved = true
         _tickMemo.mtListGen = auto_ma_mt.getMtListGen()
@@ -411,12 +571,13 @@ local function resolveAutomaticTankName()
     end
 
     local result = resolveAutomaticTankFull()
+    if not result.source then result.source = 'none' end
     local prev = _mtCache.name
     storeMtCache(result)
     if result.name and result.name ~= prev then
         local chchain = require('lib.chchain')
         if chchain.syncCurtankFromMtName then
-            chchain.syncCurtankFromMtName(result.name, 'automatic')
+            chchain.syncCurtankFromMtName(result.name, result.syncReason or 'automatic')
         end
     end
     _tickMemo.tankName = result.name
@@ -464,6 +625,8 @@ function tankrole.GetMainTankName()
     end
     if name == 'automatic' then
         local resolved = resolveAutomaticTankName()
+        -- Bind (or any zone other than the fight) must not fall back to self when the held MT is elsewhere.
+        if absentFromMtLockZone() then return resolved end
         if (not resolved or resolved == '') and isUngrouped() then return mq.TLO.Me.Name() end
         return resolved
     end
@@ -498,6 +661,54 @@ end
 ---@return boolean
 function tankrole.AmIMainAssist()
     return tankrole.GetAssistTargetName() == mq.TLO.Me.Name()
+end
+
+--- Advance the MT floor past this character when they die as the automatic MT.
+--- Runs before the death reset clears the name cache, so a later resolve cannot keep them.
+function tankrole.noteLocalMtDeath()
+    local rc = state.getRunconfig()
+    if getEffectiveTankSetting(rc) ~= 'automatic' then return end
+    local me = mq.TLO.Me.Name()
+    if not me or me == '' then return end
+    local current = _mtCache.name or _mtHeldName
+    if not current or not namesEqual(current, me) then return end
+    local listIdx = auto_ma_mt.indexInList(rc.MtList, me)
+    if listIdx then
+        _mtFloor = listIdx + 1
+    else
+        _mtFloor = 1
+    end
+    local zone = currentZone()
+    if zone then _mtLockZone = zone end
+    _mtOocSince = nil
+    if _mtHeldName and namesEqual(_mtHeldName, me) then
+        _mtHeldName = nil
+        _mtHeldSource = nil
+    end
+end
+
+--- Alive zone changes with no death lock clear the cursor. A release to bind keeps it.
+function tankrole.onZoneChanged()
+    if not _mtLockZone then
+        clearMtCursor()
+        return
+    end
+    local zone = currentZone()
+    if zone and namesEqual(zone, _mtLockZone) then
+        _mtOocSince = nil
+        return
+    end
+    local rc = state.getRunconfig()
+    if rc.wasDeadOrHover or inPrimaryBindZone() then
+        _mtOocSince = nil
+        return
+    end
+    if mtFightActive() then
+        if zone then _mtLockZone = zone end
+        _mtOocSince = nil
+        return
+    end
+    clearMtCursor()
 end
 
 --- Print automatic MA/MT resolution diagnostics (/cz tank status, /cz tankrole).
@@ -541,6 +752,12 @@ function tankrole.debugPrint()
         tostring(topMa), tostring(topMaSrc), tostring(topMaIdx))
     printf('  topMtCandidateInZone=%s source=%s idx=%s',
         tostring(topMt), tostring(topMtSrc), tostring(topMtIdx))
+    printf('  MT floor=%s lockZone=%s held=%s absent=%s fight=%s',
+        tostring(_mtFloor),
+        _mtLockZone or '(none)',
+        tostring(_mtHeldName or '(none)'),
+        absentFromMtLockZone() and 'yes' or 'no',
+        mtFightActive() and 'yes' or 'no')
 
     printf('  MA path: %s', summarizeMaPath())
     printf('  MT path: %s', summarizeMtPath())

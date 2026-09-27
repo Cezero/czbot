@@ -81,6 +81,7 @@ Scalar pull options can be set via setvar. **pull.spell** (table: gem, spell, ra
 |------|------|---------|---------|
 | **melee.assistpct** | number | 99 | MA target HP % at or below which to sync. |
 | **melee.stickcmd** | string | `'hold uw 7'` | Stick command when engaging. |
+| **melee.useRanged** | boolean | `false` | Engage with `/autofire` instead of `/attack`. Faces the target; shoots only with line of sight; does not close to melee; backs up if too close for a ranged weapon; turns off and reverts to melee on "You have run out of ammo!". Later: a second toggle to stay close enough to kick (not implemented). |
 | **melee.stayBehind** | boolean | `false` | Non-MT: append `behind` (rogue) or `!front` (other classes) to stick while engaging. |
 | **melee.behindAggroPct** | number | 90 | Non-MT with stayBehind: above this PctAggro, stick without positioning token until aggro drops. |
 | **melee.offtank** | boolean | `false` | This bot is an offtank (add selection via Actor channel). |

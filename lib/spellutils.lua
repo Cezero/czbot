@@ -3676,7 +3676,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
             { deadline = mq.gettime() + 3000, priority = runPriority, spellcheckResume = rc.CurSpell.spellcheckResume })
         return true
     end
-    if (sub == 'debuff' and targethit == 'notmatar' and mq.TLO.Me.Combat()) then mq.cmd('/squelch /attack off') end
+    if sub == 'debuff' and targethit == 'notmatar' then
+        if mq.TLO.Me.Combat() then mq.cmd('/squelch /attack off') end
+        -- Ranged engage uses /autofire; stop it so notmatar can retarget. doMelee turns it back on after.
+        local meleeCfg = botconfig.config.melee
+        if meleeCfg and meleeCfg.useRanged and mq.TLO.Me.AutoFire() then mq.cmd('/squelch /autofire') end
+    end
     if bardtwist and bardtwist.StopTwist then bardtwist.StopTwist() end
     if mq.TLO.Me.Class.ShortName() == 'BRD' then
         if (botconfig.config.settings.domelee and state.getMobCount() > 0 and targethit ~= 'notmatar' and not mq.TLO.Me.Combat()) then

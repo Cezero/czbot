@@ -591,6 +591,18 @@ local function applyMaDisengage(content, sender)
     end
 end
 
+--- Sticky MT (including MA+MT) already on a live target: ignore inbound /cz attack.
+local function stickyMtHoldsEngage(rc)
+    if not tankrole.AmIMainTank() then return false end
+    local melee = require('lib.config').config.melee
+    if not melee or melee.mtSticky ~= true then return false end
+    local engageId = rc.engageTargetId
+    if not engageId or engageId <= 0 then return false end
+    if not spawnutils.isNpcEngageTarget(mq.TLO.Spawn(engageId)) then return false end
+    if require('lib.charm').isCharmSkipped(engageId, rc) then return false end
+    return true
+end
+
 local function applyAttackEngage(content, sender)
     if not sender or sender == myName() then return end
     if content.zone and not zonesMatch(content.zone, myZone()) then return end
@@ -601,6 +613,8 @@ local function applyAttackEngage(content, sender)
     local rc = state.getRunconfig()
     -- Already locked on this spawn from a prior /cz attack — stay silent, no re-apply.
     if rc.attackCommandEngage and rc.engageTargetId == spawnId then return end
+    -- Do not set attackCommandEngage; combat resolvers keep the current target.
+    if stickyMtHoldsEngage(rc) then return end
     local ok, _, isNewEngage = engage.applyAttackCommandEngage(spawnId)
     if ok and isNewEngage then
         botmove.onFollowEngagementStarted(rc)
