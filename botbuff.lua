@@ -493,6 +493,22 @@ local function buffGetTargetsForPhase(phase, context, hoist)
             end
             out = filterCorpses(out)
         end
+        -- pc is peers only. A zone PC on the CharInfo ALL watch is not a target.
+        if phase == 'pc' then
+            local peersOnly = {}
+            for i = 1, #out do
+                local t = out[i]
+                local name = t.name
+                if (not name or name == '') and t.id then
+                    name = mq.TLO.Spawn(t.id).CleanName()
+                end
+                if name and name ~= '' and resolvePeer(name, context, hoist) then
+                    t.name = name
+                    peersOnly[#peersOnly + 1] = t
+                end
+            end
+            return peersOnly
+        end
         return out
     end
     if phase == 'groupbuff' then
@@ -611,13 +627,16 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
     end
 
     -- Phase target list is a union across spells; require this spell's watchlist for peers.
-    -- Non-peers are never on CharInfo watches; phase handlers decide Spawn need.
+    -- pc is peers only. groupmember / tank / offtank may still Spawn-check in-group or named non-peers.
     local watchScope = charinfowatchers.phaseToScope(phase)
     if watchScope and watchScope ~= 'GRPAGG' then
         local watchSid = spellutils.GetSpellId(entry) or sid
         if not charinfowatchers.watchListHas('BUFF', watchScope, watchSid, targetId) then
             local name = mq.TLO.Spawn(targetId).CleanName()
             if name and resolvePeer(name, context, hoist) then
+                return nil, nil
+            end
+            if phase == 'pc' then
                 return nil, nil
             end
             if phase == 'groupmember' and not charinfowatchers.hasNonPeerGroupMembers() then
@@ -684,7 +703,8 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         end
         return nil, nil
     end
-    -- groupmember/pc (incl. Group v2 AE on ALL): peers = watchlist + range; non-peers = Spawn path when flagged.
+    -- groupmember: peers = watchlist + range; in-group non-peers = Spawn path when flagged.
+    -- pc (incl. Group v2 AE on ALL): peers only. Never Spawn-target a zone PC.
     if phase == 'groupmember' then
         if not BuffClass[spellIndex].groupmember then return nil, nil end
         local grpname = mq.TLO.Spawn(targetId).CleanName()
@@ -709,16 +729,8 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         local grpname = mq.TLO.Spawn(targetId).CleanName()
         if not grpname then return nil, nil end
         local peer = resolvePeer(grpname, context, hoist)
-        if peer then
-            return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, 'pc', peer, context, hoist)
-        elseif IconCheck(spellIndex, targetId, grpname, nil, context, hoist) then
-            if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'pc', nil, nil, nil)
-                and heightAllowsSpawn(entry, targetId)
-                and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
-                return targetId, 'pc'
-            end
-        end
-        return nil, nil
+        if not peer then return nil, nil end
+        return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, 'pc', peer, context, hoist)
     end
     return nil, nil
 end

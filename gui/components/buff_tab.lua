@@ -45,7 +45,7 @@ local TARGETPHASE_OPTIONS_BUFF = {
     { key = 'self',        label = 'Self',     tooltip = 'Buff self.' },
     { key = 'tank',        label = 'Tank',     tooltip = 'Buff tank (main assist).' },
     { key = 'groupmember', label = 'Group',     tooltip = 'Buff your group members (class filter below).' },
-    { key = 'pc',          label = 'All chars', tooltip = 'Single-target or Group v2 AE: buff networked characters from the CharInfo ALL watchlist (any group), class-filtered at register time.' },
+    { key = 'pc',          label = 'All peers', tooltip = 'Single-target or Group v2 AE: buff CharInfo peers in any group, class-filtered at register time.' },
     { key = 'mypet',       label = 'My Pet',   tooltip = 'Buff your pet.' },
     { key = 'pet',         label = 'Pet',      tooltip = 'Buff other group pets.' },
     { key = 'groupbuff',   label = 'Grp Buff', tooltip = 'Group v1 AE: cast on self (no target) when enough of your group need the buff. tarcnt includes self.' },
@@ -53,8 +53,8 @@ local TARGETPHASE_OPTIONS_BUFF = {
 
 local TARGETPHASE_GROUPV2_PC = {
     key = 'pc',
-    label = 'All chars',
-    tooltip = 'Group v2 AE: cast on CharInfo ALL-watchlist peers; AE covers their group and they leave the watchlist when buffed.',
+    label = 'All peers',
+    tooltip = 'Group v2 AE: cast on CharInfo peers; the AE covers their group and they leave the watchlist when buffed.',
 }
 
 local TARGETPHASE_GROUPV2_GROUPBUFF = {

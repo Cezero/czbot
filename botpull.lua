@@ -161,6 +161,27 @@ local function getCurrentXTargetIdSet()
     return set
 end
 
+--- Camp MobList plus XTarget Auto-Haters not already in that list.
+--- Pull start and roam use this count. Melee, buffs, and heals stay on MobList.
+local function pullerCampCount(rc)
+    local seen = {}
+    local n = 0
+    for _, v in ipairs(rc.MobList or {}) do
+        local id = v.ID()
+        if id and id > 0 and not seen[id] then
+            seen[id] = true
+            n = n + 1
+        end
+    end
+    for id, _ in pairs(getCurrentXTargetIdSet()) do
+        if not seen[id] then
+            seen[id] = true
+            n = n + 1
+        end
+    end
+    return n
+end
+
 --- Returns true if spawnId is on extended target as an Auto Hater NPC.
 local function isSpawnOnXTarget(spawnId)
     if not spawnId or spawnId == 0 then return false end
@@ -556,7 +577,7 @@ end
 -- chainpullcnt 0 disables chain pull (both count and HP). Live config is read each tick, so GUI/setvar changes apply immediately.
 local function shouldStartPull(rc)
     if state.getRunState() == state.STATES.pulling then return false end
-    local mobCount = state.getMobCount()
+    local mobCount = pullerCampCount(rc)
     local engageId = rc.engageTargetId
     local chainCnt = myconfig.pull.chainpullcnt or 0
     local chainHp = myconfig.pull.chainpullhp or 0
@@ -759,7 +780,7 @@ local function roamNavDeferredForBuff(rc)
 end
 
 local function tickRoamNav(rc)
-    local mobCount = state.getMobCount()
+    local mobCount = pullerCampCount(rc)
     if (_roamPrevMobCount or 0) > 0 and mobCount == 0 and myconfig.settings.dobuff then
         rc.roamBuffCheckPending = true
     end
@@ -1088,6 +1109,29 @@ local function abortNavDuringPull(reason)
     end
 end
 
+--- Auto-Hater delta for an active outing.
+--- A new Auto-Hater that is not the pull target aborts (chain-pull haters snapshotted at start are ignored).
+--- When returnIfPullTargetAggro is set, the pull target already on XTarget means we have aggro and return to camp.
+---@param opts table|nil { returnIfPullTargetAggro?: boolean, clearTarget?: boolean }
+---@return boolean true when this tick was consumed
+local function handleXTargetDuringPull(rc, spawn, opts)
+    opts = opts or {}
+    local xtAtStart = rc.pullXTargetIdsAtStart or {}
+    local pullId = rc.pullAPTargetID
+    for id, _ in pairs(getCurrentXTargetIdSet()) do
+        if not xtAtStart[id] and id ~= pullId then
+            abortNavDuringPull(myconfig.pull.hunter and 'Add aggro (XTarget), aborting hunt.' or
+                'Add aggro (XTarget), returning to camp.')
+            return true
+        end
+    end
+    if opts.returnIfPullTargetAggro and isSpawnOnXTarget(pullId) then
+        transitionPullToReturning(rc, spawn, { clearTarget = opts.clearTarget and true or false })
+        return true
+    end
+    return false
+end
+
 -- One tick of navigating state.
 local function tickNavigating(rc, spawn)
     local spawnDistSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), spawn.X(), spawn.Y())
@@ -1111,21 +1155,12 @@ local function tickNavigating(rc, spawn)
         return
     end
 
-    -- XTarget authoritative: new mob on XTarget = add (abort) or pull target (transition to returning)
+    -- XTarget: pull target on Auto-Hater means we have aggro; any other new Auto-Hater aborts.
+    if handleXTargetDuringPull(rc, spawn, { returnIfPullTargetAggro = true, clearTarget = true }) then
+        return
+    end
     local xtAtStart = rc.pullXTargetIdsAtStart or {}
     local currentXt = getCurrentXTargetIdSet()
-    for id, _ in pairs(currentXt) do
-        if not xtAtStart[id] then
-            if id == rc.pullAPTargetID then
-                -- Pull target just appeared on XTarget: we have aggro, return to camp
-                transitionPullToReturning(rc, spawn, { clearTarget = true })
-                return
-            else
-                abortNavDuringPull(myconfig.pull.hunter and 'Add aggro (XTarget), aborting hunt.' or 'Add aggro (XTarget), returning to camp.')
-                return
-            end
-        end
-    end
 
     -- Add-abort: HP dropped (we took damage) — unless our own pull target is already on XTarget
     -- (tagged pull) or pre-existing XTarget hostiles remain (chain-pull camp fight hitting us).
@@ -1237,6 +1272,10 @@ local function tickAggroing(rc, spawn)
     -- Mob engaged by someone else (e.g. MA): clear so puller is effectively assisting, not "aggroing".
     if botpull.EngageCheck() then
         abortPullSoftFailure('aggroing: EngageCheck (mob engaged by other)')
+        return
+    end
+    -- XTarget: pull target on Auto-Hater means we have aggro; any other new Auto-Hater aborts.
+    if handleXTargetDuringPull(rc, spawn, { returnIfPullTargetAggro = true }) then
         return
     end
     if rc.pullPhase == 'aggro_wait_target' then
@@ -1406,6 +1445,10 @@ end
 
 -- One tick of returning state.
 local function tickReturning(rc, spawn)
+    -- New Auto-Hater that is not the pull target (and was not on XTarget at outing start) aborts.
+    if handleXTargetDuringPull(rc, spawn) then
+        return
+    end
     if not mq.TLO.Navigation.Active() then
         if botmove.AtCamp() then
             rc.pullState = 'waiting_combat'

@@ -5,12 +5,30 @@
 local mq = require('mq')
 local ImGui = require('ImGui')
 local botconfig = require('lib.config')
+local aggro = require('lib.aggro')
+local tankrole = require('lib.tankrole')
 local inputs = require('gui.widgets.inputs')
 local spell_entry = require('gui.widgets.spell_entry')
 
 local M = {}
 
 local NUMERIC_INPUT_WIDTH = 80
+
+local function itemHovered()
+    if ImGuiHoveredFlags and ImGuiHoveredFlags.AllowWhenDisabled then
+        return ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)
+    end
+    return ImGui.IsItemHovered()
+end
+
+--- Monk with Feign Death trained and an aggro meter (level 20+).
+local function monkAutoFeignVisible()
+    if mq.TLO.Me.Class.ShortName() ~= 'MNK' then return false end
+    if not aggro.pctAggroAvailable() then return false end
+    local skill = mq.TLO.Me.Skill('Feign Death')
+    local val = skill and tonumber(skill()) or 0
+    return val > 0
+end
 
 local function runConfigLoaders()
     botconfig.ApplyAndPersist()
@@ -179,6 +197,34 @@ function M.draw()
         local evVal = melee.evadePct or 90
         local evNew, evCh = inputs.boundedInt('combat_evadePct', evVal, 0, 100, 5, '##combat_evadePct')
         if evCh then melee.evadePct = evNew; runConfigLoaders() end
+    end
+
+    if monkAutoFeignVisible() then
+        local mtDisabled = tankrole.AmIMainTank()
+        if mtDisabled then ImGui.BeginDisabled(true) end
+        ImGui.Text('Auto Feign')
+        if itemHovered() then
+            ImGui.SetTooltip(mtDisabled and 'Auto Feign is off while this bot is the Main Tank.'
+                or 'At or above Feign aggro %% (level 20+), use Feign Death during combat. The next tick stands and resumes melee.')
+        end
+        ImGui.SameLine()
+        local feignChecked = (melee.autoFeign == true)
+        local fgVal, fgPressed = ImGui.Checkbox('##combat_autoFeign', feignChecked)
+        if fgPressed and not mtDisabled then melee.autoFeign = fgVal; runConfigLoaders() end
+        if melee.autoFeign then
+            ImGui.SameLine()
+            ImGui.Text('Feign aggro %')
+            if itemHovered() then
+                ImGui.SetTooltip(mtDisabled and 'Auto Feign is off while this bot is the Main Tank.'
+                    or 'At or above this Me.PctAggro, use Feign Death. The next tick stands and resumes melee.')
+            end
+            ImGui.SameLine()
+            ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+            local fgPct = melee.feignPct or 90
+            local fgPctNew, fgPctCh = inputs.boundedInt('combat_feignPct', fgPct, 0, 100, 5, '##combat_feignPct')
+            if fgPctCh and not mtDisabled then melee.feignPct = fgPctNew; runConfigLoaders() end
+        end
+        if mtDisabled then ImGui.EndDisabled() end
     end
 
     -- Line 3: Min Mana (if class has mana pool)

@@ -1066,7 +1066,12 @@ function botheal.HealCheck(runPriority)
             local spellId = spellutils.GetSpellId(spellCtx.entry)
             if phase == 'pc' and th.pc then
                 if not charinfowatchers.watchListHas('HEAL', 'ALL', spellId, targetId) then return nil, nil end
-                if peerHealInRange(context, targetId, spellCtx.spellrangeSq, name) then
+                local peerName = name
+                if not peerName or peerName == '' then
+                    peerName = mq.TLO.Spawn(targetId).CleanName()
+                end
+                if not peerName or peerName == '' or not charinfo.GetInfo(peerName) then return nil, nil end
+                if peerHealInRange(context, targetId, spellCtx.spellrangeSq, peerName) then
                     return accept(targetId, 'pc')
                 end
                 return nil, nil

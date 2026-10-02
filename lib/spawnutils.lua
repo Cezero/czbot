@@ -318,6 +318,7 @@ function spawnutils.shouldPreserveStickyEngage(rc)
     if tankrole.AmIMainTank() and not tankrole.AmIMainAssist()
         and botconfig.config.melee.mtSticky then
         return spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc)
+            and spawnutils.passesNoCampAcleash(mq.TLO.Spawn(rc.engageTargetId), rc)
     end
     if botconfig.config.melee.offtank and not tankrole.AmIMainAssist() then
         local spellutils = require('lib.spellutils')
@@ -352,7 +353,7 @@ function spawnutils.shouldPreserveStickyEngage(rc)
     if not tankrole.AmIMainAssist() and rc.lastAssistTargetId == rc.engageTargetId
         and isLiveAssistUnavailable() then
         -- No usable live MA (none resolved, dead, or hovering): keep kill via lastAssist.
-        return true
+        return spawnutils.passesNoCampAcleash(mq.TLO.Spawn(rc.engageTargetId), rc)
     end
     if assistName and assistName ~= '' and not tankrole.AmIMainAssist() then
         local eng = rc.MaActorEngaged
@@ -361,13 +362,13 @@ function spawnutils.shouldPreserveStickyEngage(rc)
             -- Match current Assist, or keep through automatic promote while spawn is still the engage.
             if maName and (maName:lower() == assistName:lower()
                 or spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc)) then
-                return true
+                return spawnutils.passesNoCampAcleash(mq.TLO.Spawn(rc.engageTargetId), rc)
             end
         end
         -- Assist-name changed on promote: preserve when engage matches lastAssist cache or camp pin.
         if rc.lastAssistTargetId == rc.engageTargetId
             and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
-            return true
+            return spawnutils.passesNoCampAcleash(mq.TLO.Spawn(rc.engageTargetId), rc)
         end
     end
     for _, v in ipairs(rc.MobList or {}) do
@@ -384,6 +385,16 @@ function spawnutils.isSpawnInCampRadius(spawn, rc)
     local cx, cy, cz = spawnutils.getMobListAnchor(rc)
     local acleashSq = myconfig.settings.acleashSq
     return spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
+end
+
+--- Camp set: true (callers keep camp-pin rules). No camp: spawn must be within acleash + zradius
+--- of the mob-list anchor (this bot, or the MA when the MA is within maAnchorLeash).
+function spawnutils.passesNoCampAcleash(spawn, rc)
+    rc = rc or state.getRunconfig()
+    if rc.campstatus == true and rc.makecamp and rc.makecamp.x and rc.makecamp.y then
+        return true
+    end
+    return spawnutils.isSpawnInCampRadius(spawn, rc)
 end
 
 function spawnutils.isSpawnInCampRadiusById(spawnId, rc)

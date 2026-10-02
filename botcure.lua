@@ -66,13 +66,18 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
         return nil, nil
     end
 
-    -- Non-peer: Spawn buff walk (only when nonPeerGroupMembers flag is set by caller).
+    -- pc is peers only. Never /tar a zone PC from this phase.
+    if targethit == 'pc' then
+        return nil, nil
+    end
+
+    -- Non-peer: Spawn buff walk for in-group members and named tank/offtank only.
     if not spellutils.EnsureSpawnBuffsPopulated(botid, 'cure', index, targethit, CureTypeList(index), resumePhase, resumeGroupIndex) then
         return nil, nil
     end
     if not spellutils.SpawnDetrimentalsForCure(botid, CureTypeList(index)) then return nil, nil end
     if not spellutils.DistanceCheck('cure', index, botid) then return nil, nil end
-    if targethit == 'tank' or targethit == 'offtank' or targethit == 'groupmember' or targethit == 'pc' then
+    if targethit == 'tank' or targethit == 'offtank' or targethit == 'groupmember' then
         return botid, targethit
     end
     return nil, nil

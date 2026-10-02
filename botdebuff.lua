@@ -1105,9 +1105,11 @@ end
 function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, reason)
     if mq.TLO.Me.Class.ShortName() ~= 'BRD' then return false end
     if not EvalID or EvalID <= 0 or not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(EvalID)) then
+        bardtwist.ClearTwistOnceReserve()
         return true
     end
     if state.getRunState() == state.STATES.camp_return then
+        bardtwist.ClearTwistOnceReserve()
         return true
     end
     local rc = state.getRunconfig()
@@ -1115,21 +1117,31 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
     if not entry or type(entry.gem) ~= 'number' then return false end
     local spellName = entry.spell or ('gem' .. tostring(entry.gem))
     local targetName = (mq.TLO.Spawn(EvalID) and mq.TLO.Spawn(EvalID).CleanName()) or tostring(EvalID)
+    local function skipAlreadyMezzed()
+        log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
+        spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
+        retargetMaTargetAfterNotmatar(EvalID)
+        bardtwist.ClearTwistOnceReserve()
+        bardtwist.RestoreCombatTwistAfterTwistOnce()
+        return true
+    end
     if targethit == 'notmatar' then
         if spellutils.IsMezTwistFailSkipped(EvalID, rc) then
-            return true
-        end
-        local function skipAlreadyMezzed()
-            log.say('[Mez] skipping \at%s\ax (id %s) - already mezzed by another player (detected before cast)', targetName, EvalID)
-            spellutils.RecordDontStackDebuffFromSpawn(EvalID, entry.spell, 'Mezzed')
-            retargetMaTargetAfterNotmatar(EvalID)
-            bardtwist.RestoreCombatTwistAfterTwistOnce()
+            bardtwist.ClearTwistOnceReserve()
             return true
         end
         -- Spawn-side already blocks remes: skip without retargeting (avoids steal/idle loop).
         if spellutils.SpawnMezBlocksDontStack(EvalID) then
             return skipAlreadyMezzed()
         end
+    elseif targethit ~= 'matar' then
+        return false
+    end
+    bardtwist.SetTwistOnceReserve(entry.gem, entry.spell)
+    if not bardtwist.EnsureGemMemmed(entry.gem, entry.spell) then
+        return true
+    end
+    if targethit == 'notmatar' then
         targeting.TargetAndWaitBuffsPopulated(EvalID, 1000)
         if mq.TLO.Target.ID() == EvalID and mq.TLO.Target.Mezzed() then
             local remMs = spellutils.SpawnEnthrallRemainingMs(EvalID)
@@ -1145,15 +1157,12 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
         else
             log.say('[Mez] casting \am%s\ax on add \at%s\ax (id %s)', spellName, targetName, EvalID)
         end
-    elseif targethit == 'matar' then
+    else
         if mq.TLO.Target.ID() ~= EvalID then
             targeting.TargetAndWait(EvalID, 500)
         end
         log.say('[Debuff] twist-once \am%s\ax on \at%s\ax (id %s)', spellName, targetName, EvalID)
-    else
-        return false
     end
-    bardtwist.EnsureTwistForMode('combat')
     bardtwist.SetTwistOnceGem(entry.gem)
     local castTime = entry.spell and mq.TLO.Spell(entry.spell).MyCastTime()
     local castTimeMs = (castTime and castTime > 0) and castTime or 3000
@@ -1167,6 +1176,7 @@ function botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPri
         deadline = mq.gettime() + castTimeMs + 100,
         startedAt = mq.gettime(),
     }
+    bardtwist.ClearTwistOnceReserve()
     spellutils.rememberLastCast('debuff', spellIndex, EvalID, { fromTwistOnceGem = true })
     if not state.canStartBusyState(state.STATES.casting) then
         rc.bardTwistOnceWait = nil

@@ -169,6 +169,29 @@ local function tryRogueEvade()
     return true
 end
 
+--- Monk: Feign Death when PctAggro is high. Next tick stands (charState) and resumes attack.
+local function tryMonkFeign()
+    if not myconfig.melee or myconfig.melee.autoFeign ~= true then return false end
+    if mq.TLO.Me.Class.ShortName() ~= 'MNK' then return false end
+    if not aggro.pctAggroAvailable() then return false end
+    local skill = mq.TLO.Me.Skill('Feign Death')
+    local skillVal = skill and tonumber(skill()) or 0
+    if skillVal <= 0 then return false end
+    if not mq.TLO.Me.Combat() then return false end
+    if tankrole.AmIMainTank() then return false end
+    if mq.TLO.Me.State() == 'FEIGN' then return false end
+    if isCastingBusy() then return false end
+    if not mq.TLO.Me.AbilityReady('Feign Death')() then return false end
+    local pct = aggro.getPctAggro()
+    local threshold = tonumber(myconfig.melee.feignPct) or 90
+    if pct == nil or pct < threshold then return false end
+    mq.cmd('/squelch /doability "Feign Death"')
+    if state.getRunState() ~= state.STATES.casting then
+        state.getRunconfig().statusMessage = string.format('Feigning (PctAggro %d%%)', pct)
+    end
+    return true
+end
+
 -- Later: a second Combat-tab toggle (stay close enough to kick) will keep the bot inside kick
 -- range while still using /autofire. Out of scope for this pass: ranged mode may path only to
 -- gain line of sight; it does not close to melee (no stick, no moving_closer).
@@ -496,7 +519,8 @@ local function resolveOfftankTarget(assistName, mainTankName, assistpct)
         _otResolveLastId = actarid
         return actarid
     end
-    if maTarId and maTarId > 0 then
+    if maTarId and maTarId > 0
+        and spawnutils.passesNoCampAcleash(mq.TLO.Spawn(maTarId), rc) then
         if _otDebug and _otResolveLastId ~= maTarId then
             otDebugLog('branch=maAssist id=%s ma=%s mt=%s claim=%s mezzedEngage=%s pick=nil',
                 tostring(maTarId), tostring(maTarId), tostring(mtTarId), tostring(claimId),
@@ -521,7 +545,10 @@ local function getMaFollowTargetId()
     if not maTarId or maTarId <= 0 then return nil end
     if charm.isCharmSkipped(maTarId, rc) then return nil end
     if fromCache then
-        if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then return maTarId end
+        local spawn = mq.TLO.Spawn(maTarId)
+        if spawnutils.isAliveEngageSpawn(spawn) and spawnutils.passesNoCampAcleash(spawn, rc) then
+            return maTarId
+        end
         return nil
     end
     if not spawnutils.isCampAcleashEnforced(rc) then return maTarId end
@@ -535,13 +562,15 @@ end
 local function resolveMtFollowTarget()
     local rc = state.getRunconfig()
     if hasAliveEngageTarget(rc) and myconfig.melee.mtSticky then
-        if spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
+        if spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc)
+            and spawnutils.passesNoCampAcleash(mq.TLO.Spawn(rc.engageTargetId), rc) then
             return rc.engageTargetId
         end
     end
     local maTarId = getMaFollowTargetId()
     if maTarId then return maTarId end
-    if hasAliveEngageTarget(rc) and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
+    if hasAliveEngageTarget(rc) and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc)
+        and spawnutils.passesNoCampAcleash(mq.TLO.Spawn(rc.engageTargetId), rc) then
         return rc.engageTargetId
     end
     return nil
@@ -562,7 +591,9 @@ local function isAssistTargetEngageable(maTarId, rc, _assistName, hp, assistpct)
     for _, v in ipairs(rc.MobList or {}) do
         if v.ID() == maTarId then return true end
     end
-    if rc.lastAssistTargetId == maTarId then return true end
+    if rc.lastAssistTargetId == maTarId then
+        return spawnutils.passesNoCampAcleash(spawn, rc)
+    end
     return false
 end
 
@@ -579,7 +610,8 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
     local _, _, maTarId, maTarHp, fromCache = spellutils.GetAssistInfo(true, assistpct)
     if maTarId and maTarId > 0 and not charm.isCharmSkipped(maTarId, rc) then
         if fromCache then
-            if spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(maTarId)) then
+            local spawn = mq.TLO.Spawn(maTarId)
+            if spawnutils.isAliveEngageSpawn(spawn) and spawnutils.passesNoCampAcleash(spawn, rc) then
                 return maTarId
             end
         else
@@ -590,7 +622,8 @@ local function resolveMeleeAssistTarget(assistName, assistpct)
         end
     end
     -- Keep current camp engage across MA death / promote hiccups (MT-style sticky).
-    if hasAliveEngageTarget(rc) and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
+    if hasAliveEngageTarget(rc) and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc)
+        and spawnutils.passesNoCampAcleash(mq.TLO.Spawn(rc.engageTargetId), rc) then
         return rc.engageTargetId
     end
     return nil
@@ -1361,6 +1394,7 @@ function botmelee.getHookFn(name)
                 end
             end
             tryRogueEvade()
+            tryMonkFeign()
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
             state.setRunState(state.STATES.melee, payload and payload or { phase = 'idle', priority = bothooks.getPriority('doMelee') })
             if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then

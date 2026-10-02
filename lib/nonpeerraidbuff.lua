@@ -191,6 +191,19 @@ local function heightAllows(entry, spawnId)
     return ht ~= nil and ht > threshold
 end
 
+--- True when name is a current raid member (roster cache can outlive a leave).
+local function isCurrentRaidMember(name)
+    if not name or name == '' then return false end
+    local n = mq.TLO.Raid.Members() or 0
+    if n <= 0 then return false end
+    for i = 1, n do
+        local rm = mq.TLO.Raid.Member(i)
+        local rn = rm and rm.Name and rm.Name()
+        if rn == name then return true end
+    end
+    return false
+end
+
 local function classMatches(buffClass, classLc)
     if not buffClass or not classLc then return false end
     if buffClass.classes == 'all' then return true end
@@ -230,6 +243,7 @@ function M.needsBuff(spellIndex, targetId, member, entry, spellName, spellId, ra
     if not settingOn() or not _rosterFlag then return nil, nil end
     if not buffClass or not buffClass.pc then return nil, nil end
     if not member or not classMatches(buffClass, member.class) then return nil, nil end
+    if not member.name or not isCurrentRaidMember(member.name) then return nil, nil end
     if not targetId or targetId <= 0 or not entry or not spellName or spellName == '' then return nil, nil end
 
     local sp = mq.TLO.Spawn(targetId)

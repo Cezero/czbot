@@ -115,6 +115,8 @@ When the bot is **not** already pulling, **StartPull()** is called when **any** 
 2. **Chain (count):** Current mob count is **less than** `chainpullcnt` → start a pull (e.g. keep pulling until you have at least `chainpullcnt` mobs).
 3. **Chain (HP):** Current mob count is ≤ `chainpullcnt` **and** the current engage target’s HP % is ≤ `chainpullhp` → start the next pull (e.g. pull the next mob when the current one is low).
 
+**Mob count for these checks** (and for roam “bubble empty”) is the camp **MobList** plus every **XTarget Auto-Hater** that is not already in that list. A hater outside camp radius, or without line of sight, still counts, so the puller will not start another pull while it already has aggro. Melee, buffs, and heals keep using the radius-based MobList only. Chain-pull still uses this combined count, so the bot will not pull past `chainpullcnt`.
+
 In all cases, the internal **pre-conditions** must also pass (see [Pre-conditions that block pulling](#pre-conditions-that-block-pulling)). If they do not, no pull is started even when one of the three conditions above is true.
 
 ---
@@ -123,9 +125,9 @@ In all cases, the internal **pre-conditions** must also pass (see [Pre-condition
 
 Once a pull has started, the bot moves through these phases:
 
-1. **Navigating** — Paths to the chosen mob. May abort on timeout, low HP, or if the bot leaves camp (e.g. beyond radius + 40).
-2. **Aggroing** — When in range, uses **pull.spell** (melee, ranged, spell gem, disc, ability, alt, item, or script) to get aggro.
-3. **Returning** — Navigates back to camp with the mob. Leash logic may pause nav if the mob is too far.
+1. **Navigating** — Paths to the chosen mob. May abort on timeout, low HP, or if the bot leaves camp (e.g. beyond radius + 40). If the pull target is already an XTarget Auto-Hater, the bot has aggro and returns to camp. Any other **new** Auto-Hater (not on XTarget when the outing started) aborts the pull.
+2. **Aggroing** — When in range, uses **pull.spell** (melee, ranged, spell gem, disc, ability, alt, item, or script) to get aggro. The pull target on XTarget (or target-of-target) means aggro and a return to camp. A different new Auto-Hater aborts.
+3. **Returning** — Navigates back to camp with the mob. Leash logic may pause nav if the mob is too far. A new Auto-Hater that is not the pull target aborts back to camp. The pull target and Auto-Haters already present at outing start (chain-pull camp mobs) do not abort.
 4. **Waiting_combat** — Mob is in camp; normal melee/combat runs until the mob is dead or timers clear the pull state.
 
 ```mermaid
@@ -158,13 +160,13 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 |------|--------|----------|
 | **Camp** | `hunter` false, `roam` false | MakeCamp on; puller returns to fixed camp after tagging. |
 | **Hunter** | `hunter` true, `roam` false | No makecamp; anchor set once. Puller can run far from anchor to tag; mob is brought back to camp. |
-| **Roam hunt** | `roam` true | Player-centered, like running with **domelee** and no camp. Mob bubble (**Radius** / **acleash**) and **# Mobs** are around you. When the bubble is empty, the bot **/nav**s to the nearest pullable mob within **pull.radius** of your position. Along the way or on arrival, **doMelee** engages anything in **Radius** — no pull spell phase, no anchor, no return-to-camp. Pull filters (con, zrange, mana, exclude, FTE, PathExists, etc.) apply to nav target selection only. |
+| **Roam hunt** | `roam` true | Player-centered, like running with **domelee** and no camp. Mob bubble (**Radius** / **acleash**) and **# Mobs** are around you. When that bubble is empty and no XTarget Auto-Hater is up, the bot **/nav**s to the nearest pullable mob within **pull.radius** of your position. Along the way or on arrival, **doMelee** engages anything in **Radius** — no pull spell phase, no anchor, no return-to-camp. Pull filters (con, zrange, mana, exclude, FTE, PathExists, etc.) apply to nav target selection only. |
 
 **Roam hunt group setup:** Hunter character = MT + `dopull` + `domelee` + `pull.roam`. Group members = `/cz follow` + `domelee` + normal **acleash** (assist bubble follows each character).
 
 **Solo roam:** When not in a group or raid, unset Assist and Tank resolve to self, so the roam puller engages from MobList and matar abilities (Kick, discs, etc.) use your engage target. You do not need to set Assist/Tank to yourself for solo roam hunt.
 
-**Roam buff timing:** When **dobuff** is on, one buff check cycle runs after the mob bubble clears and before the bot picks the next nav target. Buff checks are skipped while status shows **Roaming to...** (active roam nav).
+**Roam buff timing:** When **dobuff** is on, one buff check cycle runs after the puller camp count clears (MobList plus XTarget Auto-Haters) and before the bot picks the next nav target. Buff checks are skipped while status shows **Roaming to...** (active roam nav).
 
 **FTE (makecamp):** In-camp FTE uses the short combat block and **2s recheck** only — **fteLockoutSec** does **not** apply to camp MobList / MA-MT engage. Outside-camp pull targets get **fteLockoutSec** for pull selection; if that mob later enters camp, the bot arms the 2s combat recheck (pull lockout remains for pulling only).
 

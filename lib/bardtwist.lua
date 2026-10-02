@@ -361,6 +361,24 @@ local function twistMemPendingComplete(p)
     return gemHasIntendedSpell(p.gem, p.spell) and spellReadyByName(p.spell)
 end
 
+local function getTwistOnceReserve()
+    local rc = state.getRunconfig()
+    local r = rc.bardTwistOnceReserve
+    if not r or not r.gem or not r.spell then return nil end
+    if mq.gettime() >= (r.untilMs or 0) then
+        rc.bardTwistOnceReserve = nil
+        return nil
+    end
+    return r
+end
+
+--- True when twist-once reserve owns this gem for a different spell (do not remem over it).
+local function reservedBlocksOwnedMem(gem, spell)
+    local r = getTwistOnceReserve()
+    if not r or r.gem ~= gem then return false end
+    return string.lower(r.spell) ~= string.lower(spell or '')
+end
+
 local function standAfterTwistMem()
     if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() then
         mq.cmd('/stand')
@@ -400,7 +418,7 @@ end
 local function firstOwnedGemNeedingMem(owned)
     for i = 1, #owned do
         local o = owned[i]
-        if o.spell and o.gem then
+        if o.spell and o.gem and not reservedBlocksOwnedMem(o.gem, o.spell) then
             local inGem = mq.TLO.Me.Gem(o.gem)() or ''
             if string.lower(inGem) ~= string.lower(o.spell) and mq.TLO.Me.Book(o.spell)() then
                 return o, inGem
@@ -417,7 +435,10 @@ local function ensureOwnedGemsMemmed(owned)
     local rc = state.getRunconfig()
     local p = rc.bardTwistMemPending
     if p and p.gem and p.spell then
-        if twistMemPendingComplete(p) then
+        local r = getTwistOnceReserve()
+        if r and p.gem == r.gem and string.lower(p.spell) ~= string.lower(r.spell) then
+            rc.bardTwistMemPending = nil
+        elseif twistMemPendingComplete(p) then
             rc.bardTwistMemPending = nil
             standAfterTwistMem()
         elseif mq.gettime() < (p.untilMs or 0) then
@@ -441,6 +462,30 @@ local function ensureOwnedGemsMemmed(owned)
     bardtwist.BardDbgNow('twist mem gem %d -> %s (had: %s)', needMem.gem, needMem.spell,
         (hadGem ~= '' and hadGem or 'empty'))
     return false
+end
+
+--- Mem a single gem to spell (twist-once mez/debuff). False while waiting / mem in progress.
+function bardtwist.EnsureGemMemmed(gem, spell)
+    if type(gem) ~= 'number' or gem < 1 or gem > 12 then return true end
+    if not spell or spell == '' then return true end
+    return ensureOwnedGemsMemmed({ { gem = gem, spell = spell } })
+end
+
+function bardtwist.SetTwistOnceReserve(gem, spell)
+    local rc = state.getRunconfig()
+    if type(gem) ~= 'number' or gem < 1 or gem > 12 or not spell or spell == '' then
+        rc.bardTwistOnceReserve = nil
+        return
+    end
+    rc.bardTwistOnceReserve = {
+        gem = gem,
+        spell = spell,
+        untilMs = mq.gettime() + TWIST_MEM_WAIT_MS,
+    }
+end
+
+function bardtwist.ClearTwistOnceReserve()
+    state.getRunconfig().bardTwistOnceReserve = nil
 end
 
 --- True when gem (1–12) is in the twist list for the current mode (idle/combat/travel/pull).

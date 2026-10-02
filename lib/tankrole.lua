@@ -30,6 +30,8 @@ local _mtLockZone = nil
 local _mtHeldName = nil
 local _mtHeldSource = nil
 local _mtOocSince = nil
+-- Indexes at or below this were passed because that tank died. A battle rez cannot reclaim them.
+local _mtBlockThrough = nil
 local _tickMemo = {
     assistName = nil,
     tankName = nil,
@@ -265,6 +267,7 @@ local function clearMtCursor()
     _mtOocSince = nil
     _mtHeldName = nil
     _mtHeldSource = nil
+    _mtBlockThrough = nil
 end
 
 local function mtListSignature()
@@ -306,17 +309,52 @@ local function inPrimaryBindZone()
     return namesEqual(bindZone, zone)
 end
 
-local function anyMemberInAttack()
+local AGGRESSIVE_BITS = bit32.bor(4, 8) -- PLAYERSTATE_AGGRESSIVE, FORCED_AGGRESSIVE
+
+local function spawnIsFighting(sp)
+    if not sp or not sp.ID or not sp.ID() or sp.ID() == 0 then return false end
+    if sp.Dead() or sp.Type() == 'Corpse' then return false end
+    local ps = sp.PlayerState and sp.PlayerState()
+    if ps and bit32.band(ps, AGGRESSIVE_BITS) ~= 0 then return true end
+    if sp.Aggressive and sp.Aggressive() then return true end
+    local tid = sp.Target and sp.Target.ID and sp.Target.ID()
+    if tid and tid > 0 then
+        local tgt = mq.TLO.Spawn(tid)
+        if tgt and tgt.ID() and tgt.ID() > 0 and tgt.Type() == 'NPC' and not tgt.Dead() then
+            return true
+        end
+    end
+    return false
+end
+
+local function selfHasAutoHater()
+    local n = mq.TLO.Me.XTarget() or 0
+    for i = 1, n do
+        local xt = mq.TLO.Me.XTarget(i)
+        if xt and xt.ID() and xt.ID() > 0 and xt.TargetType and xt.TargetType() == 'Auto Hater'
+            and xt.Type() == 'NPC' and not xt.Dead() then
+            return true
+        end
+    end
+    return false
+end
+
+--- Raid/group spawns, not this bot's own combat flags. Healers and a hovering tank still see the fight.
+local function anyMemberInFight()
     local raid = inRaid()
     local count = raid and (mq.TLO.Raid.Members() or 0) or (mq.TLO.Group.Members() or 0)
     if count <= 0 then return false end
-    local me = mq.TLO.Me.Name()
     for i = 1, count do
         local member = raid and mq.TLO.Raid.Member(i) or mq.TLO.Group.Member(i)
         local name = member and member.Name and member.Name()
-        if name and name ~= '' and not namesEqual(name, me) then
+        if name and name ~= '' then
+            local sp = mq.TLO.Spawn('pc =' .. name)
+            if spawnIsFighting(sp) then return true end
             local ctx = charinfoutils.getLeaderContext(name)
             if ctx and ctx.sameZone and ctx.alive and ctx.inAttack then return true end
+            if ctx and ctx.peer and ctx.peer.CombatState == 'COMBAT' and ctx.alive and ctx.sameZone then
+                return true
+            end
         end
     end
     return false
@@ -324,13 +362,21 @@ end
 
 --- True while this fight should keep the forward MT cursor.
 local function mtFightActive()
+    if state.isDeadOrHover() then return true end
     if state.isCombatContextForBuff() then return true end
     if mq.TLO.Me.CombatState() == 'COMBAT' then return true end
-    return anyMemberInAttack()
+    if selfHasAutoHater() then return true end
+    return anyMemberInFight()
 end
 
 local function mtOocResetReady()
     if absentFromMtLockZone() then return false end
+    -- Death and the tick we stand up are not out of combat. Counting them let a battle rez reclaim MT.
+    local rc = state.getRunconfig()
+    if state.isDeadOrHover() or rc.wasDeadOrHover then
+        _mtOocSince = nil
+        return false
+    end
     if mtFightActive() then
         _mtOocSince = nil
         return false
@@ -348,6 +394,50 @@ local function rememberMtHold(name, source, index)
     _mtHeldName = name
     _mtHeldSource = source
     if index ~= nil then _mtFloor = index end
+end
+
+local function myMtIndex()
+    local me = mq.TLO.Me.Name()
+    if not me or me == '' then return nil end
+    local listIdx = auto_ma_mt.indexInList(state.getRunconfig().MtList, me)
+    if listIdx then return listIdx end
+    if not inRaid() then
+        local primary = auto_ma_mt.mtPrimaryTloName()
+        if primary and namesEqual(primary, me) then return 0 end
+    end
+    return nil
+end
+
+local function mtNameIndex(name)
+    if not name or name == '' then return nil end
+    local listIdx = auto_ma_mt.indexInList(state.getRunconfig().MtList, name)
+    if listIdx then return listIdx end
+    if not inRaid() then
+        local primary = auto_ma_mt.mtPrimaryTloName()
+        if primary and namesEqual(primary, name) then return 0 end
+    end
+    return nil
+end
+
+--- Do not select this index or anything earlier until the fight ends or the list wraps.
+local function blockMtThrough(index)
+    if index == nil then return end
+    if _mtBlockThrough == nil or index > _mtBlockThrough then
+        _mtBlockThrough = index
+    end
+    if _mtFloor <= index then
+        _mtFloor = index + 1
+    end
+    _mtOocSince = nil
+end
+
+local function iWasCurrentMt()
+    local me = mq.TLO.Me.Name()
+    local current = _mtCache.name or _mtHeldName
+    if current and me and namesEqual(current, me) then return true end
+    local idx = myMtIndex()
+    if idx == nil then return false end
+    return idx == _mtFloor
 end
 
 local function finishMt(meta)
@@ -378,10 +468,17 @@ local function resolveAutomaticTankFull()
         return finishMt(meta)
     end
 
+    if state.isDeadOrHover() or state.getRunconfig().wasDeadOrHover then
+        if iWasCurrentMt() then
+            blockMtThrough(myMtIndex())
+        end
+    end
+
     if mtOocResetReady() then
-        local hadCursor = _mtFloor > 0 or _mtLockZone ~= nil
+        local hadCursor = _mtFloor > 0 or _mtLockZone ~= nil or _mtBlockThrough ~= nil
         _mtLockZone = nil
         _mtOocSince = nil
+        _mtBlockThrough = nil
         local name, source, index = auto_ma_mt.mtCandidateFromIndex(0)
         meta.name = name
         meta.source = source
@@ -394,11 +491,24 @@ local function resolveAutomaticTankFull()
         return finishMt(meta)
     end
 
-    local name, source, index, wrapped = auto_ma_mt.mtCandidateFromIndex(_mtFloor)
+    local minIndex = _mtFloor
+    if _mtBlockThrough ~= nil and minIndex <= _mtBlockThrough then
+        minIndex = _mtBlockThrough + 1
+    end
+    local name, source, index, wrapped = auto_ma_mt.mtCandidateFromIndex(minIndex)
     meta.name = name
     meta.source = source
     meta.wrapped = wrapped == true
-    if meta.wrapped then meta.syncReason = 'mt_wrap' end
+    if meta.wrapped then
+        meta.syncReason = 'mt_wrap'
+        _mtBlockThrough = nil
+    elseif name and index ~= nil and minIndex > 0 and index >= minIndex then
+        local prev = _mtCache.name or _mtHeldName
+        local prevIdx = mtNameIndex(prev)
+        if prev and prevIdx ~= nil and not isCandidateAvailable(prev, false) and prevIdx < index then
+            blockMtThrough(prevIdx)
+        end
+    end
     if name then
         rememberMtHold(name, source, index)
     end
@@ -436,6 +546,10 @@ local function isCachedMtValid(cache)
         return true
     end
     if not cache.name then return false end
+    local cachedIdx = mtNameIndex(cache.name)
+    if _mtBlockThrough ~= nil and cachedIdx ~= nil and cachedIdx <= _mtBlockThrough then
+        return false
+    end
     if absentFromMtLockZone() and _mtHeldName and namesEqual(cache.name, _mtHeldName) then
         return true
     end
@@ -670,21 +784,18 @@ function tankrole.noteLocalMtDeath()
     if getEffectiveTankSetting(rc) ~= 'automatic' then return end
     local me = mq.TLO.Me.Name()
     if not me or me == '' then return end
-    local current = _mtCache.name or _mtHeldName
-    if not current or not namesEqual(current, me) then return end
-    local listIdx = auto_ma_mt.indexInList(rc.MtList, me)
-    if listIdx then
-        _mtFloor = listIdx + 1
-    else
-        _mtFloor = 1
-    end
+    local idx = myMtIndex()
+    if idx == nil then return end
+    local passed = _mtFloor > idx
+    if not iWasCurrentMt() and not passed then return end
+    blockMtThrough(idx)
     local zone = currentZone()
     if zone then _mtLockZone = zone end
-    _mtOocSince = nil
     if _mtHeldName and namesEqual(_mtHeldName, me) then
         _mtHeldName = nil
         _mtHeldSource = nil
     end
+    log.say('MT death lock past %s (floor %s)', me, tostring(_mtFloor))
 end
 
 --- Alive zone changes with no death lock clear the cursor. A release to bind keeps it.
@@ -752,8 +863,9 @@ function tankrole.debugPrint()
         tostring(topMa), tostring(topMaSrc), tostring(topMaIdx))
     printf('  topMtCandidateInZone=%s source=%s idx=%s',
         tostring(topMt), tostring(topMtSrc), tostring(topMtIdx))
-    printf('  MT floor=%s lockZone=%s held=%s absent=%s fight=%s',
+    printf('  MT floor=%s blockThrough=%s lockZone=%s held=%s absent=%s fight=%s',
         tostring(_mtFloor),
+        _mtBlockThrough ~= nil and tostring(_mtBlockThrough) or '(none)',
         _mtLockZone or '(none)',
         tostring(_mtHeldName or '(none)'),
         absentFromMtLockZone() and 'yes' or 'no',
