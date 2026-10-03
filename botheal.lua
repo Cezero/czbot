@@ -971,7 +971,8 @@ local function selfHpHealReady()
     for i = 1, count do
         if healSpellResource(i) ~= 'mana' and healEntryValid(i) and not spellMarkedNotInBook(i) then
             local ctx = HPEvalContext(i)
-            if ctx then
+            -- HoT self bands (for example 61-80) are upkeep. They must not cancel a rez or other cast.
+            if ctx and not spellutils.IsHoTSpell(ctx.entry) then
                 local id, hit = rejectIfAlreadyHoT(ctx.entry, HPEvalSelf(i, ctx))
                 if id and hit and spellutils.SpellCheck('heal', i) and spellutils.PreCondCheck('heal', i, id) then
                     -- A gem on recast delay blocks the heal pass; do not skip ahead to a later spell.
@@ -1274,7 +1275,7 @@ function botheal.HealCheck(runPriority)
                 getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
         end)
         if healPassStartedCast() then return false end
-        if needCorpse and combatRezDeferred then
+        if needCorpse and combatRezDeferred and not preferSelfHeal then
             tickprof.span('pass_corpse', function()
                 spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
                     getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)

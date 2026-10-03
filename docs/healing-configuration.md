@@ -27,7 +27,7 @@ All heal options live under **`config.heal`**. Spell entries are in **`heal.spel
 | **interruptlevel** | 0.80 | Used when deciding whether to interrupt a heal because the **target** has risen above the band. |
 | **xttargets** | 0 | Comma-separated XTarget slot numbers (e.g. `"1,2,3"`) that are valid for heals. Set on the **Advanced** tab. Intended for **mixed raids** when **not** every extra heal target is on CharInfo. Spells with band **xtgt** can heal those slots (PCs, mercs, pets; NPCs are ignored). Skipped when **heal_list** is non-empty and every listed name is on CharInfo (the **watched** phase runs instead). |
 
-When your HP is inside a configured **self** band on an HP heal and that spell can be cast, the bot interrupts whatever it is casting (tank heal, buff, cure, debuff, or rez) and heals itself. CH chain casts are left running. **interruptlevel** does not apply to that decision; it only cancels a heal when the target's HP rises above the band.
+When your HP is inside a configured **self** band on a direct HP heal (not a heal over time) and that spell can be cast, the bot interrupts whatever it is casting (tank heal, buff, cure, debuff, or rez) and heals itself. HoT self bands do not interrupt. CH chain casts are left running. **interruptlevel** does not apply to that decision; it only cancels a heal when the target's HP rises above the band.
 
 ### Group AE heals (MQ TargetType Group v1 / Group v2)
 
