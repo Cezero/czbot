@@ -164,22 +164,7 @@ end
 --- Camp MobList plus XTarget Auto-Haters not already in that list.
 --- Pull start and roam use this count. Melee, buffs, and heals stay on MobList.
 local function pullerCampCount(rc)
-    local seen = {}
-    local n = 0
-    for _, v in ipairs(rc.MobList or {}) do
-        local id = v.ID()
-        if id and id > 0 and not seen[id] then
-            seen[id] = true
-            n = n + 1
-        end
-    end
-    for id, _ in pairs(getCurrentXTargetIdSet()) do
-        if not seen[id] then
-            seen[id] = true
-            n = n + 1
-        end
-    end
-    return n
+    return spawnutils.countCampMobsWithAutoHaters(rc)
 end
 
 --- Returns true if spawnId is on extended target as an Auto Hater NPC.

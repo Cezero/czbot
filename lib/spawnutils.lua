@@ -54,6 +54,41 @@ function spawnutils.isAutoHaterXTarget(xt)
     return xt.TargetType() == 'Auto Hater'
 end
 
+--- Unique camp count: MobList IDs plus XTarget Auto-Haters not already in that list.
+--- The same spawn on both counts once.
+---@param rc table|nil
+---@return number count
+---@return boolean fromMobList true when at least one counted ID came from MobList
+---@return boolean fromXTarget true when at least one counted ID was an Auto-Hater absent from MobList
+function spawnutils.countCampMobsWithAutoHaters(rc)
+    rc = rc or state.getRunconfig()
+    local seen = {}
+    local fromMobList = false
+    local fromXTarget = false
+    local n = 0
+    for _, v in ipairs(rc.MobList or {}) do
+        local id = v.ID()
+        if id and id > 0 and not seen[id] then
+            seen[id] = true
+            fromMobList = true
+            n = n + 1
+        end
+    end
+    local slots = mq.TLO.Me.XTarget() or 0
+    for i = 1, slots do
+        local xt = mq.TLO.Me.XTarget(i)
+        if spawnutils.isAutoHaterXTarget(xt) then
+            local id = xt.ID()
+            if id and id > 0 and not seen[id] then
+                seen[id] = true
+                fromXTarget = true
+                n = n + 1
+            end
+        end
+    end
+    return n, fromMobList, fromXTarget
+end
+
 local function getMaAnchorLeash()
     local tankrole = require('lib.tankrole')
     return tankrole.getAnchorLeash()

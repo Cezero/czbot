@@ -631,16 +631,26 @@ function M.draw()
             end
             ImGui.TextColored(WHITE, '%s', '# Mobs: ')
             ImGui.SameLine(0, 2)
-            ImGui.TextColored(LIGHT_GREY, '%s', tostring(state.getMobCount(rc)))
+            local mobCount, fromMobList, fromXTarget = spawnutils.countCampMobsWithAutoHaters(rc)
+            ImGui.TextColored(LIGHT_GREY, '%s', tostring(mobCount))
             do
                 local _, _, _, anchorSource = spawnutils.getMobListAnchor(rc)
                 local anchorLabel = anchorSource == 'ma' and 'MA'
                     or anchorSource == 'camp' and 'Camp'
                     or 'Self'
+                local sourceLabel
+                if fromMobList and fromXTarget then
+                    sourceLabel = anchorLabel .. '+XT'
+                elseif fromXTarget then
+                    sourceLabel = 'XT'
+                else
+                    sourceLabel = anchorLabel
+                end
                 ImGui.SameLine()
-                ImGui.TextColored(LIGHT_GREY, '%s', string.format('[%s]', anchorLabel))
+                ImGui.TextColored(LIGHT_GREY, '%s', string.format('[%s]', sourceLabel))
                 if ImGui.IsItemHovered() then
-                    ImGui.SetTooltip('Mob bubble scan center: MA (charinfo), camp pin, or your position.')
+                    ImGui.SetTooltip(
+                        'Deduped camp list plus XTarget Auto-Haters. Bracket is the scan center (MA, camp pin, or you) and XT when an Auto-Hater was not already in the camp list.')
                 end
             end
             ImGui.SameLine()
