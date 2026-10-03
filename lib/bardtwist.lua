@@ -309,7 +309,8 @@ function bardtwist.GetCurrentTwistMode()
     if not bardtwist.IsBard() then return nil end
     if state.isTravelMode() then return 'travel' end
     local rc = state.getRunconfig()
-    if rc.MobList and rc.MobList[1] then return 'combat' end
+    local spawnutils = require('lib.spawnutils')
+    if spawnutils.countCampMobsWithAutoHaters(rc) > 0 then return 'combat' end
     return 'idle'
 end
 

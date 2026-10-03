@@ -20,8 +20,8 @@ When **MQ2Twist** is loaded and you are a bard, the bot maintains a default twis
 
 | Mode       | When used                             | Contents                                                                                                   |
 | ---------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **idle**   | No mobs in camp (including pull travel) | All buffs with **inIdle** checked (config order). Skipped near primary bind (bind stealth). |
-| **combat** | Mobs in camp, assisting (not pulling) | Buffs with **inCombat** checked (config order) then all debuff entries with **matar** and numeric gem (config order). |
+| **idle**   | Camp count is zero (camp list plus any XTarget Auto Hater), including pull travel | All buffs with **inIdle** checked (config order). Skipped near primary bind (bind stealth). |
+| **combat** | Camp count above zero (mobs in camp or an XTarget Auto Hater), assisting (not pulling) | Buffs with **inCombat** checked (config order) then all debuff entries with **matar** and numeric gem (config order). |
 | **travel** | Travel mode active (`/cz travel`)     | Single song: buff with alias `travel`, else `selos`; if neither, no twist. Config order.                   |
 
 - When the twist list already matches MQ2Twist's configured list, the bot uses `/twist start` to resume rather than re-issuing the full gem list (avoids resetting the twist sequence).

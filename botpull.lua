@@ -162,7 +162,7 @@ local function getCurrentXTargetIdSet()
 end
 
 --- Camp MobList plus XTarget Auto-Haters not already in that list.
---- Pull start and roam use this count. Melee, buffs, and heals stay on MobList.
+--- Pull start and roam use this count. Buff combat context and bard twist mode use the same count. Melee and heals stay on MobList.
 local function pullerCampCount(rc)
     return spawnutils.countCampMobsWithAutoHaters(rc)
 end

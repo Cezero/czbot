@@ -504,7 +504,8 @@ end
 ---@return boolean
 function M.isCombatContextForBuff(rc)
     rc = rc or M.getRunconfig()
-    if M.getMobCount(rc) > 0 then return true end
+    local spawnutils = require('lib.spawnutils')
+    if spawnutils.countCampMobsWithAutoHaters(rc) > 0 then return true end
     local mq = require('mq')
     local id = rc.engageTargetId
     if id and id > 0 then
