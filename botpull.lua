@@ -398,7 +398,21 @@ local function resolveMemberManaPct(member, memberName)
     return nil
 end
 
--- Group checks: offline/corpse always block; healer mana gate when manaclass non-empty and pull.mana > 0.
+-- True when this group member blocks a new pull: no spawn id (offline / not in zone),
+-- or a corpse within utils.CORPSE_CONSIDER_RADIUS. A farther corpse does not block.
+local function memberBlocksPullForCorpse(member)
+    local spawn = member.Spawn
+    local spawnType = spawn and spawn.Type and spawn.Type()
+    if spawnType and string.lower(spawnType) == 'corpse' then
+        local dist = spawn.Distance and spawn.Distance()
+        return dist ~= nil and dist <= utils.CORPSE_CONSIDER_RADIUS
+    end
+    local memberId = member.ID()
+    return not memberId or memberId == 0
+end
+
+-- Group checks: offline always blocks; a corpse blocks only within CORPSE_CONSIDER_RADIUS.
+-- Healer mana gate when manaclass non-empty and pull.mana > 0.
 -- Sets rc.pullHealerManaWait on mana failure. Returns true if pull must not start.
 local function groupBlocksPull(rc)
     local members = mq.TLO.Group.Members()
@@ -418,10 +432,8 @@ local function groupBlocksPull(rc)
     for i = 1, members do
         local member = mq.TLO.Group.Member(i)
         if member then
-            local memberId = member.ID()
-            if not memberId or memberId == 0 then return true end
+            if memberBlocksPullForCorpse(member) then return true end
             local spawn = member.Spawn
-            if spawn and spawn.Type() and string.lower(spawn.Type()) == 'corpse' then return true end
             if manaGateEnabled and member.Class and member.Class.ShortName() then
                 local cls = string.upper(member.Class.ShortName() or '')
                 if checked[cls] then
@@ -531,13 +543,8 @@ local function pullBlockReason(rc)
     if members and members > 0 then
         for i = 1, members do
             local member = mq.TLO.Group.Member(i)
-            if member then
-                local memberId = member.ID()
-                if not memberId or memberId == 0 then return 'group-corpse' end
-                local spawn = member.Spawn
-                if spawn and spawn.Type() and string.lower(spawn.Type()) == 'corpse' then
-                    return 'group-corpse'
-                end
+            if member and memberBlocksPullForCorpse(member) then
+                return 'group-corpse'
             end
         end
     end

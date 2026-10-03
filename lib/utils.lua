@@ -8,6 +8,9 @@ local combat = require('lib.combat')
 
 local utils = {}
 
+--- 2D range for group-corpse pull blocking and corpse rez scans. Independent of settings.acleash.
+utils.CORPSE_CONSIDER_RADIUS = 100
+
 local PROTECTED_NPC_PREFIXES = { 'soulbinder', 'translocator' }
 local PROTECTED_NPC_NAMES = {
     ['agent of change'] = true,

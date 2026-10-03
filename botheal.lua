@@ -175,14 +175,13 @@ end
 
 local function _corpseRezCandidates()
     if _corpseRezMemo.valid then return _corpseRezMemo.list end
-    local myconfig = botconfig.config
-    local corpsecount = mq.TLO.SpawnCount('pccorpse radius ' .. myconfig.settings.acleash)()
+    local corpsedist = utils.CORPSE_CONSIDER_RADIUS
+    local corpsecount = mq.TLO.SpawnCount('pccorpse radius ' .. corpsedist)()
     if not corpsecount or corpsecount == 0 then
         _corpseRezMemo.valid = true
         _corpseRezMemo.list = {}
         return _corpseRezMemo.list
     end
-    local corpsedist = myconfig.settings.acleash
     local candidates = {}
     for i = 1, corpsecount do
         local spawn = mq.TLO.NearestSpawn(i, 'pccorpse radius ' .. corpsedist)
