@@ -261,6 +261,37 @@ function spawnutils.isSpawnWithinCampPinById(spawnId, rc)
     return spawnutils.isSpawnWithinCampPin(spawn, rc)
 end
 
+--- True when a no-LoS spawn may be melee-engaged without leaving camp leash.
+--- LoS, leash off, or no camp: true, and the navmesh is not queried.
+--- Otherwise the nav path from the player must exist and be within settings.acleash.
+--- @return boolean ok
+--- @return number|nil pathLen set when the navmesh was queried
+function spawnutils.isEngagePathWithinAcleash(spawn, rc)
+    if not spawn or not spawn.ID or not spawn.ID() or spawn.ID() == 0 then
+        return false
+    end
+    rc = rc or state.getRunconfig()
+    if rc.campstatus ~= true or not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y then
+        return true
+    end
+    if rc.doCampAcleash == false then
+        return true
+    end
+    if spawn.LineOfSight() then
+        return true
+    end
+    local navArg = 'id ' .. spawn.ID()
+    if not mq.TLO.Navigation.PathExists(navArg)() then
+        return false
+    end
+    local pathLen = mq.TLO.Navigation.PathLength(navArg)()
+    local acleash = tonumber(botconfig.config.settings.acleash)
+    if not pathLen or pathLen <= 0 or not acleash or pathLen > acleash then
+        return false, pathLen
+    end
+    return true, pathLen
+end
+
 --- True when the player is within settings.acleash + zradius of the camp pin.
 function spawnutils.isPlayerWithinCampPin(rc)
     rc = rc or state.getRunconfig()

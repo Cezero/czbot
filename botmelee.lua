@@ -33,6 +33,7 @@ local MA_DISENGAGE_BROADCAST_REASONS = {
     command = true,
     protected_spawn = true,
     engage_not_allowed = true,
+    path_exceeds_acleash = true,
 }
 
 local function shouldBroadcastMaDisengage(reason, engageId)
@@ -413,6 +414,29 @@ local function selectEngageTargetFromLosList(losList, engageId)
     return bestId
 end
 
+local _engagePathSkipLog = {}
+
+local function logEngagePathSkip(spawn, pathLen)
+    if not spawn or not spawn.ID then return end
+    local sid = spawn.ID()
+    if not sid or sid == 0 then return end
+    local now = mq.gettime()
+    local prev = _engagePathSkipLog[sid]
+    if prev and now < prev + ENGAGE_LOS_LOG_INTERVAL_MS then return end
+    _engagePathSkipLog[sid] = now
+    local mobName = spawn.CleanName() or '?'
+    local acleash = myconfig.settings.acleash or 0
+    local pathText = (type(pathLen) == 'number') and string.format('%.1f', pathLen) or 'none'
+    log.say('[EngagePath] skip id=%s mob=%s pathLen=%s acleash=%s',
+        tostring(sid), mobName, pathText, tostring(acleash))
+end
+
+local function engagePathWithinAcleash(spawn, rc)
+    local ok, pathLen = spawnutils.isEngagePathWithinAcleash(spawn, rc)
+    if not ok then logEngagePathSkip(spawn, pathLen) end
+    return ok
+end
+
 -- MobList entry is eligible for MA/MT engage selection (matches TargetFilter camp rules).
 local function isEngageableMobListSpawn(spawn)
     if not spawnutils.isAliveEngageSpawn(spawn) then return false end
@@ -423,11 +447,19 @@ local function isEngageableMobListSpawn(spawn)
     if sid and spawnutils.isRoamPullMode(rc) and spawnutils.isPullUnpullable(sid, rc) then return false end
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isSpawnWithinCampPin(spawn, rc) then return false end
     local tfNum = tonumber(myconfig.settings.TargetFilter) or 0
-    if tfNum == 2 then return true end
-    if tfNum ~= 0 then return false end
-    if spawn.LineOfSight() then return true end
-    return (tonumber(mq.TLO.Me.Level()) or 0) >= 20
-        and spawnutils.isOnXTargetAutoHater(sid)
+    local eligible = false
+    if tfNum == 2 then
+        eligible = true
+    elseif tfNum == 0 then
+        if spawn.LineOfSight() then
+            eligible = true
+        else
+            eligible = (tonumber(mq.TLO.Me.Level()) or 0) >= 20
+                and spawnutils.isOnXTargetAutoHater(sid)
+        end
+    end
+    if not eligible then return false end
+    return engagePathWithinAcleash(spawn, rc)
 end
 
 
@@ -658,6 +690,7 @@ local function isValidMaSelectedTarget(spawnId, rc)
     -- Always require camp radius (MobList anchor + acleash); OOR manual targets must not adopt.
     if not spawnutils.isSpawnInCampRadiusById(spawnId, rc) then return false end
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isSpawnWithinCampPinById(spawnId, rc) then return false end
+    if not engagePathWithinAcleash(spawn, rc) then return false end
     return true
 end
 
@@ -712,13 +745,15 @@ local function selectMATarget()
         end
         if keepSticky then
             local currentSpawn = mq.TLO.Spawn(engageId)
-            if not currentSpawn.Named() then
-                local namedId = findClosestEngageableNamed(rc.MobList)
-                if namedId then return namedId end
-                local protectId = protectcasters.getReadyThreatId(rc, engageId)
-                if protectId then return protectId end
+            if engagePathWithinAcleash(currentSpawn, rc) then
+                if not currentSpawn.Named() then
+                    local namedId = findClosestEngageableNamed(rc.MobList)
+                    if namedId then return namedId end
+                    local protectId = protectcasters.getReadyThreatId(rc, engageId)
+                    if protectId then return protectId end
+                end
+                return engageId
             end
-            return engageId
         end
     end
 
@@ -885,6 +920,11 @@ end
 
 local disengageCombat = botmelee.disengageCombat
 
+local function disengagePathExceedsAcleash()
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    disengageCombat('path_exceeds_acleash')
+end
+
 -- Stand, attack, and stick to the engage target for final melee positioning. Stops nav first.
 -- Idempotent: only re-issues /stick when the active stick target or command differs.
 local function applyEngageStick(engageTargetId)
@@ -910,19 +950,26 @@ local function applyEngageStick(engageTargetId)
 end
 
 -- When the engage target is out of line of sight, approach it WITHOUT straight-line /stick (which
--- runs into walls/floors). If the navmesh has a route, pathfind (/nav) around the obstruction and let
--- /stick take over on arrival; if there is NO route, stop and hold so we don't grind into the wall,
--- waiting for LoS or a path to open (the mob or group moving). Returns true when LoS is blocked (the
--- caller must not /stick); false when LoS is clear (caller sticks normally).
--- Note: we intentionally do NOT gate on aggro here. Proactive no-LoS targeting is prevented upstream
--- (LoS TargetFilter; at level 20+ Auto-Haters may enter MobList without LoS), and an assist target
--- is the group's committed mob — both are legitimate things to path to.
+-- runs into walls/floors). If the navmesh has a route within acleash, pathfind (/nav) around the
+-- obstruction and let /stick take over on arrival. If there is no route, or the path is longer than
+-- acleash, stop and hold so we don't run outside camp or grind into the wall. Returns true when LoS
+-- is blocked (the caller must not /stick); false when LoS is clear (caller sticks normally).
+-- /cz attack is exempt from the path-length gate. No-LoS Auto-Haters and TargetFilter 2 spawns are
+-- pathed only when isEngagePathWithinAcleash passes.
 local function navToEngageTargetIfBlocked(engageTargetId, context)
     if mq.TLO.Target.LineOfSight() then
         logEngageLoSClear(engageTargetId)
         return false
     end
     logEngageLoSBlocked(engageTargetId, context)
+    local rc = state.getRunconfig()
+    local attackExempt = rc.attackCommandEngage and rc.engageTargetId == engageTargetId
+    if not attackExempt and not engagePathWithinAcleash(mq.TLO.Spawn(engageTargetId), rc) then
+        if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+        if mq.TLO.Stick.Active() then mq.cmd('/squelch /stick off') end
+        _lastEngageStickCmd = nil
+        return true
+    end
     if mq.TLO.Navigation.PathExists('id ' .. engageTargetId)() then
         if mq.TLO.Stick.Active() then mq.cmd('/squelch /stick off') end
         _lastEngageStickCmd = nil
@@ -1042,6 +1089,14 @@ local function engageTarget()
     if utils.isProtectedSpawn(mq.TLO.Spawn(engageTargetId)) then
         mezExit('protected_spawn id=%s', tostring(engageTargetId))
         disengageCombat('protected_spawn')
+        return
+    end
+
+    local rc = state.getRunconfig()
+    local attackExempt = rc.attackCommandEngage and rc.engageTargetId == engageTargetId
+    if not attackExempt and not engagePathWithinAcleash(mq.TLO.Spawn(engageTargetId), rc) then
+        mezExit('path_exceeds_acleash id=%s', tostring(engageTargetId))
+        disengagePathExceedsAcleash()
         return
     end
 
@@ -1240,6 +1295,20 @@ function botmelee.AdvCombat()
         if not latch then id = nil end
     end
 
+    local attackExempt = id and rc.attackCommandEngage and id == rc.engageTargetId
+    local pathRejected = false
+    if id and not attackExempt and not engagePathWithinAcleash(mq.TLO.Spawn(id), rc) then
+        if rc.engageTargetId == id then
+            disengagePathExceedsAcleash()
+            pathRejected = true
+        end
+        id = nil
+    elseif not id and rc.engageTargetId and not rc.attackCommandEngage
+        and not engagePathWithinAcleash(mq.TLO.Spawn(rc.engageTargetId), rc) then
+        disengagePathExceedsAcleash()
+        pathRejected = true
+    end
+
     local engageBranch = 'none'
     if id then
         engageBranch = 'main'
@@ -1272,7 +1341,7 @@ function botmelee.AdvCombat()
             end
         end
         engageTarget()
-    else
+    elseif not pathRejected then
         -- doMelee sets runState=melee before AdvCombat; isMeleeEngaged is then always true.
         -- Only full-disengage when there is real combat to release — otherwise quietly clear idle melee.
         if rc.engageTargetId or rc.attackCommandEngage or rc.allMezzedEngageId

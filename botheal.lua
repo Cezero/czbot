@@ -1,5 +1,6 @@
 ﻿local mq = require('mq')
 local botconfig = require('lib.config')
+local log = require('lib.log')
 local spellbands = require('lib.spellbands')
 local spellutils = require('lib.spellutils')
 local state = require('lib.state')
@@ -908,6 +909,136 @@ local function rejectIfAlreadyHoT(entry, id, hit)
     return id, hit
 end
 
+local function healHookAllowed()
+    local myconfig = botconfig.config
+    if state.isTravelMode() and not state.isTravelAttackOverriding() then return false end
+    if botmove.isBeyondFollowDistance() then return false end
+    if not (myconfig.settings.doheal or state.isTravelAttackOverriding()) then return false end
+    if not (myconfig.heal and myconfig.heal.spells and #myconfig.heal.spells > 0) then return false end
+    return true
+end
+
+local function configuredGemSlot(entry)
+    local gem = entry and entry.gem
+    if type(gem) == 'number' and gem >= 1 and gem <= 12 then return gem end
+    if type(gem) == 'string' then
+        local n = tonumber(gem)
+        if n and n >= 1 and n <= 12 then return n end
+    end
+    return nil
+end
+
+local function gemHoldsSpell(entry, slot)
+    local spellName = entry and entry.spell
+    if not spellName or spellName == '' then return false end
+    local ok, inSlot = pcall(function() return mq.TLO.Me.Gem(slot)() end)
+    if not ok or not inSlot or inSlot == '' then return false end
+    return string.lower(inSlot) == string.lower(spellName)
+end
+
+--- Recast delay only. SpellReady is false for every gem while a cast is up.
+local function gemTimerClear(slot)
+    local ok, left = pcall(function() return mq.TLO.Me.GemTimer(slot)() end)
+    if not ok or left == nil then return true end
+    local n = tonumber(left)
+    if n == nil then return true end
+    return n <= 0
+end
+
+local function selfHealReadyWhileCasting(entry, index)
+    local slot = configuredGemSlot(entry)
+    if slot then
+        if gemHoldsSpell(entry, slot) and not gemTimerClear(slot) then return false end
+        return true
+    end
+    local gem = entry.gem
+    if gem == 'item' or gem == 'alt' or gem == 'disc' or gem == 'ability' or gem == 'script' then
+        return spellutils.CheckGemReadiness('heal', index, entry)
+    end
+    return true
+end
+
+local function spellMarkedNotInBook(index)
+    local missing = state.getRunconfig().spellNotInBook
+    return missing and missing.heal and missing.heal[index]
+end
+
+--- First HP self-heal spell that would cast, ignoring SpellReady (gems are grey during a cast).
+--- @return number|nil spellIndex
+--- @return number|nil targetId
+local function selfHpHealReady()
+    local count = botconfig.getSpellCount('heal')
+    for i = 1, count do
+        if healSpellResource(i) ~= 'mana' and healEntryValid(i) and not spellMarkedNotInBook(i) then
+            local ctx = HPEvalContext(i)
+            if ctx then
+                local id, hit = rejectIfAlreadyHoT(ctx.entry, HPEvalSelf(i, ctx))
+                if id and hit and spellutils.SpellCheck('heal', i) and spellutils.PreCondCheck('heal', i, id) then
+                    -- A gem on recast delay blocks the heal pass; do not skip ahead to a later spell.
+                    if not selfHealReadyWhileCasting(ctx.entry, i) then return nil end
+                    return i, id
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function castInProgress(rc)
+    local phase = rc.CurSpell and rc.CurSpell.phase
+    if phase == 'precast' or phase == 'precast_wait_move' then return true end
+    if phase ~= 'casting' then return false end
+    if spellutils.IsMemorizing() then return true end
+    if (mq.TLO.Me.CastTimeLeft() or 0) > 0 then return true end
+    return mq.TLO.Me.Casting() and true or false
+end
+
+local function castingHpSelfHeal(rc)
+    local cs = rc.CurSpell
+    if not cs or cs.sub ~= 'heal' or cs.targethit ~= 'self' then return false end
+    local entry = botconfig.getSpellEntry('heal', cs.spell)
+    if entry and entry.healResource == 'mana' then return false end
+    return true
+end
+
+local function dropCastWithoutResume()
+    local rc = state.getRunconfig()
+    spellutils.interruptActiveCast(rc)
+    if rc.CurSpell then rc.CurSpell.spellcheckResume = nil end
+    local payload = state.getRunStatePayload()
+    if payload then
+        payload.spellcheckResume = nil
+        payload.hook = nil
+    end
+    spellutils.clearCastingStateOrResume()
+    local deadline = mq.gettime() + 200
+    while (mq.TLO.Me.CastTimeLeft() or 0) > 0 and mq.gettime() < deadline do
+        mq.delay(10)
+    end
+end
+
+--- Interrupt a non-CH cast when an HP self heal is due, then let doHeal cast it this tick.
+--- @return boolean true when a cast was interrupted for a self heal
+function botheal.preemptForSelfHeal()
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then return false end
+    if state.getRunState() == state.STATES.chchain or state.isChchainExclusive() then return false end
+    if not healHookAllowed() then return false end
+    local rc = state.getRunconfig()
+    if not castInProgress(rc) or castingHpSelfHeal(rc) then return false end
+    local spellIndex = selfHpHealReady()
+    if not spellIndex then return false end
+    local cur = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
+    local name = (cur and (spellutils.GetResolvedSpellName(cur) or cur.spell)) or 'spell'
+    log.say('Interrupting %s, self HP is in a self-heal band', name)
+    dropCastWithoutResume()
+    rc = state.getRunconfig()
+    rc.preferSelfHeal = true
+    rc.selfHealPreempt = true
+    -- Start the self heal before the hook loop so priorityCure cannot recast first.
+    botheal.HealCheck(bothooks.getPriority('doHeal'))
+    return true
+end
+
 spellutils.setPrepareImmediateCastFn(function(sub, _index, evalId, targethit)
     if sub ~= 'heal' or targethit ~= 'corpse' or not evalId then return end
     if mq.TLO.Me.CastTimeLeft() > 0 then return end
@@ -1103,6 +1234,7 @@ function botheal.HealCheck(runPriority)
         noResume = true,
     }
     local cursor = spellutils.getResumeCursor('doHeal')
+    local preferSelfHeal = state.getRunconfig().preferSelfHeal == true
     local combatRezDeferred = healCombatRezDeferred()
     if healCorpsePending() and not combatRezDeferred
         and cursor and cursor.phase and cursor.phase ~= 'corpse' then
@@ -1128,14 +1260,14 @@ function botheal.HealCheck(runPriority)
     if resumePass ~= 'mana' then
         local needCorpse = healCorpsePending()
             or (cursor and cursor.phase == 'corpse')
-        if needCorpse and not combatRezDeferred then
+        if needCorpse and not combatRezDeferred and not preferSelfHeal then
             tickprof.span('pass_corpse', function()
                 spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', HEAL_PHASE_ORDER_CORPSE, healGetTargetsForPhase,
                     getSpellIndicesForResource('hp'), cachedTargetNeedsSpell, ctx, options)
             end)
             if healPassStartedCast() then return false end
         end
-        if healShouldHoldHealPass() and not combatRezDeferred then return false end
+        if healShouldHoldHealPass() and not combatRezDeferred and not preferSelfHeal then return false end
         local hpOrder = healHpPhaseOrder(ctx, cursor)
         tickprof.span('pass_hp', function()
             spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', hpOrder, healGetTargetsForPhase,
@@ -1163,10 +1295,7 @@ end
 function botheal.getHookFn(name)
     if name == 'doHeal' then
         return function(hookName)
-            local myconfig = botconfig.config
-            if state.isTravelMode() and not state.isTravelAttackOverriding() then return end
-            if botmove.isBeyondFollowDistance() then return end
-            if not (myconfig.settings.doheal or state.isTravelAttackOverriding()) or not (myconfig.heal.spells and #myconfig.heal.spells > 0) then return end
+            if not healHookAllowed() then return end
             if state.getRunState() == state.STATES.idle then state.getRunconfig().statusMessage = 'Heal Check' end
             botheal.HealCheck(bothooks.getPriority(hookName))
         end

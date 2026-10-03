@@ -2590,6 +2590,8 @@ function spellutils.clearCastingStateOrResume()
     end
     rc.CurSpell = {}
     rc.statusMessage = ''
+    rc.selfHealPreempt = nil
+    rc.preferSelfHeal = nil
     casting.clear()
     local sr = resolveSpellcheckResumePayload(state.getRunStatePayload())
     if shouldSetHookResumeAfterCast(sr) then

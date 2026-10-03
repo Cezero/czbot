@@ -111,6 +111,9 @@ function hookregistry.runNormalHooks()
         return
     end
 
+    local botheal = require('botheal')
+    botheal.preemptForSelfHeal()
+
     local bothooks = require('lib.bothooks')
     local chchainExclusive = state.isChchainExclusive()
     local chchainCap = chchainExclusive and bothooks.getPriority('chchainTick') or nil
@@ -158,6 +161,17 @@ function hookregistry.runNormalHooks()
         local busyList = _sortedRunWhenBusy or {}
         for _, h in ipairs(busyList) do
             _runHook(h)
+        end
+    end
+
+    local rc = state.getRunconfig()
+    if rc.selfHealPreempt then
+        local cs = rc.CurSpell
+        local started = cs and cs.sub == 'heal' and cs.targethit == 'self' and cs.spell
+            and (cs.phase == 'precast' or cs.phase == 'precast_wait_move' or cs.phase == 'casting')
+        rc.preferSelfHeal = nil
+        if not started then
+            rc.selfHealPreempt = nil
         end
     end
 end
