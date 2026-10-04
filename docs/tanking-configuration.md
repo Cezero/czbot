@@ -34,10 +34,10 @@ Under **`config.melee`**:
 | **assistpct** | 99 | MA’s target HP % at or below which this bot will sync to the MA’s target (for DPS/MA logic). |
 | **offtank** | `false` | When true, this bot is an offtank (see [Offtank configuration](offtank-configuration.md)). |
 | **minmana** | 0 | Minimum mana % to engage (melee). |
-| **bandolierDps** | *(unset)* | Inventory bandolier to activate when this bot is **not** the Main Tank. Blank or omitted: no switch. Combat tab **DPS Bandolier**. |
-| **bandolierTank** | *(unset)* | Inventory bandolier to activate when this bot **is** the Main Tank. Blank or omitted: no switch. Combat tab **Tank Bandolier**. |
-| **bandolierBuff** | *(unset)* | Inventory bandolier worn while **bandolierBuffSpell** is still needed on this character and will stack. Blank or omitted: no switch. Combat tab **Buff Bandolier**. |
-| **bandolierBuffSpell** | *(unset)* | Buff or song name checked on self (for example `Avatar`). Missing, or inside the normal self-buff refresh window, counts as needed. Either this or **bandolierBuff** blank: no buff-set switch. Combat tab **Buff**. |
+| **bandolierDps** | *(unset)* | Inventory bandolier to activate when this bot is **not** the Main Tank. Blank or omitted: no switch. Combat tab **Bandoliers** → **DPS**. |
+| **bandolierTank** | *(unset)* | Inventory bandolier to activate when this bot **is** the Main Tank. Blank or omitted: no switch. Combat tab **Bandoliers** → **Tank**. |
+| **bandolierBuff** | *(unset)* | Inventory bandolier worn while **bandolierBuffSpell** is still needed on this character and will stack. Blank or omitted: no switch. Combat tab **Bandoliers** → **Buff**. |
+| **bandolierBuffSpell** | *(unset)* | Buff or song name checked on self (for example `Avatar`). Missing, or inside the normal self-buff refresh window, counts as needed. Either this or **bandolierBuff** blank: no buff-set switch. Combat tab **Bandoliers** → **Spell**. |
 
 **Example: melee/tank-related config**
 

@@ -85,46 +85,7 @@ function M.draw()
     end
 
     local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
-    local bandolierFlags = (ImGuiInputTextFlags.EnterReturnsTrue) or 0
-    ImGui.Text('DPS Bandolier')
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Inventory bandolier to activate when this bot is not the Main Tank. Leave blank to never switch for DPS.')
-    end
-    ImGui.SameLine()
-    ImGui.SetNextItemWidth(180)
-    local dpsBuf = melee.bandolierDps or ''
-    local dpsNew, dpsCh = ImGui.InputText('##combat_bandolierDps', dpsBuf, bandolierFlags)
-    if dpsCh and dpsNew ~= nil then melee.bandolierDps = dpsNew; runConfigLoaders() end
-    ImGui.SameLine()
-    ImGui.Text('Tank Bandolier')
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Inventory bandolier to activate when this bot is the Main Tank. Leave blank to never switch for tank.')
-    end
-    ImGui.SameLine()
-    ImGui.SetNextItemWidth(180)
-    local tankBuf = melee.bandolierTank or ''
-    local tankNew, tankCh = ImGui.InputText('##combat_bandolierTank', tankBuf, bandolierFlags)
-    if tankCh and tankNew ~= nil then melee.bandolierTank = tankNew; runConfigLoaders() end
-
-    ImGui.Text('Buff Bandolier')
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Inventory bandolier to activate while this character still needs the buff named in Buff. Leave blank to never switch for a proc buff.')
-    end
-    ImGui.SameLine()
-    ImGui.SetNextItemWidth(180)
-    local buffBandBuf = melee.bandolierBuff or ''
-    local buffBandNew, buffBandCh = ImGui.InputText('##combat_bandolierBuff', buffBandBuf, bandolierFlags)
-    if buffBandCh and buffBandNew ~= nil then melee.bandolierBuff = buffBandNew; runConfigLoaders() end
-    ImGui.SameLine()
-    ImGui.Text('Buff')
-    if ImGui.IsItemHovered() then
-        ImGui.SetTooltip('Buff or song name to check on yourself (for example Avatar). The Buff bandolier stays on while that buff is missing or inside the normal refresh window, and only if it will stack. Leave blank to disable.')
-    end
-    ImGui.SameLine()
-    ImGui.SetNextItemWidth(180)
-    local buffSpellBuf = melee.bandolierBuffSpell or ''
-    local buffSpellNew, buffSpellCh = ImGui.InputText('##combat_bandolierBuffSpell', buffSpellBuf, bandolierFlags)
-    if buffSpellCh and buffSpellNew ~= nil then melee.bandolierBuffSpell = buffSpellNew; runConfigLoaders() end
+    local textFlags = (ImGuiInputTextFlags.EnterReturnsTrue) or 0
 
     ImGui.Text('Charm pet setup')
     if ImGui.IsItemHovered() then
@@ -173,7 +134,7 @@ function M.draw()
     ImGui.SameLine()
     ImGui.SetNextItemWidth(300)
     local stickBuf = melee.stickcmd or ''
-    local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, bandolierFlags)
+    local stickNew, stickCh = ImGui.InputText('##combat_stickcmd', stickBuf, textFlags)
     if stickCh and stickNew ~= nil then melee.stickcmd = stickNew; runConfigLoaders() end
 
     ImGui.Text('Use ranged')
@@ -256,6 +217,48 @@ function M.draw()
         local mmVal = melee.minmana or 0
         local mmNew, mmCh = inputs.boundedInt('combat_minmana', mmVal, 0, 100, 5, '##combat_minmana')
         if mmCh then melee.minmana = mmNew; runConfigLoaders() end
+    end
+
+    if ImGui.CollapsingHeader('Bandoliers') then
+        ImGui.Text('DPS')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Inventory bandolier to activate when this bot is not the Main Tank. Leave blank to never switch for DPS.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(180)
+        local dpsBuf = melee.bandolierDps or ''
+        local dpsNew, dpsCh = ImGui.InputText('##combat_bandolierDps', dpsBuf, textFlags)
+        if dpsCh and dpsNew ~= nil then melee.bandolierDps = dpsNew; runConfigLoaders() end
+
+        ImGui.Text('Tank')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Inventory bandolier to activate when this bot is the Main Tank. Leave blank to never switch for tank.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(180)
+        local tankBuf = melee.bandolierTank or ''
+        local tankNew, tankCh = ImGui.InputText('##combat_bandolierTank', tankBuf, textFlags)
+        if tankCh and tankNew ~= nil then melee.bandolierTank = tankNew; runConfigLoaders() end
+
+        ImGui.Text('Buff')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Inventory bandolier to activate while this character still needs the buff named beside it. Leave blank to never switch for a proc buff.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(180)
+        local buffBandBuf = melee.bandolierBuff or ''
+        local buffBandNew, buffBandCh = ImGui.InputText('##combat_bandolierBuff', buffBandBuf, textFlags)
+        if buffBandCh and buffBandNew ~= nil then melee.bandolierBuff = buffBandNew; runConfigLoaders() end
+        ImGui.SameLine()
+        ImGui.Text('Spell')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Buff or song name to check on yourself (for example Avatar). The Buff bandolier stays on while that buff is missing or inside the normal refresh window, and only if it will stack. Leave blank to disable.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(180)
+        local buffSpellBuf = melee.bandolierBuffSpell or ''
+        local buffSpellNew, buffSpellCh = ImGui.InputText('##combat_bandolierBuffSpell', buffSpellBuf, textFlags)
+        if buffSpellCh and buffSpellNew ~= nil then melee.bandolierBuffSpell = buffSpellNew; runConfigLoaders() end
     end
     ImGui.PopStyleVar(1)
 end
