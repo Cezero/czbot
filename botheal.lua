@@ -962,22 +962,73 @@ local function spellMarkedNotInBook(index)
     return missing and missing.heal and missing.heal[index]
 end
 
---- First HP self-heal spell that would cast, ignoring SpellReady (gems are grey during a cast).
---- @return number|nil spellIndex
---- @return number|nil targetId
-local function selfHpHealReady()
+local PREEMPT_PHASES = { 'self', 'tank', 'offtank', 'watched' }
+
+local function entryRangeSq(entry)
+    local spellEntity = spellutils.GetSpellEntity(entry)
+    if not spellEntity or not spellEntity.MyRange then return nil end
+    local spellrange = spellEntity.MyRange()
+    if not spellrange then return nil end
+    return spellrange * spellrange
+end
+
+--- What the heal pass would do with this spell on this target.
+--- @return string|nil 'ready' direct HP heal, 'hold' HoT or gem delay (do not preempt or fall through), 'next_target' group-only miss, nil try next spell
+local function preemptSpellOutcome(index, phase, targetId, nameHint, rangeCtx)
+    if healSpellResource(index) == 'mana' or not healBandHasPhase(index, phase) then return nil end
+    if not healEntryValid(index) or spellMarkedNotInBook(index) then return nil end
+    local entry = botconfig.getSpellEntry('heal', index)
+    if not entry then return nil end
+    if phase == 'self' then
+        local ctx = HPEvalContext(index)
+        if not ctx then return nil end
+        local id = HPEvalSelf(index, ctx)
+        if not id then return nil end
+        targetId = id
+    else
+        local spellId = spellutils.GetSpellId(entry)
+        if not charinfowatchers.watchListHas('HEAL', 'LIST', spellId, targetId) then return nil end
+        if not peerHealInRange(rangeCtx, targetId, entryRangeSq(entry), nameHint) then return nil end
+    end
+    -- Already-present HoT is upkeep; the next direct heal can still preempt.
+    if spellutils.IsHoTSpell(entry) and spellutils.TargetHasHealSpell(entry, targetId) then return nil end
+    if not spellutils.SpellCheck('heal', index) or not spellutils.PreCondCheck('heal', index, targetId) then
+        return nil
+    end
+    -- HealCheck selects this spell, then abandons the target when it is group-only and they are not grouped.
+    if phase ~= 'self' and spellutils.IsGroupOnlySpell(entry) and not spellutils.IsSpawnInMyGroup(targetId) then
+        return 'next_target'
+    end
+    -- A HoT that would land is upkeep. It must not cancel the current cast, and the heal pass would cast it first.
+    if spellutils.IsHoTSpell(entry) then return 'hold' end
+    -- A gem on recast delay blocks the heal pass; do not skip ahead to a later spell.
+    if not selfHealReadyWhileCasting(entry, index) then return 'hold' end
+    return 'ready'
+end
+
+--- @return string|nil 'ready', 'hold', or nil when this phase would not cast
+local function phasePreemptOutcome(phase)
     local count = botconfig.getSpellCount('heal')
-    for i = 1, count do
-        if healSpellResource(i) ~= 'mana' and healEntryValid(i) and not spellMarkedNotInBook(i) then
-            local ctx = HPEvalContext(i)
-            -- HoT self bands (for example 61-80) are upkeep. They must not cancel a rez or other cast.
-            if ctx and not spellutils.IsHoTSpell(ctx.entry) then
-                local id, hit = rejectIfAlreadyHoT(ctx.entry, HPEvalSelf(i, ctx))
-                if id and hit and spellutils.SpellCheck('heal', i) and spellutils.PreCondCheck('heal', i, id) then
-                    -- A gem on recast delay blocks the heal pass; do not skip ahead to a later spell.
-                    if not selfHealReadyWhileCasting(ctx.entry, i) then return nil end
-                    return i, id
-                end
+    if phase == 'self' then
+        local meId = mq.TLO.Me.ID()
+        for i = 1, count do
+            local outcome = preemptSpellOutcome(i, 'self', meId, nil, nil)
+            if outcome == 'next_target' then return nil end
+            if outcome then return outcome end
+        end
+        return nil
+    end
+    if phase == 'watched' and not charinfowatchers.healListFullyOnCharInfo() then return nil end
+    local targets = filterCorpses(charinfowatchers.unionTargetsForPhase('heal', phase, count, healBandHasPhase))
+    if not targets or #targets == 0 then return nil end
+    local rangeCtx = {}
+    for ti = 1, #targets do
+        local t = targets[ti]
+        if t and t.id then
+            for i = 1, count do
+                local outcome = preemptSpellOutcome(i, phase, t.id, t.name, rangeCtx)
+                if outcome == 'next_target' then break end
+                if outcome then return outcome end
             end
         end
     end
@@ -993,12 +1044,17 @@ local function castInProgress(rc)
     return mq.TLO.Me.Casting() and true or false
 end
 
-local function castingHpSelfHeal(rc)
+--- Lower number wins. Heals outside self/tank/offtank/watched, mana heals, and non-heals are lower.
+local function castPreemptRank(rc)
     local cs = rc.CurSpell
-    if not cs or cs.sub ~= 'heal' or cs.targethit ~= 'self' then return false end
+    if not cs or cs.sub ~= 'heal' then return 100 end
     local entry = botconfig.getSpellEntry('heal', cs.spell)
-    if entry and entry.healResource == 'mana' then return false end
-    return true
+    if not entry or entry.healResource == 'mana' then return 100 end
+    if cs.targethit == 'self' then return 1 end
+    if cs.targethit == 'tank' then return 2 end
+    if cs.targethit == 'offtank' then return 3 end
+    if cs.targethit == 'watched' then return 4 end
+    return 100
 end
 
 local function dropCastWithoutResume()
@@ -1017,24 +1073,35 @@ local function dropCastWithoutResume()
     end
 end
 
---- Interrupt a non-CH cast when an HP self heal is due, then let doHeal cast it this tick.
---- @return boolean true when a cast was interrupted for a self heal
+--- Interrupt a non-CH cast when a direct HP heal is due for self, tank, offtank, or watched.
+--- Lower phases and non-heals yield. An equal or higher named heal is left running.
+--- @return boolean true when a cast was interrupted for that heal
 function botheal.preemptForSelfHeal()
     if mq.TLO.Me.Class.ShortName() == 'BRD' then return false end
     if state.getRunState() == state.STATES.chchain or state.isChchainExclusive() then return false end
     if not healHookAllowed() then return false end
     local rc = state.getRunconfig()
-    if not castInProgress(rc) or castingHpSelfHeal(rc) then return false end
-    local spellIndex = selfHpHealReady()
-    if not spellIndex then return false end
+    if not castInProgress(rc) then return false end
+    local curRank = castPreemptRank(rc)
+    local phase
+    for rank = 1, #PREEMPT_PHASES do
+        if curRank <= rank then break end
+        local outcome = phasePreemptOutcome(PREEMPT_PHASES[rank])
+        if outcome == 'hold' then return false end
+        if outcome == 'ready' then
+            phase = PREEMPT_PHASES[rank]
+            break
+        end
+    end
+    if not phase then return false end
     local cur = botconfig.getSpellEntry(rc.CurSpell.sub, rc.CurSpell.spell)
     local name = (cur and (spellutils.GetResolvedSpellName(cur) or cur.spell)) or 'spell'
-    log.say('Interrupting %s, self HP is in a self-heal band', name)
+    log.say('Interrupting %s, %s HP is in a %s heal band', name, phase, phase)
     dropCastWithoutResume()
     rc = state.getRunconfig()
     rc.preferSelfHeal = true
     rc.selfHealPreempt = true
-    -- Start the self heal before the hook loop so priorityCure cannot recast first.
+    -- Start the heal before the hook loop so priorityCure cannot recast first.
     botheal.HealCheck(bothooks.getPriority('doHeal'))
     return true
 end

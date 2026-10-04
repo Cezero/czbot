@@ -167,8 +167,15 @@ function hookregistry.runNormalHooks()
     local rc = state.getRunconfig()
     if rc.selfHealPreempt then
         local cs = rc.CurSpell
-        local started = cs and cs.sub == 'heal' and cs.targethit == 'self' and cs.spell
-            and (cs.phase == 'precast' or cs.phase == 'precast_wait_move' or cs.phase == 'casting')
+        local hit = cs and cs.targethit
+        local namedHit = hit == 'self' or hit == 'tank' or hit == 'offtank' or hit == 'watched'
+        local started = false
+        if namedHit and cs.sub == 'heal' and cs.spell
+            and (cs.phase == 'precast' or cs.phase == 'precast_wait_move' or cs.phase == 'casting') then
+            local botconfig = require('lib.config')
+            local entry = botconfig.getSpellEntry('heal', cs.spell)
+            started = entry ~= nil and entry.healResource ~= 'mana'
+        end
         rc.preferSelfHeal = nil
         if not started then
             rc.selfHealPreempt = nil
