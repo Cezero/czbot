@@ -208,6 +208,30 @@ function M.draw()
         if mtDisabled then ImGui.EndDisabled() end
     end
 
+    local fadeMtDisabled = tankrole.AmIMainTank()
+    if fadeMtDisabled then ImGui.BeginDisabled(true) end
+    ImGui.Text('Auto Fade')
+    if itemHovered() then
+        ImGui.SetTooltip(fadeMtDisabled and 'Auto Fade is off while this bot is the Main Tank.'
+            or 'At or above Fade aggro %% (level 20+), run /fade during combat. /fade zones the character.')
+    end
+    ImGui.SameLine()
+    local fadeChecked = (melee.autoFade == true)
+    local fadeVal, fadePressed = ImGui.Checkbox('##combat_autoFade', fadeChecked)
+    if fadePressed and not fadeMtDisabled then melee.autoFade = fadeVal; runConfigLoaders() end
+    ImGui.SameLine()
+    ImGui.Text('Fade aggro %')
+    if itemHovered() then
+        ImGui.SetTooltip(fadeMtDisabled and 'Auto Fade is off while this bot is the Main Tank.'
+            or 'At or above this Me.PctAggro (level 20+), run /fade during combat. /fade zones the character.')
+    end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(NUMERIC_INPUT_WIDTH)
+    local fadePct = melee.fadePct or 85
+    local fadePctNew, fadePctCh = inputs.boundedInt('combat_fadePct', fadePct, 0, 100, 5, '##combat_fadePct')
+    if fadePctCh and not fadeMtDisabled then melee.fadePct = fadePctNew; runConfigLoaders() end
+    if fadeMtDisabled then ImGui.EndDisabled() end
+
     -- Line 3: Min Mana (if class has mana pool)
     if mq.TLO.Me.MaxMana() and mq.TLO.Me.MaxMana() > 0 then
         ImGui.Text('Min Mana')

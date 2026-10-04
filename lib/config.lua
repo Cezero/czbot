@@ -73,6 +73,8 @@
 ---@field evadePct number|nil
 ---@field autoFeign boolean|nil monk: Feign Death at or above feignPct (level 20+, skill trained; off while Main Tank)
 ---@field feignPct number|nil
+---@field autoFade boolean|nil MQ /fade at or above fadePct (zones the character; level 20+; off while Main Tank)
+---@field fadePct number|nil
 ---@field offtank boolean|nil
 ---@field mtSticky boolean|nil
 ---@field minmana number|nil
@@ -143,7 +145,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'autoInventory', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
-    melee = { 'assistpct', 'stickcmd', 'useRanged', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'autoFeign', 'feignPct', 'offtank', 'mtSticky', 'minmana', 'bandolierDps', 'bandolierTank', 'bandolierBuff', 'bandolierBuffSpell' },
+    melee = { 'assistpct', 'stickcmd', 'useRanged', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'autoFeign', 'feignPct', 'autoFade', 'fadePct', 'offtank', 'mtSticky', 'minmana', 'bandolierDps', 'bandolierTank', 'bandolierBuff', 'bandolierBuffSpell' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
@@ -1514,7 +1516,7 @@ function M.Load(path)
     M.recomputeDerivedSettings()
     applySectionDefaults('bard', { mez_remez_sec = 6 })
     applySectionDefaults('melee', {
-        stickcmd = 'hold uw 7', useRanged = false, mobprobEngageGraceMs = 1000, stayBehind = false, behindAggroPct = 90, evadePct = 90, autoFeign = false, feignPct = 90, offtank = false, mtSticky = false,
+        stickcmd = 'hold uw 7', useRanged = false, mobprobEngageGraceMs = 1000, stayBehind = false, behindAggroPct = 90, evadePct = 90, autoFeign = false, feignPct = 90, autoFade = false, fadePct = 85, offtank = false, mtSticky = false,
         minmana = 0, assistpct = 99,
     })
     applySectionDefaults('heal', { interruptlevel = 0.80, xttargets = 0 })

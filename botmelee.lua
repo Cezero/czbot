@@ -193,6 +193,30 @@ local function tryMonkFeign()
     return true
 end
 
+local lastAutoFadeMs = 0
+local AUTO_FADE_MIN_GAP_MS = 2000
+
+--- MQ /fade when PctAggro is high. /fade zones the character; zone reset runs from the normal zone events.
+--- Independent of monk Feign Death. Not an ability: no AltAbilityReady check.
+local function tryAutoFade()
+    if not myconfig.melee or myconfig.melee.autoFade ~= true then return false end
+    if not aggro.pctAggroAvailable() then return false end
+    if not mq.TLO.Me.Combat() then return false end
+    if tankrole.AmIMainTank() then return false end
+    if isCastingBusy() then return false end
+    local now = mq.gettime()
+    if now - lastAutoFadeMs < AUTO_FADE_MIN_GAP_MS then return false end
+    local pct = aggro.getPctAggro()
+    local threshold = tonumber(myconfig.melee.fadePct) or 85
+    if pct == nil or pct < threshold then return false end
+    mq.cmd('/squelch /fade')
+    lastAutoFadeMs = now
+    if state.getRunState() ~= state.STATES.casting then
+        state.getRunconfig().statusMessage = string.format('Fading (PctAggro %d%%)', pct)
+    end
+    return true
+end
+
 -- Later: a second Combat-tab toggle (stay close enough to kick) will keep the bot inside kick
 -- range while still using /autofire. Out of scope for this pass: ranged mode may path only to
 -- gain line of sight; it does not close to melee (no stick, no moving_closer).
@@ -1464,6 +1488,7 @@ function botmelee.getHookFn(name)
             end
             tryRogueEvade()
             tryMonkFeign()
+            tryAutoFade()
             local payload = (state.getRunState() == state.STATES.melee) and state.getRunStatePayload() or nil
             state.setRunState(state.STATES.melee, payload and payload or { phase = 'idle', priority = bothooks.getPriority('doMelee') })
             if tankrole.AmIMainTank() or tankrole.AmIMainAssist() then
