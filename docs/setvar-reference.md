@@ -16,7 +16,7 @@ After a successful setvar, config loaders run so the new value takes effect imme
 | **settings.doheal** | boolean | `false` | Enable heal loop. |
 | **settings.dobuff** | boolean | `false` | Enable buff loop. |
 | **settings.buffNonPeerRaid** | boolean | `false` | After peer pc buffs, also buff in-zone non-peer raid members (Advanced tab). See [Buffing configuration](buffing-configuration.md). |
-| **settings.autoInventory** | boolean | `false` | When on, put items on the cursor into bags immediately (Advanced tab). Zone junk is still destroyed; full bags still set OutOfSpace. Forage and pre-cast unblock still autoinv when this is off. |
+| **settings.autoInventory** | boolean | `false` | When on, put items on the cursor into bags immediately (Advanced tab). Zone junk is still destroyed; full bags still set OutOfSpace. Forage, pre-cast unblock, and **cz_common.autoinv_list** still autoinv when this is off. |
 | **settings.docure** | boolean | `false` | Enable cure loop. |
 | **settings.domelee** | boolean | `false` | Enable melee/engage. |
 | **settings.doraid** | boolean | `false` | Raid mode (zone-specific raid mechanics). See [Raid mode](raid-mode.md). |
@@ -88,6 +88,8 @@ Scalar pull options can be set via setvar. **pull.spell** (table: gem, spell, ra
 | **melee.minmana** | number | 0 | Min mana % to engage. |
 | **melee.bandolierDps** | string | *(unset)* | Bandolier to activate when not Main Tank. Blank: no switch. |
 | **melee.bandolierTank** | string | *(unset)* | Bandolier to activate when Main Tank. Blank: no switch. |
+| **melee.bandolierBuff** | string | *(unset)* | Bandolier worn while **melee.bandolierBuffSpell** is still needed on self and will stack. Blank: no switch. |
+| **melee.bandolierBuffSpell** | string | *(unset)* | Self buff or song name for the buff bandolier (for example `Avatar`). Blank: no switch. |
 
 ---
 

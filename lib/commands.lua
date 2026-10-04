@@ -38,6 +38,7 @@ local rolelists = require('lib.rolelists')
 local common_sync = require('lib.common_sync')
 local targeting = require('lib.targeting')
 local log = require('lib.log')
+local autoinvlist = require('lib.autoinvlist')
 local unpack = unpack
 
 local TOGGLELIST = {
@@ -182,6 +183,56 @@ local function cmd_addjunk(args, str)
     end
     botconfig.addZoneJunk(zone, itemName)
     log.say('Added "%s" to zone %s junk list.', itemName, zone)
+end
+
+local function cursorItemName()
+    if mq.TLO.Cursor.ID() and mq.TLO.Cursor.Name() and mq.TLO.Cursor.Name() ~= '' then
+        return mq.TLO.Cursor.Name()
+    end
+    return nil
+end
+
+local function cmd_autoinv(args)
+    local removing = args[2] and args[2]:lower() == 'remove'
+    local itemName
+    if removing then
+        if args[3] then
+            itemName = table.concat(args, ' ', 3)
+        else
+            itemName = cursorItemName()
+        end
+    elseif args[2] then
+        itemName = table.concat(args, ' ', 2)
+    else
+        itemName = cursorItemName()
+    end
+    if not itemName or itemName == '' then
+        if removing then
+            log.say('No item name given and nothing on cursor. Use: /cz autoinv remove <itemname> or put item on cursor.')
+        else
+            log.say('No item name given and nothing on cursor. Use: /cz autoinv <itemname> or put item on cursor.')
+        end
+        return
+    end
+    if removing then
+        local removed = autoinvlist.remove(itemName)
+        if removed then
+            log.say('Removed "%s" from auto-inventory list.', itemName)
+        elseif removed == nil then
+            log.say('Could not update the auto-inventory list.')
+        else
+            log.say('"%s" is not on the auto-inventory list.', itemName)
+        end
+        return
+    end
+    local added = autoinvlist.add(itemName)
+    if added then
+        log.say('Added "%s" to auto-inventory list.', itemName)
+    elseif added == nil then
+        log.say('Could not update the auto-inventory list.')
+    else
+        log.say('"%s" is already on the auto-inventory list.', itemName)
+    end
 end
 
 local function cmd_foragezone(args, str)
@@ -1573,6 +1624,7 @@ local handlers = {
     mobprob = cmd_mobprob,
     togglecampacleash = cmd_togglecampacleash,
     addjunk = cmd_addjunk,
+    autoinv = cmd_autoinv,
     foragezone = cmd_foragezone,
     quit = cmd_quit,
 }

@@ -20,9 +20,10 @@ local function st(id)
     return _state[id]
 end
 
-local function listContains(list, name)
+local function listContains(list, name, sameName)
     if type(list) ~= 'table' then return false end
-    for _, n in ipairs(list) do if n == name then return true end end
+    local eq = sameName or function(a, b) return a == b end
+    for _, n in ipairs(list) do if eq(n, name) then return true end end
     return false
 end
 
@@ -34,8 +35,11 @@ end
 ---   reorder       boolean show Up/Down buttons (default false)
 ---   reverse       boolean display newest-first (default false)
 ---   addNoun       string  placeholder noun for the manual-add field (default 'Name')
+---   addButtonLabel string label for the getTargetName button (default 'Add target')
+---   manualAlways  boolean show the typed-name row even when getTargetName returns a name
+---   sameName      fun(a,b):boolean equality for duplicate checks (default ==)
 ---   validateName  fun(name):boolean  gate adds (default: always allow)
----   getTargetName fun():string|nil   candidate for the "Add target" button; nil hides that button
+---   getTargetName fun():string|nil   candidate for the add button; nil hides that button
 ---   onChange      fun(action:string) called after add/remove/reorder; action is 'save' or 'save_replace'
 function M.draw(opts)
     local list = opts.list
@@ -85,14 +89,17 @@ function M.draw(opts)
 
     local s = st(id)
     local targetName = opts.getTargetName and opts.getTargetName() or nil
+    local sameName = opts.sameName
     if targetName then
-        if ImGui.Button('Add target##' .. id) then
-            if targetName ~= '' and validateName(targetName) and not listContains(list, targetName) then
+        if ImGui.Button((opts.addButtonLabel or 'Add target') .. '##' .. id) then
+            if targetName ~= '' and validateName(targetName) and not listContains(list, targetName, sameName) then
                 table.insert(list, targetName)
                 onChange('save')
             end
         end
-    else
+    end
+    if opts.manualAlways or not targetName then
+        if targetName and not s.show then ImGui.SameLine() end
         if not s.show then
             if ImGui.Button('Add##' .. id) then s.show = true end
         else
@@ -103,7 +110,7 @@ function M.draw(opts)
             ImGui.SameLine()
             if ImGui.Button('Add##' .. id .. '_submit') or changed then
                 local name = (s.buf or ''):match('^%s*(.-)%s*$')
-                if name and name ~= '' and validateName(name) and not listContains(list, name) then
+                if name and name ~= '' and validateName(name) and not listContains(list, name, sameName) then
                     table.insert(list, name)
                     onChange('save')
                 end

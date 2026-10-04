@@ -253,7 +253,8 @@ function M.needsBuff(spellIndex, targetId, member, entry, spellName, spellId, ra
     local dSq = utils.getDistanceSquared2D(mq.TLO.Me.X(), mq.TLO.Me.Y(), sp.X(), sp.Y())
     if rangeSq and (not dSq or dSq > rangeSq) then return nil, nil end
 
-    local related = relatedSpellIds(spellId, entry.spellicon)
+    local icons = spellutils.BuffCoverageIds(entry)
+    local related = relatedSpellIds(spellId, icons)
     local now = mq.gettime()
     local cached = cacheEntry(targetId)
     local cacheFresh = cached and cached.at and (now - cached.at) < REFRESH_MS
@@ -265,7 +266,7 @@ function M.needsBuff(spellIndex, targetId, member, entry, spellName, spellId, ra
     if cacheFresh and anyKnownAbsent(cached, related, now) then
         -- Cache says missing / near expiry: confirm with SpawnNeedsBuff only if already populated.
         if sp.BuffsPopulated and sp.BuffsPopulated() then
-            if spellutils.SpawnNeedsBuff(targetId, spellName, entry.spellicon) then
+            if spellutils.SpawnNeedsBuff(targetId, spellName, icons) then
                 return targetId, 'pc'
             end
             return nil, nil
@@ -274,10 +275,10 @@ function M.needsBuff(spellIndex, targetId, member, entry, spellName, spellId, ra
         if inCombat() then return nil, nil end
         if _spawnRefreshBudget <= 0 then return nil, nil end
         _spawnRefreshBudget = _spawnRefreshBudget - 1
-        if not refreshSpawnCache(targetId, spellId, spellName, entry.spellicon) then return nil, nil end
+        if not refreshSpawnCache(targetId, spellId, spellName, icons) then return nil, nil end
         cached = cacheEntry(targetId)
         if anyStillUp(cached, related, mq.gettime()) then return nil, nil end
-        if spellutils.SpawnNeedsBuff(targetId, spellName, entry.spellicon) then
+        if spellutils.SpawnNeedsBuff(targetId, spellName, icons) then
             return targetId, 'pc'
         end
         return nil, nil
@@ -288,11 +289,11 @@ function M.needsBuff(spellIndex, targetId, member, entry, spellName, spellId, ra
     if not cacheFresh then
         if _spawnRefreshBudget <= 0 then return nil, nil end
         _spawnRefreshBudget = _spawnRefreshBudget - 1
-        if not refreshSpawnCache(targetId, spellId, spellName, entry.spellicon) then return nil, nil end
+        if not refreshSpawnCache(targetId, spellId, spellName, icons) then return nil, nil end
         cached = cacheEntry(targetId)
         now = mq.gettime()
         if anyStillUp(cached, related, now) then return nil, nil end
-        if spellutils.SpawnNeedsBuff(targetId, spellName, entry.spellicon) then
+        if spellutils.SpawnNeedsBuff(targetId, spellName, icons) then
             return targetId, 'pc'
         end
         return nil, nil

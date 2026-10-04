@@ -37,6 +37,7 @@ All buff options are under **`config.buff.spells`**. Each spell entry can have:
 | **inIdle** | Optional. **Bard only.** When `true` (default), this buff is included in the idle twist list. When `false`, it is not twisted when idle. Ignored for non-bards. GUI shows "In idle" only for Bards. |
 | **combatOnly** | Optional. **Non-bard only** (ignored for BRD). When `true`, the auto buff loop **only** considers this spell when the camp count is above zero (mobs in camp or an XTarget Auto Hater) — never while idle. Implies combat allowance; you do not need **inCombat** for eligibility (you may still set **inCombat** for documentation clarity). Default is `false`. GUI shows "Combat only" for non-bards. |
 | **spellicon** | Optional. List of spell IDs treated as equivalents for “already has buff” detection (e.g. `{ 1234, 5678 }`). Legacy scalar `spellicon = 1234` is normalized to a one-element list on load. Empty/`{}` = only the buff spell itself. |
+| **stspell** | Optional. **Non-bard Group v1/v2 only.** Spell name of the single-target version (for example `Aegolism` on a `Gift of Aegolism` entry). Uses this entry’s **gem**. When set, 1 or 2 people in a group who need the buff get this spell; 3 or more get the group spell. Either spell counts as already buffed, including the refresh window. **tarcnt** is not used for that choice. Empty or omitted = group spell only. |
 | **height** | Optional. For shrink (SPA 89) buffs: cast when target `Height` exceeds this decimal (e.g. `2.4`). Peers use CharInfo `Height`; self uses `Me.Height`. The buff GUI shows this field automatically when the spell has SPA 89. Replaces a Height precondition. Within a phase, Shrink is re-cast on each needy target until Height drops below the gate before the next buff index. |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip; **string** — Lua script with `mq` and `EvalID` in scope; return truthy to allow the cast. |
 
@@ -124,7 +125,20 @@ MQ **TargetType** controls which buff phases apply. The GUI shows only appropria
 | **Group v2** | **groupbuff** + **pc** | **groupbuff**: same count/cast-on-self for your group (retargets to self). **pc**: CharInfo **ALL** watchlist — cast on watchlisted peers in range (watch includes FreeBuffSlots); AE lands on their group and peers drop off the watchlist when the buff appears. |
 | **Single / Self / etc.** | Normal ST phases; no **groupbuff** | Unchanged single-target logic. |
 
-**tarcnt** is shown in the GUI only for Group v1/v2 spells. It includes the caster for **groupbuff**.
+**tarcnt** is shown in the GUI only for Group v1/v2 spells. It includes the caster for **groupbuff**. When **stspell** is set, **tarcnt** is not used: 1 or 2 needy people in that group get the single-target spell (same gem), and 3 or more get the group spell. The single-target spell is not cast from self, tank, or group-member phases; your group is decided in **groupbuff**, and each Group v2 remote group is decided in **pc**.
+
+**Example: group buff with a single-target version**
+
+```lua
+{
+  gem = 8,
+  spell = 'Gift of Aegolism',
+  stspell = 'Aegolism',
+  bands = {
+    { targetphase = { 'groupbuff', 'pc' }, validtargets = { 'all' } }
+  },
+}
+```
 
 **Example: Group v2 AE (own group + remote groups)**
 

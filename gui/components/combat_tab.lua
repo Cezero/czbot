@@ -106,6 +106,26 @@ function M.draw()
     local tankNew, tankCh = ImGui.InputText('##combat_bandolierTank', tankBuf, bandolierFlags)
     if tankCh and tankNew ~= nil then melee.bandolierTank = tankNew; runConfigLoaders() end
 
+    ImGui.Text('Buff Bandolier')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Inventory bandolier to activate while this character still needs the buff named in Buff. Leave blank to never switch for a proc buff.')
+    end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(180)
+    local buffBandBuf = melee.bandolierBuff or ''
+    local buffBandNew, buffBandCh = ImGui.InputText('##combat_bandolierBuff', buffBandBuf, bandolierFlags)
+    if buffBandCh and buffBandNew ~= nil then melee.bandolierBuff = buffBandNew; runConfigLoaders() end
+    ImGui.SameLine()
+    ImGui.Text('Buff')
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip('Buff or song name to check on yourself (for example Avatar). The Buff bandolier stays on while that buff is missing or inside the normal refresh window, and only if it will stack. Leave blank to disable.')
+    end
+    ImGui.SameLine()
+    ImGui.SetNextItemWidth(180)
+    local buffSpellBuf = melee.bandolierBuffSpell or ''
+    local buffSpellNew, buffSpellCh = ImGui.InputText('##combat_bandolierBuffSpell', buffSpellBuf, bandolierFlags)
+    if buffSpellCh and buffSpellNew ~= nil then melee.bandolierBuffSpell = buffSpellNew; runConfigLoaders() end
+
     ImGui.Text('Charm pet setup')
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip('When you charm a mob, automatically set the new charm pet to taunt OFF (so it does not steal aggro from your tank) and send it to attack the current target. Pet buffs/heals still run via the normal loops.')

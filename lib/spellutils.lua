@@ -1036,11 +1036,142 @@ function spellutils.BuffSkipClearForCast(EvalID, spellId)
     end
 end
 
+--- Remaining Me buff/song duration ms, or nil when that spell is absent.
+function spellutils.MeBuffDuration(spellName)
+    if not spellName or spellName == '' then return nil end
+    local present = mq.TLO.Me.Buff(spellName)() or mq.TLO.Me.Song(spellName)()
+    if not present then return nil end
+    local dur = mq.TLO.Me.Buff(spellName).Duration()
+    if dur == nil and mq.TLO.Me.Song(spellName).Duration then
+        dur = mq.TLO.Me.Song(spellName).Duration()
+    end
+    return dur or 0
+end
+
+local function coverageSpellNames(entry)
+    local names = {}
+    local seen = {}
+    local function add(name)
+        if type(name) ~= 'string' or name == '' or seen[name] then return end
+        seen[name] = true
+        names[#names + 1] = name
+    end
+    if entry and entry.spell and entry.spell ~= '' then
+        add(spellutils.GetResolvedSpellName(entry) or entry.spell)
+    end
+    add(spellutils.SingleTargetBuffName(entry))
+    local icons = entry and entry.spellicon
+    if type(icons) ~= 'table' then
+        icons = (icons and icons ~= 0) and { icons } or {}
+    end
+    for _, id in ipairs(icons) do
+        local n = tonumber(id)
+        if n and n > 0 then
+            local iconName = mq.TLO.Spell(n).Name()
+            if iconName and iconName ~= '' then add(iconName) end
+        end
+    end
+    return names
+end
+
+--- True when self is missing every equivalent, or one of them is inside the refresh window.
+function spellutils.SelfNeedsBuffEntry(entry)
+    if not entry then return false end
+    local anyPresent = false
+    local needsRefresh = false
+    for _, name in ipairs(coverageSpellNames(entry)) do
+        local dur = spellutils.MeBuffDuration(name)
+        if dur ~= nil then
+            anyPresent = true
+            if dur < BUFF_REFRESH_THRESHOLD_MS then needsRefresh = true end
+        end
+    end
+    if not anyPresent then return true end
+    return needsRefresh
+end
+
+--- True when spawnId already has a covering buff (group, stspell, or spellicon) above the refresh window.
+function spellutils.BuffCoverageFresh(entry, spawnId)
+    if not entry or not spawnId or spawnId <= 0 then return false end
+    local meId = mq.TLO.Me.ID()
+    if spawnId == meId then
+        for _, name in ipairs(coverageSpellNames(entry)) do
+            local dur = spellutils.MeBuffDuration(name)
+            if dur ~= nil and dur >= BUFF_REFRESH_THRESHOLD_MS then return true end
+        end
+        return false
+    end
+    local name = mq.TLO.Spawn(spawnId).CleanName()
+    local peer = name and name ~= '' and charinfo.GetInfo(name) or nil
+    if peer then
+        for _, id in ipairs(spellutils.BuffCoverageIds(entry)) do
+            local dur = spellutils.PeerGetBuffDuration(peer, id)
+            if dur ~= nil and dur >= BUFF_REFRESH_THRESHOLD_MS then return true end
+        end
+        return false
+    end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.BuffsPopulated or not sp.BuffsPopulated() then return false end
+    for _, spellName in ipairs(coverageSpellNames(entry)) do
+        local buff = sp.Buff(spellName)
+        if buff and buff() then
+            local dur = buff.Duration() or 0
+            if dur >= BUFF_REFRESH_THRESHOLD_MS then return true end
+        end
+    end
+    return false
+end
+
+--- True when stspell cannot be cast (missing from book/item/alt). Does not disable the parent entry.
+function spellutils.singleTargetBuffBlocked(entry)
+    local shadow = spellutils.singleTargetCastEntry(entry)
+    if not shadow then return true end
+    local gem = shadow.gem
+    local spell = shadow.spell
+    local function noteMissing(msg)
+        if not entry._stNotInBook then
+            entry._stNotInBook = true
+            log.say(msg, spell)
+        end
+    end
+    if type(gem) == 'number' then
+        if not mq.TLO.Spell(spell)() then
+            noteMissing('Single-target buff %s was not found')
+            return true
+        end
+        if not mq.TLO.Me.Book(spell)() then
+            noteMissing('Single-target buff %s is not in your book')
+            return true
+        end
+        entry._stNotInBook = nil
+        return false
+    elseif gem == 'item' then
+        if not mq.TLO.FindItem(spell)() then
+            noteMissing('Single-target buff item %s was not found')
+            return true
+        end
+        entry._stNotInBook = nil
+        return false
+    elseif gem == 'alt' then
+        local aa = mq.TLO.Me.AltAbility(spell)
+        if not aa or not aa() then
+            noteMissing('Single-target buff alt %s was not found')
+            return true
+        end
+        entry._stNotInBook = nil
+        return false
+    end
+    return true
+end
+
 --- Live re-check before committing a buff cast. Returns true if cast should abort (still above refresh window).
 function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
     if not index or not EvalID then return false end
     local entry = botconfig.getSpellEntry('buff', index)
     if not entry or not entry.spell then return false end
+    if targethit == 'stbuff' then
+        return spellutils.BuffCoverageFresh(entry, EvalID)
+    end
     local spellid = spellutils.GetSpellId(entry)
     if not spellid or spellid == 0 then return false end
     local spellName = spellutils.GetResolvedSpellName(entry) or entry.spell
@@ -1802,6 +1933,66 @@ end
 function spellutils.IsGroupAEBuffEntry(entry)
     local tt = spellutils.GetSpellTargetType(entry)
     return tt == 'Group v1' or tt == 'Group v2'
+end
+
+--- Configured single-target spell name for a group buff, or nil when unset/blank.
+function spellutils.SingleTargetBuffName(entry)
+    if not entry or type(entry.stspell) ~= 'string' then return nil end
+    local name = entry.stspell:match('^%s*(.-)%s*$') or ''
+    if name == '' then return nil end
+    return name
+end
+
+function spellutils.SingleTargetBuffId(entry)
+    local name = spellutils.SingleTargetBuffName(entry)
+    if not name then return nil end
+    local id = tonumber(mq.TLO.Spell(name).ID())
+    if id and id > 0 then return id end
+    return nil
+end
+
+--- Group AE buff with stspell, excluding bards (gem songs stay on twist).
+function spellutils.UsesSingleTargetGroupBuff(entry)
+    if not spellutils.SingleTargetBuffName(entry) then return false end
+    if not spellutils.IsGroupAEBuffEntry(entry) then return false end
+    if mq.TLO.Me.Class.ShortName() == 'BRD' then return false end
+    return true
+end
+
+--- Cast view of stspell: parent gem, single-target spell name. Not the config entry.
+function spellutils.singleTargetCastEntry(entry)
+    local name = spellutils.SingleTargetBuffName(entry)
+    if not name or not entry then return nil end
+    return {
+        gem = entry.gem,
+        spell = name,
+        minmana = entry.minmana,
+        announce = entry.announce,
+    }
+end
+
+--- Group spell id, stspell id, and spellicon ids. Does not write entry.spellicon.
+function spellutils.BuffCoverageIds(entry)
+    local ids = {}
+    local seen = {}
+    local function add(id)
+        id = tonumber(id)
+        if id and id > 0 and not seen[id] then
+            seen[id] = true
+            ids[#ids + 1] = id
+        end
+    end
+    if entry then
+        add(spellutils.GetSpellId(entry))
+        add(spellutils.SingleTargetBuffId(entry))
+        local icons = entry.spellicon
+        if type(icons) == 'table' then
+            for _, id in ipairs(icons) do add(id) end
+        else
+            add(icons)
+        end
+    end
+    return ids
 end
 
 -- Group AE buff: group need was already validated; anchor/self may still show the buff
@@ -3332,6 +3523,9 @@ function spellutils.InterruptCheck()
     local spelltartype = mq.TLO.Spell(spellname).TargetType() or ''
     local targetname = mq.TLO.Spawn(target).CleanName()
     local spellid = spellutils.GetSpellId(entry)
+    if criteria == 'stbuff' then
+        spellid = spellutils.SingleTargetBuffId(entry) or spellid
+    end
     if not spellid then return false end
     local spelldur = spellutils.GetSpellDurationSec(entry) * 1000
     if not criteria then return false end
@@ -3340,6 +3534,13 @@ function spellutils.InterruptCheck()
     local charinfowatchers = require('lib.charinfowatchers')
     local kind = charinfowatchers.sectionToKind(sub)
     local scope = charinfowatchers.interruptScopeForTargethit(criteria)
+
+    if sub == 'buff' and criteria == 'stbuff' and target and spellutils.BuffCoverageFresh(entry, target) then
+        log.say('Interrupt %s, buff already present', spellutils.SingleTargetBuffName(entry) or spellname)
+        spellutils.interruptActiveCast(rc)
+        spellutils.clearCastingStateOrResume()
+        return
+    end
 
     -- Group AE: re-check GRPAGG readiness mid-cast.
     if kind and (criteria == 'groupheal' or criteria == 'groupbuff' or criteria == 'groupcure') then
@@ -3505,6 +3706,36 @@ function spellutils.CheckGemReadiness(sub, index, entry)
     return true
 end
 
+--- Gem readiness for stspell using the parent gem. Does not disable the parent entry or mark spellNotInBook.
+function spellutils.stBuffReady(entry)
+    if spellutils.singleTargetBuffBlocked(entry) then return false end
+    local shadow = spellutils.singleTargetCastEntry(entry)
+    if not shadow then return false end
+    local gem = shadow.gem
+    local spell = shadow.spell
+    local minmana = (entry.minmana ~= nil) and entry.minmana or 0
+    if type(gem) == 'number' then
+        local spellmana = mq.TLO.Spell(spell).Mana()
+        if spellmana and spellmana > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < spellmana or mq.TLO.Me.PctMana() < minmana) then
+            return false
+        end
+        if spellMemmedInConfiguredGemSlot(shadow) and not spellReadyByName(spell) then
+            return false
+        end
+        return true
+    elseif gem == 'item' then
+        return mq.TLO.Me.ItemReady(spell)() and true or false
+    elseif gem == 'alt' then
+        local aa = mq.TLO.Me.AltAbility(spell)
+        local spellmana = aa and aa.Spell and aa.Spell.Mana and aa.Spell.Mana()
+        if spellmana and spellmana > 0 and ((mq.TLO.Me.CurrentMana() - (mq.TLO.Me.ManaRegen() * 2)) < spellmana or mq.TLO.Me.PctMana() < minmana) then
+            return false
+        end
+        return mq.TLO.Me.AltAbilityReady(spell)() and true or false
+    end
+    return false
+end
+
 function spellutils.SetCastStatusMessage(sub, targetname, spellname, entry)
     local rc = state.getRunconfig()
     if sub == 'heal' then
@@ -3624,6 +3855,11 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     local meId = mq.TLO.Me.ID()
     local entry = botconfig.getSpellEntry(sub, index)
     if not entry then return false end
+    local castEntry = entry
+    if sub == 'buff' and targethit == 'stbuff' then
+        castEntry = spellutils.singleTargetCastEntry(entry)
+        if not castEntry then return false end
+    end
     local mezCastDbg = sub == 'debuff' and targethit == 'notmatar' and spellutils.IsMezSpell(entry)
     local function mezBlocked(reason)
         if mezCastDbg then
@@ -3637,8 +3873,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if not state.canStartBusyState(state.STATES.casting) then mezBlocked('busy state'); return false end
         if not spellutils.SpellCheck(sub, index) then mezBlocked('SpellCheck'); return false end
         if mq.TLO.Me.Class.ShortName() ~= 'BRD' and mq.TLO.Me.CastTimeLeft() > 0 then mezBlocked('CastTimeLeft'); return false end
-        if not spellutils.CheckGemReadiness(sub, index, entry) then mezBlocked('gem not ready'); return false end
-        if spellutils.ShouldDeferMQ2CastForGemCooldown(entry) then mezBlocked('gem cooldown'); return false end
+        if sub == 'buff' and targethit == 'stbuff' then
+            if not spellutils.stBuffReady(entry) then mezBlocked('st gem not ready'); return false end
+        else
+            if not spellutils.CheckGemReadiness(sub, index, entry) then mezBlocked('gem not ready'); return false end
+            if spellutils.ShouldDeferMQ2CastForGemCooldown(entry) then mezBlocked('gem cooldown'); return false end
+        end
         rc.CurSpell = {
             sub = sub,
             spell = index,
@@ -3655,8 +3895,8 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     else
         if spellcheckResume then rc.CurSpell.spellcheckResume = spellcheckResume end
     end
-    local spell = string.lower(entry.spell or '')
-    local gem = entry.gem
+    local spell = string.lower(castEntry.spell or '')
+    local gem = castEntry.gem
     local targetname
     if targethit == 'self' or EvalID == meId then
         targetname = mq.TLO.Me.CleanName() or 'Unknown'
@@ -3664,12 +3904,12 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         local spawn = mq.TLO.Spawn(EvalID)
         targetname = (spawn and spawn.CleanName()) or 'Unknown'
     end
-    local spellname = entry.spell or spell
+    local spellname = castEntry.spell or spell
     if not resuming then
         spellutils.SetCastStatusMessage(sub, targetname, spellname, (sub == 'debuff' or sub == 'ad') and entry or nil)
     end
 
-    if not resuming and spellutils.ShouldWaitForMovement(entry) then
+    if not resuming and spellutils.ShouldWaitForMovement(castEntry) then
         mq.cmd('/multiline ; /nav stop log=off ; /stick off')
         rc.CurSpell.phase = 'precast_wait_move'
         rc.CurSpell.deadline = mq.gettime() + 3000
@@ -3697,9 +3937,9 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         local _, tankid = spellutils.GetTankInfo(true)
         if tankid ~= meId then mtSelfCastInCombat = false end
     end
-    local skipSelfRetarget = (EvalID == meId and spellutils.IsSelfTargetSpell(entry)) or
+    local skipSelfRetarget = (EvalID == meId and spellutils.IsSelfTargetSpell(castEntry)) or
         (sub == 'heal' and spellutils.IsGroupV1OrV2HealEntry(entry)) or
-        (sub == 'buff' and EvalID == meId and spellutils.IsGroupV1NoRetargetBuffEntry(entry)) or
+        (sub == 'buff' and targethit ~= 'stbuff' and EvalID == meId and spellutils.IsGroupV1NoRetargetBuffEntry(entry)) or
         (sub == 'debuff' and (gem == 'ability' or gem == 'disc') and EvalID == rc.engageTargetId and mq.TLO.Target.ID() == EvalID)
     if not useCastingLib and mq.TLO.Target.ID() ~= EvalID and not mtSelfCastInCombat and not skipSelfRetarget then
         mq.cmdf('/tar id %s', EvalID)
@@ -3733,15 +3973,15 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
     -- Stand to cast only when not about to memorize: standing interrupts MQ2Cast memorization.
     if mq.TLO.Me.Sitting() and not mq.TLO.Me.Mount() and (not rc.CurSpell or rc.CurSpell.phase ~= 'casting') then
         local standToCast = true
-        if useCastingLib and spellutils.castNeedsGemMemorize(entry) then
+        if useCastingLib and spellutils.castNeedsGemMemorize(castEntry) then
             standToCast = false
         end
         if standToCast then mq.cmd('/stand') end
     end
     if useCastingLib then
-        local castSpellId = spellutils.GetSpellId(entry)
-        local castRequest = spellutils.BuildCastRequest(entry, EvalID, sub)
-        local needGemMem = spellutils.castNeedsGemMemorize(entry)
+        local castSpellId = spellutils.GetSpellId(castEntry)
+        local castRequest = spellutils.BuildCastRequest(castEntry, EvalID, sub)
+        local needGemMem = spellutils.castNeedsGemMemorize(castEntry)
         rc.CurSpell.viaMQ2Cast = true
         rc.CurSpell.viaCastingLib = true
         rc.CurSpell.spellid = castSpellId
@@ -3783,7 +4023,7 @@ function spellutils.CastSpell(index, EvalID, targethit, sub, runPriority, spellc
         if needGemMem then mq.delay(CASTING_MEMORIZE_DELAY_MS) end
         return true
     end
-    spellutils.ExecuteNativeCast(gem, entry.spell, sub, index)
+    spellutils.ExecuteNativeCast(gem, castEntry.spell, sub, index)
     spellutils.rememberLastCast(sub, index, EvalID)
     if sub == 'debuff' and (gem == 'ability' or gem == 'disc') then
         rc.CurSpell.phase = 'casting'

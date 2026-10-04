@@ -29,6 +29,23 @@ local KIND_BY_SECTION = {
 
 local CURE_TYPES = { 'POISON', 'DISEASE', 'CURSE', 'CORRUPTION' }
 
+--- spellicon ids plus the single-target group-buff spell id. Does not mutate entry.spellicon.
+function M.buffEquivIds(entry)
+    local ids = M.normalizeSpelliconList(entry and entry.spellicon)
+    local st = spellutils.SingleTargetBuffId(entry)
+    if st and st > 0 then
+        local seen = false
+        for i = 1, #ids do
+            if ids[i] == st then
+                seen = true
+                break
+            end
+        end
+        if not seen then ids[#ids + 1] = st end
+    end
+    return ids
+end
+
 --- Normalize spellicon to a list of positive spell IDs. Accepts number, string, or array.
 function M.normalizeSpelliconList(spellicon)
     local out = {}
@@ -194,8 +211,8 @@ function M.registerBuffWatchers()
         local entry = botconfig.getSpellEntry('buff', i)
         if entry and entry.enabled ~= false then
             local spellId = spellIdForEntry(entry)
-            local equivIds = M.normalizeSpelliconList(entry.spellicon)
-            entry.spellicon = equivIds
+            entry.spellicon = M.normalizeSpelliconList(entry.spellicon)
+            local equivIds = M.buffEquivIds(entry)
             local bands = entry.bands
             if spellId and type(bands) == 'table' then
                 local height = tonumber(entry.height) or 0

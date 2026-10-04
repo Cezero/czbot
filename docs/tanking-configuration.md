@@ -5,7 +5,7 @@ This document explains how to configure the bot when it is the **Main Tank (MT)*
 ## Overview
 
 - **Tank role and target selection** (who is MT, puller priority, etc.) are configured as in [Tank and Assist Roles](tank-and-assist-roles.md): **TankName**, **AssistName**, and the group window Puller.
-- **Melee/tank behavior** (stick, when to assist, camp distance) is configured in **`settings`** and **`melee`**. When this bot is the MT, it picks which mob to engage from the camp list; when it is DPS or offtank, it follows the MA (see [Offtank configuration](offtank-configuration.md)). Optional **bandolierDps** / **bandolierTank** names (Combat tab) activate the matching inventory bandolier when MT status changes; leave blank to never switch.
+- **Melee/tank behavior** (stick, when to assist, camp distance) is configured in **`settings`** and **`melee`**. When this bot is the MT, it picks which mob to engage from the camp list; when it is DPS or offtank, it follows the MA (see [Offtank configuration](offtank-configuration.md)). Optional **bandolierDps** / **bandolierTank** names (Combat tab) activate the matching inventory bandolier when MT status changes; leave blank to never switch. Optional **bandolierBuff** plus **bandolierBuffSpell** wears that set while this character still needs the named self buff (missing, or inside the normal refresh window) and the buff will stack, then returns to the DPS or Tank set.
 
 ---
 
@@ -36,6 +36,8 @@ Under **`config.melee`**:
 | **minmana** | 0 | Minimum mana % to engage (melee). |
 | **bandolierDps** | *(unset)* | Inventory bandolier to activate when this bot is **not** the Main Tank. Blank or omitted: no switch. Combat tab **DPS Bandolier**. |
 | **bandolierTank** | *(unset)* | Inventory bandolier to activate when this bot **is** the Main Tank. Blank or omitted: no switch. Combat tab **Tank Bandolier**. |
+| **bandolierBuff** | *(unset)* | Inventory bandolier worn while **bandolierBuffSpell** is still needed on this character and will stack. Blank or omitted: no switch. Combat tab **Buff Bandolier**. |
+| **bandolierBuffSpell** | *(unset)* | Buff or song name checked on self (for example `Avatar`). Missing, or inside the normal self-buff refresh window, counts as needed. Either this or **bandolierBuff** blank: no buff-set switch. Combat tab **Buff**. |
 
 **Example: melee/tank-related config**
 

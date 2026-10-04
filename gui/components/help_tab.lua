@@ -81,6 +81,7 @@ local GROUPS = {
         { "/cz charm", "Add your target to the charm list." },
         { "/cz mobfilter <...>", "Adjust mob-list filtering for the current zone." },
         { "/cz addjunk <item>", "Add an item to the zone junk list (destroyed on forage)." },
+        { "/cz autoinv [remove] <item>", "Add or remove a shared auto-inventory item (always /autoinv). Uses the cursor item when no name is given." },
         { "/cz foragezone on|off", "Enable / disable auto-forage in the current zone." },
         { "/cz fte clear [all]", "Clear FTE lock for your targeted NPC, or all entries." },
         { "/cz xarc <...>", "Advanced XTarget configuration." },

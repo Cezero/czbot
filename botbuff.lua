@@ -69,7 +69,7 @@ end
 local function IconCheck(index, EvalID, knownName, peerHint, context, hoist)
     local entry = botconfig.getSpellEntry('buff', index)
     if not entry then return true end
-    local icons = charinfowatchers.normalizeSpelliconList(entry.spellicon)
+    local icons = charinfowatchers.buffEquivIds(entry)
     if #icons == 0 then return true end
     local botname = knownName
     if not botname or botname == '' then
@@ -241,10 +241,8 @@ local function BuffEvalSelf(index, entry, spell, spellid, range, myid, myclass, 
             end
             -- Defer Stacks until we know we may need to cast. Icon-equivalent: Me buff/song by spellicon name if set.
             local entry = botconfig.getSpellEntry('buff', index)
-            local spellicon = entry and entry.spellicon
             local iconBlocks = false
-            local icons = type(spellicon) == 'table' and spellicon
-                or ((spellicon and spellicon ~= 0) and { spellicon } or {})
+            local icons = charinfowatchers.buffEquivIds(entry)
             for _, iconId in ipairs(icons) do
                 local iconSpell = mq.TLO.Spell(iconId).Name()
                 if iconSpell and iconSpell ~= ''
@@ -290,7 +288,7 @@ local function BuffEvalTank(index, entry, spell, spellid, rangeSq, tank, tankid,
     if not spellutils.EnsureSpawnBuffsPopulated(tankid, 'buff', index, 'tank', nil, 'after_tank', nil) then
         return nil, nil
     end
-    if heightAllowsSpawn(entry, tankid) and spellutils.SpawnNeedsBuff(tankid, spell, entry.spellicon) then
+    if heightAllowsSpawn(entry, tankid) and spellutils.SpawnNeedsBuff(tankid, spell, charinfowatchers.buffEquivIds(entry)) then
         return tankid, 'tank'
     end
     return nil, nil
@@ -306,6 +304,45 @@ local function getSpellRanges(entry)
     return mq.TLO.Spell(entry.spell).MyRange(), mq.TLO.Spell(entry.spell).AERange()
 end
 
+local ST_GROUP_THRESHOLD = 3
+
+local function nonPeerGroupNeeds(index, entry, spell)
+    local n = 0
+    local ids = {}
+    if not charinfowatchers.hasNonPeerGroupMembers() then return n, ids end
+    local icons = charinfowatchers.buffEquivIds(entry)
+    for _, m in ipairs(charinfowatchers.getNonPeerGroupMembers()) do
+        if m.id and m.id > 0
+            and spellutils.EnsureSpawnBuffsPopulated(m.id, 'buff', index, 'groupbuff', nil, nil, nil)
+            and heightAllowsSpawn(entry, m.id)
+            and spellutils.SpawnNeedsBuff(m.id, spell, icons) then
+            n = n + 1
+            ids[#ids + 1] = m.id
+        end
+    end
+    return n, ids
+end
+
+--- Needy count for anchorName's EQ group. Own group adds self and non-peer members.
+local function groupKeyNeedyCount(anchorName, spellId, entry, nonPeerNeeds)
+    local key = castutils.getPeerGroupKey(anchorName)
+    local n = 0
+    if charinfo.GetWatchList and spellId then
+        local ids = charinfo.GetWatchList('BUFF', 'ALL', spellId) or {}
+        for _, id in ipairs(ids) do
+            local name = id and mq.TLO.Spawn(id).CleanName()
+            if name and name ~= '' and castutils.getPeerGroupKey(name) == key then
+                n = n + 1
+            end
+        end
+    end
+    if key == 'mine' then
+        if spellutils.SelfNeedsBuffEntry(entry) then n = n + 1 end
+        n = n + (tonumber(nonPeerNeeds) or 0)
+    end
+    return n
+end
+
 local function BuffEvalGroupBuff(index, entry, spell, spellid, range, aeRange, context, hoist)
     if not aeRange then
         local _
@@ -316,22 +353,44 @@ local function BuffEvalGroupBuff(index, entry, spell, spellid, range, aeRange, c
     if not sid then return nil, nil end
 
     local function selfPasses()
-        local present = mq.TLO.Me.Buff(spell)() or mq.TLO.Me.Song(spell)()
-        if not present then return true end
-        local dur = mq.TLO.Me.Buff(spell).Duration() or mq.TLO.Me.Song(spell).Duration() or 0
-        return dur < 20000
+        return spellutils.SelfNeedsBuffEntry(entry)
     end
 
-    local nonPeerNeeds = 0
-    if charinfowatchers.hasNonPeerGroupMembers() then
-        for _, m in ipairs(charinfowatchers.getNonPeerGroupMembers()) do
-            if m.id and m.id > 0
-                and spellutils.EnsureSpawnBuffsPopulated(m.id, 'buff', index, 'groupbuff', nil, nil, nil)
-                and heightAllowsSpawn(entry, m.id)
-                and spellutils.SpawnNeedsBuff(m.id, spell, entry.spellicon) then
-                nonPeerNeeds = nonPeerNeeds + 1
+    local nonPeerNeeds, nonPeerIds = nonPeerGroupNeeds(index, entry, spell)
+
+    if spellutils.UsesSingleTargetGroupBuff(entry) then
+        local peerCount = 0
+        if charinfo.GetWatchCount then
+            peerCount = charinfo.GetWatchCount('BUFF', 'GRPAGG', sid) or 0
+        end
+        local total = peerCount + (selfPasses() and 1 or 0) + nonPeerNeeds
+        if total <= 0 then return nil, nil end
+        if total >= ST_GROUP_THRESHOLD then
+            local spellEnt = spellutils.GetSpellEntity(entry)
+            local id = (spellEnt and spellEnt.TargetType() == 'Group v1') and 1 or mq.TLO.Me.ID()
+            return id, 'groupbuff'
+        end
+        if spellutils.singleTargetBuffBlocked(entry) then return nil, nil end
+        local stName = spellutils.SingleTargetBuffName(entry)
+        local function inStRange(id)
+            if not id or id <= 0 or not stName then return false end
+            if id == mq.TLO.Me.ID() then return true end
+            return spellutils.DistanceCheckByName(stName, id)
+        end
+        if selfPasses() then
+            local myid = mq.TLO.Me.ID()
+            if inStRange(myid) then return myid, 'stbuff' end
+        end
+        if charinfo.GetWatchList then
+            local ids = charinfo.GetWatchList('BUFF', 'GRPAGG', sid) or {}
+            for _, id in ipairs(ids) do
+                if inStRange(id) then return id, 'stbuff' end
             end
         end
+        for _, id in ipairs(nonPeerIds) do
+            if inStRange(id) then return id, 'stbuff' end
+        end
+        return nil, nil
     end
 
     if not charinfowatchers.grpAggShouldCast('BUFF', sid, entry.tarcnt, selfPasses, nonPeerNeeds) then
@@ -616,6 +675,10 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
     local cached = getOrBuildSpellCache(spellIndex, spellCache)
     if not cached then return nil, nil end
     local entry, spell, sid = cached.entry, cached.spell, cached.sid
+    if spellutils.UsesSingleTargetGroupBuff(entry)
+        and (phase == 'self' or phase == 'tank' or phase == 'offtank' or phase == 'groupmember') then
+        return nil, nil
+    end
     local myRange, aeRange, range, rangeSq = cached.myRange, cached.aeRange, cached.range, cached.rangeSq
     local tank = hoist and hoist.tank or context.tank
     local tankid = hoist and hoist.tankid or context.tankid
@@ -674,7 +737,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         if not spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'offtank', nil, nil, nil) then
             return nil, nil
         end
-        if heightAllowsSpawn(entry, targetId) and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
+        if heightAllowsSpawn(entry, targetId) and spellutils.SpawnNeedsBuff(targetId, spell, charinfowatchers.buffEquivIds(entry)) then
             return targetId, 'offtank'
         end
         return nil, nil
@@ -718,7 +781,7 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         if IconCheck(spellIndex, targetId, grpname, nil, context, hoist) then
             if spellutils.EnsureSpawnBuffsPopulated(targetId, 'buff', spellIndex, 'groupmember', nil, nil, nil)
                 and heightAllowsSpawn(entry, targetId)
-                and spellutils.SpawnNeedsBuff(targetId, spell, entry.spellicon) then
+                and spellutils.SpawnNeedsBuff(targetId, spell, charinfowatchers.buffEquivIds(entry)) then
                 return targetId, 'groupmember'
             end
         end
@@ -730,6 +793,25 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
         if not grpname then return nil, nil end
         local peer = resolvePeer(grpname, context, hoist)
         if not peer then return nil, nil end
+        if spellutils.UsesSingleTargetGroupBuff(entry) then
+            local watchSid = spellutils.GetSpellId(entry) or sid
+            local nonPeerNeeds = 0
+            if castutils.getPeerGroupKey(grpname) == 'mine' then
+                nonPeerNeeds = nonPeerGroupNeeds(spellIndex, entry, spell)
+            end
+            local needy = groupKeyNeedyCount(grpname, watchSid, entry, nonPeerNeeds)
+            if needy >= ST_GROUP_THRESHOLD then
+                return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, 'pc', peer, context, hoist)
+            end
+            if needy >= 1 and not spellutils.singleTargetBuffBlocked(entry)
+                and charinfowatchers.watchListHas('BUFF', 'ALL', watchSid, targetId) then
+                local stName = spellutils.SingleTargetBuffName(entry)
+                if stName and spellutils.DistanceCheckByName(stName, targetId) then
+                    return targetId, 'stbuff'
+                end
+            end
+            return nil, nil
+        end
         return BuffEvalBotNeedsBuff(targetId, grpname, sid, rangeSq, spellIndex, 'pc', peer, context, hoist)
     end
     return nil, nil

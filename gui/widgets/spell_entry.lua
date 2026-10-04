@@ -113,6 +113,12 @@ local function validatorForGemType(gemType)
     return nil
 end
 
+--- Same name check as the spell/item/AA field for this config gem value.
+function M.validatorForConfigGem(gem)
+    local gemType = type(gem) == 'number' and 'gem' or gem
+    return validatorForGemType(gemType)
+end
+
 -- Gem types that do not use the spell/item/ability field (display "unused", not editable).
 local UNUSED_SPELL_TYPES = { melee = true }
 

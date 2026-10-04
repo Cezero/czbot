@@ -78,6 +78,8 @@
 ---@field minmana number|nil
 ---@field bandolierDps string|nil inventory bandolier name when not Main Tank (blank = no switch)
 ---@field bandolierTank string|nil inventory bandolier name when Main Tank (blank = no switch)
+---@field bandolierBuff string|nil inventory bandolier worn while bandolierBuffSpell is still needed on self (blank = no switch)
+---@field bandolierBuffSpell string|nil buff or song name to check on self for bandolierBuff (blank = no switch)
 
 ---@class ConfigHeal
 ---@field spells table[]|nil
@@ -141,7 +143,7 @@ local keyOrder = { 'settings', 'pull', 'melee', 'heal', 'buff', 'debuff', 'cure'
 local subOrder = {
     settings = { 'dodebuff', 'doheal', 'dobuff', 'docure', 'domelee', 'doraid', 'dodrag', 'domount', 'mountcast', 'dosit', 'doforage', 'doChchain', 'sitmana', 'sitendur', 'sitaggro', 'TankName', 'AssistName', 'TargetFilter', 'petassist', 'acleash', 'followdistance', 'zradius', 'campRestDistance', 'maCampAnchor', 'maAnchorLeash', 'mezMinLevel', 'charmPetAutoSetup', 'protectCasters', 'protectCastersSec', 'campAcleash', 'confirmExit', 'autoInventory', 'buffNonPeerRaid', 'antiAfk' },
     pull = { 'spell', 'radius', 'zrange', 'pullMinCon', 'pullMaxCon', 'maxLevelDiff', 'usePullLevels', 'pullMinLevel', 'pullMaxLevel', 'chainpullhp', 'chainpullcnt', 'mana', 'manaclass', 'leash', 'fteLockoutSec', 'backupCandidates', 'addAbortRadius', 'usepriority', 'hunter', 'roam' },
-    melee = { 'assistpct', 'stickcmd', 'useRanged', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'autoFeign', 'feignPct', 'offtank', 'mtSticky', 'minmana', 'bandolierDps', 'bandolierTank' },
+    melee = { 'assistpct', 'stickcmd', 'useRanged', 'mobprobEngageGraceMs', 'stayBehind', 'behindAggroPct', 'evadePct', 'autoFeign', 'feignPct', 'offtank', 'mtSticky', 'minmana', 'bandolierDps', 'bandolierTank', 'bandolierBuff', 'bandolierBuffSpell' },
     heal = { 'interruptlevel', 'xttargets', 'spells' },
     buff = { 'spells' },
     debuff = { 'spells' },
@@ -151,7 +153,7 @@ local subOrder = {
 
 local spellSlotOrder = {
     heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
-    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'precondition', 'height' },
+    buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'stspell', 'precondition', 'height' },
     debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen', 'recastActive' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
     pull = { 'gem', 'spell', 'range' },
@@ -174,7 +176,7 @@ end
 -- Canonical default spell entry per section. getDefaultSpellEntry returns a copy so callers do not mutate.
 local defaultSpellEntries = {
     heal = { gem = 0, spell = '', minmana = 0, minmanapct = 0, maxmanapct = 100, alias = false, announce = false, enabled = true, inCombat = false, bands = { { targetphase = { 'self', 'tank', 'groupmember' }, validtargets = { 'all' }, min = 0, max = 60 } }, healResource = 'hp', precondition = nil },
-    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, combatOnly = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = {}, precondition = nil, height = nil },
+    buff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, inCombat = false, inIdle = true, combatOnly = false, bands = { { targetphase = { 'self', 'tank', 'pc', 'mypet', 'pet' }, validtargets = { 'all' } } }, spellicon = {}, stspell = nil, precondition = nil, height = nil },
     debuff = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, enabled = true, bands = { { targetphase = { 'matar', 'notmatar', 'named' }, min = 20, max = 100 } }, recast = 0, delay = 0, precondition = nil, dontStack = nil, stopWhen = nil, onlyMT = false },
     cure = { gem = 0, spell = '', minmana = 0, alias = false, announce = false, curetype = { 'all' }, enabled = true, bands = { { targetphase = { 'self', 'tank', 'groupmember', 'pc' }, validtargets = { 'all' } } }, precondition = nil },
 }
@@ -267,7 +269,7 @@ local _pendingMutators = nil
 
 local ZONE_LIST_KEYS = { 'excludelist', 'prioritylist', 'charmlist' }
 local ZONE_BOOL_MAP_KEYS = { 'nukeFlavors', 'nukeFlavorsAutoDisabled', 'junk' }
-local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ot_list', 'heal_list', 'ch_healers', 'noCombatZones', 'botListClassOrder' }
+local TOP_LIST_KEYS = { 'ma_list', 'mt_list', 'ot_list', 'heal_list', 'ch_healers', 'noCombatZones', 'botListClassOrder', 'autoinv_list' }
 local PROGRESS_SUFFIX = '_progress'
 local PROGRESS_SUFFIX_LEN = #PROGRESS_SUFFIX
 
@@ -1149,6 +1151,13 @@ local function writeConfigToFile(config, filename)
                     end
                 elseif key == 'bands' and type(value) == "table" then
                     writeBands(value, indent)
+                elseif key == 'stspell' and type(value) == 'string' then
+                    local trimmed = value:match('^%s*(.-)%s*$') or ''
+                    if trimmed ~= '' then
+                        file:write(indent .. formatKey('stspell') .. " = " .. '"' ..
+                            trimmed:gsub('\\', '\\\\'):gsub('"', '\\"') .. '",\n')
+                        file:flush()
+                    end
                 elseif key == 'precondition' then
                     if value ~= nil and not (type(value) == 'string' and value:match('^%s*$')) then
                         local preStr = type(value) == 'string' and value or tostring(value)

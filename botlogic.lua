@@ -21,6 +21,7 @@ local tickprof = require('lib.tickprof')
 local log = require('lib.log')
 local antiafk = require('lib.antiafk')
 local bandolier = require('lib.bandolier')
+local autoinvlist = require('lib.autoinvlist')
 
 local ok, VERSION = pcall(require, 'version')
 if not ok then VERSION = "dev" end
@@ -151,7 +152,7 @@ local function charState_Always()
         rc.forageSawCursor = false
     end
 
-    -- Cursor / inventory: junk destroy (any); OutOfSpace (any); /autoinv after bot Forage or when autoInventory is on
+    -- Cursor / inventory: junk destroy (any); OutOfSpace (any); /autoinv after bot Forage, when autoInventory is on, or when the cursor item is on autoinv_list
     if mq.TLO.Cursor.ID() then
         local zone = mq.TLO.Zone.ShortName()
         local cursorName = mq.TLO.Cursor.Name()
@@ -163,7 +164,8 @@ local function charState_Always()
             end
             rc.OutOfSpace = true
         elseif not rc.OutOfSpace
-            and (rc.forageExpectCursor or botconfig.config.settings.autoInventory == true)
+            and (rc.forageExpectCursor or botconfig.config.settings.autoInventory == true
+                or autoinvlist.contains(cursorName))
             and mq.TLO.Me.FreeInventory() > 0 then
             mq.cmd('/autoinv')
             rc.OutOfSpace = false

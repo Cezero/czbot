@@ -261,7 +261,7 @@ function M.draw()
     end
     if ImGui.IsItemHovered() then
         ImGui.SetTooltip(
-            'When on, put items on the cursor into bags immediately. Zone junk is still destroyed; full bags still set OutOfSpace. Default off (forage and pre-cast unblock still autoinv).')
+            'When on, put items on the cursor into bags immediately. Zone junk is still destroyed; full bags still set OutOfSpace. Default off (forage, pre-cast unblock, and the Lists auto-inventory list still autoinv).')
     end
     ImGui.Spacing()
     ImGui.TextColored(WHITE, '%s', 'Warp Threshold: ')

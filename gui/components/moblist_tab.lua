@@ -1,4 +1,4 @@
-﻿-- Lists tab: exclude, priority, and charm lists for the current zone.
+﻿-- Lists tab: exclude, priority, and charm lists for the current zone, plus global autoinv_list.
 
 local mq = require('mq')
 local ImGui = require('ImGui')
@@ -8,6 +8,8 @@ local nocombatzones = require('lib.nocombatzones')
 local theme = require('gui.widgets.theme')
 local section = require('gui.widgets.section')
 local name_list = require('gui.widgets.name_list')
+local autoinvlist = require('lib.autoinvlist')
+local botconfig = require('lib.config')
 
 local M = {}
 
@@ -32,6 +34,36 @@ local function drawMobListSection(listType, runconfigKey, label)
         addNoun = 'Mob name',
         getTargetName = currentTargetName,
         onChange = function(action) mobfilter.process(listType, action) end,
+    })
+end
+
+local function currentCursorItemName()
+    if mq.TLO.Cursor.ID() and mq.TLO.Cursor.ID() > 0 then
+        local name = mq.TLO.Cursor.Name()
+        if name and name ~= '' then return name end
+    end
+    return nil
+end
+
+local function sameItemName(a, b)
+    return type(a) == 'string' and type(b) == 'string' and a:lower() == b:lower()
+end
+
+local function drawAutoinvListSection()
+    -- Copy so the widget does not mutate cz_common before mutateCommon reloads disk.
+    local list = botconfig.copyStringList(autoinvlist.getList())
+    name_list.draw({
+        id = 'autoinv_list',
+        label = 'Auto-inventory list',
+        list = list,
+        addNoun = 'Item name',
+        addButtonLabel = 'Add cursor',
+        manualAlways = true,
+        getTargetName = currentCursorItemName,
+        sameName = sameItemName,
+        onChange = function(action)
+            autoinvlist.save(list, action == 'save_replace')
+        end,
     })
 end
 
@@ -76,6 +108,7 @@ function M.draw()
     drawMobListSection('exclude', 'ExcludeList', 'Exclude list')
     drawMobListSection('priority', 'PriorityList', 'Priority list')
     drawMobListSection('charm', 'CharmList', 'Charm list')
+    drawAutoinvListSection()
     drawNoCombatZonesSection()
 end
 

@@ -7,6 +7,7 @@ local spellutils = require('lib.spellutils')
 local buffphase = require('lib.buffphase')
 local spell_entry = require('gui.widgets.spell_entry')
 local inputs = require('gui.widgets.inputs')
+local modals = require('gui.widgets.modals')
 
 local charinfowatchers = require('lib.charinfowatchers')
 
@@ -17,6 +18,8 @@ local SPELICON_INPUT_WIDTH = 220
 
 -- Per-spell-entry editable buffer for adding to `spellicon` list.
 local spelliconTextState = {}
+-- Per-entry modal state for the optional single-target spell name.
+local stSpellEditState = {}
 
 local function resolveSpelliconName(spellicon)
     local sid = tonumber(spellicon)
@@ -194,6 +197,54 @@ local function buffCustomSection(entry, idPrefix, onChanged)
                 entry.height = nil
             end
             if onChanged then onChanged() end
+        end
+        ImGui.Spacing()
+    end
+    if isGroupAEBuffEntry(entry) and mq.TLO.Me.Class.ShortName() ~= 'BRD' then
+        ImGui.Text('Single-target')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip(
+                'Optional single-target spell cast with this entry\'s gem. If 1 or 2 people in a group need the buff, cast this spell on them. If 3 or more need it, cast the group spell. Either spell counts as the buff. Target count is not used while this is set. Empty = group spell only.')
+        end
+        ImGui.SameLine()
+        local stId = idPrefix .. '_stspell'
+        local stState = stSpellEditState[stId]
+        if not stState then
+            stState = { open = false, buffer = '', error = nil }
+            stSpellEditState[stId] = stState
+        end
+        local stDisplay = (type(entry.stspell) == 'string' and entry.stspell ~= '') and entry.stspell or 'unset'
+        ImGui.SetNextItemWidth(SPELICON_INPUT_WIDTH)
+        if ImGui.Selectable(stDisplay .. '##' .. stId, false, 0, ImVec2(SPELICON_INPUT_WIDTH, 0)) then
+            stState.open = true
+            stState.buffer = type(entry.stspell) == 'string' and entry.stspell or ''
+            stState.error = nil
+            modals.openValidatedEditModal(stId)
+        end
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Click to edit')
+        end
+        if stState.open then
+            local baseValidator = spell_entry.validatorForConfigGem(entry.gem)
+            local function validateSt(value)
+                local trimmed = (value or ''):match('^%s*(.-)%s*$') or ''
+                if trimmed == '' then return true end
+                if not baseValidator then return true end
+                return baseValidator(trimmed)
+            end
+            local function onSave(value)
+                local trimmed = (value or ''):match('^%s*(.-)%s*$') or ''
+                entry.stspell = trimmed ~= '' and trimmed or nil
+                stState.open = false
+                stState.buffer = ''
+                if onChanged then onChanged() end
+            end
+            local function onCancel()
+                stState.open = false
+                stState.buffer = ''
+                stState.error = nil
+            end
+            modals.validatedEditModal(stId, stState, validateSt, onSave, onCancel)
         end
         ImGui.Spacing()
     end
