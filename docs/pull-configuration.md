@@ -60,8 +60,9 @@ The **`pull.spell`** table configures how the bot gets aggro. It has the same sh
     - **`'disc'`** — Use a discipline; **`spell`** = disc name.
     - **`'ability'`** — Use a combat ability; **`spell`** = ability name. If **range** is omitted, the bot uses **10** (melee) as the pull range.
     - **`'script'`** — Run a script from **`config.script[spell]`**; **`spell`** = script key. Use **`spell = 'warp'`** for built-in warp pull (instant move to target and back).
-- **spell** — Spell name, item name (for **gem** `'item'` or `'ranged'`), AA/disc/ability name, or script key. Ignored for **gem** `'melee'`.
-- **range** — (Optional.) Distance at which the pull is used. If omitted, the bot derives it when possible from the spell or ability (e.g. spell gem → spell's MyRange − 5; **gem** `'ranged'` → item range; **gem** `'ability'` → 10).
+    - **`'fartaunt'`** — Stay in camp, target the mob, and run `/fartaunt` (fixed **600** 3D units). No spell name and no navigation. See [Far Taunt](#far-taunt).
+- **spell** — Spell name, item name (for **gem** `'item'` or `'ranged'`), AA/disc/ability name, or script key. Ignored for **gem** `'melee'` and **`'fartaunt'`**.
+- **range** — (Optional.) Distance at which the pull is used. If omitted, the bot derives it when possible from the spell or ability (e.g. spell gem → spell's MyRange − 5; **gem** `'ranged'` → item range; **gem** `'ability'` → 10). Ignored for **`'fartaunt'`** (always 600).
 
 **Bard:** When **`pull.spell`** has a numeric **gem** (1–12), the bot uses that same gem and spell for twist-on-pull (e.g. agro song). There are no separate engage_gem/engage_spell options.
 
@@ -100,6 +101,7 @@ pull = {
 - Discipline: `spell = { gem = 'disc', spell = 'Assault', range = 50 }` — optional explicit range
 - Alt ability: `spell = { gem = 'alt', spell = 'Explosive Arrow' }`
 - Combat ability: `spell = { gem = 'ability', spell = 'Kick', range = 10 }` — range defaults to 10 if omitted
+- Far Taunt: `spell = { gem = 'fartaunt', spell = '' }` — stay in camp and `/fartaunt` up to 600
 
 Omit any **pull** option to use its default; you can set only **pull.spell** and **settings.dopull** for a minimal config.
 
@@ -107,7 +109,7 @@ Omit any **pull** option to use its default; you can set only **pull.spell** and
 
 ## When does the bot start a pull?
 
-The bot does **not** start a new pull while it is already in a pull (navigating, aggroing, returning, or waiting for combat). In that case it only runs the pull state machine until the current pull finishes.
+The bot does **not** start a new pull while it is already in a pull (navigating, aggroing, returning, waiting for combat, or far taunt). In that case it only runs the pull state machine until the current pull finishes.
 
 When the bot is **not** already pulling, **StartPull()** is called when **any** of the following is true:
 
@@ -126,7 +128,7 @@ In all cases, the internal **pre-conditions** must also pass (see [Pre-condition
 Once a pull has started, the bot moves through these phases:
 
 1. **Navigating** — Paths to the chosen mob. May abort on timeout, low HP, or if the bot leaves camp (e.g. beyond radius + 40). If the pull target is already an XTarget Auto-Hater, the bot has aggro and returns to camp. Any other **new** Auto-Hater (not on XTarget when the outing started) aborts the pull.
-2. **Aggroing** — When in range, uses **pull.spell** (melee, ranged, spell gem, disc, ability, alt, item, or script) to get aggro. The pull target on XTarget (or target-of-target) means aggro and a return to camp. A different new Auto-Hater aborts.
+2. **Aggroing** — When in range, uses **pull.spell** (melee, ranged, spell gem, disc, ability, alt, item, script, or far taunt) to get aggro. The pull target on XTarget (or target-of-target) means aggro and a return to camp. A different new Auto-Hater aborts. Far Taunt does not enter this phase; it stays in camp (see [Far Taunt](#far-taunt)).
 3. **Returning** — Navigates back to camp with the mob. Leash logic may pause nav if the mob is too far. A new Auto-Hater that is not the pull target aborts back to camp. The pull target and Auto-Haters already present at outing start (chain-pull camp mobs) do not abort.
 4. **Waiting_combat** — Mob is in camp; normal melee/combat runs until the mob is dead or timers clear the pull state.
 
@@ -137,6 +139,16 @@ stateDiagram-v2
     Aggroing --> Returning
     Returning --> Waiting_combat
 ```
+
+### Far Taunt
+
+`pull.spell.gem = 'fartaunt'` uses the same target filters as other methods (con or level, pull radius, max Z, arc, exclude, FTE, path, priority, backup candidates). It then drops any mob farther than **600** (3D) from the puller, because `/fartaunt` cannot reach it. A smaller pull radius still wins.
+
+The puller does not navigate. It targets the mob and issues `/fartaunt`, then waits in camp with pulling still active (so melee does not run out to the mob). While that mob is an XTarget Auto-Hater and is moving (`Speed() > 0`, or its distance to camp decreased within the last 10 seconds), the puller waits. It does not honor the return timer and does not clear the inbound-mob hold that would otherwise start another outing and run back out.
+
+If the mob is on XTarget but neither moving nor getting closer for 10 seconds, the puller issues `/fartaunt` once more from camp. If it is still stalled after another 10 seconds, that target is dropped and the next candidate is tried the same way, or the outing stops. No agro within 15 seconds does the same. A different new XTarget Auto-Hater aborts in place. When the mob is on the camp mob list (or within camp radius), the pull ends and normal melee can engage.
+
+Roam mode ignores this method and still navigates to the nearest pull target.
 
 ---
 
@@ -149,8 +161,8 @@ Even when one of the “start a pull” conditions is true, the bot will **not**
 - **Your HP ≤ 45%** — No new pull is started; an in-progress pull may also abort.
 - **Group mana** — Disabled when **mana** is 0 or **manaclass** is empty. When enabled ( **mana** > 0 and at least one class checked), no new pull if any in-group member whose class is checked has mana **≤ mana** (must be strictly above **mana**). Unreadable mana is treated as 0. Checked classes not present in the group do not block.
 - **Group corpse** — A group member’s corpse is within 100 (2D). A corpse farther than that does not block. A member with no spawn id (offline or not in zone) still blocks.
-- **Rez sickness or snare** — The puller has resurrection sickness (`Resurrection Sickness`, `Revival Sickness`) or a movement snare debuff. Root, mez, slow, fear, stat debuffs (e.g. Shadow Vortex, Malaise, Malo, Tash), and curable debuffs (poison, disease, curse, corruption with counters) do not block. An in-progress pull in **navigating** or **aggroing** is aborted and the puller returns to camp (or picks a new roam target in hunter mode).
-- **Return timer** — After pulling a mob, a short return timer blocks starting another pull until the previous pull’s mob is cleared (e.g. dead or out of range) or the timer expires.
+- **Rez sickness or snare** — The puller has resurrection sickness (`Resurrection Sickness`, `Revival Sickness`) or a movement snare debuff. Root, mez, slow, fear, stat debuffs (e.g. Shadow Vortex, Malaise, Malo, Tash), and curable debuffs (poison, disease, curse, corruption with counters) do not block. An in-progress pull in **navigating**, **aggroing**, or **far taunt** is aborted. Navigating and aggroing return to camp (or pick a new roam target in hunter mode). Far Taunt stops in place.
+- **Return timer** — After pulling a mob, a short return timer blocks starting another pull until the previous pull’s mob is cleared (e.g. dead or out of range) or the timer expires. Far Taunt does not start that next outing while the mob is still an XTarget Auto-Hater and moving; see [Far Taunt](#far-taunt).
 
 ---
 

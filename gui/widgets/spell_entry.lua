@@ -120,7 +120,11 @@ function M.validatorForConfigGem(gem)
 end
 
 -- Gem types that do not use the spell/item/ability field (display "unused", not editable).
-local UNUSED_SPELL_TYPES = { melee = true }
+local UNUSED_SPELL_TYPES = { melee = true, fartaunt = true }
+
+local function hidesSpellName(gemType)
+    return gemType == 'melee' or gemType == 'fartaunt'
+end
 
 --- Short label for the spell/item/ability column based on gem type (for single-row layout).
 local function fieldLabelForGemType(gemType)
@@ -378,12 +382,12 @@ function M.draw(spell, opts)
         if onChanged then onChanged() end
     end
 
-    if gemType ~= 'melee' then
+    if not hidesSpellName(gemType) then
         ImGui.SameLine()
         ImGui.Text('%s', fieldLabelForGemType(type(spell.gem) == 'number' and 'gem' or spell.gem))
         ImGui.SameLine()
     end
-    if gemType ~= 'melee' then
+    if not hidesSpellName(gemType) then
         local isUnused = UNUSED_SPELL_TYPES[gemType] == true
         local validator = validatorForGemType(gemType) or function() return true end
         local function onSave(value)
@@ -432,7 +436,7 @@ function M.draw(spell, opts)
         end
     end
 
-    if showRange then
+    if showRange and gemType ~= 'fartaunt' then
         local rangeLabelW = select(1, ImGui.CalcTextSize('Range'))
         local rangeLabelWidth = (rangeLabelW or 0) + 4
         local rangeTotalWidth = rangeLabelWidth + NUMERIC_INPUT_WIDTH

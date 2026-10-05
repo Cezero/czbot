@@ -33,6 +33,11 @@ local FTE_RECHECK_TARGET_DELAY_MS = 300
 --- /cz attack latch: ignore camp/follow leash clears while engage spawn is within this 2D distance.
 local ATTACK_COMMAND_CHASE_DIST = 500
 local ATTACK_COMMAND_CHASE_DIST_SQ = ATTACK_COMMAND_CHASE_DIST * ATTACK_COMMAND_CHASE_DIST
+--- Living PCs within this 3D distance of an NPC block it as a pull candidate unless they are group (or raid) members.
+local PULL_OUTSIDER_PC_DIST = 20
+local PULL_OUTSIDER_PC_DIST_SQ = PULL_OUTSIDER_PC_DIST * PULL_OUTSIDER_PC_DIST
+local PULL_OUTSIDER_LOG_MS = 5000
+local _pullOutsiderLogAt = 0
 
 local function spawnInArea(spawn, x, y, z, radius2DSq, radiusZ)
     if not spawn or not x or not y then return false end
@@ -774,7 +779,75 @@ local function spawnInPullArc(spawn, rc)
     return true
 end
 
-local function filterSpawnForPull(spawn, rc)
+local function rememberAllowedName(allowedNames, name)
+    if name and name ~= '' then
+        allowedNames[string.lower(name)] = true
+    end
+end
+
+local function rememberAllowedMember(allowedIds, allowedNames, member)
+    if not member then return end
+    local id = member.ID and member.ID()
+    if id and id > 0 then allowedIds[id] = true end
+    if member.Name then rememberAllowedName(allowedNames, member.Name()) end
+end
+
+--- Living PCs in zone who are not in the puller's raid (if in a raid) or group (otherwise).
+--- Positions only; scanned once per pull-list build.
+local function collectOutsiderPcPositions()
+    local allowedIds = {}
+    local allowedNames = {}
+    local meId = mq.TLO.Me.ID()
+    if meId and meId > 0 then allowedIds[meId] = true end
+    rememberAllowedName(allowedNames, mq.TLO.Me.CleanName())
+    rememberAllowedName(allowedNames, mq.TLO.Me.Name())
+
+    local raidMembers = mq.TLO.Raid.Members() or 0
+    if raidMembers > 0 then
+        for i = 1, raidMembers do
+            rememberAllowedMember(allowedIds, allowedNames, mq.TLO.Raid.Member(i))
+        end
+    else
+        local groupMembers = mq.TLO.Group.Members() or 0
+        for i = 0, groupMembers do
+            rememberAllowedMember(allowedIds, allowedNames, mq.TLO.Group.Member(i))
+        end
+    end
+
+    local outsiders = {}
+    local count = tonumber(mq.TLO.SpawnCount('pc')()) or 0
+    for i = 1, count do
+        local sp = mq.TLO.NearestSpawn(i, 'pc')
+        local id = sp and sp.ID()
+        if id and id > 0 and not allowedIds[id] and not (sp.Dead and sp.Dead()) then
+            local clean = sp.CleanName()
+            local name = sp.Name()
+            local namedMember = (clean and clean ~= '' and allowedNames[string.lower(clean)])
+                or (name and name ~= '' and allowedNames[string.lower(name)])
+            if not namedMember then
+                local x, y, z = sp.X(), sp.Y(), sp.Z()
+                if x and y and z then
+                    outsiders[#outsiders + 1] = { x = x, y = y, z = z }
+                end
+            end
+        end
+    end
+    return outsiders
+end
+
+local function mobNearOutsiderPc(spawn, outsiders)
+    if not outsiders or #outsiders == 0 or not spawn then return false end
+    local x, y, z = spawn.X(), spawn.Y(), spawn.Z()
+    if not x or not y or not z then return false end
+    for i = 1, #outsiders do
+        local p = outsiders[i]
+        local dSq = utils.getDistanceSquared3D(x, y, z, p.x, p.y, p.z)
+        if dSq and dSq <= PULL_OUTSIDER_PC_DIST_SQ then return true end
+    end
+    return false
+end
+
+local function filterSpawnForPull(spawn, rc, outsiders)
     local myconfig = botconfig.config
     local pull = myconfig.pull
     if not pull then return false end
@@ -821,6 +894,7 @@ local function filterSpawnForPull(spawn, rc)
             if v.ID() == spawn.ID() then return false end
         end
     end
+    if mobNearOutsiderPc(spawn, outsiders) then return false, 'outsider' end
     return true
 end
 
@@ -868,10 +942,22 @@ function spawnutils.buildPullMobList(rc)
         return spawnInArea(spawn, cx, cy, cz, radiusSq, zrange)
     end
     local raw = mq.getFilteredSpawns(predicate)
+    local outsiders = collectOutsiderPcPositions()
     local out = {}
+    local skippedOutsider = 0
     for _, spawn in ipairs(raw) do
-        if filterSpawnForPull(spawn, rc) then
+        local ok, reason = filterSpawnForPull(spawn, rc, outsiders)
+        if ok then
             table.insert(out, spawn)
+        elseif reason == 'outsider' then
+            skippedOutsider = skippedOutsider + 1
+        end
+    end
+    if skippedOutsider > 0 then
+        local now = mq.gettime()
+        if now - _pullOutsiderLogAt >= PULL_OUTSIDER_LOG_MS then
+            _pullOutsiderLogAt = now
+            log.say('[Pull] skipping %d pull target(s) near outside players', skippedOutsider)
         end
     end
     return out

@@ -17,8 +17,9 @@ local M = {}
 local NUMERIC_INPUT_WIDTH = 80
 
 local PRIMARY_OPTIONS_PULL = {
-    { value = 'melee',   label = 'Melee' },
-    { value = 'ranged',  label = 'Ranged' },
+    { value = 'melee',    label = 'Melee' },
+    { value = 'fartaunt', label = 'Far Taunt' },
+    { value = 'ranged',   label = 'Ranged' },
     { value = 'gem',     label = 'Gem' },
     { value = 'ability', label = 'Ability' },
     { value = 'item',    label = 'Item' },

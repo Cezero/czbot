@@ -34,7 +34,7 @@
 ---@field antiAfk boolean|nil when true, open/close a random bag (or inventory) after ~3–4 min true idle (default on)
 
 ---@class ConfigPullSpell
----@field gem number|string|nil 1-12, 'item', 'alt', 'disc', 'ability', 'script', 'melee', or 'ranged'
+---@field gem number|string|nil 1-12, 'item', 'alt', 'disc', 'ability', 'script', 'melee', 'ranged', or 'fartaunt'
 ---@field spell string|nil spell name, item name (for ranged bow), or empty for melee
 ---@field range number|nil optional; derived from spell/ability when possible
 

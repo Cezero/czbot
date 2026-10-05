@@ -17,6 +17,9 @@ local botpull = {}
 local bardtwist = require('lib.bardtwist')
 
 local PULLEDMOB_NO_CLOSER_MS = 10000
+local FAR_TAUNT_RANGE = 600
+local FAR_TAUNT_CMD_INTERVAL_MS = 2000
+local FAR_TAUNT_NO_AGGRO_MS = 15000
 local RETURNING_AFTER_ABORT_WAIT_MS = 5000
 local PULL_RETURN_EXTRA_WAIT_MS = 5000
 local RETURNING_AFTER_ABORT_TIMEOUT_MS = 30000
@@ -27,10 +30,16 @@ local _noMeshWarnLast = 0
 
 -- Pull state machine. rc fields: pullState, pullAPTargetID, pullCandidateIds, pullCandidateIndex, pullTagTimer, pullReturnTimer, pullPhase, pullDeadline,
 -- pullNavStartHP, pullAggroingStartTime, pullAtCampSince, pullHealerManaWait, pullDebuffWait, pullRangedStoredItem, pullRangedAttempted;
+-- pullFarTauntLastCmd, pullFarTauntStallRetried, pullFarTauntLastDistSq, pullFarTauntLastCloserTime;
 -- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
 -- pullSeenSpawnIds (spawnId -> firstSeenMs) persists across pulls: wait for new-spawn FTE lock before
 -- pulling that ID; never skip a nearer young spawn in favor of a farther aged one.
-botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat' }
+botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat', 'fartaunt' }
+
+local function isFarTaunt()
+    local ps = myconfig.pull and myconfig.pull.spell
+    return ps and ps.gem == 'fartaunt'
+end
 
 local ROAM_NO_TARGET_STATUS_MS = 5000
 local _roamNoTargetStatusLast = 0
@@ -79,6 +88,8 @@ end
 --- Returns effective pull range in units for the given pull spell entry.
 local function getPullRange(entry)
     if not entry then return 50 end
+    -- Far Taunt is a fixed 600-unit command. The pull-tab range box does not change it.
+    if entry.gem == 'fartaunt' then return FAR_TAUNT_RANGE end
     if entry.range and type(entry.range) == 'number' and entry.range > 0 then return entry.range end
     local gem = entry.gem
     local spell = entry.spell
@@ -258,12 +269,17 @@ local function clearPullState(reason)
     rc.pullDebuffWait = nil
     rc.pullRangedStoredItem = nil
     rc.pullRangedAttempted = nil
+    rc.pullFarTauntLastCmd = nil
+    rc.pullFarTauntStallRetried = nil
+    rc.pullFarTauntLastDistSq = nil
+    rc.pullFarTauntLastCloserTime = nil
     rc.pulledmob = nil
     rc.pullreturntimer = nil
     rc.pulledmobLastDistSq = nil
     rc.pulledmobLastCloserTime = nil
     clearEngageIfPullTargetGone(rc, endingPullId)
-    if reason == 'waiting_combat: AP in camp or timer' or reason == 'returning: warp' then
+    if reason == 'waiting_combat: AP in camp or timer' or reason == 'returning: warp'
+        or reason == 'fartaunt: mob in camp' then
         rc.statusMessage = ''
     elseif reason and reason ~= '' then
         rc.statusMessage = string.format('Pull aborted: %s', reason)
@@ -476,6 +492,12 @@ local function canStartPull(rc)
                 rc.pulledmobLastDistSq = nil
                 rc.pulledmobLastCloserTime = nil
             else
+                -- Far Taunt: stay in camp while the inbound mob is on XTarget and still moving.
+                -- Do not clear pulledmob; that is what lets the next StartPull run back out.
+                if isFarTaunt() and isSpawnOnXTarget(rc.pulledmob) and (tonumber(pmob.Speed()) or 0) > 0 then
+                    rc.pulledmobLastCloserTime = mq.gettime()
+                    return false
+                end
                 -- outside acleash: only clear if mob hasn't gotten closer for 10s
                 local lastDistSq = rc.pulledmobLastDistSq or math.huge
                 if pulledDistSq < lastDistSq then
@@ -731,6 +753,17 @@ local function selectPullTargets(apmoblist, rc, maxCount)
             candidates = freshUnattempted
         end
     end
+    if isFarTaunt() then
+        local inRange = {}
+        for _, v in ipairs(candidates) do
+            local dist = v.Distance3D()
+            if dist and dist <= FAR_TAUNT_RANGE then
+                inRange[#inRange + 1] = v
+            end
+        end
+        candidates = inRange
+        if #candidates == 0 then return {} end
+    end
     local ps = myconfig.pull.spell
     local isWarp = ps and ps.gem == 'script' and ps.spell
         and string.lower(tostring(ps.spell)) == 'warp'
@@ -841,6 +874,30 @@ local function tickRoamNav(rc)
     end
 end
 
+local function issueFarTaunt(rc, spawnId)
+    mq.cmdf('/multiline ; /nav stop log=off ; /stick off ; /attack off ; /squelch /tar id %s ; /fartaunt', spawnId)
+    rc.pullFarTauntLastCmd = mq.gettime()
+end
+
+local function armFarTaunt(rc, spawn)
+    local spawnId = spawn.ID()
+    rc.pullAPTargetID = spawnId
+    rc.pullTagTimer = botpull.TagTimeCalc('pull', spawnId)
+    rc.pullReturnTimer = nil
+    rc.pullState = 'fartaunt'
+    rc.pullPhase = nil
+    rc.pullDeadline = nil
+    rc.pullAggroingStartTime = mq.gettime()
+    rc.pullFarTauntLastCmd = nil
+    rc.pullFarTauntStallRetried = nil
+    rc.pullFarTauntLastDistSq = nil
+    rc.pullFarTauntLastCloserTime = nil
+    rc.pullNavStartHP = mq.TLO.Me.PctHPs()
+    rc.pullXTargetIdsAtStart = getCurrentXTargetIdSet()
+    rc.statusMessage = string.format('Far taunt %s (%s)', spawn.Name(), spawnId)
+    issueFarTaunt(rc, spawnId)
+end
+
 function botpull.StartPull()
     local rc = state.getRunconfig()
     if not canStartPull(rc) then
@@ -882,6 +939,11 @@ function botpull.StartPull()
 
     local distance = spawn.Distance() and math.floor(spawn.Distance()) or 0
     log.say('Attempting to pull \ar%s \arid %s \auat %s', spawn.Name(), spawn.ID(), distance)
+    if isFarTaunt() then
+        armFarTaunt(rc, spawn)
+        state.setRunState(state.STATES.pulling, { priority = bothooks.getPriority('doPull') })
+        return
+    end
     mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /mqtarget clear')
     mq.cmdf('/nav id %s dist=7 log=off los=on', spawn.ID())
     if isWarp then mq.cmdf('/warp id %s', spawn.ID()) end
@@ -911,6 +973,7 @@ local function markPullTargetAttempted(rc, reason)
         or reason == 'navigating: EngageCheck (mob engaged by other)'
         or reason == 'aggroing: EngageCheck (mob engaged by other)'
         or reason == 'FTE lock detected'
+        or reason == 'Far taunt stalled'
     if shouldMarkAttempted then
         local attempted = rawget(rc, 'pullAttemptedIds')
         if not attempted then
@@ -931,6 +994,15 @@ local function abortRoamHunt(reason)
 end
 
 local function abortPullAndReturnToCamp(reason)
+    if isFarTaunt() then
+        mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off ; /attack off ; /stick off')
+        local rc = state.getRunconfig()
+        markPullTargetAttempted(rc, reason)
+        rc.engageTargetId = nil
+        if reason then log.say('[Pull] abort: %s', reason) end
+        clearPullState(reason or 'fartaunt abort')
+        return
+    end
     mq.cmd('/multiline ; /squelch /mqtarget clear ; /nav stop log=off')
     local rc = state.getRunconfig()
     markPullTargetAttempted(rc, reason)
@@ -959,6 +1031,10 @@ local function isQueueEntryViable(spawnId, rc)
     if spawnutils.isPullUnpullable(spawnId, rc) then return false end
     local attempted = rawget(rc, 'pullAttemptedIds') or {}
     if attempted[spawnId] then return false end
+    if isFarTaunt() then
+        local dist = spawn.Distance3D()
+        if not dist or dist > FAR_TAUNT_RANGE then return false end
+    end
     return true
 end
 
@@ -982,20 +1058,24 @@ local function isKnownPullOutingSpawn(spawnId, rc)
 end
 
 local function beginPullCandidate(rc, spawn, reason)
-    local spawnId = spawn.ID()
-    rc.pullAPTargetID = spawnId
-    rc.pullTagTimer = botpull.TagTimeCalc('pull', spawnId)
-    rc.pullPhase = nil
-    rc.pullDeadline = nil
-    rc.pullAggroingStartTime = nil
-    rc.pullNavStartHP = mq.TLO.Me.PctHPs()
-    rc.pullXTargetIdsAtStart = getCurrentXTargetIdSet()
-    rc.pullState = 'navigating'
-    mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /mqtarget clear')
-    mq.cmdf('/nav id %s dist=7 log=off los=on', spawnId)
-    rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawnId)
+    if isFarTaunt() then
+        armFarTaunt(rc, spawn)
+    else
+        local spawnId = spawn.ID()
+        rc.pullAPTargetID = spawnId
+        rc.pullTagTimer = botpull.TagTimeCalc('pull', spawnId)
+        rc.pullPhase = nil
+        rc.pullDeadline = nil
+        rc.pullAggroingStartTime = nil
+        rc.pullNavStartHP = mq.TLO.Me.PctHPs()
+        rc.pullXTargetIdsAtStart = getCurrentXTargetIdSet()
+        rc.pullState = 'navigating'
+        mq.cmd('/multiline ; /attack off ; /stick off ; /squelch /mqtarget clear')
+        mq.cmdf('/nav id %s dist=7 log=off los=on', spawnId)
+        rc.statusMessage = string.format('Pulling %s (%s)', spawn.Name(), spawnId)
+    end
     if reason then
-        log.say('[Pull] %s; trying backup target %s (%s)', reason, spawn.Name(), spawnId)
+        log.say('[Pull] %s; trying backup target %s (%s)', reason, spawn.Name(), spawn.ID())
     end
 end
 
@@ -1485,6 +1565,114 @@ local function tickWaitingCombat(rc)
     end
 end
 
+local function holdFarTauntCamp()
+    if mq.TLO.Navigation.Active() or mq.TLO.Stick.Active() or mq.TLO.Me.Combat() then
+        mq.cmd('/multiline ; /nav stop log=off ; /stick off ; /attack off')
+    end
+end
+
+--- True when the pull target has reached camp (on MobList, or within acleash and zradius of the pin).
+local function farTauntMobArrived(rc, spawn)
+    local sid = spawn.ID()
+    for _, v in ipairs(rc.MobList or {}) do
+        if v.ID() == sid then return true end
+    end
+    if not hasCampAnchor(rc) then return false end
+    local dSq = utils.getDistanceSquared2D(rc.makecamp.x, rc.makecamp.y, spawn.X(), spawn.Y())
+    local acleashSq = myconfig.settings.acleashSq
+    if not dSq or not acleashSq or dSq > acleashSq then return false end
+    local zradius = myconfig.settings.zradius or 75
+    local dz = math.abs((spawn.Z() or 0) - (rc.makecamp.z or 0))
+    return dz <= zradius
+end
+
+local function farTauntCampDistSq(rc, spawn)
+    if hasCampAnchor(rc) then
+        return utils.getDistanceSquared3D(rc.makecamp.x, rc.makecamp.y, rc.makecamp.z, spawn.X(), spawn.Y(), spawn.Z())
+    end
+    return utils.getDistanceSquared3D(mq.TLO.Me.X(), mq.TLO.Me.Y(), mq.TLO.Me.Z(), spawn.X(), spawn.Y(), spawn.Z())
+end
+
+--- Updates closer-tracking. Returns live motion this tick, and whether motion was seen inside the 10s window.
+--- Live motion is Speed() > 0 or distance-to-camp decreased. The window covers a one-tick speed flicker.
+local function farTauntMotion(rc, spawn)
+    local distSq = farTauntCampDistSq(rc, spawn)
+    local now = mq.gettime()
+    local speed = tonumber(spawn.Speed()) or 0
+    local closed = distSq and rc.pullFarTauntLastDistSq and distSq < rc.pullFarTauntLastDistSq
+    if distSq and (rc.pullFarTauntLastDistSq == nil or distSq < rc.pullFarTauntLastDistSq) then
+        rc.pullFarTauntLastDistSq = distSq
+        rc.pullFarTauntLastCloserTime = now
+    end
+    if speed > 0 then
+        rc.pullFarTauntLastCloserTime = now
+    end
+    if rc.pullFarTauntLastCloserTime == nil then
+        rc.pullFarTauntLastCloserTime = now
+    end
+    rc.pulledmob = rc.pullAPTargetID
+    rc.pulledmobLastDistSq = rc.pullFarTauntLastDistSq
+    rc.pulledmobLastCloserTime = rc.pullFarTauntLastCloserTime
+    local withinWindow = (now - (rc.pullFarTauntLastCloserTime or 0)) <= PULLEDMOB_NO_CLOSER_MS
+    return speed > 0 or closed, withinWindow
+end
+
+-- Camp-stay pull: target and /fartaunt, then wait. Never /nav to the mob or back out to re-aggro.
+local function tickFarTaunt(rc, spawn)
+    holdFarTauntCamp()
+    if mq.TLO.Me.PctHPs() and mq.TLO.Me.PctHPs() <= 45 then
+        clearPullState('fartaunt: low HP')
+        return
+    end
+    if handleXTargetDuringPull(rc, spawn) then
+        return
+    end
+    if farTauntMobArrived(rc, spawn) then
+        clearPullState('fartaunt: mob in camp')
+        return
+    end
+    if isSpawnOnXTarget(rc.pullAPTargetID) then
+        local live, withinWindow = farTauntMotion(rc, spawn)
+        if live then
+            rc.pullFarTauntStallRetried = nil
+        end
+        if live or withinWindow then
+            rc.statusMessage = string.format('Waiting for %s (%s)', spawn.Name(), spawn.ID())
+            return
+        end
+        if not rc.pullFarTauntStallRetried then
+            rc.pullFarTauntStallRetried = true
+            rc.pullFarTauntLastCloserTime = mq.gettime()
+            rc.pulledmobLastCloserTime = rc.pullFarTauntLastCloserTime
+            issueFarTaunt(rc, rc.pullAPTargetID)
+            rc.statusMessage = string.format('Far taunt %s (%s)', spawn.Name(), spawn.ID())
+            return
+        end
+        abortPullSoftFailure('Far taunt stalled')
+        return
+    end
+    if spawn.PctHPs() and spawn.PctHPs() < 100 then
+        local sid = rc.pullAPTargetID
+        if sid and sid > 0 then spawnutils.markPullUnpullable(rc, sid) end
+        abortPullSoftFailure('Pull target below 100% HP, picking another')
+        return
+    end
+    if botpull.EngageCheck() then
+        abortPullSoftFailure('navigating: EngageCheck (mob engaged by other)')
+        return
+    end
+    local elapsed = mq.gettime() - (rc.pullAggroingStartTime or 0)
+    if elapsed > FAR_TAUNT_NO_AGGRO_MS then
+        abortPullSoftFailure(myconfig.pull.hunter and 'No agro after 15s, picking another target.' or
+            'No agro after 15s, returning to camp.')
+        return
+    end
+    if not rc.pullFarTauntLastCmd or (mq.gettime() - rc.pullFarTauntLastCmd) >= FAR_TAUNT_CMD_INTERVAL_MS then
+        issueFarTaunt(rc, rc.pullAPTargetID)
+    end
+    rc.statusMessage = string.format('Far taunt %s (%s)', spawn.Name(), spawn.ID())
+end
+
 function botpull.PullTick()
     local rc = state.getRunconfig()
     if rc.pullState == 'returning_after_abort' then
@@ -1501,7 +1689,7 @@ function botpull.PullTick()
         clearPullState('PullTick: MasterPause')
         return
     end
-    if rc.pullState == 'navigating' or rc.pullState == 'aggroing' then
+    if rc.pullState == 'navigating' or rc.pullState == 'aggroing' or rc.pullState == 'fartaunt' then
         if spellutils.MeHasNonCurableDebuff() then
             abortNavDuringPull('Rez sickness or snare')
             return
@@ -1522,6 +1710,10 @@ function botpull.PullTick()
     end
     if rc.pullState == 'waiting_combat' then
         tickWaitingCombat(rc)
+        return
+    end
+    if rc.pullState == 'fartaunt' then
+        tickFarTaunt(rc, spawn)
     end
 end
 
@@ -1571,7 +1763,7 @@ function botpull.AbortPullForFTE(reason, spawnId)
         end
         return false
     end
-    local inActivePull = rc.pullState == 'navigating' or rc.pullState == 'aggroing'
+    local inActivePull = rc.pullState == 'navigating' or rc.pullState == 'aggroing' or rc.pullState == 'fartaunt'
     if inActivePull and rc.pullAPTargetID then
         return abortPullSoftFailure(reason or 'FTE lock detected')
     elseif rc.pullAPTargetID then

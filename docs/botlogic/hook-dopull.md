@@ -38,8 +38,8 @@ flowchart TB
 - **Map radii:** Each doPull tick (when dopull is on) calls `syncPullMapFilter`; StartPull also calls it via ensureCampAndAnchor.
 - **Non-combat zones** are configured in **cz_common** `noCombatZones` (GUI Lists tab). **Bind stealth** blocks pulling near primary bind. See [Safety and stealth](../safety-and-stealth.md).
 - **Roam (`pull.roam`):** No pull state machine. `tickRoamNav` runs each doPull tick: when mob bubble is empty and prechecks pass, `/nav` to closest pullable mob within **pull.radius** of the player; **doMelee** (priority 600) engages anything in **acleash**. Status: `Roaming to …` or `No pull targets nearby`.
-- **StartPull (camp/hunter):** Requires canStartPull; ensureCampAndAnchor (syncPullMapFilter, makecamp or hunter anchor); buildPullMobList; `selectPullTargets` (up to **pull.backupCandidates**). Then /nav to first spawn; set pullAPTargetID, pullTagTimer, setRunState('pulling'). `pullState = navigating`, pullReturnTimer set (camp). On soft failure, `advanceToNextPullCandidate` tries the next queued ID before camp return.
-- **PullTick (camp/hunter):** navigating → aggroing → returning → waiting_combat. See [Movement and misc state](movement-and-misc.md#pull-state-machine-dopull).
+- **StartPull (camp/hunter):** Requires canStartPull; ensureCampAndAnchor (syncPullMapFilter, makecamp or hunter anchor); buildPullMobList; `selectPullTargets` (up to **pull.backupCandidates**). Then /nav to first spawn; set pullAPTargetID, pullTagTimer, setRunState('pulling'). `pullState = navigating`, pullReturnTimer set (camp). On soft failure, `advanceToNextPullCandidate` tries the next queued ID before camp return. **Far Taunt** (`pull.spell.gem = 'fartaunt'`) skips nav: it targets, runs `/fartaunt` (600 3D), sets `pullState = fartaunt`, and waits in camp while that mob is on XTarget and moving. It does not run back out to re-aggro.
+- **PullTick (camp/hunter):** navigating → aggroing → returning → waiting_combat, or `fartaunt` when that method is selected. See [Movement and misc state](movement-and-misc.md#pull-state-machine-dopull).
 
 ## See also
 
