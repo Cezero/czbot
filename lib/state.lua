@@ -597,6 +597,11 @@ function M.BurnRemainingMs()
     return rem > 0 and rem or 0
 end
 
+local function stopActiveNav()
+    local mq = require('mq')
+    if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+end
+
 ---Toggle or set global MasterPause (pause CZBot). Used by status tab Pause button and /czp.
 ---@param ... string|nil 'on' = pause, 'off' = resume, none = toggle
 function M.czpause(...)
@@ -607,11 +612,13 @@ function M.czpause(...)
         print('Unpausing CZBot')
     elseif args[1] and args[1] == 'on' then
         _G.MasterPause = true
+        stopActiveNav()
         print('Pausing CZBot')
     else
         -- Treat nil as not paused (e.g. before first use)
         if _G.MasterPause ~= true then
             _G.MasterPause = true
+            stopActiveNav()
             print('Pausing CZBot')
         else
             _G.MasterPause = false

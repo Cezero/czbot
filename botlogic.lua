@@ -439,13 +439,19 @@ function botlogic.mainloop()
         local tick = tickprof.beginTick()
         local tickStart = mq.gettime()
         hookregistry.runRunWhenPausedHooks()
-        local paused = MasterPause == true
-        if not paused then
+        local pausedAtStart = MasterPause == true
+        if not pausedAtStart then
             hookregistry.runNormalHooks()
         end
         antiafk.tick()
         bandolier.tick()
-        tickprof.endTick(tick, paused)
+        -- Pause can flip during a yield inside this tick and that tick can start /nav
+        -- after czpause already stopped the previous path. Stop once here. Later paused
+        -- ticks leave nav alone so a manual /nav issued while paused keeps running.
+        if not pausedAtStart and MasterPause == true and mq.TLO.Navigation.Active() then
+            mq.cmd('/nav stop log=off')
+        end
+        tickprof.endTick(tick, MasterPause == true)
         local procMs = mq.gettime() - tickStart
         local sleepMs = TICK_TARGET_MS - procMs
         if sleepMs > 0 then

@@ -986,6 +986,15 @@ local function navToEngageTargetIfBlocked(engageTargetId, context)
         return false
     end
     logEngageLoSBlocked(engageTargetId, context)
+    -- Pause already stopped the path that was running. Do not start another, and do not
+    -- /nav stop (a manual /nav issued after pause must survive). Stick would still close.
+    if MasterPause == true then
+        if mq.TLO.Stick.Active() then
+            mq.cmd('/squelch /stick off')
+            _lastEngageStickCmd = nil
+        end
+        return true
+    end
     local rc = state.getRunconfig()
     local attackExempt = rc.attackCommandEngage and rc.engageTargetId == engageTargetId
     if not attackExempt and not engagePathWithinAcleash(mq.TLO.Spawn(engageTargetId), rc) then
