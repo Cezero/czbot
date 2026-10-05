@@ -14,6 +14,7 @@ utils.CORPSE_CONSIDER_RADIUS = 100
 local PROTECTED_NPC_PREFIXES = { 'soulbinder', 'translocator' }
 local PROTECTED_NPC_NAMES = {
     ['agent of change'] = true,
+    ['nexus scion'] = true,
 }
 
 local nocombatzones = require('lib.nocombatzones')
