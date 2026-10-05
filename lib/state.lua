@@ -597,9 +597,96 @@ function M.BurnRemainingMs()
     return rem > 0 and rem or 0
 end
 
-local function stopActiveNav()
+local PAUSE_ABORT = {}
+local _pauseAbort = false
+local _hookDepthByCo = setmetatable({}, { __mode = 'k' })
+local _yieldDepthByCo = setmetatable({}, { __mode = 'k' })
+
+local function coKey()
+    return coroutine.running() or 'main'
+end
+
+--- Stop nav, stick, attack, and an in-progress cast. Called only when entering pause.
+local function stopActiveAutomation()
     local mq = require('mq')
     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
+    if mq.TLO.Stick.Active() then mq.cmd('/squelch /stick off') end
+    if mq.TLO.Me.Combat() then mq.cmd('/squelch /attack off') end
+    if mq.TLO.Me.Casting() or (mq.TLO.Me.CastTimeLeft() or 0) > 0 then
+        mq.cmd('/stopcast')
+    end
+end
+
+function M.pushAbortableHook()
+    local co = coKey()
+    _hookDepthByCo[co] = (_hookDepthByCo[co] or 0) + 1
+end
+
+function M.popAbortableHook()
+    local co = coKey()
+    local depth = (_hookDepthByCo[co] or 1) - 1
+    if depth <= 0 then
+        _hookDepthByCo[co] = nil
+    else
+        _hookDepthByCo[co] = depth
+    end
+end
+
+function M.requestPauseAbort()
+    _pauseAbort = true
+end
+
+function M.clearPauseAbort()
+    _pauseAbort = false
+end
+
+function M.isPauseAbort(err)
+    return err == PAUSE_ABORT
+end
+
+--- Unwind an abortable hook once its outermost yield returns. Nested yields (the
+--- pause command's own /nav stop) must not error through a C frame.
+function M.checkPauseAbort()
+    if not _pauseAbort then return end
+    if (_hookDepthByCo[coKey()] or 0) <= 0 then return end
+    _pauseAbort = false
+    error(PAUSE_ABORT)
+end
+
+local function wrapYield(rawFn)
+    return function(...)
+        local co = coKey()
+        local depth = (_yieldDepthByCo[co] or 0) + 1
+        _yieldDepthByCo[co] = depth
+        local packed = { pcall(rawFn, ...) }
+        local nextDepth = depth - 1
+        if nextDepth <= 0 then
+            _yieldDepthByCo[co] = nil
+        else
+            _yieldDepthByCo[co] = nextDepth
+        end
+        local ok = table.remove(packed, 1)
+        if not ok then error(packed[1]) end
+        if nextDepth <= 0 then M.checkPauseAbort() end
+        return unpack(packed)
+    end
+end
+
+local _yieldWrapped = false
+local function installYieldAbort()
+    if _yieldWrapped then return end
+    _yieldWrapped = true
+    local mq = require('mq')
+    mq.delay = wrapYield(mq.delay)
+    mq.cmd = wrapYield(mq.cmd)
+    mq.cmdf = wrapYield(mq.cmdf)
+end
+
+local function enterPause()
+    _G.MasterPause = true
+    stopActiveAutomation()
+    M.requestPauseAbort()
+    print('Pausing CZBot')
 end
 
 ---Toggle or set global MasterPause (pause CZBot). Used by status tab Pause button and /czp.
@@ -611,15 +698,11 @@ function M.czpause(...)
         M.getRunconfig().maAdoptSelectedTarget = true
         print('Unpausing CZBot')
     elseif args[1] and args[1] == 'on' then
-        _G.MasterPause = true
-        stopActiveNav()
-        print('Pausing CZBot')
+        enterPause()
     else
         -- Treat nil as not paused (e.g. before first use)
         if _G.MasterPause ~= true then
-            _G.MasterPause = true
-            stopActiveNav()
-            print('Pausing CZBot')
+            enterPause()
         else
             _G.MasterPause = false
             M.getRunconfig().maAdoptSelectedTarget = true
@@ -627,5 +710,7 @@ function M.czpause(...)
         end
     end
 end
+
+installYieldAbort()
 
 return M

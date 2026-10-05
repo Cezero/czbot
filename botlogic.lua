@@ -433,6 +433,9 @@ end
 function botlogic.mainloop()
     local TICK_TARGET_MS = 250
     while not state.getRunconfig().terminate do
+        -- A hook cannot stay suspended across iterations. Drop an abort left by a
+        -- pause during the previous sleep so the next tick does not unwind itself.
+        state.clearPauseAbort()
         mq.doevents()
         tankrole.beginTick()
         spellutils.beginTick()

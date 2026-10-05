@@ -206,12 +206,13 @@ function tickprof.wrapHook(name, fn, arg)
     local prevHook = _currentHook
     _currentHook = name
     local start = mq.gettime()
-    fn(arg)
-    local elapsed = mq.gettime() - start
+    local ok, err = pcall(fn, arg)
     _currentHook = prevHook
+    local elapsed = mq.gettime() - start
     if tick and tick.hooks then
         tick.hooks[name] = (tick.hooks[name] or 0) + elapsed
     end
+    if not ok then error(err) end
 end
 
 function tickprof.endTick(handle, paused)

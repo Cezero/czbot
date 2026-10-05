@@ -43,12 +43,25 @@ local function _rebuildSorted()
     _sortedRunWhenBusy = runWhenBusy
 end
 
-local function _runHook(h)
-    if tickprof.IsDebug() then
-        tickprof.wrapHook(h.name, h.fn, h.name)
-    else
-        h.fn(h.name)
-    end
+--- Run one hook. abortable hooks unwind when /czp sets the pause sentinel.
+--- @return boolean false only when the hook was pause-aborted
+local function _runHook(h, abortable)
+    local state = require('lib.state')
+    if abortable then state.pushAbortableHook() end
+    local ok, err = xpcall(function()
+        if tickprof.IsDebug() then
+            tickprof.wrapHook(h.name, h.fn, h.name)
+        else
+            h.fn(h.name)
+        end
+    end, function(e)
+        if state.isPauseAbort(e) then return e end
+        return debug.traceback(tostring(e), 2)
+    end)
+    if abortable then state.popAbortableHook() end
+    if ok then return true end
+    if state.isPauseAbort(err) then return false end
+    error(err)
 end
 
 local hookregistry = {}
@@ -105,7 +118,7 @@ function hookregistry.runNormalHooks()
     if state.isDeadOrHover() or state.getRunState() == state.STATES.dead then
         for _, h in ipairs(list) do
             if h.runWhenDead then
-                _runHook(h)
+                if not _runHook(h, true) then return end
             end
         end
         return
@@ -119,6 +132,7 @@ function hookregistry.runNormalHooks()
     local chchainCap = chchainExclusive and bothooks.getPriority('chchainTick') or nil
 
     local skippedByBusyCap = {}
+    local aborted = false
     for _, h in ipairs(list) do
         local maxPriority = chchainCap
         if maxPriority == nil and state.isBusy() then
@@ -128,7 +142,10 @@ function hookregistry.runNormalHooks()
             end
         end
         if maxPriority == nil or h.priority <= maxPriority then
-            _runHook(h)
+            if not _runHook(h, true) then
+                aborted = true
+                break
+            end
         else
             skippedByBusyCap[#skippedByBusyCap + 1] = string.format('%s(%d>%s)', h.name, h.priority, tostring(maxPriority))
         end
@@ -156,11 +173,11 @@ function hookregistry.runNormalHooks()
     end
     -- When busy (e.g. casting), run runWhenBusy hooks so movement (camp return, follow) still runs.
     -- Skip during CH chain exclusive mode so camp/follow cannot steal ticks from the slot clock.
-    if state.isBusy() and not chchainExclusive then
+    if not aborted and state.isBusy() and not chchainExclusive then
         if _sortedRunWhenBusy == nil then _rebuildSorted() end
         local busyList = _sortedRunWhenBusy or {}
         for _, h in ipairs(busyList) do
-            _runHook(h)
+            if not _runHook(h, true) then break end
         end
     end
 
