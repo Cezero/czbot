@@ -798,6 +798,20 @@ local function healBandHasPhase(spellIndex, phase)
     return AHThreshold[spellIndex][phase] and true or false
 end
 
+--- CharInfo zone shortname can match another instance. Named PCs need a local spawn.
+local function healPeerSpawnInZone(targetId, name)
+    if name and name ~= '' then
+        local sp = mq.TLO.Spawn('pc =' .. name)
+        local id = sp and sp.ID()
+        return id ~= nil and id > 0
+    end
+    local sp = mq.TLO.Spawn(targetId)
+    local id = sp and sp.ID()
+    if not id or id <= 0 then return false end
+    local typ = sp.Type and sp.Type()
+    return typ ~= 'Corpse'
+end
+
 local function peerHealInRange(context, targetId, rangeSq, nameHint)
     if not rangeSq then return false end
     local meX = context.meX
@@ -808,6 +822,7 @@ local function peerHealInRange(context, targetId, rangeSq, nameHint)
         context.meX, context.meY = meX, meY
     end
     local name = nameHint or (context.peerNameById and context.peerNameById[targetId])
+    if not healPeerSpawnInZone(targetId, name) then return false end
     local peer = name and context.peerByName and context.peerByName[name]
     if not peer and name then
         peer = charinfo.GetInfo(name)
