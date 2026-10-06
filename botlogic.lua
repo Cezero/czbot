@@ -71,7 +71,12 @@ local function charState_Always()
             local castTimeLeft = mq.TLO.Me.CastTimeLeft() or 0
             local effectivelyIdle = state.getMobCount() == 0 and not mq.TLO.Me.Casting() and castTimeLeft == 0
             local deadlineStuck = state.runStateDeadlinePassed() and castTimeLeft == 0
-            if deadlineStuck or (effectivelyIdle and not (rc.CurSpell and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) and castTimeLeft == 0)) then
+            local phase = rc.CurSpell and rc.CurSpell.phase
+            local precastWait = phase == 'precast' or phase == 'precast_wait_move'
+            -- precast has no cast bar yet; idle-clear would abort the target or stop-moving wait.
+            local idleClear = effectivelyIdle and not precastWait
+                and not (rc.CurSpell and (rc.CurSpell.viaMQ2Cast or rc.CurSpell.viaCastingLib) and castTimeLeft == 0)
+            if deadlineStuck or idleClear then
                 log.say('[cast-clear] charState stuck/idle sub=%s phase=%s deadlineStuck=%s effectivelyIdle=%s',
                     tostring(rc.CurSpell and rc.CurSpell.sub), tostring(rc.CurSpell and rc.CurSpell.phase),
                     tostring(deadlineStuck), tostring(effectivelyIdle))

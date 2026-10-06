@@ -930,9 +930,54 @@ function spellutils.BuffSkipClear(peerName, spellId)
     bySpell[sid] = nil
 end
 
+--- After a successful item buff click, ignore that spawn+spell until CharInfo drops them or this expires.
+local ITEM_BUFF_SETTLE_MS = 3000
+local _itemBuffSettle = {} -- [spawnId][spellId] = expiresAt ms
+
 --- Drop all buff observations (zone/death/config reload).
 function spellutils.BuffSkipClearAll()
     _buffObs = {}
+    _itemBuffSettle = {}
+end
+
+function spellutils.ArmItemBuffSettle(spawnId, spellId)
+    if not spawnId or spawnId <= 0 or not spellId then return end
+    local bySpell = _itemBuffSettle[spawnId]
+    if not bySpell then
+        bySpell = {}
+        _itemBuffSettle[spawnId] = bySpell
+    end
+    bySpell[spellId] = mq.gettime() + ITEM_BUFF_SETTLE_MS
+end
+
+function spellutils.ItemBuffSettleActive(spawnId, spellId)
+    local bySpell = spawnId and _itemBuffSettle[spawnId]
+    if not bySpell or not spellId then return false end
+    local exp = bySpell[spellId]
+    if not exp then return false end
+    if mq.gettime() >= exp then
+        bySpell[spellId] = nil
+        return false
+    end
+    return true
+end
+
+--- True when spawn buffs are populated and this spell is present above the refresh window.
+--- Same id and duration test as InterruptCheckBuffDebuffAlreadyPresent.
+function spellutils.SpawnBuffAboveRefresh(entry, spawnId)
+    if not entry or not spawnId or spawnId <= 0 then return false end
+    local spellName = spellutils.GetResolvedSpellName(entry) or entry.spell
+    local spellId = spellutils.GetSpellId(entry)
+    local durMs = (spellutils.GetSpellDurationSec(entry) or 0) * 1000
+    if not spellName or spellName == '' or not spellId or durMs <= 0 then return false end
+    local sp = mq.TLO.Spawn(spawnId)
+    if not sp or not sp.BuffsPopulated or not sp.BuffsPopulated() then return false end
+    local buff = sp.Buff(spellName)
+    if not buff or not buff() then return false end
+    local buffid = buff.ID() or false
+    local buffdur = buff.Duration() or 0
+    local buffPresent = (buffid and buffid == spellId) and buffdur > (durMs * 0.10)
+    return buffPresent and buffdur >= BUFF_REFRESH_THRESHOLD_MS
 end
 
 --- Arm skip from observed remaining duration (ms). Returns true if caller should treat as "still up" (no cast).
@@ -1254,11 +1299,21 @@ function spellutils.buffNeedRevalidateAbort(index, EvalID, targethit)
     if not peerName or peerName == '' then return false end
     local peer = charinfo.GetInfo(peerName)
     if peer then
-        -- Watcher peers: trust live watchlist (need/slots/stacks). Leave peer-pet path above alone.
+        -- Watcher peers: watchlist, then item-click settle and a live buff read when populated.
         local cw = require('lib.charinfowatchers')
         local scope = cw.phaseToScope(targethit)
         if scope and scope ~= 'GRPAGG' then
-            return not cw.watchListHas('BUFF', scope, spellid, EvalID)
+            if not cw.watchListHas('BUFF', scope, spellid, EvalID) then
+                return true
+            end
+            -- Watchlist lags the buff that just landed. Item clicks are ready again immediately.
+            if entry.gem == 'item' and spellutils.ItemBuffSettleActive(EvalID, spellid) then
+                return true
+            end
+            if spellutils.SpawnBuffAboveRefresh(entry, EvalID) then
+                return true
+            end
+            return false
         end
         return false
     end
@@ -2913,6 +2968,15 @@ function spellutils.handleSpellCheckReentry(sub, options)
                     local spawnName = mq.TLO.Spawn(rc.CurSpell.target).CleanName() or tostring(rc.CurSpell.target)
                     log.say('%s did not take hold on \at%s\ax (blocked); skipping for %d min', entry.spell,
                         spawnName, math.floor(BLOCKED_SKIP_MS / 60000))
+                end
+            end
+            if castResult == 'CAST_SUCCESS' and rc.CurSpell.sub == 'buff' and rc.CurSpell.target then
+                local holdEntry = botconfig.getSpellEntry('buff', rc.CurSpell.spell)
+                if holdEntry and holdEntry.gem == 'item' then
+                    local holdSid = spellutils.GetSpellId(holdEntry)
+                    if holdSid then
+                        spellutils.ArmItemBuffSettle(rc.CurSpell.target, holdSid)
+                    end
                 end
             end
             spellutils.OnCastComplete(rc.CurSpell.spell, rc.CurSpell.target, rc.CurSpell.targethit, rc.CurSpell.sub)

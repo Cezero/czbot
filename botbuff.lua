@@ -705,6 +705,10 @@ local function buffTargetNeedsSpell(spellIndex, targetId, targethit, context, sp
             if phase == 'groupmember' and not charinfowatchers.hasNonPeerGroupMembers() then
                 return nil, nil
             end
+        elseif entry.gem == 'item' and spellutils.ItemBuffSettleActive(targetId, watchSid) then
+            return nil, nil
+        elseif spellutils.SpawnBuffAboveRefresh(entry, targetId) then
+            return nil, nil
         end
     end
 
