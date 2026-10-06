@@ -34,6 +34,7 @@ local _noMeshWarnLast = 0
 -- pulledmob, pulledmobLastDistSq, pulledmobLastCloserTime, pullreturntimer. All cleared in clearPullState().
 -- pullSeenSpawnIds (spawnId -> firstSeenMs) persists across pulls: wait for new-spawn FTE lock before
 -- pulling that ID; never skip a nearer young spawn in favor of a farther aged one.
+-- Noted every AddSpawnCheck while dopull is on; cleared on zone. Absence from the pull list does not forget an ID.
 botpull.PULL_STATES = { 'returning_after_abort', 'navigating', 'aggroing', 'returning', 'waiting_combat', 'fartaunt' }
 
 local function isFarTaunt()
@@ -296,6 +297,9 @@ end
 ---@param reason string|nil e.g. zone, death, follow, command
 function botpull.DisablePull(reason)
     local rc = state.getRunconfig()
+    if reason == 'zone' then
+        rawset(rc, 'pullSeenSpawnIds', nil)
+    end
     local wasOn = rc.dopull == true
     local activePull = rc.pullState ~= nil and rc.pullState ~= ''
         or state.getRunState() == state.STATES.pulling
@@ -648,7 +652,8 @@ function botpull.ensurePullCampState(rc)
     ensureCampAndAnchor(rc or state.getRunconfig())
 end
 
--- Sync pullSeenSpawnIds; return aged spawns (>FTE wait) for selection, or block.
+-- Return aged spawns (>FTE wait) for selection, or block.
+-- First-seen times come from notePullSeenSpawns and are not cleared when an ID leaves this list.
 -- If the nearest pull candidate is still young, wait — do not skip to a farther aged mob.
 -- Returns: agedList, shouldBlock
 local function syncAndFilterAgedPullMobs(rc, apmoblist)
@@ -658,15 +663,13 @@ local function syncAndFilterAgedPullMobs(rc, apmoblist)
         rawset(rc, 'pullSeenSpawnIds', seen)
     end
     local now = mq.gettime()
-    local present = {}
     local aged = {}
     local nearestPathLen = nil
     local nearestAged = false
     if apmoblist then
         for _, spawn in ipairs(apmoblist) do
-            local id = spawn.ID()
+            local id = tonumber(spawn.ID())
             if id and id > 0 then
-                present[id] = true
                 if not seen[id] then
                     seen[id] = now
                 end
@@ -681,11 +684,6 @@ local function syncAndFilterAgedPullMobs(rc, apmoblist)
                     nearestAged = isAged
                 end
             end
-        end
-    end
-    for id in pairs(seen) do
-        if not present[id] then
-            seen[id] = nil
         end
     end
     local hasTarget = apmoblist and apmoblist[1] ~= nil

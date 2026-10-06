@@ -930,6 +930,42 @@ function spawnutils.buildCampMobList(rc)
     return out, #out
 end
 
+--- Stamp first-seen time for NPCs inside pull radius. Ignores pull filters (camp, path, FTE, outsider).
+--- Drops an ID only when that spawn is gone or a corpse.
+function spawnutils.notePullSeenSpawns(rc)
+    rc = rc or state.getRunconfig()
+    if rc.dopull ~= true then return end
+    local pull = botconfig.config.pull
+    if not pull or not pull.radiusSq then return end
+    local seen = rc.pullSeenSpawnIds
+    if not seen then
+        seen = {}
+        rc.pullSeenSpawnIds = seen
+    end
+    local now = mq.gettime()
+    local cx, cy, cz = getPullAreaCenter(rc)
+    local zrange = pull.zrange or 200
+    local radiusSq = pull.radiusSq
+    local function predicate(spawn)
+        if not spawn or spawn.Type() ~= 'NPC' then return false end
+        return spawnInArea(spawn, cx, cy, cz, radiusSq, zrange)
+    end
+    local raw = mq.getFilteredSpawns(predicate)
+    for _, spawn in ipairs(raw) do
+        local id = tonumber(spawn.ID())
+        if id and id > 0 and not seen[id] then
+            seen[id] = now
+        end
+    end
+    for id in pairs(seen) do
+        local sp = mq.TLO.Spawn(id)
+        local gone = not sp or not sp.ID() or sp.ID() == 0 or sp.Type() == 'Corpse'
+        if gone then
+            seen[id] = nil
+        end
+    end
+end
+
 function spawnutils.buildPullMobList(rc)
     rc = rc or state.getRunconfig()
     local myconfig = botconfig.config
@@ -1261,6 +1297,11 @@ end
 function spawnutils.AddSpawnCheck()
     local rc = state.getRunconfig()
     if rc.doChchain and rc.chainActive then return end
+    if rc.dopull then
+        tickprof.span('notePullSeen', function()
+            spawnutils.notePullSeenSpawns(rc)
+        end)
+    end
     utils.pruneCharmSkipIds(rc)
     tickprof.span('pruneFTE', function()
         spawnutils.pruneFTEList(rc)
