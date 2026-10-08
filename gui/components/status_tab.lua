@@ -819,8 +819,8 @@ function M.draw()
         local mountTypeNew, mountTypeCh = combos.combo('mount_type', mountTypeIdx, mountTypeOptions, nil)
         if mountTypeCh then
             local newType = (mountTypeNew == 1) and 'gem' or 'item'
-            botconfig.config.settings.mountcast = (mountName and mountName ~= '' and mountName ~= 'none') and
-            (mountName .. '|' .. newType) or 'none'
+            local namePart = (mountName and mountName ~= '' and mountName ~= 'none') and mountName or 'none'
+            botconfig.config.settings.mountcast = namePart .. '|' .. newType
             runConfigLoaders()
         end
         ImGui.SameLine()
@@ -838,8 +838,8 @@ function M.draw()
     if mountState.open then
         local function onMountSave(value)
             local trimmed = (value or ''):match('^%s*(.-)%s*$')
-            botconfig.config.settings.mountcast = (trimmed == '' or trimmed == 'none') and 'none' or
-            (trimmed .. '|' .. currentMountType)
+            local namePart = (trimmed == '' or trimmed == 'none') and 'none' or trimmed
+            botconfig.config.settings.mountcast = namePart .. '|' .. currentMountType
             mountState.open = false
             mountState.buffer = ''
             runConfigLoaders()

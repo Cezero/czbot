@@ -486,6 +486,7 @@ function spellutils.MountCheck()
     local mountcast = botconfig.config.settings.mountcast
     if not mountcast or mountcast == 'none' then return end
     local mount, spelltype = mountcast:match("^%s*(.-)%s*|%s*(.-)%s*$")
+    if not mount or mount == '' or mount == 'none' then return end
     botconfig.config['mount1'] = { gem = spelltype, spell = mount }
     if not mq.TLO.Me.Mount() and not MountCastFailed then
         spellutils.CastSpell('1', 1, 'mountcast', 'mount')

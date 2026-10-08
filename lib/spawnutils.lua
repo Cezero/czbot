@@ -237,6 +237,69 @@ function spawnutils.FTECheck(spawnId, rc)
     return spawnutils.isEngageTracked(spawnId, rc) or spawnutils.isCombatFTEBlocked(spawnId, rc)
 end
 
+--- Assist fuzzy band: 10% past acleash so pin offset does not drop an MA/MT engage.
+local ACLEASH_FUZZY_FACTOR = 1.1
+
+local function fuzzyAcleashSq(acleashSq)
+    if not acleashSq or acleashSq <= 0 then return nil end
+    return acleashSq * ACLEASH_FUZZY_FACTOR * ACLEASH_FUZZY_FACTOR
+end
+
+local function leaderNamesEqual(a, b)
+    if not a or a == '' or not b or b == '' then return false end
+    return a:lower() == b:lower()
+end
+
+--- True when this bot waits for strict acleash (MA and MT do not use the fuzzy band).
+local function fuzzyAcleashSuppressed()
+    local tankrole = require('lib.tankrole')
+    return tankrole.AmIMainAssist() or tankrole.AmIMainTank()
+end
+
+--- Leader standing inside strict acleash + zradius of this bot's camp pin.
+local function isLeaderInsideStrictCampPin(ctx, rc)
+    if not ctx or not ctx.alive or not ctx.sameZone then return false end
+    if not ctx.x or not ctx.y then return false end
+    local cx, cy, cz = getCampAnchor(rc)
+    if not cx or not cy then return false end
+    local settings = botconfig.config.settings
+    local acleashSq = settings.acleashSq
+    local zradius = settings.zradius or 75
+    local dSq = utils.getDistanceSquared2D(ctx.x, ctx.y, cx, cy)
+    if not dSq or not acleashSq or dSq > acleashSq then return false end
+    if zradius and cz and ctx.z and math.abs(ctx.z - cz) > zradius then return false end
+    return true
+end
+
+--- Spawn ids the MA and/or MT are in ATTACK on, when that leader is inside the strict camp pin.
+--- Nil when the fuzzy band does not apply (this bot is MA/MT, no camp, or camp leash is off).
+--- @return table<number, boolean>|nil
+local function fuzzyEngageSpawnIdSet(rc)
+    rc = rc or state.getRunconfig()
+    if rc.campstatus ~= true then return nil end
+    if not rc.makecamp or not rc.makecamp.x or not rc.makecamp.y then return nil end
+    if rc.doCampAcleash == false then return nil end
+    if fuzzyAcleashSuppressed() then return nil end
+    local tankrole = require('lib.tankrole')
+    local ids = {}
+    local function consider(name)
+        if not name or name == '' then return end
+        local ctx = charinfoutils.getLeaderContext(name)
+        if not ctx or not ctx.inAttack then return end
+        local tid = tonumber(ctx.targetId)
+        if not tid or tid <= 0 then return end
+        if not isLeaderInsideStrictCampPin(ctx, rc) then return end
+        ids[tid] = true
+    end
+    local maName = tankrole.GetAssistTargetName()
+    local mtName = tankrole.GetMainTankName()
+    consider(maName)
+    if mtName and not leaderNamesEqual(maName, mtName) then
+        consider(mtName)
+    end
+    return ids
+end
+
 --- True when chase/assist bypasses are disabled (MobList always uses settings.acleash).
 function spawnutils.isCampAcleashEnforced(rc)
     rc = rc or state.getRunconfig()
@@ -246,6 +309,7 @@ function spawnutils.isCampAcleashEnforced(rc)
 end
 
 --- True when spawn is within settings.acleash + zradius of the camp pin (not MA anchor).
+--- Non-MA/MT: an MA/MT ATTACK target also passes out to acleash * 1.1 when that leader is inside the strict pin.
 function spawnutils.isSpawnWithinCampPin(spawn, rc)
     if not spawn then return false end
     rc = rc or state.getRunconfig()
@@ -256,7 +320,12 @@ function spawnutils.isSpawnWithinCampPin(spawn, rc)
     local myconfig = botconfig.config
     local zradius = myconfig.settings.zradius or 75
     local acleashSq = myconfig.settings.acleashSq
-    return spawnInArea(spawn, cx, cy, cz, acleashSq, zradius)
+    if spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return true end
+    if not spawnInArea(spawn, cx, cy, cz, fuzzyAcleashSq(acleashSq), zradius) then return false end
+    local ids = fuzzyEngageSpawnIdSet(rc)
+    if not ids then return false end
+    local sid = spawn.ID()
+    return sid ~= nil and ids[sid] == true
 end
 
 function spawnutils.isSpawnWithinCampPinById(spawnId, rc)
@@ -269,6 +338,7 @@ end
 --- True when a no-LoS spawn may be melee-engaged without leaving camp leash.
 --- LoS, leash off, or no camp: true, and the navmesh is not queried.
 --- Otherwise the nav path from the player must exist and be within settings.acleash.
+--- Non-MA/MT accept acleash * 1.1 when the spawn is an MA/MT ATTACK target and that leader is inside the strict pin.
 --- @return boolean ok
 --- @return number|nil pathLen set when the navmesh was queried
 function spawnutils.isEngagePathWithinAcleash(spawn, rc)
@@ -291,10 +361,21 @@ function spawnutils.isEngagePathWithinAcleash(spawn, rc)
     end
     local pathLen = mq.TLO.Navigation.PathLength(navArg)()
     local acleash = tonumber(botconfig.config.settings.acleash)
-    if not pathLen or pathLen <= 0 or not acleash or pathLen > acleash then
+    if not pathLen or pathLen <= 0 or not acleash then
         return false, pathLen
     end
-    return true, pathLen
+    if pathLen <= acleash then
+        return true, pathLen
+    end
+    if pathLen > acleash * ACLEASH_FUZZY_FACTOR then
+        return false, pathLen
+    end
+    local ids = fuzzyEngageSpawnIdSet(rc)
+    local sid = spawn.ID()
+    if ids and sid and ids[sid] then
+        return true, pathLen
+    end
+    return false, pathLen
 end
 
 --- True when the player is within settings.acleash + zradius of the camp pin.
@@ -742,7 +823,15 @@ local function filterSpawnForCamp(spawn, rc, opts)
         cx, cy, cz = spawnutils.getMobListAnchor(rc)
         acleashSq = myconfig.settings.acleashSq
     end
-    if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then return false end
+    if not spawnInArea(spawn, cx, cy, cz, acleashSq, zradius) then
+        -- Pin mismatch: MA/MT engaged mobs may sit just outside this bot's anchor circle.
+        local fuzzyIds = opts.fuzzyEngageIds
+        if not fuzzyIds or not sid or not fuzzyIds[sid] then return false end
+        local pinX, pinY, pinZ = getCampAnchor(rc)
+        if not spawnInArea(spawn, pinX, pinY, pinZ, fuzzyAcleashSq(acleashSq), zradius) then
+            return false
+        end
+    end
     if not spawnutils.filterSpawnProtected(spawn) then return false end
     if not spawnutils.filterSpawnExcludeAndFTE(spawn, rc, opts.excludeSet) then return false end
     -- Pull.fteLockoutSec excludes from camp MobList only in roam (makecamp uses combat FTE).
@@ -918,6 +1007,7 @@ function spawnutils.buildCampMobList(rc)
         zradius = zradius,
         tfNum = tfNum,
         excludeSet = excludeSet,
+        fuzzyEngageIds = fuzzyEngageSpawnIdSet(rc),
     }
     -- Single zone scan with hoisted anchor/filter options (TargetFilter last).
     local function predicate(spawn)
@@ -1184,7 +1274,25 @@ function spawnutils.explainMobFilter(spawnId)
         printf('    LoS=%s XTargetAutoHater=%s level=%d (LoS waived if level>=20 and AutoHater)',
             tostring(los), tostring(xt), lvl)
     end
-    printf('  filterSpawnForCamp: %s', filterSpawnForCamp(spawn, rc) and 'pass' or 'FAIL')
+    local fuzzyIds = fuzzyEngageSpawnIdSet(rc)
+    local pinX, pinY, pinZ = getCampAnchor(rc)
+    local strictPin = spawnInArea(spawn, pinX, pinY, pinZ, acleashSq, zradius)
+    local fuzzyPin = spawnInArea(spawn, pinX, pinY, pinZ, fuzzyAcleashSq(acleashSq), zradius)
+    local engageBand = 'n/a'
+    if fuzzyIds then
+        engageBand = (fuzzyIds[spawnId] and fuzzyPin) and 'yes' or 'no'
+    end
+    printf('  camp pin strict=%s fuzzy=%s engage-band=%s',
+        strictPin and 'yes' or 'no', fuzzyPin and 'yes' or 'no', engageBand)
+    printf('  filterSpawnForCamp: %s', filterSpawnForCamp(spawn, rc, {
+        cx = ax,
+        cy = ay,
+        cz = az,
+        acleashSq = acleashSq,
+        zradius = zradius,
+        tfNum = tfNum,
+        fuzzyEngageIds = fuzzyIds,
+    }) and 'pass' or 'FAIL')
 
     local tankrole = require('lib.tankrole')
     local maName = tankrole.GetAssistTargetName()

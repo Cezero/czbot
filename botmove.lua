@@ -1275,6 +1275,10 @@ function botmove.MakeCampLeashCheck()
     -- /cz attack latch within chase dist: do not yank back to camp / wipe engage.
     if spawnutils.isAttackCommandLatchActive(rc) then return end
     if spawnutils.isCampAcleashEnforced(rc) and not spawnutils.isPlayerWithinCampPin(rc) then
+        -- Melee behind an edge mob leaves the bot outside the pin. Hold while the mob is still allowed.
+        if rc.engageTargetId and spawnutils.isSpawnWithinCampPinById(rc.engageTargetId, rc) then
+            return
+        end
         botmove.MakeCamp('return')
         return
     end
