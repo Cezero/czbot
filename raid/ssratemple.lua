@@ -54,6 +54,10 @@ mq.event('SsraWaveOfDeath', '#*#A Glyph Covered Serpent begins casting Wave of D
     beginFight(20000)
 end)
 
+function M.reset()
+    clearPhase()
+end
+
 function M.raid_check()
     if not inZone() then return false end
     if phase ~= nil and not eligible() then

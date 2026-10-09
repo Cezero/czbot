@@ -76,7 +76,17 @@ function botraid.getHookFn(name)
         return function(hookName)
             local rc = state.getRunconfig()
             if rc.doChchain and rc.chainActive then return end
-            if not myconfig.settings.doraid then return end
+            if not myconfig.settings.doraid then
+                -- raid_mechanic skips doMelee. Leaving it set after /cz doraid off
+                -- keeps melee from engaging for the rest of the session.
+                if state.getRunState() == state.STATES.raid_mechanic then
+                    state.setRunState(state.STATES.idle)
+                end
+                if current_zone_module and type(current_zone_module.reset) == 'function' then
+                    current_zone_module.reset()
+                end
+                return
+            end
             if botraid.RaidCheck() then
                 state.setRunState(state.STATES.raid_mechanic, { priority = bothooks.getPriority('doRaid') })
             else
