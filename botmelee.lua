@@ -1463,9 +1463,12 @@ function botmelee.getHookFn(name)
             end
             if not spawnutils.isPlayerWithinCampPin(rc) and not attackLatch then
                 disengageCombat('outside_camp_pin')
-                -- Allow camp-return / fear-return /nav to finish; stopping it here causes resume stutter outside the pin.
+                -- Makecamp nav must run from outside the pin to RestDist. Stopping it here
+                -- stutters every tick until acleash; inside the pin this block does not run.
+                local camp = rc.makecamp
+                local campSet = rc.campstatus and camp and camp.x and camp.y and camp.z
                 local rs = state.getRunState()
-                if rs ~= state.STATES.camp_return and rs ~= state.STATES.fear_return then
+                if not campSet and rs ~= state.STATES.camp_return and rs ~= state.STATES.fear_return then
                     if mq.TLO.Navigation.Active() then mq.cmd('/nav stop log=off') end
                 end
                 return
