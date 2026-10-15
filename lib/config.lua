@@ -154,7 +154,7 @@ local subOrder = {
 }
 
 local spellSlotOrder = {
-    heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'precondition' },
+    heal = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'minmanapct', 'maxmanapct', 'enabled', 'inCombat', 'tarcnt', 'bands', 'healResource', 'divineAura', 'precondition' },
     buff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'inCombat', 'inIdle', 'combatOnly', 'tarcnt', 'bands', 'spellicon', 'stspell', 'precondition', 'height' },
     debuff = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'enabled', 'onlyMT', 'bands', 'recast', 'delay', 'precondition', 'dontStack', 'stopWhen', 'recastActive' },
     cure = { 'gem', 'spell', 'alias', 'announce', 'minmana', 'curetype', 'enabled', 'tarcnt', 'bands', 'precondition' },
@@ -1157,6 +1157,13 @@ local function writeConfigToFile(config, filename)
                     local trimmed = value:match('^%s*(.-)%s*$') or ''
                     if trimmed ~= '' then
                         file:write(indent .. formatKey('stspell') .. " = " .. '"' ..
+                            trimmed:gsub('\\', '\\\\'):gsub('"', '\\"') .. '",\n')
+                        file:flush()
+                    end
+                elseif key == 'divineAura' and type(value) == 'string' then
+                    local trimmed = value:match('^%s*(.-)%s*$') or ''
+                    if trimmed ~= '' then
+                        file:write(indent .. formatKey('divineAura') .. " = " .. '"' ..
                             trimmed:gsub('\\', '\\\\'):gsub('"', '\\"') .. '",\n')
                         file:flush()
                     end

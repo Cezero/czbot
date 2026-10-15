@@ -482,15 +482,125 @@ function spellutils.Init(deps)
     end
 end
 
+local MOUNT_SPELL_INDEX = 1
+local _mountWarnSpell = nil
+local _mountWarnAt = 0
+
+local function warnMount(spell, fmt)
+    local now = mq.gettime()
+    if _mountWarnSpell == spell and now < _mountWarnAt then return end
+    _mountWarnSpell = spell
+    _mountWarnAt = now + 60000
+    log.say(fmt, spell)
+end
+
+--- Spell-gem count the cast pipeline can use (helpers treat slots above 12 as not memorizable).
+local function mountGemLimit()
+    local n = tonumber(mq.TLO.Me.NumGems()) or 0
+    if n < 1 then return 0 end
+    if n > 12 then return 12 end
+    return n
+end
+
+local function gemSpellName(slot)
+    local g = mq.TLO.Me.Gem(slot)
+    if not g or not g.Name then return nil end
+    local name = g.Name()
+    if type(name) ~= 'string' or name == '' then return nil end
+    return name
+end
+
+--- Gem slot already holding this spell, if any (Me.Gem[name] is the slot number).
+local function memorizedGemSlot(spellName)
+    local g = mq.TLO.Me.Gem(spellName)
+    if not g then return nil end
+    local ok, raw = pcall(function() return g() end)
+    if not ok then return nil end
+    local slot = tonumber(raw)
+    if not slot or slot < 1 or slot > 13 then return nil end
+    return slot
+end
+
+local function gemReservedByConfig(slot)
+    for _, section in ipairs({ 'heal', 'buff', 'debuff', 'cure' }) do
+        local spells = botconfig.config[section] and botconfig.config[section].spells
+        if type(spells) == 'table' then
+            for _, entry in ipairs(spells) do
+                if entry and entry.gem == slot and type(entry.spell) == 'string' and entry.spell ~= '' then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+--- Prefer the gem that already has the spell, then an empty unreserved gem, then any empty gem, then the last gem.
+local function resolveMountGemSlot(spellName)
+    local memmed = memorizedGemSlot(spellName)
+    if memmed then return memmed end
+    local limit = mountGemLimit()
+    if limit < 1 then return nil end
+    local emptyReserved
+    for slot = 1, limit do
+        if not gemSpellName(slot) then
+            if not gemReservedByConfig(slot) then return slot end
+            if not emptyReserved then emptyReserved = slot end
+        end
+    end
+    if emptyReserved then return emptyReserved end
+    for slot = limit, 1, -1 do
+        if not gemReservedByConfig(slot) then return slot end
+    end
+    return limit
+end
+
+--- Runtime entry CastSpell looks up via getSpellEntry('mount', 1). Not in the save key order.
+local function ensureMountSpellEntry(gem, spell)
+    local cfg = botconfig.config
+    if type(cfg.mount) ~= 'table' then cfg.mount = {} end
+    if type(cfg.mount.spells) ~= 'table' then cfg.mount.spells = {} end
+    local entry = cfg.mount.spells[MOUNT_SPELL_INDEX]
+    if type(entry) ~= 'table' or entry.spell ~= spell or entry.gem ~= gem then
+        entry = { gem = gem, spell = spell, enabled = true }
+        cfg.mount.spells[MOUNT_SPELL_INDEX] = entry
+    end
+    return entry
+end
+
 function spellutils.MountCheck()
     local mountcast = botconfig.config.settings.mountcast
-    if not mountcast or mountcast == 'none' then return end
+    if type(mountcast) ~= 'string' or mountcast == '' or mountcast == 'none' then return end
     local mount, spelltype = mountcast:match("^%s*(.-)%s*|%s*(.-)%s*$")
     if not mount or mount == '' or mount == 'none' then return end
-    botconfig.config['mount1'] = { gem = spelltype, spell = mount }
-    if not mq.TLO.Me.Mount() and not MountCastFailed then
-        spellutils.CastSpell('1', 1, 'mountcast', 'mount')
+    if mq.TLO.Me.Mount() or MountCastFailed then return end
+    local meId = mq.TLO.Me.ID()
+    if not meId or meId == 0 then return end
+
+    local rc = state.getRunconfig()
+    local castingMount = rc.CurSpell and rc.CurSpell.sub == 'mount' and rc.CurSpell.phase
+        and botconfig.getSpellEntry('mount', MOUNT_SPELL_INDEX)
+    if not castingMount then
+        local gem
+        if spelltype == 'item' then
+            if not mq.TLO.FindItem(mount)() then
+                warnMount(mount, 'Mount item %s is not in your inventory')
+                return
+            end
+            gem = 'item'
+        elseif spelltype == 'gem' then
+            if not mq.TLO.Me.Book(mount)() then
+                warnMount(mount, 'Mount spell %s is not in your book')
+                return
+            end
+            gem = resolveMountGemSlot(mount)
+            if not gem then return end
+        else
+            return
+        end
+        ensureMountSpellEntry(gem, mount)
     end
+    spellutils.CastSpell(MOUNT_SPELL_INDEX, meId, 'mountcast', 'mount', bothooks.getPriority('charState'))
 end
 
 -- Returns true if the spell has no reagents or the character has >= required count of each reagent in inventory.
@@ -3650,6 +3760,20 @@ function spellutils.InterruptCheck()
     if kind and scope and scope ~= 'GRPAGG' and target and target ~= mq.TLO.Me.ID() then
         if not charinfowatchers.watchListHas(kind, scope, spellid, target) then
             log.say('Interrupting %s, target left watchlist', spellname)
+            spellutils.interruptActiveCast(rc)
+            spellutils.clearCastingStateOrResume()
+            return
+        end
+    end
+
+    -- Gap-HoT peers: a Divine Aura proc during the cast will not land. Free the healer.
+    if sub == 'heal' and target and target > 0 and target ~= mq.TLO.Me.ID()
+        and (criteria == 'tank' or criteria == 'offtank' or criteria == 'watched'
+            or criteria == 'groupmember' or criteria == 'pc' or criteria == 'xtgt') then
+        local botheal = require('botheal')
+        local auraName = botheal.divineAuraOnTarget and botheal.divineAuraOnTarget(target)
+        if auraName then
+            log.say('Interrupting %s, target has %s', spellname, auraName)
             spellutils.interruptActiveCast(rc)
             spellutils.clearCastingStateOrResume()
             return

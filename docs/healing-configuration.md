@@ -49,6 +49,7 @@ Each entry in **`heal.spells`** can have:
 | **tarcnt** | Optional. Only used for **group/AE heals**: minimum number of group members in the HP band (and in range) required to trigger the spell. When omitted, group heals fire when at least 1 member is in band. Not used for single-target heals. |
 | **bands** | Who and at what HP % this spell applies. Each band has **targetphase** (phase stages) and **validtargets** (within-phase types). See [Heal bands](#heal-bands) below. |
 | **healResource** | Optional. `'hp'` (default) or `'mana'`. When `'mana'`, the spell is treated as a mana heal (e.g. Cleric Canni); min/max in bands apply to **mana %** of the target, not HP. When `'mana'`, self phase may be skipped for that spell under certain logic. |
+| **divineAura** | Optional. Buff name (normally `Divine Aura`) on a heal-over-time spell. That HoT is the gap heal for peers covered by its **tank**, **offtank**, or **watched** bands. See [Divine Aura gap heals](#divine-aura-gap-heals). Ignored on spells that are not heal over time. |
 | **inCombat** | Optional. When `true` and the spell has **corpse** in a band, rez is allowed when mobs are in camp. Default is `false`. |
 | **precondition** | Optional. When missing or not set, defaults to `true` (cast is allowed). When **defined**: **boolean** — `true` = allow, `false` = skip this spell for this evaluation; **string** — Lua script run with `mq` and `EvalID` (current target spawn ID) in scope; return a truthy value to allow the cast, otherwise the spell is skipped (e.g. only cast when target HP > X%, or only when not in a certain zone). |
 
@@ -103,6 +104,27 @@ If a spell’s band includes multiple phases (e.g. `self`, `tank`, `pc`), the bo
 **Heal over time (HoT)**
 
 HoT spells are **autodetected** from spell data (SPA 100); no configuration is needed. The bot will not recast them on targets who already have the effect (buff or shortbuff). For **single-target** heals, a target is not considered to need the spell if they already have it. For **group heals**, when counting how many group members need the heal for **tarcnt**, members who already have the HoT are excluded; the group HoT is only cast when the number of members who are in HP band, in range, and do not already have the HoT is at least **tarcnt**. Group HoT **tarcnt** is most accurate when group members are peers (known via charinfo); non-peer group members are counted as “need” when in band if their buff state is unknown.
+
+**Divine Aura gap heals**
+
+Set **divineAura** to a buff name on a HoT (the Heal tab checkbox **Divine Aura HoT**, default buff `Divine Aura`). The peers it covers are whoever that spell’s **tank**, **offtank**, or **watched** bands select: the main tank, active off-tanks, or **heal_list** names. Other phases do not add anyone.
+
+While that buff is up, every single-target heal on those peers is skipped (tank, off-tank, watched, group, PC, and XTarget). A heal cannot land on Divine Aura, and a direct heal started in the gap often fizzles if the buff procs during the cast. When the buff drops and their HP is in the HoT’s band, only that HoT (or another HoT with **divineAura** set) is cast. The HoT keeps ticking after Divine Aura returns. Direct heals are not used on those peers even while the buff is down. Group AE heals are unchanged.
+
+If **heal_list** contains other people and the HoT band is **watched**, those names get the same HoT-only rule. Put only the paladin on that list, or limit the HoT band to **tank** or **offtank** when that paladin is the tank.
+
+```lua
+{
+  gem = 3,
+  spell = 'Celestial Healing',
+  divineAura = 'Divine Aura',
+  bands = {
+    { targetphase = { 'watched' }, min = 0, max = 90 }
+  }
+}
+```
+
+Use `'tank'` instead of `'watched'` when the paladin is the main tank.
 
 **Corpse rez eligibility:** When **corpse** is in targetphase, the bot only rezzes corpses whose player is in charinfo, in your EQ group, in your raid, or in your guild (same guild name as you). Random nearby corpses are ignored. Legacy `validtargets` on corpse bands (`all`, `bots`, `raid`) are ignored.
 

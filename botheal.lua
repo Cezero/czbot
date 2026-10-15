@@ -987,6 +987,176 @@ local function entryRangeSq(entry)
     return spellrange * spellrange
 end
 
+local DA_SINGLE_HITS = {
+    tank = true,
+    offtank = true,
+    watched = true,
+    groupmember = true,
+    pc = true,
+    xtgt = true,
+}
+
+local _daSpellIds = {}
+local _daCoverage = { at = 0, set = {} }
+local DA_COVERAGE_MS = 50
+
+local function divineAuraBuffName(entry)
+    local name = entry and entry.divineAura
+    if type(name) ~= 'string' then return nil end
+    name = name:match('^%s*(.-)%s*$')
+    if not name or name == '' then return nil end
+    return name
+end
+
+local function divineAuraSpellId(buffName)
+    local key = buffName:lower()
+    local cached = _daSpellIds[key]
+    if cached then return cached end
+    local ok, id = pcall(function() return mq.TLO.Spell(buffName).ID() end)
+    if ok and type(id) == 'number' and id > 0 then
+        _daSpellIds[key] = id
+        return id
+    end
+    return nil
+end
+
+--- Gap HoT: divineAura names a buff, and the spell is a HoT (SPA 100).
+local function gapHotEntry(entry)
+    return divineAuraBuffName(entry) ~= nil and spellutils.IsHoTSpell(entry)
+end
+
+local function spawnIdForPeerName(name)
+    if type(name) ~= 'string' or name == '' then return nil end
+    local peer = charinfo.GetInfo(name)
+    local id = peer and peer.ID
+    if not id or id <= 0 then
+        local sp = mq.TLO.Spawn('pc =' .. name)
+        id = sp and sp.ID()
+    end
+    if id and id > 0 then return id end
+    return nil
+end
+
+--- Spawn ids covered by enabled gap HoTs, from tank / offtank / watched bands only.
+--- set[id] = { name = string, buffs = { [spellId] = buffName } }
+local function divineAuraCoverage()
+    local now = mq.gettime()
+    if _daCoverage.at > 0 and (now - _daCoverage.at) < DA_COVERAGE_MS then return _daCoverage.set end
+    local set = {}
+    local count = botconfig.getSpellCount('heal')
+    local pending = {}
+    local needTank, needOt, needWatched = false, false, false
+    for i = 1, count do
+        local entry = botconfig.getSpellEntry('heal', i)
+        if entry and entry.enabled ~= false and gapHotEntry(entry) then
+            local buffName = divineAuraBuffName(entry)
+            local buffId = divineAuraSpellId(buffName)
+            local tank = healBandHasPhase(i, 'tank')
+            local ot = healBandHasPhase(i, 'offtank')
+            local watched = healBandHasPhase(i, 'watched')
+            if buffId and (tank or ot or watched) then
+                pending[#pending + 1] = {
+                    buffId = buffId,
+                    buffName = buffName,
+                    tank = tank,
+                    ot = ot,
+                    watched = watched,
+                }
+                needTank = needTank or tank
+                needOt = needOt or ot
+                needWatched = needWatched or watched
+            end
+        end
+    end
+    local function cover(name, buffId, buffName)
+        local id = spawnIdForPeerName(name)
+        if not id then return end
+        local row = set[id]
+        if not row then
+            row = { name = name, buffs = {} }
+            set[id] = row
+        end
+        row.buffs[buffId] = buffName
+    end
+    if #pending > 0 and needTank then
+        local mt = require('lib.tankrole').GetMainTankName()
+        for pi = 1, #pending do
+            local p = pending[pi]
+            if p.tank then cover(mt, p.buffId, p.buffName) end
+        end
+    end
+    if #pending > 0 and needOt then
+        local ots = czactor.getActiveOfftanks()
+        for oi = 1, #ots do
+            for pi = 1, #pending do
+                local p = pending[pi]
+                if p.ot then cover(ots[oi].name, p.buffId, p.buffName) end
+            end
+        end
+    end
+    if #pending > 0 and needWatched then
+        local list = require('lib.rolelists').getHealList()
+        if type(list) == 'table' then
+            for ni = 1, #list do
+                for pi = 1, #pending do
+                    local p = pending[pi]
+                    if p.watched then cover(list[ni], p.buffId, p.buffName) end
+                end
+            end
+        end
+    end
+    _daCoverage.set = set
+    _daCoverage.at = now
+    return set
+end
+
+local function targetWindowHasBuff(targetId, buffId, buffName)
+    if mq.TLO.Target.ID() ~= targetId or not mq.TLO.Target.BuffsPopulated() then return false end
+    local function slotHas(slot)
+        if not slot then return false end
+        local ok, present = pcall(function() return slot() end)
+        if not ok or not present or present == '' then return false end
+        local idOk, id = pcall(function() return slot.ID() end)
+        if idOk and type(id) == 'number' and id > 0 then return id == buffId end
+        return true
+    end
+    if slotHas(mq.TLO.Target.Buff(buffName)) then return true end
+    local shortOk, shortSlot = pcall(function() return mq.TLO.Target.ShortBuff(buffName) end)
+    if shortOk and slotHas(shortSlot) then return true end
+    return false
+end
+
+local function coveredBuffName(targetId, row)
+    if not row or not row.buffs then return nil end
+    local peerName = row.name
+    if not peerName or peerName == '' then
+        local sp = mq.TLO.Spawn(targetId)
+        peerName = sp and (sp.CleanName() or sp.Name())
+    end
+    local peer = (peerName and peerName ~= '') and charinfo.GetInfo(peerName) or nil
+    for buffId, buffName in pairs(row.buffs) do
+        if targetWindowHasBuff(targetId, buffId, buffName) then return buffName end
+        if peer and spellutils.PeerHasBuff(peer, buffId) then return buffName end
+    end
+    return nil
+end
+
+--- Buff name when targetId is a gap-HoT peer and that buff is up; else nil.
+function botheal.divineAuraOnTarget(targetId)
+    if not targetId or targetId <= 0 then return nil end
+    return coveredBuffName(targetId, divineAuraCoverage()[targetId])
+end
+
+--- True when this single-target heal must not cast: buff is up, or the spell is not a gap HoT.
+local function divineAuraBlocks(entry, targetId)
+    if not targetId or targetId <= 0 then return false end
+    local row = divineAuraCoverage()[targetId]
+    if not row then return false end
+    if coveredBuffName(targetId, row) then return true end
+    if gapHotEntry(entry) then return false end
+    return true
+end
+
 --- What the heal pass would do with this spell on this target.
 --- @return string|nil 'ready' direct HP heal, 'hold' HoT or gem delay (do not preempt or fall through), 'next_target' group-only miss, nil try next spell
 local function preemptSpellOutcome(index, phase, targetId, nameHint, rangeCtx)
@@ -1005,6 +1175,8 @@ local function preemptSpellOutcome(index, phase, targetId, nameHint, rangeCtx)
         if not charinfowatchers.watchListHas('HEAL', 'LIST', spellId, targetId) then return nil end
         if not peerHealInRange(rangeCtx, targetId, entryRangeSq(entry), nameHint) then return nil end
     end
+    -- Divine Aura up is a miss, not a hold, so another peer can still preempt.
+    if phase ~= 'self' and divineAuraBlocks(entry, targetId) then return nil end
     -- Already-present HoT is upkeep; the next direct heal can still preempt.
     if spellutils.IsHoTSpell(entry) and spellutils.TargetHasHealSpell(entry, targetId) then return nil end
     if not spellutils.SpellCheck('heal', index) or not spellutils.PreCondCheck('heal', index, targetId) then
@@ -1203,6 +1375,7 @@ function botheal.HealCheck(runPriority)
 
         local function accept(id, hit)
             if not id or not hit then return nil, nil end
+            if DA_SINGLE_HITS[hit] and divineAuraBlocks(spellCtx.entry, id) then return nil, nil end
             if not healSpellCheckOk(spellIndex) then return nil, nil end
             return id, hit
         end

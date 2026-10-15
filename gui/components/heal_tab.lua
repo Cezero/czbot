@@ -143,6 +143,38 @@ local function healCustomSection(entry, idPrefix, onChanged)
         entry.tarcnt = newTc
         if onChanged then onChanged() end
     end
+    ImGui.Spacing()
+    local daName = type(entry.divineAura) == 'string' and (entry.divineAura:match('^%s*(.-)%s*$') or '') or ''
+    local daOn = daName ~= ''
+    local daVal, daPressed = ImGui.Checkbox('Divine Aura HoT##' .. idPrefix .. '_divineAura', daOn)
+    if ImGui.IsItemHovered() then
+        ImGui.SetTooltip(
+            'Skip this peer while the buff is up. Cast this HoT only in the gap. Direct heals never cast on them.')
+    end
+    if daPressed then
+        entry.divineAura = daVal and (daOn and daName or 'Divine Aura') or nil
+        if onChanged then onChanged() end
+    end
+    if type(entry.divineAura) == 'string' and entry.divineAura ~= '' then
+        ImGui.SameLine()
+        ImGui.Text('Buff')
+        if ImGui.IsItemHovered() then
+            ImGui.SetTooltip('Buff name that blocks heals. Default is Divine Aura. Commit with Enter.')
+        end
+        ImGui.SameLine()
+        ImGui.SetNextItemWidth(140)
+        local ImGuiInputTextFlags = ImGuiInputTextFlags or {}
+        local enterFlag = ImGuiInputTextFlags.EnterReturnsTrue or 0
+        local newBuf, submitted = ImGui.InputText('##' .. idPrefix .. '_divineAuraName', entry.divineAura, enterFlag)
+        if submitted then
+            local trimmed = (newBuf or ''):match('^%s*(.-)%s*$') or ''
+            entry.divineAura = trimmed ~= '' and trimmed or nil
+            if onChanged then onChanged() end
+        end
+        if not spellutils.IsHoTSpell(entry) then
+            ImGui.TextColored(theme.LIGHT_GREY, '%s', 'Applies only to heal-over-time spells.')
+        end
+    end
     -- In combat (rez only): show only when corpse is in a band
     if bandHasPhase(entry, 'corpse') then
         ImGui.Spacing()
