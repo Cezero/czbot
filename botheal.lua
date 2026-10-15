@@ -917,6 +917,12 @@ local function healManaPhaseOrder()
     return applyHealNamedPhaseGate(ordered)
 end
 
+--- Out-of-combat regen is on while standing (ACTIVE) or sitting (RESTING). Sit instead of a mana heal.
+local function oocRegenInEffect()
+    local cs = mq.TLO.Me.CombatState()
+    return cs == 'ACTIVE' or cs == 'RESTING'
+end
+
 local function rejectIfAlreadyHoT(entry, id, hit)
     if not id then return nil, nil end
     if spellutils.IsHoTSpell(entry) and spellutils.TargetHasHealSpell(entry, id) then return nil, nil end
@@ -1496,8 +1502,10 @@ function botheal.HealCheck(runPriority)
         state.clearRunState()
         cursor = nil
     end
+    local oocRegen = oocRegenInEffect()
     local resumePass
-    if cursor and cursor.spellIndex then
+    -- A mana resume must not skip the HP pass while regen blocks mana heals; the HP pass clears it.
+    if cursor and cursor.spellIndex and not oocRegen then
         resumePass = healSpellResource(cursor.spellIndex) == 'mana' and 'mana' or 'hp'
     end
     local indicesCache = {}
@@ -1537,7 +1545,7 @@ function botheal.HealCheck(runPriority)
             if healPassStartedCast() then return false end
         end
     end
-    local manaPhases = healManaPhaseOrder()
+    local manaPhases = (not oocRegen) and healManaPhaseOrder() or {}
     if #manaPhases > 0 then
         tickprof.span('pass_mana', function()
             spellutils.RunPhaseFirstSpellCheck('heal', 'doHeal', manaPhases, healGetTargetsForPhase,
