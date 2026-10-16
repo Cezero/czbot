@@ -483,8 +483,18 @@ function spellutils.Init(deps)
 end
 
 local MOUNT_SPELL_INDEX = 1
+local MOUNT_ATTEMPT_WINDOW_MS = 8000
 local _mountWarnSpell = nil
 local _mountWarnAt = 0
+local _mountAttemptUntil = 0
+
+function spellutils.isMountAttemptRecent()
+    return mq.gettime() < _mountAttemptUntil
+end
+
+local function noteMountAttempt()
+    _mountAttemptUntil = mq.gettime() + MOUNT_ATTEMPT_WINDOW_MS
+end
 
 local function warnMount(spell, fmt)
     local now = mq.gettime()
@@ -573,7 +583,11 @@ function spellutils.MountCheck()
     if type(mountcast) ~= 'string' or mountcast == '' or mountcast == 'none' then return end
     local mount, spelltype = mountcast:match("^%s*(.-)%s*|%s*(.-)%s*$")
     if not mount or mount == '' or mount == 'none' then return end
-    if mq.TLO.Me.Mount() or MountCastFailed then return end
+    if mq.TLO.Me.Mount() then
+        _mountAttemptUntil = 0
+        return
+    end
+    if MountCastFailed or botconfig.isMountDisabledInZone(mq.TLO.Zone.ShortName()) then return end
     local meId = mq.TLO.Me.ID()
     if not meId or meId == 0 then return end
 
@@ -600,6 +614,7 @@ function spellutils.MountCheck()
         end
         ensureMountSpellEntry(gem, mount)
     end
+    noteMountAttempt()
     spellutils.CastSpell(MOUNT_SPELL_INDEX, meId, 'mountcast', 'mount', bothooks.getPriority('charState'))
 end
 

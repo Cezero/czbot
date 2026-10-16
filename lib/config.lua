@@ -471,6 +471,11 @@ local function unionMergeZoneBlocks(a, b)
     elseif a.forageDisabled == false or b.forageDisabled == false then
         out.forageDisabled = false
     end
+    if a.mountDisabled or b.mountDisabled then
+        out.mountDisabled = true
+    elseif a.mountDisabled == false or b.mountDisabled == false then
+        out.mountDisabled = false
+    end
     return out
 end
 
@@ -566,6 +571,9 @@ local function mergeZoneBlock(diskZb, memZb)
     end
     if memZb.forageDisabled ~= nil then
         out.forageDisabled = memZb.forageDisabled
+    end
+    if memZb.mountDisabled ~= nil then
+        out.mountDisabled = memZb.mountDisabled
     end
     for k, v in pairs(memZb) do
         if out[k] == nil and v ~= nil then out[k] = v end
@@ -961,6 +969,20 @@ function M.setForageDisabledInZone(zone, disabled)
     M.mutateCommon(function(common)
         local zb = M.ensureZoneBlockIn(common, zone)
         zb.forageDisabled = disabled and true or false
+    end)
+end
+
+--- Zone mount disable (cz_common zones[zone].mountDisabled): when true, do not cast a mount in this zone.
+function M.isMountDisabledInZone(zone)
+    local zb = M.getZoneBlock(zone)
+    return zb and zb.mountDisabled == true
+end
+
+function M.setMountDisabledInZone(zone, disabled)
+    if not zone or zone == '' then return end
+    M.mutateCommon(function(common)
+        local zb = M.ensureZoneBlockIn(common, zone)
+        zb.mountDisabled = disabled and true or false
     end)
 end
 

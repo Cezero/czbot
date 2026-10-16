@@ -296,8 +296,24 @@ function botevents.Event_GMDetected()
     end
 end
 
-function botevents.Event_MountFailed()
+local function recordMountZoneBan()
     if botconfig.config.settings.domount then MountCastFailed = true end
+    local zone = mq.TLO.Zone.ShortName()
+    if not zone or zone == '' or botconfig.isMountDisabledInZone(zone) then return end
+    botconfig.setMountDisabledInZone(zone, true)
+    log.say('Mounts disabled in %s.', zone)
+end
+
+function botevents.Event_MountFailed()
+    recordMountZoneBan()
+end
+
+--- Outdoor-only failure is shared by many spells. Only a mount attempt bans the zone.
+function botevents.Event_MountOutdoors()
+    local rc = state.getRunconfig()
+    local castingMount = rc.CurSpell and rc.CurSpell.sub == 'mount'
+    if not castingMount and not spellutils.isMountAttemptRecent() then return end
+    recordMountZoneBan()
 end
 
 function botevents.Event_HitYou()
@@ -378,6 +394,7 @@ function botevents.BindEvents()
     mq.event('TooSteep', "The ground here is too steep to camp", botevents.Event_TooSteep)
     mq.event('FTELock', "#*#your target is Encounter Locked to someone else#*#", botevents.Event_FTELocked)
     mq.event('MountFailed', '#*#You cannot summon a mount here.#*#', botevents.Event_MountFailed)
+    mq.event('MountOutdoors', '#*#You can only cast this spell in the outdoors.#*#', botevents.Event_MountOutdoors)
     mq.event('MobProb1', "#*#Your target is too far away,#*#", botevents.Event_MobProb)
     mq.event('MobProb2', "#*#You cannot see your target#*#", botevents.Event_MobProb)
     mq.event('MobProb3', "#*#You can\'t hit them from here#*#", botevents.Event_MobProb)
