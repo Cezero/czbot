@@ -32,6 +32,7 @@ local PRIMARY_OPTIONS = {
 local TARGETPHASE_OPTIONS_CURE = {
     { key = 'self',        label = 'Self',     tooltip = 'Cure self.' },
     { key = 'tank',        label = 'Tank',     tooltip = 'Cure tank (main assist).' },
+    { key = 'watched',     label = 'Watched',  tooltip = 'Cure heal_list names via CharInfo. Runs only when every heal_list name is on CharInfo (all-bot raid).' },
     { key = 'groupcure',   label = 'Grp Cure', tooltip = 'Group AE cures.' },
     { key = 'groupmember', label = 'Group',    tooltip = 'Cure group members (class filter below).' },
     { key = 'pc',          label = 'PC',       tooltip = 'Cure other PCs/bots (class filter below).' },

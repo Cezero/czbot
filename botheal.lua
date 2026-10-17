@@ -1268,6 +1268,7 @@ end
 
 --- Interrupt a non-CH cast when a direct HP heal is due for self, tank, offtank, or watched.
 --- Lower phases and non-heals yield. An equal or higher named heal is left running.
+--- A cure (doCure or priorityCure, precast or casting) is never interrupted.
 --- @return boolean true when a cast was interrupted for that heal
 function botheal.preemptForSelfHeal()
     if mq.TLO.Me.Class.ShortName() == 'BRD' then return false end
@@ -1275,6 +1276,7 @@ function botheal.preemptForSelfHeal()
     if not healHookAllowed() then return false end
     local rc = state.getRunconfig()
     if not castInProgress(rc) then return false end
+    if rc.CurSpell and rc.CurSpell.sub == 'cure' then return false end
     local curRank = castPreemptRank(rc)
     local phase
     for rank = 1, #PREEMPT_PHASES do

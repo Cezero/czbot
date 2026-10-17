@@ -9,7 +9,7 @@ This page explains **how** spell targeting works for all spell types (heal, buff
 | **heal** | PCs, pets, corpses, group, XTargets | **tarcnt** = min group members in HP band for group/AE heals | **targetphase** (phase stages) + **validtargets** (within-phase types) + min/max HP % |
 | **buff** | Self, tank, group AE, group members, peers by class, mypet, other pets | **tarcnt** for **groupbuff** (min group members needing buff) | **targetphase** + **validtargets** (classes or all); **inCombat**, **combatOnly** (non-bard), and Bard **inIdle** control when spell can run |
 | **debuff** | Mobs in camp (MA target + adds) | **mintar**/**maxtar** (camp mob-count gate) | **targetphase** only (matar, notmatar, named) + min/max HP % |
-| **cure**  | Self, tank, group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **priority** in targetphase runs an earlier pass when any cure spell has it (no top-level setting). **groupmember**, **groupcure**, **pc** |
+| **cure**  | Self, tank, offtank, heal_list (watched), group AE cure, group members, peers by class | **tarcnt** for **groupcure** (min group members with detrimental) | **targetphase** + **validtargets**; **priority** in targetphase runs an earlier pass when any cure spell has it (no top-level setting). **watched**, **groupmember**, **groupcure**, **pc** |
 
 ---
 
@@ -128,25 +128,27 @@ Bands use **targetphase** and **validtargets**. targetphase tokens: **self**, **
 
 ## Cure targeting
 
-Cure spells use the same phase-first, per-target spell-check as heal and buff. The **phase order** for the main cure pass is: self → tank → groupcure → groupmember → pc. For each phase, the bot gets the list of targets for that phase, then for **each target** checks **all** cure spells that have that phase in their bands (in config order). The first spell that the target needs (matching detrimental, in range) is cast. Bands use **targetphase** and **validtargets**. **groupmember** = in-group only (peers then non-peer group members via Group TLO). **groupcure** = group AE cure. **pc** = all peers.
+Cure spells use the same phase-first, per-target spell-check as heal and buff. The **phase order** for the main cure pass is: self → tank → offtank → watched → groupcure → groupmember → pc. **watched** (`heal_list`) runs only when every listed name is on CharInfo. For each phase, the bot gets the list of targets for that phase, then for **each target** checks **all** cure spells that have that phase in their bands (in config order). The first spell that the target needs (matching detrimental, in range) is cast. Bands use **targetphase** and **validtargets**. **groupmember** = in-group only (peers then non-peer group members via Group TLO). **groupcure** = group AE cure. **pc** = all peers.
 
 ### Priority cure pass
 
-When **at least one cure spell has priority in its band targetphase**, an earlier hook runs (before heals and before the main cure hook). That hook **only considers those spells**. Those spells are evaluated in the same target order (self, tank, groupcure, groupmember, pc). No top-level setting is required. After casting a cure in the main pass, the bot may re-evaluate so multiple cures can fire in sequence.
+When **at least one cure spell has priority in its band targetphase**, an earlier hook runs (before heals and before the main cure hook). That hook **only considers those spells**. Those spells are evaluated in the same target order (self, tank, offtank, watched, groupcure, groupmember, pc). No top-level setting is required. After casting a cure in the main pass, the bot may re-evaluate so multiple cures can fire in sequence.
 
 ### Phase order (main pass)
 
 1. **self** — Yourself (if bands allow).
 2. **tank** — Main Tank (if bands allow; can be non-bot when explicitly named; only out-of-group non-bot we cure). Non-peer detrimentals from Spawn after targeting (BuffsPopulated).
-3. **groupcure** — Group AE cure; spell targets group; cast when at least **tarcnt** group members have a matching detrimental (peers from charinfo, non-peers from Spawn when BuffsPopulated).
-4. **groupmember** — In-group only: peers first, then non-peer group members. Non-peer need from Spawn (BuffsPopulated).
-5. **pc** — All peers by class from validtargets (no group check). Out-of-group peers can be cured in this pass.
+3. **offtank** — Peers with a live OT claim.
+4. **watched** — `heal_list` names via CharInfo. Skipped unless every listed name is on CharInfo (all-bot raid).
+5. **groupcure** — Group AE cure; spell targets group; cast when at least **tarcnt** group members have a matching detrimental (peers from charinfo, non-peers from Spawn when BuffsPopulated).
+6. **groupmember** — In-group only: peers first, then non-peer group members. Non-peer need from Spawn (BuffsPopulated).
+7. **pc** — All peers by class from validtargets (no group check). Out-of-group peers can be cured in this pass.
 
 See [Curing configuration](curing-configuration.md) and [Out-of-group peers](out-of-group-peers.md).
 
 ### Bands
 
-Bands use **targetphase** and **validtargets** (no min/max). **targetphase** tokens: **self**, **tank**, **groupcure**, **groupmember**, **pc**, and **priority**. When any cure spell has **priority** in targetphase, the priority cure pass runs (earlier hook); no separate configuration is needed. **validtargets**: class shorts or **all**. **tarcnt** optional for **groupcure**. **curetype** (table of types, e.g. **{ 'all' }** or **{ 'poison', 'disease' }**) determines when the spell is considered; targeting is by bands and the phase order above.
+Bands use **targetphase** and **validtargets** (no min/max). **targetphase** tokens: **self**, **tank**, **offtank**, **watched**, **groupcure**, **groupmember**, **pc**, and **priority**. When any cure spell has **priority** in targetphase, the priority cure pass runs (earlier hook); no separate configuration is needed. **validtargets**: class shorts or **all**. **tarcnt** optional for **groupcure**. **curetype** (table of types, e.g. **{ 'all' }** or **{ 'poison', 'disease' }**) determines when the spell is considered; targeting is by bands and the phase order above. **watched** needs no validtargets.
 
 ---
 

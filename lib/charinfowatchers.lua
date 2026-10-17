@@ -94,7 +94,7 @@ function M.tankOtWatchNames()
     return out
 end
 
---- MtList ∪ OtList ∪ HealList for HEAL LIST watchers (tank / offtank / watched).
+--- MtList ∪ OtList ∪ HealList for HEAL and CURE LIST watchers (tank / offtank / watched).
 function M.healListWatchNames()
     local seen = {}
     local out = {}
@@ -256,7 +256,7 @@ function M.registerCureWatchers()
     if not charinfo.ClearWatchers then return end
     charinfo.ClearWatchers('CURE')
     local count = botconfig.getSpellCount('cure')
-    local listNames = M.tankOtWatchNames()
+    local listNames = M.healListWatchNames()
     for i = 1, count do
         local entry = botconfig.getSpellEntry('cure', i)
         if entry and entry.enabled ~= false then

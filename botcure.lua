@@ -57,7 +57,8 @@ local function CureEvalForTarget(index, botname, botid, botclass, targethit, spe
 
     if charinfo.GetInfo(botname) then
         if not spellutils.DistanceCheck('cure', index, botid) then return nil, nil end
-        if targethit == 'tank' or targethit == 'offtank' or targethit == 'groupmember' or targethit == 'pc' then
+        if targethit == 'tank' or targethit == 'offtank' or targethit == 'watched'
+            or targethit == 'groupmember' or targethit == 'pc' then
             return botid, targethit
         end
         if type(targethit) == 'string' and cureindex[targethit] then
@@ -110,10 +111,10 @@ local function CureEvalGroupCure(index, entry)
     return mq.TLO.Me.ID(), 'groupcure'
 end
 
-local CURE_PHASE_ORDER = { 'self', 'tank', 'offtank', 'groupcure', 'groupmember', 'pc' }
+local CURE_PHASE_ORDER = { 'self', 'tank', 'offtank', 'watched', 'groupcure', 'groupmember', 'pc' }
 local CURE_PHASE_ORDER_PRIORITY = { 'priority' }
 local CURE_PHASE_ORDER_LOCAL = { 'self' }
-local CURE_PHASE_ORDER_LOCAL_LIST = { 'self', 'tank', 'offtank' }
+local CURE_PHASE_ORDER_LOCAL_LIST = { 'self', 'tank', 'offtank', 'watched' }
 
 --- Tank only — peer targets come from CharInfo watch unions.
 local function cureBuildContext()
@@ -129,7 +130,7 @@ local function curePhaseOrderForPass(requested)
     if requested and requested ~= CURE_PHASE_ORDER then
         return requested
     end
-    local listIds = charinfowatchers.spellIdsForPhases('cure', { 'tank', 'offtank' }, cureBandHasPhase)
+    local listIds = charinfowatchers.spellIdsForPhases('cure', { 'tank', 'offtank', 'watched' }, cureBandHasPhase)
     local otherIds = charinfowatchers.spellIdsForPhases(
         'cure', { 'groupcure', 'groupmember', 'pc' }, cureBandHasPhase)
     local hasList = charinfowatchers.anyWatchNonEmpty('CURE', { 'LIST' }, listIds)
@@ -169,8 +170,9 @@ local function cureGetTargetsForPhase(phase, context, pcAllowed)
         end
         return out
     end
+    if phase == 'watched' and not charinfowatchers.healListFullyOnCharInfo() then return {} end
     if phase == 'self' then return castutils.getTargetsSelf() end
-    if phase == 'tank' or phase == 'offtank' or phase == 'groupmember' or phase == 'pc' then
+    if phase == 'tank' or phase == 'offtank' or phase == 'watched' or phase == 'groupmember' or phase == 'pc' then
         if phase == 'pc' and not pcAllowed then return {} end
         local count = botconfig.getSpellCount('cure')
         local out = charinfowatchers.unionTargetsForPhase('cure', phase, count, cureBandHasPhase)

@@ -5,7 +5,7 @@
 
 ## Logic
 
-Runs the phase-first spell check for the **cure** section. Phase order: self, tank, groupcure, groupmember, pc.
+Runs the phase-first spell check for the **cure** section. Phase order: self, tank, offtank, watched, groupcure, groupmember, pc. **watched** runs only when every `heal_list` name is on CharInfo.
 
 ```mermaid
 flowchart TB
@@ -13,10 +13,10 @@ flowchart TB
     Guards -->|Yes| End[return]
     Guards -->|No| CureCheck[CureCheck runPriority CURE_PHASE_ORDER doCure]
     CureCheck --> RunPhase[RunPhaseFirstSpellCheck cure CURE_PHASE_ORDER]
-    RunPhase --> PhaseLoop[phase order: self tank groupcure groupmember pc]
+    RunPhase --> PhaseLoop[phase order: self tank offtank watched groupcure groupmember pc]
 ```
 
-CureEvalForTarget: self uses Me detrimentals; peers use CharInfo CURE watchlists + DistanceCheck only; non-peer group members (minute-cached `nonPeerGroupMembers` flag) use Spawn detrimentals. Groupcure uses `GetWatchCount` (+ non-peer needs) vs tarcnt. Spells have curetype (table of strings) and bands (self, tank, groupcure, groupmember, class). Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md). priorityCure uses the same pipeline with phase order { 'priority' } only.
+CureEvalForTarget: self uses Me detrimentals; peers use CharInfo CURE watchlists + DistanceCheck only; non-peer group members (minute-cached `nonPeerGroupMembers` flag) use Spawn detrimentals. **watched** uses the same heal_list LIST watches as heals and is skipped unless every heal_list name is on CharInfo. Groupcure uses `GetWatchCount` (+ non-peer needs) vs tarcnt. Spells have curetype (table of strings) and bands (self, tank, offtank, watched, groupcure, groupmember, class). Spell completion and interrupt (including MQ2Cast) are described in [Spell casting flow](spell-casting-flow.md). priorityCure uses the same pipeline with phase order { 'priority' } only.
 
 ## See also
 
