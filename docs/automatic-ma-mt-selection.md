@@ -57,14 +57,14 @@ When the game reports a Main Assist or Main Tank name:
 2. Candidate must be **alive** and in the **same zone** as this bot.
 3. **No distance check** for primary — an in-zone primary far away still wins over the list.
 
-If the primary is dead, feigned, hovering, or in another zone, resolution walks the fallback list immediately (no “stuck on corpse name” retention).
+If the primary is dead, hovering, or in another zone, resolution walks the fallback list immediately (no “stuck on corpse name” retention). **Main Assist** also walks when that primary is feigned. **Main Tank** does not: Feign Death keeps the current holder. A real death, hover, 0 HP, or leaving the zone still moves MT forward.
 
 ### Lists (`ma_list` / `mt_list`)
 
 1. Walk the list **in order** — first eligible name wins.
-2. Candidate must be **alive** and in the **same zone**.
+2. Candidate must be **alive** and in the **same zone**. A feigned name fails `ma_list` and passes `mt_list` (Feign Death is not a tank death).
 3. **`ma_list` (group only):** candidate must be within **`maAnchorLeash`**. In **raid**, `ma_list` is in-zone only (no leash), same as **`mt_list`**.
-4. **`mt_list`:** in-zone only; no leash.
+4. **`mt_list`:** in-zone only; no leash. Feign Death does not advance the cursor or the death lock. Peers often lose the PC spawn while someone is feigned; charinfo `FEIGN` in the same zone with HP above 0 still counts as that tank.
 
 Out-of-group backups on the lists are used when the EQ primary is unavailable and they pass availability (including leash for `ma_list` in group).
 
@@ -80,7 +80,7 @@ When `AssistName` or `TankName` is `"automatic"`, CZBot caches the resolved name
 
 **Persistent cache validity:** raid vs group path, EQ primary snapshot, list generation, `maAnchorLeash` generation, and whether the cached source (`primary`, `list`, or `manual`) still passes availability.
 
-**Throttled refresh:** Every ~2s, automatic MA is re-resolved so a higher-priority assist can reclaim after a rez. Automatic MT does not move backward during a fight. The cursor runs group Main Tank (index 0, not used in raid) and then `mt_list`. It stays on the current holder while that character is available, then takes the next available name. It wraps to the start only when nobody from the current index through the end is available, and it resets to the start after combat has been clear for a few seconds. Dead time and the tick a tank stands up from a rez do not count as out of combat, so a battle rez cannot take the cursor back. Other bots keep that same forward cursor while any group or raid member is still fighting. A tank who releases to their bind point keeps that cursor: the bot does not re-pick from whoever is alive in the bind zone, and it does not treat that zone as out of combat. An alive zone change with no death lock clears the cursor, as does editing `mt_list`.
+**Throttled refresh:** Every ~2s, automatic MA is re-resolved so a higher-priority assist can reclaim after a rez. Automatic MT does not move backward during a fight. The cursor runs group Main Tank (index 0, not used in raid) and then `mt_list`. It stays on the current holder while that character is available, including while they are feigned, then takes the next available name on a real death. It wraps to the start only when nobody from the current index through the end is available, and it resets to the start after combat has been clear for a few seconds. Dead time and the tick a tank stands up from a rez do not count as out of combat, so a battle rez cannot take the cursor back. Other bots keep that same forward cursor while any group or raid member is still fighting. A tank who releases to their bind point keeps that cursor: the bot does not re-pick from whoever is alive in the bind zone, and it does not treat that zone as out of combat. An alive zone change with no death lock clears the cursor, as does editing `mt_list`.
 
 **Invalidation events:** zone change, `/cz tank set`, `/cz assist set`, `ma_list`/`mt_list` edits, `/cz reloadcommon`, `maAnchorLeash` change. Use `/cz tank status` for a live diagnostic (cache cleared before printing).
 
@@ -92,8 +92,8 @@ CZBot looks up each candidate via **MQCharInfo** (bot peers) or **Spawn TLO** (n
 
 | Check | Primary (game role) | `ma_list` fallback | `mt_list` fallback |
 |-------|---------------------|--------------------|--------------------|
-| Alive | Yes | Yes | Yes |
-| Same zone | Yes | Yes | Yes |
+| Alive | Yes | Yes | Yes, and Feign Death still counts |
+| Same zone | Yes | Yes | Yes (charinfo zone match is enough while feigned) |
 | Within `maAnchorLeash` | No | Yes (group only) | No |
 
 See prior sections in this doc for charinfo vs spawn tiering (same as before).

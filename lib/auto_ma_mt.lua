@@ -68,6 +68,21 @@ function auto_ma_mt.isCandidateAvailable(name, requireLeash)
     return true
 end
 
+--- MT stays on a feigned holder. Real death, hover, 0 HP, and leaving the zone still drop them.
+--- Self uses meAlive(), which already counts Feign Death as up. Peers often have no PC spawn
+--- while feigned; charinfo zone match plus FEIGN is enough.
+function auto_ma_mt.isMtCandidateAvailable(name)
+    if not name or name == '' then return false end
+    if namesEqual(name, myName()) then
+        return meAlive()
+    end
+    local ctx = charinfoutils.getLeaderContext(name)
+    if not ctx then return false end
+    if ctx.alive and ctx.sameZone then return true end
+    if not ctx.feigning then return false end
+    return ctx.zoneNameMatch == true or ctx.sameZone == true
+end
+
 function auto_ma_mt.firstAvailableFromList(list, requireLeash)
     if type(list) ~= 'table' then return nil end
     for _, name in ipairs(list) do
@@ -77,7 +92,11 @@ function auto_ma_mt.firstAvailableFromList(list, requireLeash)
 end
 
 function auto_ma_mt.firstAvailableFromMtList(list)
-    return auto_ma_mt.firstAvailableFromList(list, false)
+    if type(list) ~= 'table' then return nil end
+    for _, name in ipairs(list) do
+        if auto_ma_mt.isMtCandidateAvailable(name) then return name end
+    end
+    return nil
 end
 
 function auto_ma_mt.firstAvailableFromMaList(list)
@@ -192,7 +211,7 @@ end
 local function mtPrimaryIfAvailable()
     if inRaid() then return nil end
     local primary = auto_ma_mt.mtPrimaryTloName()
-    if primary and auto_ma_mt.isCandidateAvailable(primary, false) then
+    if primary and auto_ma_mt.isMtCandidateAvailable(primary) then
         return primary
     end
     return nil
@@ -215,7 +234,7 @@ function auto_ma_mt.mtCandidateFromIndex(minIndex)
         local primary = mtPrimaryIfAvailable()
         if primary then return primary, 'primary', 0, false end
         for i, name in ipairs(list) do
-            if auto_ma_mt.isCandidateAvailable(name, false) then
+            if auto_ma_mt.isMtCandidateAvailable(name) then
                 return name, 'list', i, false
             end
         end
@@ -224,7 +243,7 @@ function auto_ma_mt.mtCandidateFromIndex(minIndex)
 
     for i = minIndex, #list do
         local name = list[i]
-        if auto_ma_mt.isCandidateAvailable(name, false) then
+        if auto_ma_mt.isMtCandidateAvailable(name) then
             return name, 'list', i, false
         end
     end
@@ -235,7 +254,7 @@ function auto_ma_mt.mtCandidateFromIndex(minIndex)
     if last > #list then last = #list end
     for i = 1, last do
         local name = list[i]
-        if auto_ma_mt.isCandidateAvailable(name, false) then
+        if auto_ma_mt.isMtCandidateAvailable(name) then
             return name, 'list', i, true
         end
     end
@@ -264,10 +283,17 @@ function auto_ma_mt.getManualMaOverrideName()
     return o.name
 end
 
+--- Manual MT override stays through Feign Death. Expiry and a real death still clear it.
+function auto_ma_mt.isManualMtHolderAvailable(override)
+    if not override or not override.name or override.name == '' then return false end
+    if override.expiresAt and mq.gettime() > override.expiresAt then return false end
+    return auto_ma_mt.isMtCandidateAvailable(override.name)
+end
+
 function auto_ma_mt.getManualMtOverrideName()
     local o = state.getRunconfig().ActorMtOverride
     if not o or o.reason ~= 'manual' then return nil end
-    if not auto_ma_mt.isActorHolderAvailable(o, false) then return nil end
+    if not auto_ma_mt.isManualMtHolderAvailable(o) then return nil end
     return o.name
 end
 
@@ -283,7 +309,7 @@ function auto_ma_mt.sweepStaleManualRoleOverrides()
     if rc.ActorMtOverride and rc.ActorMtOverride.reason ~= 'manual' then
         rc.ActorMtOverride = nil
     elseif rc.ActorMtOverride and rc.ActorMtOverride.reason == 'manual'
-        and not auto_ma_mt.isActorHolderAvailable(rc.ActorMtOverride, false) then
+        and not auto_ma_mt.isManualMtHolderAvailable(rc.ActorMtOverride) then
         rc.ActorMtOverride = nil
     end
 end

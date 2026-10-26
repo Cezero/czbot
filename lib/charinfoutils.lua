@@ -8,6 +8,7 @@ local utils = require('lib.utils')
 local charinfoutils = {}
 
 local UNAVAILABLE_STATE_FLAGS = { 'DEAD', 'FEIGN', 'HOVER' }
+local DEAD_OR_HOVER_FLAGS = { 'DEAD', 'HOVER' }
 
 --- True when peer.State contains flag (e.g. 'ATTACK').
 function charinfoutils.peerHasState(peer, flag)
@@ -49,6 +50,14 @@ local function aliveFromCharinfoPeer(peer)
     return pct == nil or pct > 0
 end
 
+--- Feign is not a death. HP nil is an unread peer value, not 0 HP.
+local function peerIsFeigning(peer)
+    if not charinfoutils.peerHasState(peer, 'FEIGN') then return false end
+    if charinfoutils.peerHasAnyState(peer, DEAD_OR_HOVER_FLAGS) then return false end
+    local pct = peer.PctHPs
+    return pct == nil or pct > 0
+end
+
 local function baseContextFromCharinfo(name, peer)
     local zone = peer.Zone
     local targetId = peer.Target and peer.Target.ID or nil
@@ -63,7 +72,9 @@ local function baseContextFromCharinfo(name, peer)
         targetId = targetId,
         inAttack = charinfoutils.peerHasState(peer, 'ATTACK'),
         alive = aliveFromCharinfoPeer(peer),
+        feigning = peerIsFeigning(peer),
         sameZone = false,
+        zoneNameMatch = false,
         peerZone = peerZoneShortName(zone),
         peer = peer,
     }
@@ -95,6 +106,9 @@ local function leaderContextFromSpawn(name)
     local targetId = spawn.Target and spawn.Target.ID() or nil
     if targetId and targetId <= 0 then targetId = nil end
     local alive = not spawn.Dead() and not spawn.Hovering()
+    local stateName = spawn.State and spawn.State() or nil
+    local pct = spawn.PctHPs and spawn.PctHPs() or nil
+    local feigning = stateName == 'FEIGN' and not spawn.Hovering() and (pct == nil or pct > 0)
     return {
         source = 'spawn',
         name = name,
@@ -105,7 +119,9 @@ local function leaderContextFromSpawn(name)
         targetId = targetId,
         inAttack = spawnInAttack(spawn),
         alive = alive,
+        feigning = feigning,
         sameZone = true,
+        zoneNameMatch = true,
         peerZone = nil,
         peer = nil,
     }
@@ -119,6 +135,7 @@ local function mergeCharinfoWithSpawn(charinfoCtx, spawnCtx)
     if not charinfoCtx.y then charinfoCtx.y = spawnCtx.y end
     if not charinfoCtx.z then charinfoCtx.z = spawnCtx.z end
     charinfoCtx.sameZone = true
+    if spawnCtx.feigning then charinfoCtx.feigning = true end
     return charinfoCtx
 end
 
@@ -130,13 +147,17 @@ local function leaderContextFromCharinfoPeer(name, peer)
     if zoneMatch == false then
         local ctx = baseContextFromCharinfo(name, peer)
         ctx.sameZone = false
+        ctx.zoneNameMatch = false
         return ctx
     end
 
     -- Zone shortname alone is not enough: during zoning, charinfo can publish
     -- new-zone X/Y/Z while shortname still matches the bot's zone. Require a
     -- live PC spawn before sameZone; keep charinfo coords via merge.
+    -- zoneNameMatch stays true without that spawn so a feigned tank (no PC
+    -- spawn, charinfo still in this zone) can keep Main Tank.
     local ctx = baseContextFromCharinfo(name, peer)
+    ctx.zoneNameMatch = zoneMatch == true
     local spawnCtx = leaderContextFromSpawn(name)
     if spawnCtx then
         return mergeCharinfoWithSpawn(ctx, spawnCtx)
@@ -171,7 +192,9 @@ local function leaderContextForSelf(name)
         targetId = targetId,
         inAttack = inAttack,
         alive = alive,
+        feigning = mq.TLO.Me.State() == 'FEIGN',
         sameZone = true,
+        zoneNameMatch = true,
         peerZone = mq.TLO.Zone.ShortName(),
         peer = nil,
     }

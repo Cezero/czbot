@@ -153,6 +153,7 @@ local function auditCandidate(name, requireLeash)
         ok = ok,
         source = ctx.source,
         alive = ctx.alive,
+        feigning = ctx.feigning == true,
         sameZone = ctx.sameZone,
         distance = ctx.distance,
         peerZone = ctx.peerZone,
@@ -181,7 +182,7 @@ local function summarizeMtPath()
     if manual then return 'manual override: ' .. manual end
     if not inRaid() then
         local primary = getMtPrimaryTlo()
-        if primary and isCandidateAvailable(primary, false) then
+        if primary and auto_ma_mt.isMtCandidateAvailable(primary) then
             return 'group MainTank: ' .. primary
         end
         if primary then
@@ -199,7 +200,7 @@ local function summarizeMtPath()
     return 'no MT resolved'
 end
 
-local function printListAudit(label, list, listRequireLeash)
+local function printListAudit(label, list, listRequireLeash, useMtRules)
     local count = type(list) == 'table' and #list or 0
     printf('  %s (%d entries):', label, count)
     if count == 0 then
@@ -212,22 +213,28 @@ local function printListAudit(label, list, listRequireLeash)
         local listRule = auditCandidate(name, useLeash)
         local distStr = primary.distance and string.format('%.1f', primary.distance) or 'nil'
         local peerZoneStr = primary.peerZone and tostring(primary.peerZone) or 'nil'
-        printf('    [%d] %s  source=%s  alive=%s  sameZone=%s  dist=%s  peerZone=%s',
+        local mtOk = useMtRules and auto_ma_mt.isMtCandidateAvailable(name)
+        printf('    [%d] %s  source=%s  alive=%s  feign=%s  sameZone=%s  dist=%s  peerZone=%s',
             i, tostring(name),
             tostring(primary.source or 'nil'),
             primary.alive and 'yes' or 'no',
+            primary.feigning and 'yes' or 'no',
             primary.sameZone and 'yes' or 'no',
             distStr,
             peerZoneStr)
-        printf('        primary (no leash): %s',
-            primary.ok and 'PASS' or 'FAIL')
-        if useLeash then
-            printf('        list (leash<=%s): %s',
-                tostring(listRule.leash),
-                listRule.ok and 'PASS' or 'FAIL')
+        if useMtRules then
+            printf('        mt (feign stays): %s', mtOk and 'PASS' or 'FAIL')
         else
-            printf('        list (in-zone only): %s',
-                listRule.ok and 'PASS' or 'FAIL')
+            printf('        primary (no leash): %s',
+                primary.ok and 'PASS' or 'FAIL')
+            if useLeash then
+                printf('        list (leash<=%s): %s',
+                    tostring(listRule.leash),
+                    listRule.ok and 'PASS' or 'FAIL')
+            else
+                printf('        list (in-zone only): %s',
+                    listRule.ok and 'PASS' or 'FAIL')
+            end
         end
     end
 end
@@ -505,7 +512,7 @@ local function resolveAutomaticTankFull()
     elseif name and index ~= nil and minIndex > 0 and index >= minIndex then
         local prev = _mtCache.name or _mtHeldName
         local prevIdx = mtNameIndex(prev)
-        if prev and prevIdx ~= nil and not isCandidateAvailable(prev, false) and prevIdx < index then
+        if prev and prevIdx ~= nil and not auto_ma_mt.isMtCandidateAvailable(prev) and prevIdx < index then
             blockMtThrough(prevIdx)
         end
     end
@@ -560,13 +567,13 @@ local function isCachedMtValid(cache)
 
     if cache.source == 'manual' then
         local o = state.getRunconfig().ActorMtOverride
-        return o and o.reason == 'manual' and auto_ma_mt.isActorHolderAvailable(o, false)
+        return o and o.reason == 'manual' and auto_ma_mt.isManualMtHolderAvailable(o)
     end
     if cache.source == 'primary' then
-        return isCandidateAvailable(cache.name, false)
+        return auto_ma_mt.isMtCandidateAvailable(cache.name)
     end
     if cache.source == 'list' then
-        return isCandidateAvailable(cache.name, false)
+        return auto_ma_mt.isMtCandidateAvailable(cache.name)
     end
     return false
 end
@@ -854,8 +861,8 @@ function tankrole.debugPrint()
         tankrole.AmIMainAssist() and 'yes' or 'no',
         tankrole.AmIMainTank() and 'yes' or 'no')
 
-    printListAudit('MaList (zone-local resolution walk)', rc.MaList, not raid)
-    printListAudit('MtList (zone-local resolution walk)', rc.MtList, false)
+    printListAudit('MaList (zone-local resolution walk)', rc.MaList, not raid, false)
+    printListAudit('MtList (zone-local resolution walk)', rc.MtList, false, true)
 
     local topMa, topMaSrc, topMaIdx = auto_ma_mt.topMaCandidateInZone()
     local topMt, topMtSrc, topMtIdx = auto_ma_mt.topMtCandidateInZone()
