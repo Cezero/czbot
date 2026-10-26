@@ -317,6 +317,7 @@ function botdebuff.BardMatarDebuffInCombatTwist(spellIndex, maTargetId)
     if botdebuff.BardMatarDebuffUsesTwistOnce(spellIndex) then return false end
     local entry = bardMatarDebuffEntry(spellIndex)
     if not entry then return false end
+    if spellutils.IsConcussionSpell(entry) then return false end
     if entry.stopWhen and #entry.stopWhen > 0 and maTargetId then
         if spellutils.SpawnHasStopWhenCategory(maTargetId, entry.stopWhen) then
             return false
@@ -440,7 +441,25 @@ local function DebuffEval(index)
     return nil, nil
 end
 
-local DEBUFF_PHASE_ORDER = { 'charm', 'burn', 'notmatar', 'matar', 'named' }
+-- aggro sits after charm: SPA 92 with aggroMin > 0 dumps hate on the assist target before other debuffs.
+local DEBUFF_PHASE_ORDER = { 'charm', 'aggro', 'burn', 'notmatar', 'matar', 'named' }
+
+--- First usable SPA 92 debuff with aggroMin > 0 on an assist-target phase.
+--- A burn-flagged entry only qualifies while a burn window is active (same as the burn phase).
+local function aggroConcussionIndex()
+    local count = botconfig.getSpellCount('debuff')
+    for i = 1, count do
+        local entry = botconfig.getSpellEntry('debuff', i)
+        local db = DebuffBands[i]
+        if entry and entry.enabled ~= false and spellutils.IsConcussionSpell(entry)
+            and db and (tonumber(db.aggroMin) or 0) > 0
+            and (db.matar or db.named or db.burn)
+            and not (db.burn and not state.IsBurnActive()) then
+            return i, entry, db
+        end
+    end
+    return nil
+end
 
 --- Cache notmatar SpawnNeedsDebuff results for this DebuffCheck pass (spellIndex -> spawnId -> bool).
 local function notmatarNeedCached(context, spellIndex, sctx, spawn)
@@ -497,6 +516,24 @@ end
 local function debuffGetTargetsForPhase(phase, context)
     local out = {}
     local mobList = context.mobList or state.getRunconfig().MobList or {}
+    if phase == 'aggro' then
+        local idx, entry, db = aggroConcussionIndex()
+        if not idx then return out end
+        local sctx = spellCtxFor(context, idx)
+        if not sctx then return out end
+        local targetId = getMatarChosenTargetId(entry, sctx)
+        if not targetId or targetId <= 0 then return out end
+        if not spawnutils.isAliveEngageSpawn(mq.TLO.Spawn(targetId)) then return out end
+        if not db.matar and db.named then
+            local sp = mq.TLO.Spawn(targetId)
+            if not (sp and sp.Named()) then return out end
+        end
+        local pct = aggro.getPctAggroOn(targetId)
+        if not aggro.readingInBand(pct, db.aggroMin, db.aggroMax) then return out end
+        local hit = (not db.matar and db.named) and 'named' or 'matar'
+        out[#out + 1] = { id = targetId, targethit = hit }
+        return out
+    end
     if phase == 'charm' then
         if context.charmRecasts then
             for _, v in pairs(context.charmRecasts) do
@@ -686,7 +723,22 @@ local function debuffTargetNeedsSpell(spellIndex, targetId, targethit, context)
     if not campCountOk(state.getMobCount(), db and db.mintar, db and db.maxtar) then
         return nil, nil
     end
-    if not aggro.inBand(db and db.aggroMin, db and db.aggroMax) then
+    if spellutils.IsConcussionSpell(entry) then
+        local untilMs = spellstates.GetDebuffDelay(spellIndex)
+        if untilMs and untilMs > mq.gettime() then return nil, nil end
+        -- aggroMin > 0: gate on this mob's aggro when we can read it. A missing reading
+        -- falls through to the current-target gate (disabled below level 20).
+        if db and (tonumber(db.aggroMin) or 0) > 0 then
+            local pct = aggro.getPctAggroOn(targetId)
+            if pct ~= nil then
+                if not aggro.readingInBand(pct, db.aggroMin, db.aggroMax) then return nil, nil end
+            elseif not aggro.inBand(db.aggroMin, db.aggroMax) then
+                return nil, nil
+            end
+        elseif not aggro.inBand(db and db.aggroMin, db and db.aggroMax) then
+            return nil, nil
+        end
+    elseif not aggro.inBand(db and db.aggroMin, db and db.aggroMax) then
         return nil, nil
     end
     local rc = state.getRunconfig()
@@ -1200,6 +1252,9 @@ local function DebuffCheckBardTwistOnceCast(spellIndex, EvalID, targethit, sub, 
         return botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, nil)
     end
     if targethit == 'matar' then
+        local entry = botconfig.getSpellEntry('debuff', spellIndex)
+        -- Hate dump is a real cast, not a gem left in the combat twist.
+        if entry and spellutils.IsConcussionSpell(entry) then return false end
         if botdebuff.BardMatarDebuffUsesTwistOnce(spellIndex) then
             return botdebuff.CastBardDebuffTwistOnce(spellIndex, EvalID, targethit, runPriority, nil)
         end
@@ -1227,7 +1282,9 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
         spellutils.noteDebuffResist()
         local newCount = spellstates.GetRecastCounter(EvalID, spellIndex)
         rc.CurSpell = {}
-        if (adEntry.recast or 0) > 0 and newCount >= adEntry.recast then
+        -- Concussion recast is "every N debuffs", not a resist limit, and its resists must not
+        -- auto-disable a nuke flavor.
+        if not spellutils.IsConcussionSpell(adEntry) and (adEntry.recast or 0) > 0 and newCount >= adEntry.recast then
             log.say('\ar%s\ax has resisted spell \ar%s\ax debuff[%s] \am%s\ax times, disabling spell for this spawn',
                 mq.TLO.Spawn(EvalID).CleanName(), adEntry.spell, spellIndex, adEntry.recast)
             local recastduration = 600000 + mq.gettime()
@@ -1262,6 +1319,11 @@ local function DebuffCheckAfterCast(spellIndex, EvalID, targethit, mobcountstart
 end
 
 local function debuffGetSpellIndices(phase, count, ctx, target)
+    if phase == 'aggro' then
+        local idx = aggroConcussionIndex()
+        if idx then return { idx } end
+        return {}
+    end
     if phase == 'charm' then
         local out = {}
         for i = 1, count do
@@ -1326,15 +1388,21 @@ local function debuffGetSpellIndices(phase, count, ctx, target)
     local fullBase = nonNuke
     if (phase == 'matar' or phase == 'named' or phase == 'burn') and target and target.id then
         local concussionIndex, concussionRecast = nil, nil
+        local aggroMode = false
         for _, i in ipairs(fullBase) do
             local entry = botconfig.getSpellEntry('debuff', i)
             if entry and spellutils.IsConcussionSpell(entry) and (entry.recast or 0) > 0 then
                 concussionIndex = i
                 concussionRecast = entry.recast
+                local db = DebuffBands[i]
+                -- A live reading means aggro priority owns this spell; do not also lock the pass to it.
+                if db and (tonumber(db.aggroMin) or 0) > 0 and aggro.getPctAggroOn(target.id) ~= nil then
+                    aggroMode = true
+                end
                 break
             end
         end
-        if concussionIndex and concussionRecast then
+        if concussionIndex and concussionRecast and not aggroMode then
             local c = spellstates.GetConcussionCounter(target.id)
             if c >= concussionRecast then
                 return { concussionIndex }
@@ -1462,10 +1530,12 @@ function botdebuff.DebuffCheck(runPriority)
         end,
     }
     local function getSpellIndices(phase, target)
-        local cached = indicesByPhase[phase]
+        -- Key includes the target. The every-N concussion list depends on it; the probe call passes nil.
+        local key = phase .. '\0' .. tostring(target and target.id or 0)
+        local cached = indicesByPhase[key]
         if cached then return cached end
         cached = debuffGetSpellIndices(phase, count, ctx, target)
-        indicesByPhase[phase] = cached
+        indicesByPhase[key] = cached
         return cached
     end
     local function getTargets(phase, context)

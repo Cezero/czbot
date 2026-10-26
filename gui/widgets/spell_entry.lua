@@ -650,7 +650,7 @@ function M.draw(spell, opts)
                 if showBandAggroMinMax then
                     ImGui.Text('Aggro %:')
                     if ImGui.IsItemHovered() then ImGui.SetTooltip(
-                        'Your Me.PctAggro range for this band (level 20+; below 20 the gate is ignored).') end
+                        'Your aggro % range for this band (level 20+; below 20 the gate is ignored). On an Aggro red. spell, min above 0 casts it on the assist target before other debuffs while your aggro on that mob is in range.') end
                     ImGui.SameLine()
                     ImGui.Text('Min')
                     ImGui.SameLine()

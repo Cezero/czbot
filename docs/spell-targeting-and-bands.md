@@ -97,7 +97,7 @@ A spell can have **multiple** valid target types (e.g. both **matar** and **notm
 
 ### HP band
 
-Each band’s **min** / **max** define mob HP %. For debuff, all bands for that spell are merged into one effective HP range per spell (see `applyBands` in the code). The mob’s HP must be in that range to be considered. **aggroMin** / **aggroMax** on debuff bands merge the same way and gate on **Me.PctAggro** (level 20+; default 0–100).
+Each band’s **min** / **max** define mob HP %. For debuff, all bands for that spell are merged into one effective HP range per spell (see `applyBands` in the code). The mob’s HP must be in that range to be considered. **aggroMin** / **aggroMax** on debuff bands merge the same way and gate on **Me.PctAggro** (level 20+; default 0–100). On an aggro-reduction spell (SPA 92), **aggroMin** above 0 instead reads aggro on the assist target and casts that spell before other debuffs while the reading is in band.
 
 ---
 

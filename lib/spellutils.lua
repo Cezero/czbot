@@ -770,7 +770,10 @@ function spellutils.noteDebuffResist()
         return
     end
     local newCount = spellstates.IncrementRecastCounter(spawnId, index)
-    if entry.recastActive or entry.gem == 'ability' or spellutils.IsNukeSpell(entry) then return end
+    if entry.recastActive or entry.gem == 'ability' or spellutils.IsNukeSpell(entry)
+        or spellutils.IsConcussionSpell(entry) then
+        return
+    end
     if newCount >= RESIST_IMMUNE_THRESHOLD then
         immune.processList(spawnId, { spellName = ctx.spellName, reason = 'resists' })
     end
@@ -2209,6 +2212,13 @@ function spellutils.IsNukeSpell(entry)
     local key = tostring(entry.gem or '') .. '\0' .. tostring(entry.spell)
     local cached = _isNukeSpellCache[key]
     if cached ~= nil then return cached end
+    -- Don't cache before spell data loads; duration 0 would stick a concussion as a nuke.
+    if not spellutils.GetSpellEntity(entry) then return false end
+    -- SPA 92 hate drop is instant. It is not a nuke for rotation, flavor, or resist auto-disable.
+    if spellutils.IsConcussionSpell(entry) then
+        _isNukeSpellCache[key] = false
+        return false
+    end
     local isNuke = spellutils.GetSpellDurationSec(entry) == 0
     _isNukeSpellCache[key] = isNuke
     return isNuke

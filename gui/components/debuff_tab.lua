@@ -225,7 +225,9 @@ function M.draw()
         end
 
         local detectedTypeLabel
-        if spellutils.IsNukeSpell(entry) then
+        if spellutils.IsConcussionSpell(entry) then
+            detectedTypeLabel = 'Aggro red.'
+        elseif spellutils.IsNukeSpell(entry) then
             local flavor = spellutils.GetNukeFlavor(entry)
             detectedTypeLabel = flavor and (flavor:gsub('^%l', string.upper) .. ' nuke') or 'Nuke'
         elseif spellutils.IsMezSpell(entry) then
