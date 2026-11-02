@@ -716,14 +716,71 @@ end
 local IMMUNE_CONFIG_SECTIONS = { 'debuff' }
 local IMMUNE_GEM_SECTIONS = { 'debuff' }
 local LAST_CAST_SNAPSHOT_TTL_MS = 20000
+local DEBUFF_HISTORY_TTL_MS = 8000
+local DEBUFF_HISTORY_MAX = 4
 local RESIST_NOTE_DEDUP_MS = 2500
 local RESIST_IMMUNE_THRESHOLD = 3
 local lastCastSnapshot = nil
 local lastResistNote = nil
+--- Listable debuff casts only. Buffs, heals, and cures must not replace this.
+local debuffHistory = {}
 
 local function spellNameFromEntry(entry)
     if not entry or not entry.spell or entry.spell == '' then return nil end
     return spellutils.GetResolvedSpellName(entry) or entry.spell
+end
+
+local function pruneDebuffHistory()
+    local now = mq.gettime()
+    local kept = {}
+    for i = 1, #debuffHistory do
+        local h = debuffHistory[i]
+        if h and h.at and now - h.at <= DEBUFF_HISTORY_TTL_MS then
+            kept[#kept + 1] = h
+        end
+    end
+    debuffHistory = kept
+end
+
+local function pushDebuffHistory(rec)
+    if not rec or not rec.index or not rec.target or rec.target <= 0 then return end
+    if not rec.spellName or rec.spellName == '' then return end
+    pruneDebuffHistory()
+    local top = debuffHistory[#debuffHistory]
+    if top and top.index == rec.index and top.sub == rec.sub then
+        top.spellName = rec.spellName
+        top.spellId = rec.spellId
+        top.target = rec.target
+        top.at = rec.at
+        top.fromTwistOnceGem = rec.fromTwistOnceGem or false
+        return
+    end
+    debuffHistory[#debuffHistory + 1] = {
+        spellName = rec.spellName,
+        spellId = rec.spellId,
+        sub = rec.sub,
+        index = rec.index,
+        target = rec.target,
+        at = rec.at,
+        fromTwistOnceGem = rec.fromTwistOnceGem or false,
+    }
+    while #debuffHistory > DEBUFF_HISTORY_MAX do
+        table.remove(debuffHistory, 1)
+    end
+end
+
+--- Newest listable debuff name that ImmuneCheck would use. Skips recastActive.
+function spellutils.latestDebuffHistorySpellName()
+    pruneDebuffHistory()
+    for i = #debuffHistory, 1, -1 do
+        local h = debuffHistory[i]
+        local entry = h and botconfig.getSpellEntry('debuff', h.index)
+        if entry and spellutils.isImmuneListableDebuff('debuff', entry) and not entry.recastActive
+            and h.spellName and h.spellName ~= '' then
+            return h.spellName
+        end
+    end
+    return nil
 end
 
 function spellutils.rememberLastCast(sub, index, targetId, extra)
@@ -738,6 +795,9 @@ function spellutils.rememberLastCast(sub, index, targetId, extra)
         at = mq.gettime(),
         fromTwistOnceGem = extra and extra.fromTwistOnceGem or false,
     }
+    if spellutils.isImmuneListableDebuff(sub, entry) then
+        pushDebuffHistory(lastCastSnapshot)
+    end
 end
 
 function spellutils.getLastCastSnapshot()
@@ -812,36 +872,139 @@ function spellutils.findConfigEntryByGem(gem)
     return nil, nil, nil
 end
 
+--- Effect named by an immune chat line. Nil means "use the most recent listable debuff".
+local function effectKindFromLine(line)
+    if not line or line == '' then return nil end
+    local l = line:lower()
+    if l:find('attack speed', 1, true) then return 'slow' end
+    if l:find('run speed', 1, true) then return 'snare' end
+    if l:find('snare', 1, true) then return 'snare' end
+    if l:find('root', 1, true) then return 'root' end
+    if l:find('mesmer', 1, true) or l:find('enthrall', 1, true) then return 'mez' end
+    if l:find('charm', 1, true) then return 'charm' end
+    if l:find('fear', 1, true) then return 'fear' end
+    return nil
+end
+
+local function entryMatchesEffect(entry, kind)
+    if not kind then return true end
+    if not entry then return false end
+    if kind == 'slow' then return spellutils.IsSlowSpell(entry) end
+    if kind == 'snare' then return spellutils.IsSnareSpell(entry) end
+    if kind == 'root' then return spellutils.IsRootSpell(entry) end
+    if kind == 'fear' then return spellutils.IsFearSpell(entry) end
+    if kind == 'mez' then return spellutils.IsMezSpell(entry) end
+    if kind == 'charm' then return spellutils.IsCharmSpell(entry) end
+    return true
+end
+
+--- Immune lines skip recastActive (threat snare still casts). Resist attribution (no line) may use it.
+local function debuffCandidateOk(entry, forImmuneLine, effect)
+    if not spellutils.isImmuneListableDebuff('debuff', entry) then return false end
+    if forImmuneLine and entry.recastActive then return false end
+    return entryMatchesEffect(entry, effect)
+end
+
+local function newestDebuffHistory(forImmuneLine, effect)
+    pruneDebuffHistory()
+    for i = #debuffHistory, 1, -1 do
+        local h = debuffHistory[i]
+        local entry = h and botconfig.getSpellEntry('debuff', h.index)
+        if debuffCandidateOk(entry, forImmuneLine, effect) then
+            return h, entry
+        end
+    end
+    return nil, nil
+end
+
+--- NPC under the cursor, else the MA's NPC. Used when a bard song has no CastSpell target.
+local function singingDebuffTargetId()
+    local tid = mq.TLO.Target.ID() or 0
+    if tid > 0 then
+        local sp = mq.TLO.Spawn(tid)
+        if utils.isAliveEngageSpawn(sp) and sp.Type() == 'NPC' then return tid end
+    end
+    local _, _, maId = spellutils.GetAssistInfo(true)
+    if maId and maId > 0 then
+        local sp = mq.TLO.Spawn(maId)
+        if utils.isAliveEngageSpawn(sp) and sp.Type() == 'NPC' then return maId end
+    end
+    return nil
+end
+
+--- While a bard combat-twist song is a configured debuff, keep it on the debuff history.
+--- Does not replace lastCastSnapshot (a heal or buff cast may own that slot).
+function spellutils.noteSingingDebuff()
+    if mq.TLO.Me.Class.ShortName() ~= 'BRD' then return end
+    -- Casting() is the spell name string. The ID lives on the TLO itself.
+    local castId = mq.TLO.Me.Casting.ID()
+    if not castId or castId <= 0 then return end
+    local section, index, entry = spellutils.findConfigEntryBySpellId(castId)
+    if not debuffCandidateOk(entry, true, nil) or section ~= 'debuff' then return end
+    local targetId = singingDebuffTargetId()
+    if not targetId then return end
+    pushDebuffHistory({
+        spellName = spellNameFromEntry(entry),
+        spellId = castId,
+        sub = 'debuff',
+        index = index,
+        target = targetId,
+        at = mq.gettime(),
+        fromTwistOnceGem = false,
+    })
+end
+
 --- Resolve spell context for immunity events (debuff spells only; never heal/buff/cure/ability).
-function spellutils.resolveImmuneSpellContext()
+--- line: immune chat text. When set, prefer the debuff whose effect matches that line.
+function spellutils.resolveImmuneSpellContext(line)
     local rc = state.getRunconfig()
     local cur = rc and rc.CurSpell
+    local forImmuneLine = line ~= nil and line ~= ''
+    local effect = effectKindFromLine(line)
     local ctx = {
         spellName = nil,
         spellId = nil,
         sub = nil,
         index = nil,
-        curSpellTarget = cur and cur.target or nil,
+        curSpellTarget = nil,
         fromTwistOnceGem = false,
         fromLastCastSnapshot = false,
     }
 
+    local function fallbackTarget(index)
+        if cur and cur.sub == 'debuff' and cur.spell == index and cur.target and cur.target > 0 then
+            return cur.target
+        end
+        return singingDebuffTargetId()
+    end
+
     local function applyEntry(sub, index, entry, target, flags)
-        if not spellutils.isImmuneListableDebuff(sub, entry) then return false end
+        if not debuffCandidateOk(entry, forImmuneLine, effect) then return false end
+        if sub ~= 'debuff' then return false end
         ctx.sub = sub
         ctx.index = index
         ctx.spellName = spellNameFromEntry(entry)
         if entry.spell then ctx.spellId = spellutils.GetSpellId(entry) end
         if target then ctx.curSpellTarget = target end
-        if flags then
-            ctx.fromTwistOnceGem = flags.fromTwistOnceGem or false
-            ctx.fromLastCastSnapshot = flags.fromLastCastSnapshot or false
-        end
+        ctx.fromTwistOnceGem = flags and flags.fromTwistOnceGem or false
+        ctx.fromLastCastSnapshot = flags and flags.fromLastCastSnapshot or false
         return ctx.spellName and ctx.spellName ~= ''
     end
 
     if cur and cur.sub == 'debuff' and cur.spell then
-        if applyEntry(cur.sub, cur.spell, botconfig.getSpellEntry(cur.sub, cur.spell), cur.target) then
+        local curEntry = botconfig.getSpellEntry(cur.sub, cur.spell)
+        if applyEntry(cur.sub, cur.spell, curEntry, cur.target) then
+            return ctx
+        end
+    end
+
+    local hist, histEntry = newestDebuffHistory(forImmuneLine, effect)
+    if hist and histEntry then
+        if applyEntry('debuff', hist.index, histEntry, hist.target, {
+            fromTwistOnceGem = hist.fromTwistOnceGem,
+            fromLastCastSnapshot = true,
+        }) then
+            ctx.spellId = hist.spellId or ctx.spellId
             return ctx
         end
     end
@@ -858,15 +1021,12 @@ function spellutils.resolveImmuneSpellContext()
         end
     end
 
-    local castingTlo = mq.TLO.Me.Casting()
-    if castingTlo then
-        local okId, castId = pcall(function() return castingTlo.ID() end)
-        if okId and castId and castId > 0 then
-            local section, index, entry = spellutils.findConfigEntryBySpellId(castId)
-            if applyEntry(section, index, entry, ctx.curSpellTarget) then
-                ctx.spellId = castId
-                return ctx
-            end
+    local castId = mq.TLO.Me.Casting.ID()
+    if castId and castId > 0 then
+        local section, index, entry = spellutils.findConfigEntryBySpellId(castId)
+        if section == 'debuff' and index and applyEntry(section, index, entry, fallbackTarget(index)) then
+            ctx.spellId = castId
+            return ctx
         end
     end
 
@@ -874,7 +1034,7 @@ function spellutils.resolveImmuneSpellContext()
         local gem = bardtwist.getLastTwistOnceGem()
         if gem then
             local section, index, entry = spellutils.findConfigEntryByGem(gem)
-            if applyEntry(section, index, entry, ctx.curSpellTarget, { fromTwistOnceGem = true }) then
+            if section == 'debuff' and index and applyEntry(section, index, entry, fallbackTarget(index), { fromTwistOnceGem = true }) then
                 return ctx
             end
         end
@@ -892,19 +1052,25 @@ local function immuneEventMatchesOurCast(ctx)
     if storedId > 0 and spellId and spellId > 0 then
         return storedId == spellId
     end
-    local castingTlo = mq.TLO.Me.Casting()
-    if castingTlo and spellId and spellId > 0 then
-        local ok, castId = pcall(function() return castingTlo.ID() end)
-        if ok and castId and castId == spellId then return true end
-    end
+    local castId = mq.TLO.Me.Casting.ID()
+    if castId and spellId and spellId > 0 and castId == spellId then return true end
     return false
 end
 
+local function notifyImmuneIfActiveDebuff(ctx)
+    local rc = state.getRunconfig()
+    local cur = rc and rc.CurSpell
+    if not cur or not (cur.viaMQ2Cast or cur.viaCastingLib) then return end
+    if cur.sub ~= ctx.sub or cur.spell ~= ctx.index then return end
+    casting.notifyImmune()
+end
+
 --- Handle CastImm / SlowImm (casting-lib and bard twist). Records the cast target, not current Target.
---- Only listable debuff spells are recorded (never heals/buffs/cures/abilities).
-function spellutils.handleTargetImmuneEvent(_line)
-    local ctx = spellutils.resolveImmuneSpellContext()
-    if not spellutils.isImmuneListableDebuff(ctx.sub, ctx.index and botconfig.getSpellEntry(ctx.sub, ctx.index)) then
+--- Only listable debuff spells are recorded (never heals/buffs/cures/abilities/recastActive).
+function spellutils.handleTargetImmuneEvent(line)
+    local ctx = spellutils.resolveImmuneSpellContext(line)
+    local entry = ctx.index and botconfig.getSpellEntry(ctx.sub, ctx.index)
+    if not debuffCandidateOk(entry, true, effectKindFromLine(line)) then
         return
     end
     if not ctx.spellName or ctx.spellName == '' then return end
@@ -921,6 +1087,8 @@ function spellutils.handleTargetImmuneEvent(_line)
     end
 
     if not immuneEventMatchesOurCast(ctx) then return end
+
+    notifyImmuneIfActiveDebuff(ctx)
 
     local immuneID = ctx.curSpellTarget
     if immuneID and immuneID > 0 then
@@ -1793,6 +1961,7 @@ function spellutils.beginTick()
     _botListOrderedMemo.petIdToOwner = nil
     _peerIdToName = {}
     _petIdToOwner = {}
+    spellutils.noteSingingDebuff()
 end
 
 --- Returns sorted bot names and a name→peer map (one GetInfo per peer for the tick).

@@ -183,10 +183,6 @@ function botevents.Event_CastRst()
 end
 
 function botevents.Event_CastImm(line)
-    if string.find(line, "(with this spell)") then return false end
-    if state.getRunconfig().CurSpell and (state.getRunconfig().CurSpell.viaMQ2Cast or state.getRunconfig().CurSpell.viaCastingLib) then
-        casting.notifyImmune()
-    end
     spellutils.handleTargetImmuneEvent(line)
 end
 

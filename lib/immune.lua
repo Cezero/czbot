@@ -29,22 +29,27 @@ end
 
 local function resolvedSpellForList(opts)
     local spellutils = require('lib.spellutils')
+    -- spellName is already GetResolvedSpellName; a second Spell() lookup can change the key ImmuneCheck uses.
     if opts and opts.spellName and opts.spellName ~= '' then
-        return mq.TLO.Spell(opts.spellName)() or opts.spellName
+        return opts.spellName
     end
     local rc = state.getRunconfig()
     local cur = rc and rc.CurSpell
     if cur and cur.sub and cur.spell then
         local entry = botconfig.getSpellEntry(cur.sub, cur.spell)
-        if spellutils.isImmuneListableDebuff(cur.sub, entry) then
+        if spellutils.isImmuneListableDebuff(cur.sub, entry) and not entry.recastActive then
             return spellutils.GetResolvedSpellName(entry) or entry.spell
         end
+    end
+    if spellutils.latestDebuffHistorySpellName then
+        local named = spellutils.latestDebuffHistorySpellName()
+        if named and named ~= '' then return named end
     end
     local snap = spellutils.getLastCastSnapshot and spellutils.getLastCastSnapshot()
     if snap and snap.sub == 'debuff' and snap.index and snap.spellName and snap.spellName ~= '' then
         local snapEntry = botconfig.getSpellEntry('debuff', snap.index)
-        if spellutils.isImmuneListableDebuff('debuff', snapEntry) then
-            return mq.TLO.Spell(snap.spellName)() or snap.spellName
+        if snapEntry and spellutils.isImmuneListableDebuff('debuff', snapEntry) and not snapEntry.recastActive then
+            return snap.spellName
         end
     end
     return nil
